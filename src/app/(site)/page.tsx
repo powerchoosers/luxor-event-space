@@ -250,10 +250,10 @@ export default function Home() {
           <Reveal delay={60} className="mx-auto flex max-w-2xl flex-col items-center text-center">
             <LuxorWordmark
               className="mx-auto w-full max-w-[620px]"
-              markClassName="-translate-x-3 sm:-translate-x-4"
+              markClassName="translate-x-[-0.35rem] sm:-translate-x-4"
               align="center"
             />
-            <DecoDivider className="mx-auto mt-5 w-full max-w-[620px] -translate-x-3 sm:-translate-x-4" />
+            <DecoDivider className="mx-auto mt-5 w-full max-w-[620px] translate-x-[-0.35rem] sm:-translate-x-4" />
             <h1 className="mt-8 max-w-2xl font-serif text-5xl leading-[0.88] text-[#f7efe3] sm:text-6xl lg:text-7xl">
               An elevated San Antonio venue for unforgettable celebrations.
             </h1>
