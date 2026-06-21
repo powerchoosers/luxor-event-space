@@ -1,0 +1,196 @@
+@import 'tailwindcss';
+
+:root {
+  --background: #050505;
+  --foreground: #f6efe8;
+  --surface: #0b0a08;
+  --surface-soft: #15100d;
+  --surface-dark: #050505;
+  --muted: #b9aa91;
+  --accent: #caa24c;
+  --accent-bright: #f1d27a;
+  --blush: #bd6575;
+  --ink: #060606;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-dark: var(--surface-dark);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-manrope);
+  --font-serif: var(--font-cormorant);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.16), transparent 30rem),
+    linear-gradient(180deg, #050505 0%, #0a0707 46%, #050505 100%);
+  color: var(--foreground);
+}
+
+::selection {
+  background: rgba(200, 166, 105, 0.34);
+  color: #100b0d;
+}
+
+@layer utilities {
+  .luxor-noise {
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.07), transparent 18%),
+      radial-gradient(circle at 80% 15%, rgba(202, 162, 76, 0.12), transparent 16%),
+      radial-gradient(circle at 50% 100%, rgba(189, 101, 117, 0.08), transparent 24%);
+    background-size: 24rem 24rem, 28rem 28rem, 32rem 32rem;
+  }
+
+  .luxor-sheen {
+    box-shadow:
+      0 26px 70px -40px rgba(0, 0, 0, 0.8),
+      inset 0 1px 0 rgba(241, 210, 122, 0.12);
+  }
+
+  .luxor-gold-text {
+    color: #caa24c;
+    background: linear-gradient(90deg, #9b6d24 0%, #f1d27a 44%, #b98024 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 0 28px rgba(202, 162, 76, 0.18);
+  }
+
+  .luxor-panel {
+    border: 1px solid rgba(202, 162, 76, 0.22);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+      #080706;
+    box-shadow:
+      0 34px 90px -58px rgba(0, 0, 0, 0.95),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  }
+
+  .luxor-deco-frame {
+    position: relative;
+  }
+
+  .luxor-deco-frame::before,
+  .luxor-deco-frame::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    border-color: rgba(202, 162, 76, 0.55);
+  }
+
+  .luxor-deco-frame::before {
+    inset: 1rem;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+  }
+
+  .luxor-deco-frame::after {
+    inset: 0.7rem;
+    border-left-width: 1px;
+    border-right-width: 1px;
+  }
+
+
+  .luxor-live-lockup {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .luxor-wordmark {
+    font-family: Cinzel, "Trajan Pro", "Cormorant Garamond", var(--font-cormorant), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: 0.115em;
+    color: #caa24c;
+    background: linear-gradient(90deg, #8f641f 0%, #f4d982 35%, #b47a23 67%, #e2bc62 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 0 24px rgba(202, 162, 76, 0.18);
+  }
+
+  .luxor-subline {
+    font-family: Cinzel, "Trajan Pro", "Cormorant Garamond", var(--font-cormorant), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: 0.62em;
+    color: #caa24c;
+    background: linear-gradient(90deg, #9f742b, #f1d27a, #a87324);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 0 16px rgba(202, 162, 76, 0.16);
+  }
+
+  @media (max-width: 640px) {
+    .luxor-wordmark {
+      letter-spacing: 0.08em;
+    }
+
+    .luxor-subline {
+      letter-spacing: 0.2em;
+    }
+  }
+
+  .luxor-deco-divider {
+    display: grid;
+    grid-template-columns: minmax(2rem, 1fr) 0.48rem minmax(2rem, 1fr);
+    align-items: center;
+    gap: 1rem;
+    color: #caa24c;
+  }
+
+  .luxor-deco-divider::before,
+  .luxor-deco-divider::after {
+    content: '';
+    height: 1px;
+    background: linear-gradient(90deg, transparent, currentColor);
+    opacity: 0.8;
+  }
+
+  .luxor-deco-divider::after {
+    background: linear-gradient(90deg, currentColor, transparent);
+  }
+
+  .luxor-diamond {
+    width: 0.48rem;
+    height: 0.48rem;
+    rotate: 45deg;
+    background: currentColor;
+  }
+
+  .luxor-ambient {
+    animation: luxor-ambient 8s ease-in-out infinite;
+  }
+
+  .glass-panel {
+    @apply border backdrop-blur-sm shadow-sm;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(202, 162, 76, 0.18);
+  }
+}
+
+@keyframes luxor-ambient {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: translate3d(0, -12px, 0) scale(1.05);
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luxor-ambient {
+    animation: none !important;
+  }
+}
+
