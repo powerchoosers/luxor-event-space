@@ -1,0 +1,209 @@
+'use client'
+
+import { FormEvent, useState } from 'react'
+import { ArrowRight, CalendarDays, Check, Loader2, Sparkles } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+
+type LuxorInquiryFormProps = {
+  source: string
+  flow?: string
+  title?: string
+  submitLabel?: string
+  showTourFields?: boolean
+  compact?: boolean
+  onSubmitted?: () => void
+}
+
+const eventTypes = ['Wedding', 'Quinceañera', 'Baby shower', 'Birthday', 'Corporate event', 'Private celebration']
+const tourTimes = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM']
+
+export function LuxorInquiryForm({
+  source,
+  flow = 'tour_request',
+  title = 'Tell us about your event.',
+  submitLabel = 'Request a tour',
+  showTourFields = false,
+  compact = false,
+  onSubmitted,
+}: LuxorInquiryFormProps) {
+  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setError(null)
+
+    const form = new FormData(event.currentTarget)
+    const payload: LuxorInquiryInput = {
+      fullName: String(form.get('fullName') ?? ''),
+      email: String(form.get('email') ?? ''),
+      phone: String(form.get('phone') ?? ''),
+      eventType: String(form.get('eventType') ?? ''),
+      targetDate: String(form.get('targetDate') ?? ''),
+      guestCount: String(form.get('guestCount') ?? ''),
+      preferredTourDate: String(form.get('preferredTourDate') ?? ''),
+      preferredTourTime: String(form.get('preferredTourTime') ?? ''),
+      packageInterest: String(form.get('packageInterest') ?? ''),
+      message: String(form.get('message') ?? ''),
+      source,
+      flow,
+      pagePath: window.location.pathname,
+      referrer: document.referrer,
+    }
+
+    try {
+      const response = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = (await response.json().catch(() => ({}))) as { error?: string }
+
+      if (!response.ok) {
+        throw new Error(result.error ?? 'The request could not be submitted.')
+      }
+
+      setSubmitted(true)
+      onSubmitted?.()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'The request could not be submitted.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={`rounded-md border border-[#caa24c]/22 bg-[#080706] shadow-[0_34px_90px_-58px_rgba(0,0,0,0.95)] ${compact ? 'p-5' : 'p-5 sm:p-8'}`}
+    >
+      <div className="mb-6 flex items-start justify-between gap-5 border-b border-[#caa24c]/20 pb-5">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Tour request</p>
+          <h2 className="mt-2 font-serif text-3xl leading-none text-[#f7efe3]">{title}</h2>
+        </div>
+        <Sparkles className="h-6 w-6 shrink-0 text-[#caa24c]" />
+      </div>
+
+      {submitted ? (
+        <div className="rounded-md border border-[#caa24c]/25 bg-black/25 p-6">
+          <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#caa24c] text-[#050505]">
+            <Check className="h-6 w-6" />
+          </div>
+          <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">Request received.</h3>
+          <p className="mt-3 text-sm leading-6 text-[#d7c29a]/72">
+            Your details were sent to the Luxor CRM. A coordinator can now follow up with availability and next steps.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Event type</span>
+              <select
+                name="eventType"
+                className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70"
+              >
+                <option value="">Select event type</option>
+                {eventTypes.map((eventType) => (
+                  <option key={eventType} value={eventType}>{eventType}</option>
+                ))}
+              </select>
+            </label>
+
+            <TextField name="targetDate" label="Target date" placeholder="Month or date" />
+            <TextField name="guestCount" label="Guest count" placeholder="Estimated count" inputMode="numeric" />
+            <TextField name="fullName" label="Full name" placeholder="Your name" required />
+            <TextField name="email" label="Email" placeholder="you@example.com" type="email" />
+            <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" />
+
+            {showTourFields ? (
+              <>
+                <TextField name="preferredTourDate" label="Tour date" type="date" />
+                <label className="block">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Tour time</span>
+                  <select
+                    name="preferredTourTime"
+                    className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70"
+                  >
+                    <option value="">Flexible</option>
+                    {tourTimes.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+          </div>
+
+          <label className="mt-5 block">
+            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Package interest</span>
+            <input
+              name="packageInterest"
+              type="text"
+              placeholder="Foundation, Signature, Showpiece, or not sure"
+              className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+            />
+          </label>
+
+          <label className="mt-5 block">
+            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Notes</span>
+            <textarea
+              name="message"
+              placeholder="Tell us what kind of event you are imagining..."
+              className="mt-2 h-28 w-full resize-none rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-4 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+            />
+          </label>
+
+          {error ? (
+            <p className="mt-4 rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200">{error}</p>
+          ) : null}
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="submit"
+            disabled={submitting}
+            className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+          >
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : showTourFields ? <CalendarDays className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+            {submitting ? 'Sending' : submitLabel}
+          </motion.button>
+        </>
+      )}
+    </form>
+  )
+}
+
+function TextField({
+  name,
+  label,
+  placeholder,
+  type = 'text',
+  required = false,
+  inputMode,
+}: {
+  name: string
+  label: string
+  placeholder?: string
+  type?: string
+  required?: boolean
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+}) {
+  return (
+    <label className="block">
+      <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">{label}</span>
+      <input
+        name={name}
+        required={required}
+        type={type}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+      />
+    </label>
+  )
+}

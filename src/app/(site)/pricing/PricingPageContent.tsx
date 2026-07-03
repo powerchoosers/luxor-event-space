@@ -2,10 +2,11 @@
 
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowRight, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Reveal } from '@/components/Reveal'
-import { LuxorWordmark } from '@/components/LuxorWordmark'
+import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 type PlanVariant = 'light' | 'dark' | 'rose'
 
@@ -121,12 +122,13 @@ function PricingHeroVisual() {
         layoutId="hero-image"
         className="luxor-deco-frame relative isolate min-h-[620px] overflow-hidden border border-[#caa24c]/25 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.85)]"
       >
-        <img
+        <Image
           src="/pricing-hero.png"
           alt="Luxor venue styling sample"
-          loading="eager"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover"
+          fill
+          priority
+          sizes="(min-width: 1024px) 52vw, 100vw"
+          className="object-cover"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.58))]" />
         <div className="absolute inset-0 opacity-60 luxor-noise" />
@@ -230,7 +232,7 @@ function TierCard({ plan, index }: { plan: PricingPlan; index: number }) {
       <motion.a
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        href="/#visit"
+        href="/visit"
         className={`mt-8 inline-flex items-center justify-center gap-2 border border-[#f1d27a]/30 px-5 py-3 text-sm font-semibold uppercase tracking-[0.12em] transition-transform duration-200 ${variant.button}`}
       >
         {plan.actionLabel}
@@ -249,18 +251,17 @@ export default function PricingPageContent() {
 
 
         <div className="relative z-10 mx-auto grid max-w-7xl gap-14 px-6 pb-16 pt-32 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:px-8 lg:pb-20 lg:pt-40">
-          <Reveal delay={60} className="max-w-2xl">
-            <LuxorWordmark className="mb-7 max-w-[560px]" />
-            <div className="luxor-deco-divider mb-8 max-w-md"><span className="luxor-diamond" /></div>
-            <h1 className="mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
+          <div className="mx-auto max-w-2xl text-center">
+            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
+            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
               Three packages with the same black-and-gold polish.
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
+            <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
               Foundation keeps it clean. Signature adds light decor. Showpiece brings the full room together
               with decor, a DJ, and a photo booth.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
                 href="#tiers"
                 className="inline-flex items-center gap-2 border border-[#f1d27a]/40 bg-[#caa24c] px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#050505] shadow-[0_20px_40px_-24px_rgba(202,162,76,0.65)] transition-transform duration-200 hover:-translate-y-0.5"
@@ -269,21 +270,21 @@ export default function PricingPageContent() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                href="/#visit"
+                href="/visit"
                 className="inline-flex items-center gap-2 border border-[#caa24c]/28 bg-white/[0.04] px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm transition-colors duration-200 hover:border-[#f1d27a]/50 hover:bg-[#caa24c]/10"
               >
                 Ask for a quote
               </Link>
             </div>
 
-            <p className="mt-6 max-w-lg text-sm leading-6 text-white/60">
+            <p className="mx-auto mt-6 max-w-lg text-sm leading-6 text-white/60">
               Quotes are based on date, guest count, and the mix of add-ons you want.
             </p>
-          </Reveal>
+          </div>
 
-          <Reveal delay={140} className="lg:pl-6">
+          <div className="lg:pl-6">
             <PricingHeroVisual />
-          </Reveal>
+          </div>
         </div>
       </section>
 
@@ -327,7 +328,7 @@ export default function PricingPageContent() {
 
                 <div className="flex flex-wrap gap-3 lg:justify-end">
                   <Link
-                    href="/#visit"
+                    href="/visit"
                     className="inline-flex items-center gap-2 border border-[#f1d27a]/40 bg-[#caa24c] px-5 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-[#050505] transition-transform duration-200 hover:-translate-y-0.5"
                   >
                     Ask for a custom quote

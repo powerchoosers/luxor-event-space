@@ -10,6 +10,12 @@ type LuxorWordmarkProps = {
   subline?: boolean
 }
 
+type LuxorAxisLockupProps = {
+  className?: string
+  dividerClassName?: string
+  showDivider?: boolean
+}
+
 export function LuxorWordmark({
   className = '',
   markClassName = '',
@@ -41,6 +47,39 @@ export function LuxorWordmark({
           </p>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+export function LuxorAxisLockup({
+  className = '',
+  dividerClassName = 'text-[#caa24c]',
+  showDivider = true,
+}: LuxorAxisLockupProps) {
+  return (
+    <div className={`luxor-axis-lockup ${className}`}>
+      <Image
+        src="/luxor-palm-mark.png"
+        alt=""
+        width={255}
+        height={190}
+        className="h-14 w-auto object-contain sm:h-16"
+      />
+      <div className="leading-none">
+        <p className="luxor-axis-word" aria-label="LUXOR">
+          {['L', 'U', 'X', 'O', 'R'].map((letter) => (
+            <span key={letter} aria-hidden="true">
+              {letter}
+            </span>
+          ))}
+        </p>
+        <p className="luxor-axis-subline">AT LAS PALMAS EVENTS</p>
+      </div>
+      {showDivider ? (
+        <div className={`luxor-deco-divider mt-5 w-full ${dividerClassName}`}>
+          <span className="luxor-diamond" />
+        </div>
+      ) : null}
     </div>
   )
 }

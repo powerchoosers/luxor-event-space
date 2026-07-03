@@ -3,14 +3,14 @@
 import React from 'react'
 import Link from 'next/link'
 import { CalendarDays, MapPin } from 'lucide-react'
-import { LuxorWordmark } from '@/components/LuxorWordmark'
+import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 const navLinks = [
-  { label: 'Events', href: '/#events' },
-  { label: 'Spaces', href: '/#spaces' },
-  { label: 'Gallery', href: '/#gallery' },
+  { label: 'Events', href: '/events' },
+  { label: 'Spaces', href: '/spaces' },
+  { label: 'Gallery', href: '/gallery' },
   { label: 'Pricing', href: '/pricing' },
-  { label: 'Visit', href: '/#visit' },
+  { label: 'Visit', href: '/visit' },
 ]
 
 export const Footer = () => {
@@ -20,18 +20,19 @@ export const Footer = () => {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_28rem),linear-gradient(180deg,rgba(5,5,5,0.1),rgba(5,5,5,0.96))]" />
       
       <div className="relative z-10 mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
+        <Link href="/" className="mx-auto block w-full max-w-[460px]">
+          <LuxorAxisLockup dividerClassName="text-[#8e6829]" />
+        </Link>
+
+        <div className="mt-14 grid grid-cols-1 gap-12 text-center lg:grid-cols-12 lg:text-left">
           {/* Brand Info */}
           <div className="lg:col-span-5">
-            <Link href="/" className="flex flex-col gap-4">
-              <LuxorWordmark className="max-w-[390px]" />
-              <p className="mt-4 max-w-sm text-base leading-7 text-[#d7c29a]/68">
-                A modern San Antonio event space built for the celebrations families remember. 
-                Host your wedding, quinceañera, or baby shower in elegance.
-              </p>
-            </Link>
+            <p className="mx-auto max-w-sm text-base leading-7 text-[#d7c29a]/68 lg:mx-0">
+              A modern San Antonio event space built for the celebrations families remember.
+              Host your wedding, quinceañera, or baby shower in elegance.
+            </p>
             <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
-              <p className="flex items-center gap-3"><MapPin className="h-4 w-4 text-[#caa24c]" /> San Antonio, Texas</p>
+              <p className="flex items-center justify-center gap-3 lg:justify-start"><MapPin className="h-4 w-4 text-[#caa24c]" /> San Antonio, Texas</p>
               <p>Private venue tours by appointment.</p>
             </div>
           </div>
@@ -55,8 +56,8 @@ export const Footer = () => {
             <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">Get in Touch</h3>
             <div className="mt-6 flex flex-col gap-4">
               <Link 
-                href="/#visit"
-                className="mt-4 inline-flex items-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
+                href="/visit"
+                className="mt-4 inline-flex items-center justify-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
               >
                 <CalendarDays className="h-4 w-4" />
                 Book Your Tour
@@ -70,9 +71,20 @@ export const Footer = () => {
           <span className="luxor-diamond" />
         </div>
 
-        <p className="mt-8 text-center font-mono text-[10px] uppercase tracking-[0.55em] text-[#caa24c]/85">
-          Timeless <span className="mx-4 text-[#caa24c]">◆</span> Elegant <span className="mx-4 text-[#caa24c]">◆</span> Celebratory <span className="mx-4 text-[#caa24c]">◆</span> Luxurious
-        </p>
+        <div className="mt-8 overflow-hidden">
+          <p className="hidden text-center font-mono text-[10px] uppercase tracking-[0.55em] text-[#caa24c]/85 sm:block">
+            Timeless <span className="mx-4 text-[#caa24c]">◆</span> Elegant <span className="mx-4 text-[#caa24c]">◆</span> Celebratory <span className="mx-4 text-[#caa24c]">◆</span> Luxurious
+          </p>
+          <div className="luxor-footer-marquee sm:hidden" aria-label="Timeless, elegant, celebratory, luxurious">
+            <div className="luxor-footer-marquee-track">
+              {[0, 1].map((item) => (
+                <span key={item} className="luxor-footer-marquee-line">
+                  Timeless <span>◆</span> Elegant <span>◆</span> Celebratory <span>◆</span> Luxurious <span>◆</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-6 border-t border-[#caa24c]/18 pt-8 sm:flex-row">
           <p className="text-xs text-[#d7c29a]/35">

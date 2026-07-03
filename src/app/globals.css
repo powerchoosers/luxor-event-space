@@ -68,6 +68,7 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 230, 144, 0.96), rgba(202, 162, 76, 0.92));
 }
+
 ::selection {
   background: rgba(200, 166, 105, 0.34);
   color: #100b0d;
@@ -159,6 +160,61 @@ body {
     text-shadow: 0 0 16px rgba(202, 162, 76, 0.16);
   }
 
+  .luxor-axis-lockup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .luxor-axis-word {
+    display: grid;
+    grid-template-columns: repeat(5, 0.72em);
+    justify-content: center;
+    font-family: Cinzel, "Trajan Pro", "Cormorant Garamond", var(--font-cormorant), Georgia, serif;
+    font-size: 3.35rem;
+    font-weight: 500;
+    line-height: 0.82;
+    color: #caa24c;
+    text-shadow: 0 0 24px rgba(202, 162, 76, 0.18);
+  }
+
+  .luxor-axis-word span {
+    display: block;
+    text-align: center;
+  }
+
+  .luxor-axis-subline {
+    margin-top: 0.7rem;
+    font-family: Cinzel, "Trajan Pro", "Cormorant Garamond", var(--font-cormorant), Georgia, serif;
+    font-size: 0.58rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    color: #caa24c;
+    text-shadow: 0 0 16px rgba(202, 162, 76, 0.16);
+  }
+
+  @media (min-width: 640px) {
+    .luxor-axis-word {
+      font-size: 5.8rem;
+    }
+
+    .luxor-axis-subline {
+      font-size: 0.86rem;
+      letter-spacing: 0.62em;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .luxor-axis-word {
+      font-size: 7rem;
+    }
+
+    .luxor-axis-subline {
+      font-size: 1rem;
+    }
+  }
+
   @media (max-width: 640px) {
     .luxor-wordmark {
       letter-spacing: 0.08em;
@@ -196,6 +252,32 @@ body {
     background: currentColor;
   }
 
+  .luxor-footer-marquee {
+    width: 100%;
+    overflow: hidden;
+    color: rgba(202, 162, 76, 0.85);
+    mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  }
+
+  .luxor-footer-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: luxor-footer-marquee 24s linear infinite;
+  }
+
+  .luxor-footer-marquee-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.35rem;
+    padding-right: 1.35rem;
+    white-space: nowrap;
+    font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.46em;
+    text-transform: uppercase;
+  }
+
   .luxor-ambient {
     animation: luxor-ambient 8s ease-in-out infinite;
   }
@@ -205,6 +287,7 @@ body {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(202, 162, 76, 0.18);
   }
+
   .luxor-scrollbar {
     scrollbar-color: rgba(202, 162, 76, 0.72) rgba(5, 5, 5, 0.72);
     scrollbar-width: thin;
@@ -239,8 +322,20 @@ body {
   }
 }
 
+@keyframes luxor-footer-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .luxor-ambient {
+  .luxor-ambient,
+  .luxor-footer-marquee-track {
     animation: none !important;
   }
 }
+

@@ -20,6 +20,15 @@ npm run build
 
 The site uses Next.js, React, TypeScript, and Tailwind CSS. The local development URL is `http://localhost:3000`.
 
+## Current Site Conventions
+
+- Public site routes include `/`, `/events`, `/spaces`, `/gallery`, `/pricing`, `/visit`, and `/tour`. Header and footer navigation should point to these real pages, not homepage hash anchors, unless a section jump is intentional.
+- Desktop heroes should feel balanced as one composition. Use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page intentionally uses a split hero with a strong visual on the other side.
+- Do not wrap above-the-fold hero content in scroll-triggered `Reveal`; first viewport content must render immediately.
+- Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
+- The gallery page uses a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves the experience beyond the current custom implementation.
+- Keep new packages conservative. Prefer existing Next.js, React, Tailwind, Framer Motion, and Lucide patterns unless a package solves a real interaction or accessibility problem.
+
 ## Commit And Push
 
 Only commit or push when the user explicitly requests it.
