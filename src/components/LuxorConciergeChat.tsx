@@ -162,14 +162,15 @@ export function LuxorConciergeChat() {
 
   return (
     <div className="fixed bottom-4 right-4 z-[130] sm:bottom-6 sm:right-6">
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open ? (
           <motion.section
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            key="chat-window"
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.96 }}
+            exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="mb-4 flex h-[min(720px,calc(100svh-2rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)]"
+            className="absolute bottom-0 right-0 flex h-[min(720px,calc(100svh-2rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)]"
             role="dialog"
             aria-label="Luxor concierge chat"
           >
@@ -376,29 +377,32 @@ export function LuxorConciergeChat() {
               </div>
             </form>
           </motion.section>
-        ) : null}
-      </AnimatePresence>
-
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="group flex items-center gap-3 rounded-full border border-[#f1d27a]/45 bg-[#0d0908] py-2 pl-2 pr-4 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c]"
-          aria-label="Open Luxor concierge chat"
-        >
-          <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
-            <Image src="/luxor-concierge.png" alt="" fill sizes="56px" className="object-cover" />
-          </span>
-          <span className="hidden sm:block">
-            <span className="block font-serif text-lg leading-none text-[#f7efe3]">Ask Elena</span>
-            <span className="mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#caa24c]">
-              <MessageCircle className="h-3 w-3" />
-              Book a tour
+        ) : (
+          <motion.button
+            key="chat-trigger"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            type="button"
+            onClick={() => setOpen(true)}
+            className="absolute bottom-0 right-0 group flex items-center gap-3 rounded-full border border-[#f1d27a]/45 bg-[#0d0908] py-2 pl-2 pr-4 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] whitespace-nowrap"
+            aria-label="Open Luxor concierge chat"
+          >
+            <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
+              <Image src="/luxor-concierge.png" alt="" fill sizes="56px" className="object-cover" />
             </span>
-          </span>
-          <ChevronLeft className="hidden h-4 w-4 text-[#caa24c] transition sm:block" />
-        </button>
-      ) : null}
+            <span className="hidden sm:block">
+              <span className="block font-serif text-lg leading-none text-[#f7efe3]">Ask Elena</span>
+              <span className="mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#caa24c]">
+                <MessageCircle className="h-3 w-3" />
+                Book a tour
+              </span>
+            </span>
+            <ChevronLeft className="hidden h-4 w-4 text-[#caa24c] transition sm:block" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
