@@ -23,7 +23,7 @@ const eventCards: EventCard[] = [
   },
   {
     title: 'Quinceañeras',
-    copy: 'A dramatic setting for the entrance, court, cake, and family photos.',
+    copy: 'A dramatic setting for the grand entrance, court seating, cake, and family photos.',
     imageSrc: '/tour-header.png',
     details: ['Grand entrance', 'Court seating', 'Family photos'],
   },
