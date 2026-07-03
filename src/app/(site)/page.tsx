@@ -271,13 +271,13 @@ export default function Home() {
             />
           </Reveal>
           <Reveal delay={120}>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-12">
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                ['/tour-header.png', 'Grand hall', 'lg:col-span-5'],
-                ['/baby-shower.png', 'Private celebration', 'lg:col-span-3'],
-                ['/corporate.png', 'Corporate dinner', 'lg:col-span-4'],
-              ].map(([src, alt, span]) => (
-                <figure key={src} className={`relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22 ${span}`}>
+                ['/tour-header.png', 'Grand hall'],
+                ['/baby-shower.png', 'Private celebration'],
+                ['/corporate.png', 'Corporate dinner'],
+              ].map(([src, alt]) => (
+                <figure key={src} className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
                   <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
                   <figcaption className="absolute inset-x-4 bottom-4 border-t border-[#caa24c]/45 pt-3 font-mono text-[10px] uppercase tracking-[0.28em] text-[#f1d27a]">
                     {alt}
