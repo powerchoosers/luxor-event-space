@@ -198,28 +198,69 @@ export function LuxorConciergeChat() {
 
             <div className="luxor-scrollbar flex-1 overflow-y-auto px-4 py-4">
               <div className="space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 ${
-                        message.role === 'user'
-                          ? 'bg-[#caa24c] text-[#050505]'
-                          : 'border border-[#caa24c]/18 bg-white/[0.035] text-[#eadcc8]'
-                      }`}
+                <AnimatePresence initial={false}>
+                  {messages.map((message) => (
+                    <motion.div
+                      layout
+                      key={message.id}
+                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
-                      {message.content}
-                    </div>
-                  </div>
-                ))}
-                {pending ? (
-                  <div className="inline-flex items-center gap-2 rounded-md border border-[#caa24c]/18 bg-white/[0.035] px-4 py-3 text-xs text-[#d7c29a]/70">
-                    <Sparkles className="h-4 w-4 text-[#caa24c]" />
-                    Elena is thinking...
-                  </div>
-                ) : null}
+                      <motion.div
+                        initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                        className={`max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-md shadow-black/5 ${
+                          message.role === 'user'
+                            ? 'bg-[#caa24c] text-[#050505]'
+                            : 'border border-[#caa24c]/18 bg-white/[0.035] text-[#eadcc8]'
+                        }`}
+                      >
+                        {message.content}
+                      </motion.div>
+                    </motion.div>
+                  ))}
+                  {pending ? (
+                    <motion.div
+                      layout
+                      key="thinking-indicator"
+                      className="flex justify-start"
+                    >
+                      <motion.div
+                        initial={{ opacity: 0, y: 30, scale: 0.85, originX: 0, originY: 1 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8, y: 15 }}
+                        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                        className="inline-flex items-center gap-2 rounded-md border border-[#caa24c]/18 bg-white/[0.035] px-4 py-3 text-xs text-[#d7c29a]/70"
+                      >
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                          className="shrink-0"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-[#caa24c]" />
+                        </motion.div>
+                        <span className="font-serif">Elena is typing</span>
+                        <div className="flex gap-1 items-center ml-1">
+                          <motion.span 
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.2, delay: 0 }}
+                            className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
+                          />
+                          <motion.span 
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }}
+                            className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
+                          />
+                          <motion.span 
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }}
+                            className="h-1.5 w-1.5 rounded-full bg-[#caa24c]"
+                          />
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
                 <div ref={messageEndRef} />
               </div>
 

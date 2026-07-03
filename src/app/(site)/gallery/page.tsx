@@ -38,7 +38,7 @@ const gallery: GalleryItem[] = [
     caption: 'High ceilings, chandeliers, and a dramatic setting for milestone moments.',
     category: 'Weddings',
     span: 'lg:col-span-5',
-    aspect: 'aspect-[4/3]',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 42vw, 100vw',
   },
   {
@@ -47,7 +47,7 @@ const gallery: GalleryItem[] = [
     caption: 'A softer setup for showers, birthdays, and family gatherings.',
     category: 'Celebrations',
     span: 'lg:col-span-5',
-    aspect: 'aspect-[4/3]',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 42vw, 100vw',
   },
   {
@@ -56,7 +56,7 @@ const gallery: GalleryItem[] = [
     caption: 'See how the room can frame a ceremony, aisle, or main focal point.',
     category: 'Weddings',
     span: 'lg:col-span-4',
-    aspect: 'aspect-[4/3]',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 34vw, 100vw',
   },
   {
@@ -65,7 +65,7 @@ const gallery: GalleryItem[] = [
     caption: 'A formal backdrop for presentations, awards, dinners, and networking.',
     category: 'Corporate',
     span: 'lg:col-span-4',
-    aspect: 'aspect-[4/3]',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 34vw, 100vw',
   },
   {
@@ -74,7 +74,7 @@ const gallery: GalleryItem[] = [
     caption: 'Neutral, polished surfaces that work with florals, signage, and lighting.',
     category: 'Room',
     span: 'lg:col-span-4',
-    aspect: 'aspect-[4/3]',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 34vw, 100vw',
   },
 ]
