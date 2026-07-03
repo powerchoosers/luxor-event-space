@@ -26,6 +26,8 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-color: rgba(202, 162, 76, 0.62) rgba(5, 5, 5, 0.76);
+  scrollbar-width: thin;
 }
 
 body {
@@ -36,6 +38,36 @@ body {
   color: var(--foreground);
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(202, 162, 76, 0.58) rgba(8, 7, 6, 0.82);
+}
+
+*::-webkit-scrollbar {
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+*::-webkit-scrollbar-track {
+  background:
+    linear-gradient(180deg, rgba(202, 162, 76, 0.08), rgba(5, 5, 5, 0.2)),
+    rgba(5, 5, 5, 0.82);
+  border-left: 1px solid rgba(202, 162, 76, 0.08);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 3rem;
+  border: 0.18rem solid rgba(5, 5, 5, 0.82);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(241, 210, 122, 0.9), rgba(154, 108, 35, 0.82));
+  box-shadow: inset 0 0 0 1px rgba(255, 239, 181, 0.22);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 230, 144, 0.96), rgba(202, 162, 76, 0.92));
+}
 ::selection {
   background: rgba(200, 166, 105, 0.34);
   color: #100b0d;
@@ -173,6 +205,25 @@ body {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(202, 162, 76, 0.18);
   }
+  .luxor-scrollbar {
+    scrollbar-color: rgba(202, 162, 76, 0.72) rgba(5, 5, 5, 0.72);
+    scrollbar-width: thin;
+  }
+
+  .luxor-scrollbar::-webkit-scrollbar {
+    width: 0.55rem;
+  }
+
+  .luxor-scrollbar::-webkit-scrollbar-track {
+    border-left: 1px solid rgba(202, 162, 76, 0.1);
+    background: rgba(5, 5, 5, 0.72);
+  }
+
+  .luxor-scrollbar::-webkit-scrollbar-thumb {
+    border: 0.13rem solid rgba(5, 5, 5, 0.72);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #f1d27a, #9f742b);
+  }
 }
 
 @keyframes luxor-ambient {
@@ -193,4 +244,3 @@ body {
     animation: none !important;
   }
 }
-

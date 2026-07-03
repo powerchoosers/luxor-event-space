@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import '../globals.css'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
+import { LuxorConciergeChat } from '@/components/LuxorConciergeChat'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -42,6 +43,7 @@ export default function RootLayout({
         <main className="flex-grow">
           {children}
         </main>
+        <LuxorConciergeChat />
         <Footer />
       </body>
     </html>
