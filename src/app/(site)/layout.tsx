@@ -5,6 +5,7 @@ import '../globals.css'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { LuxorConciergeChat } from '@/components/LuxorConciergeChat'
+import { SiteScrollGuard } from '@/components/SiteScrollGuard'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -39,6 +40,7 @@ export default function RootLayout({
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-full bg-[#050505] text-[#f6efe8]">
+        <SiteScrollGuard />
         <Header />
         <main className="flex-grow">
           {children}

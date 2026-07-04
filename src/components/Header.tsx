@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { CalendarDays, Menu, X } from 'lucide-react'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -17,6 +18,7 @@ const navLinks = [
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -27,12 +29,19 @@ export const Header = () => {
   }, [])
 
   useEffect(() => {
+    document.documentElement.style.overflow = mobileMenuOpen ? 'hidden' : ''
     document.body.style.overflow = mobileMenuOpen ? 'hidden' : ''
 
     return () => {
+      document.documentElement.style.overflow = ''
       document.body.style.overflow = ''
     }
   }, [mobileMenuOpen])
+
+  useEffect(() => {
+    document.documentElement.style.overflow = ''
+    document.body.style.overflow = ''
+  }, [pathname])
 
   return (
     <header 

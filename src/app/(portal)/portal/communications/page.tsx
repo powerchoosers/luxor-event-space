@@ -1,28 +1,32 @@
 import React from "react";
 import { 
-  PhoneCall, 
   Send, 
   Search, 
   History, 
   Phone, 
   Mail, 
-  Clock, 
-  User, 
-  Mic, 
-  Volume2, 
-  Video,
   X,
   Plus,
-  Play,
-  RotateCcw
+  Radio
 } from "lucide-react";
+import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
 
 export default function CommunicationsPage() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-12rem)] min-h-[600px]">
-      
-      {/* Sidebar: Active Contacts & History */}
-      <div className="lg:col-span-4 flex flex-col gap-6">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+      <PortalPageHeader
+        icon={<Phone size={18} />}
+        title="Communications"
+        description="Work current email threads, call queues, and follow-up notes without leaving the operations portal."
+        actions={
+          <button className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white shadow-xl shadow-blue-600/25 transition-all hover:scale-105 hover:bg-blue-500 active:scale-95">
+            <Plus size={16} /> New Message
+          </button>
+        }
+      />
+
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="flex min-h-[26rem] flex-col gap-6 lg:col-span-4">
         <div className="flex-1 nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl overflow-hidden flex flex-col shadow-2xl">
           <div className="p-5 border-b border-zinc-900/50 flex flex-col gap-4">
             <h3 className="font-semibold text-white/90 flex items-center gap-2">
@@ -43,7 +47,7 @@ export default function CommunicationsPage() {
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto divide-y divide-zinc-900/30">
+          <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-zinc-900/30">
             <ContactItem name="Alexandra Chen" time="2m ago" type="email" preview="Re: Booking Inquiry for 2026..." active />
             <ContactItem name="Robert Fox" time="4h ago" type="call" preview="Failed Call (Missed)" />
             <ContactItem name="David Miller" time="Yesterday" type="email" preview="Invoice INV-9842 Sent" />
@@ -53,9 +57,7 @@ export default function CommunicationsPage() {
         </div>
       </div>
 
-      {/* Main Terminal: Call/Email Interface */}
-      <div className="lg:col-span-8 flex flex-col gap-8">
-        {/* Terminal Header */}
+      <div className="flex min-h-[34rem] flex-col gap-6 lg:col-span-8">
         <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/50 p-1 flex-1 flex flex-col shadow-[0_40px_120px_-40px_rgba(37,99,235,0.25)]">
           <div className="bg-[#0c0c0c] rounded-t-xl py-3 px-6 border-b border-zinc-900 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -70,8 +72,7 @@ export default function CommunicationsPage() {
             </div>
           </div>
 
-          <div className="flex-1 p-8 overflow-y-auto bg-gradient-to-b from-transparent to-black/20">
-             {/* Mode Selector */}
+          <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-black/20 p-5 sm:p-8">
              <div className="flex justify-center mb-8">
                <div className="bg-zinc-900 p-1 rounded-xl border border-zinc-800 flex gap-2">
                  <button className="px-6 py-2 rounded-lg bg-black text-xs font-bold text-white border border-zinc-800 shadow-xl flex items-center gap-2">
@@ -83,7 +84,6 @@ export default function CommunicationsPage() {
                </div>
              </div>
 
-             {/* Email Interface */}
              <div className="space-y-6 max-w-2xl mx-auto">
                <div className="space-y-2">
                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-600">Subject Line</label>
@@ -98,16 +98,15 @@ export default function CommunicationsPage() {
                  <textarea 
                   className="w-full h-48 bg-[#0a0a0a] border border-zinc-900 rounded-lg px-4 py-4 text-sm text-zinc-400 focus:outline-none focus:border-blue-700/50 transition-colors leading-relaxed font-sans"
                   placeholder="Draft your forensic response here..."
-                 >
-                  Hi Alexandra,
+                  defaultValue={`Hi Alexandra,
 
-Thanks for reaching out about the Luxor Grand Hall. Following up on our tour earlier this morning, I&apos;ve prepared a custom proposal based on your 200-guest requirement.
+Thanks for reaching out about the Luxor Grand Hall. Following up on our tour earlier this morning, I've prepared a custom proposal based on your 200-guest requirement.
 
-I&apos;ve attached the preliminary invoice for your review. Please let me know if you have any questions about the tech rider or the catering options.
+I've attached the preliminary invoice for your review. Please let me know if you have any questions about the tech rider or the catering options.
 
 Best regards,
-Ownership Management
-                 </textarea>
+Ownership Management`}
+                 />
                </div>
                
                <div className="flex items-center justify-between border-t border-zinc-900 pt-6">
@@ -123,7 +122,6 @@ Ownership Management
           </div>
         </div>
 
-        {/* Call Controls (Quick Overlay View) */}
         <div className="nodal-void-card rounded-2xl border border-blue-900/30 bg-blue-950/10 p-6 flex items-center justify-between shadow-2xl relative overflow-hidden group/call">
            <div className="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-blue-600/5 to-transparent pointer-events-none" />
            <div className="flex items-center gap-5">
@@ -137,6 +135,9 @@ Ownership Management
              <div>
                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Incoming Signal Detected</p>
                <h4 className="text-lg font-bold text-white tracking-tight">Cody Fisher (Prospective Wedding)</h4>
+               <p className="mt-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-500">
+                <Radio size={12} /> live queue preview
+               </p>
              </div>
            </div>
            
@@ -148,6 +149,7 @@ Ownership Management
       </div>
 
     </div>
+    </PortalPageFrame>
   );
 }
 

@@ -307,6 +307,32 @@ body {
     border-radius: 999px;
     background: linear-gradient(180deg, #f1d27a, #9f742b);
   }
+
+  .portal-scrollbar {
+    scrollbar-color: rgba(59, 130, 246, 0.7) rgba(9, 9, 11, 0.9);
+    scrollbar-width: thin;
+  }
+
+  .portal-scrollbar::-webkit-scrollbar {
+    width: 0.62rem;
+    height: 0.62rem;
+  }
+
+  .portal-scrollbar::-webkit-scrollbar-track {
+    background: rgba(9, 9, 11, 0.92);
+    border-left: 1px solid rgba(39, 39, 42, 0.8);
+  }
+
+  .portal-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 2.75rem;
+    border: 0.15rem solid rgba(9, 9, 11, 0.92);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(96, 165, 250, 0.95), rgba(0, 47, 167, 0.9));
+  }
+
+  .portal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(147, 197, 253, 1), rgba(37, 99, 235, 0.95));
+  }
 }
 
 @keyframes luxor-ambient {

@@ -1,42 +1,30 @@
 import React from "react";
 import { 
-  BarChart3, 
   Mail, 
-  Users, 
   Send, 
-  Calendar, 
   Plus, 
-  Search, 
   Zap, 
-  TrendingUp, 
   MousePointer2, 
-  MessageSquare,
   Sparkles
 } from "lucide-react";
+import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
 
 export default function MarketingPage() {
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 text-blue-500">
-             <div className="p-2 bg-blue-600/10 rounded-xl border border-blue-600/20 shadow-[0_0_20px_rgba(37,99,235,0.2)]">
-               <Mail size={18} />
-             </div>
-             <h1 className="text-3xl font-bold tracking-tight text-white/90">Marketing Command</h1>
-          </div>
-          <p className="text-zinc-500 font-medium text-sm">Orchestrate automated outreach and analyze audience engagement across campaigns.</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
+    <PortalPageFrame>
+      <PortalPageHeader
+        icon={<Mail size={18} />}
+        title="Marketing Command"
+        description="Orchestrate automated outreach and analyze audience engagement across campaigns."
+        actions={
            <button className="flex items-center gap-2 bg-blue-600 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-blue-600/25">
              <Plus size={16} /> New Sequence
            </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Engagement Pulse */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:gap-6">
          <StatsPanel label="Audience Size" value="8,402" trend="+124" />
          <StatsPanel label="Open Rate (Avg)" value="42.8%" trend="+2.1%" />
          <StatsPanel label="Click-Through" value="18.1%" trend="+0.5%" />
@@ -44,10 +32,10 @@ export default function MarketingPage() {
       </div>
 
       {/* Main Campaign Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
         
         {/* Left Column: ACTIVE CAMPAIGNS */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
            <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600 mb-2">Operational Sequences</h3>
            
            <CampaignCard 
@@ -110,7 +98,7 @@ export default function MarketingPage() {
            </div>
         </div>
       </div>
-    </div>
+    </PortalPageFrame>
   );
 }
 

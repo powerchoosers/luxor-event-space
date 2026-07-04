@@ -9,20 +9,40 @@ import {
   Mail,
   MoreVertical,
   Activity,
-  ChevronRight
+  ChevronRight,
+  ExternalLink,
+  Sparkles
 } from "lucide-react";
+import Link from "next/link";
+import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard } from "@/components/portal/PortalUI";
 
 export default function PortalOverview() {
   return (
-    <div className="space-y-10 group/portal">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden group/portal">
       {/* Page Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-white/90">Portfolio Overview</h1>
         <p className="text-zinc-500 font-medium text-sm">Real-time command and control for Luxor Event Space operations.</p>
       </div>
 
+      <PortalBridgeCard
+        label="Public website extension"
+        title="Every website visit should have a next step in the CRM."
+        description="The public Luxor site sets the mood, captures tour intent, and sends requests into this portal so the owner side can follow up without losing context."
+        action={
+          <div className="flex flex-wrap gap-3">
+            <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/24 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#f1d27a] transition-colors hover:bg-[#caa24c]/16">
+              View website <ExternalLink size={12} />
+            </Link>
+            <Link href="/tour" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 transition-colors hover:border-[#caa24c]/30 hover:text-white">
+              Tour flow <Sparkles size={12} />
+            </Link>
+          </div>
+        }
+      />
+
       {/* Metric Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
         <MetricCard 
           label="Total Revenue" 
           value="$128,430.00" 
@@ -58,10 +78,12 @@ export default function PortalOverview() {
       </div>
 
       {/* Main Dashboard Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
         {/* Recent Lead Pipeline */}
-        <div className="lg:col-span-2 nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl overflow-hidden shadow-2xl">
-          <div className="p-6 border-b border-zinc-900/50 flex items-center justify-between">
+        <PortalTableCard
+          className="lg:col-span-2"
+          controls={
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Activity size={18} className="text-blue-500" />
               <h3 className="font-semibold text-white/90">Leads Pipeline Activity</h3>
@@ -70,10 +92,11 @@ export default function PortalOverview() {
               View All <ChevronRight size={14} />
             </button>
           </div>
+          }
+        >
           
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
+            <PortalStickyTable minWidth="820px">
+              <PortalStickyThead>
                 <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest border-b border-zinc-900/50">
                   <th className="px-6 py-4">Lead Source</th>
                   <th className="px-6 py-4">Contact</th>
@@ -81,7 +104,7 @@ export default function PortalOverview() {
                   <th className="px-6 py-4">Est. Value</th>
                   <th className="px-6 py-4 text-right">Action</th>
                 </tr>
-              </thead>
+              </PortalStickyThead>
               <tbody className="divide-y divide-zinc-900/30">
                 <LeadRow 
                   source="Web Form" 
@@ -116,9 +139,8 @@ export default function PortalOverview() {
                   statusColor="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                 />
               </tbody>
-            </table>
-          </div>
-        </div>
+            </PortalStickyTable>
+        </PortalTableCard>
 
         {/* Action Center */}
         <div className="space-y-8">
@@ -153,7 +175,7 @@ export default function PortalOverview() {
           </div>
         </div>
       </div>
-    </div>
+    </PortalPageFrame>
   );
 }
 

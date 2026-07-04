@@ -2,6 +2,7 @@ import React from "react";
 import { Calendar as CalendarIcon, Clock, MapPin, User } from "lucide-react";
 import { listLuxorTourRequests } from "@/lib/luxorInquiriesServer";
 import { LuxorInquiry } from "@/lib/luxorInquiryTypes";
+import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
 
 export default async function CalendarPage() {
   let tourRequests: LuxorInquiry[] = [];
@@ -17,21 +18,19 @@ export default async function CalendarPage() {
   const upcomingTours = Object.entries(groupedTours);
 
   return (
-    <div className="space-y-8 pb-10 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white/90">Event Calendar</h1>
-          <p className="text-zinc-500 font-medium text-sm mt-1">
-            Live tour requests from the public Luxor booking flow.
-          </p>
-        </div>
+    <PortalPageFrame className="max-w-6xl">
+      <PortalPageHeader
+        icon={<CalendarIcon size={18} />}
+        title="Event Calendar"
+        description="Live tour requests from the public Luxor booking flow."
+        actions={
+          <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
+            {tourRequests.length} active tour requests
+          </div>
+        }
+      />
 
-        <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
-          {tourRequests.length} active tour requests
-        </div>
-      </div>
-
-      <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl p-8 shadow-2xl">
+      <div className="nodal-void-card portal-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-900 bg-black/40 p-5 shadow-2xl backdrop-blur-xl sm:p-8">
         <div className="mb-8 flex items-center justify-between border-b border-zinc-900/50 pb-6">
           <div>
             <p className="text-zinc-500 font-medium uppercase tracking-widest text-xs">CRM Schedule</p>
@@ -103,7 +102,7 @@ export default async function CalendarPage() {
           </div>
         )}
       </div>
-    </div>
+    </PortalPageFrame>
   );
 }
 

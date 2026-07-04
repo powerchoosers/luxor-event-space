@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowRight, CalendarDays, Check, MapPin } from 'lucide-react'
+import { ArrowDown, ArrowRight, CalendarDays, Check, MapPin } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { Reveal } from '@/components/Reveal'
@@ -164,6 +164,12 @@ export default function Home() {
               <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />
               <span>Private venue tours in San Antonio, Texas.</span>
             </div>
+            <a
+              href="#events"
+              className="mx-auto mt-8 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-[#d7c29a]/68 transition-colors hover:text-[#f1d27a]"
+            >
+              Scroll to explore <ArrowDown className="h-3.5 w-3.5 animate-bounce text-[#caa24c]" />
+            </a>
           </div>
         </div>
       </section>

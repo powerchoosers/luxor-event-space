@@ -2,17 +2,13 @@ import React from "react";
 import { 
   FileText, 
   Search, 
-  Filter, 
   Download, 
   Printer, 
   MoreVertical, 
-  Euro,
-  ArrowUpRight,
-  TrendingDown,
-  Calendar,
   Send,
   Plus
 } from "lucide-react";
+import { PortalPageFrame, PortalPageHeader, PortalStickyTable, PortalStickyThead, PortalTableCard } from "@/components/portal/PortalUI";
 
 export default function InvoicesPage() {
   const invoices = [
@@ -24,38 +20,33 @@ export default function InvoicesPage() {
   ];
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-blue-600/10 rounded-lg border border-blue-600/20">
-               <FileText size={18} className="text-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
-             </div>
-             <h1 className="text-3xl font-bold tracking-tight text-white/90">Revenue & Invoicing</h1>
-          </div>
-          <p className="text-zinc-500 font-medium text-sm">Financial command center for tracking Luxor&apos;s event contract performance.</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+      <PortalPageHeader
+        icon={<FileText size={18} />}
+        title="Revenue & Invoicing"
+        description="Financial command center for tracking Luxor's event contract performance."
+        actions={
+          <>
            <button className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-5 py-2.5 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-all uppercase tracking-wider">
              Financial Audit Report
            </button>
            <button className="flex items-center gap-2 bg-blue-600 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/25">
              <Plus size={16} /> Create Invoice
            </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Financial Health Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3 lg:gap-6">
          <StatsPanel label="Net Revenue (MTD)" value="$42,850.00" trend="+12.5%" />
          <StatsPanel label="Outstanding AR" value="$18,400.00" trend="-4.2%" isNegative />
          <StatsPanel label="Avg Collection Time" value="4.2 Days" trend="-1d" />
       </div>
 
-      {/* Invoices List */}
-      <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-zinc-900/50 bg-white/[0.01] flex items-center justify-between">
+      <PortalTableCard
+        controls={
+        <div className="flex items-center justify-between gap-4">
            <div className="relative w-full md:w-96 group">
              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 group-hover:text-blue-500 transition-colors" />
              <input 
@@ -69,10 +60,10 @@ export default function InvoicesPage() {
              <button className="p-2 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-500 transition-colors"><Printer size={16} /></button>
            </div>
         </div>
-
-        <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left">
-            <thead>
+        }
+      >
+          <PortalStickyTable minWidth="980px">
+            <PortalStickyThead>
               <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.2em] border-b border-zinc-900/50 bg-[#0c0c0c]">
                 <th className="px-8 py-5">Invoice ID</th>
                 <th className="px-6 py-5">Client Portfolio</th>
@@ -81,7 +72,7 @@ export default function InvoicesPage() {
                 <th className="px-6 py-5">Status</th>
                 <th className="px-8 py-5 text-right">Fulfillment</th>
               </tr>
-            </thead>
+            </PortalStickyThead>
             <tbody className="divide-y divide-zinc-900/30">
               {invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-zinc-900/40 transition-colors group">
@@ -115,10 +106,9 @@ export default function InvoicesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+          </PortalStickyTable>
+      </PortalTableCard>
+    </PortalPageFrame>
   );
 }
 
