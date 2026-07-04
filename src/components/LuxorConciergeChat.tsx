@@ -46,7 +46,7 @@ const eventCards = [
     copy: 'Ceremony flow, dinner, portraits, and dancing.',
   },
   {
-    label: 'Quinceanera',
+    label: 'Quinceañera',
     image: '/tour-header.png',
     copy: 'Grand entrance, court seating, cake, and family photos.',
   },
@@ -68,7 +68,7 @@ const tourDates = [
   { label: 'Tue, Jul 14', value: '2026-07-14', time: '6:15 PM' },
 ]
 
-const quickStarts = ['Wedding', 'Quinceanera', 'Baby shower', 'Corporate event']
+const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event']
 
 function createId() {
   return Math.random().toString(36).slice(2)
@@ -86,7 +86,7 @@ function fallbackResponse(input: string) {
   }
 
   if (text.includes('quince')) {
-    return 'For a quinceanera, we should look at the entrance, court seating, family photo areas, cake moment, and dance floor. I can help you pick a tour time.'
+    return 'For a quinceañera, we should look at the entrance, court seating, family photo areas, cake moment, and dance floor. I can help you pick a tour time.'
   }
 
   return 'That sounds like a good fit for a walkthrough. Tell me the event type, guest count, and your target month, then pick one of the tour cards below.'
@@ -113,7 +113,7 @@ function shouldShowBookingCard(input: string) {
 function inferEventType(messages: Message[], notes: string) {
   const text = `${notes} ${messages.map((message) => message.content).join(' ')}`.toLowerCase()
 
-  if (text.includes('quince')) return 'Quinceanera'
+  if (text.includes('quince')) return 'Quinceañera'
   if (text.includes('baby shower')) return 'Baby shower'
   if (text.includes('corporate') || text.includes('company')) return 'Corporate'
   if (text.includes('wedding')) return 'Wedding'
