@@ -4,14 +4,18 @@ import { useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import {
   ArrowRight,
   CalendarDays,
   Check,
   ChevronLeft,
+  Mail,
   MessageCircle,
+  Phone,
   Send,
   Sparkles,
+  User,
   X,
 } from 'lucide-react'
 
@@ -19,11 +23,20 @@ type Message = {
   id: string
   role: 'assistant' | 'user'
   content: string
+  ui?: 'booking'
 }
 
 type TourSelection = {
-  date: string
+  label: string
+  value: string
   time: string
+}
+
+type ContactDetails = {
+  name: string
+  email: string
+  phone: string
+  notes: string
 }
 
 const eventCards = [
@@ -50,9 +63,9 @@ const eventCards = [
 ]
 
 const tourDates = [
-  { date: 'Sat, Jul 11', time: '10:30 AM' },
-  { date: 'Sun, Jul 12', time: '1:00 PM' },
-  { date: 'Tue, Jul 14', time: '6:15 PM' },
+  { label: 'Sat, Jul 11', value: '2026-07-11', time: '10:30 AM' },
+  { label: 'Sun, Jul 12', value: '2026-07-12', time: '1:00 PM' },
+  { label: 'Tue, Jul 14', value: '2026-07-14', time: '6:15 PM' },
 ]
 
 const quickStarts = ['Wedding', 'Quinceanera', 'Baby shower', 'Corporate event']
@@ -79,6 +92,43 @@ function fallbackResponse(input: string) {
   return 'That sounds like a good fit for a walkthrough. Tell me the event type, guest count, and your target month, then pick one of the tour cards below.'
 }
 
+function shouldShowBookingCard(input: string) {
+  const text = input.toLowerCase()
+
+  return [
+    'book',
+    'schedule',
+    'tour',
+    'appointment',
+    'visit',
+    'availability',
+    'available',
+    'date',
+    'time',
+    'call me',
+    'contact',
+  ].some((term) => text.includes(term))
+}
+
+function inferEventType(messages: Message[], notes: string) {
+  const text = `${notes} ${messages.map((message) => message.content).join(' ')}`.toLowerCase()
+
+  if (text.includes('quince')) return 'Quinceanera'
+  if (text.includes('baby shower')) return 'Baby shower'
+  if (text.includes('corporate') || text.includes('company')) return 'Corporate'
+  if (text.includes('wedding')) return 'Wedding'
+  if (text.includes('birthday')) return 'Birthday'
+
+  return ''
+}
+
+function inferGuestCount(messages: Message[], notes: string) {
+  const text = `${notes} ${messages.map((message) => message.content).join(' ')}`
+  const guestMatch = text.match(/(\d{2,4})\s*(guests?|people|attendees)/i)
+
+  return guestMatch?.[1] ?? ''
+}
+
 export function LuxorConciergeChat() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -88,6 +138,14 @@ export function LuxorConciergeChat() {
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [eventPickerOpen, setEventPickerOpen] = useState(true)
   const [submitted, setSubmitted] = useState(false)
+  const [submittingInquiry, setSubmittingInquiry] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [contactDetails, setContactDetails] = useState<ContactDetails>({
+    name: '',
+    email: '',
+    phone: '',
+    notes: '',
+  })
   const messageEndRef = useRef<HTMLDivElement>(null)
 
   const [messages, setMessages] = useState<Message[]>([
@@ -104,10 +162,42 @@ export function LuxorConciergeChat() {
     [messages],
   )
 
+  const hasBookingCard = messages.some((message) => message.ui === 'booking')
+  const contactComplete =
+    contactDetails.name.trim().length > 1 &&
+    contactDetails.email.includes('@') &&
+    contactDetails.phone.replace(/\D/g, '').length >= 10
+  const bookingReady = contactComplete && Boolean(tourSelection)
+
+  function updateContactDetail(field: keyof ContactDetails, value: string) {
+    setContactDetails((current) => ({ ...current, [field]: value }))
+  }
+
+  function showBookingCard() {
+    setTourPickerOpen(false)
+
+    if (hasBookingCard) {
+      window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+      return
+    }
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: createId(),
+        role: 'assistant',
+        content: 'I can start the tour request here. Pick a time and leave the best contact info for the Luxor team.',
+        ui: 'booking',
+      },
+    ])
+    window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+  }
+
   async function sendMessage(messageText: string) {
     const trimmed = messageText.trim()
     if (!trimmed || pending) return
 
+    const shouldOfferBooking = shouldShowBookingCard(trimmed)
     const userMessage: Message = { id: createId(), role: 'user', content: trimmed }
     setMessages((current) => [...current, userMessage])
     setInput('')
@@ -121,19 +211,45 @@ export function LuxorConciergeChat() {
       })
       const data = (await response.json()) as { reply?: string }
 
-      setMessages((current) => [
-        ...current,
-        {
-          id: createId(),
-          role: 'assistant',
-          content: data.reply || fallbackResponse(trimmed),
-        },
-      ])
+      setMessages((current) => {
+        const next: Message[] = [
+          ...current,
+          {
+            id: createId(),
+            role: 'assistant',
+            content: data.reply || fallbackResponse(trimmed),
+          },
+        ]
+
+        if (shouldOfferBooking && !current.some((message) => message.ui === 'booking')) {
+          next.push({
+            id: createId(),
+            role: 'assistant',
+            content: 'Here is the quick booking card so you do not have to type everything out.',
+            ui: 'booking',
+          })
+        }
+
+        return next
+      })
     } catch {
-      setMessages((current) => [
-        ...current,
-        { id: createId(), role: 'assistant', content: fallbackResponse(trimmed) },
-      ])
+      setMessages((current) => {
+        const next: Message[] = [
+          ...current,
+          { id: createId(), role: 'assistant', content: fallbackResponse(trimmed) },
+        ]
+
+        if (shouldOfferBooking && !current.some((message) => message.ui === 'booking')) {
+          next.push({
+            id: createId(),
+            role: 'assistant',
+            content: 'Here is the quick booking card so you do not have to type everything out.',
+            ui: 'booking',
+          })
+        }
+
+        return next
+      })
     } finally {
       setPending(false)
       window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
@@ -147,17 +263,176 @@ export function LuxorConciergeChat() {
     void sendMessage(`I am planning a ${label}.`)
   }
 
-  function submitTourRequest() {
-    setSubmitted(true)
-    setMessages((current) => [
-      ...current,
-      {
-        id: createId(),
-        role: 'assistant',
-        content:
-          'Perfect. I saved this as a tour request starter. A Luxor coordinator will still confirm final availability and details.',
+  async function submitTourRequest() {
+    if (!bookingReady || submittingInquiry) {
+      showBookingCard()
+      return
+    }
+
+    setSubmittingInquiry(true)
+    setSubmissionError(null)
+
+    const payload: LuxorInquiryInput = {
+      fullName: contactDetails.name,
+      email: contactDetails.email,
+      phone: contactDetails.phone,
+      eventType: selectedEvent?.label ?? inferEventType(messages, contactDetails.notes),
+      guestCount: inferGuestCount(messages, contactDetails.notes),
+      preferredTourDate: tourSelection?.value ?? '',
+      preferredTourTime: tourSelection?.time ?? '',
+      message: contactDetails.notes,
+      source: 'chat_widget',
+      flow: 'concierge_chat',
+      pagePath: window.location.pathname,
+      referrer: document.referrer,
+      metadata: {
+        selectedEvent: selectedEvent?.label ?? null,
+        selectedTourLabel: tourSelection ? `${tourSelection.label}, ${tourSelection.time}` : null,
+        chatMessages: messages.map(({ role, content }) => ({ role, content })),
       },
-    ])
+    }
+
+    try {
+      const response = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = (await response.json().catch(() => ({}))) as { error?: string }
+
+      if (!response.ok) {
+        throw new Error(result.error ?? 'The request could not be submitted.')
+      }
+
+      setSubmitted(true)
+      setMessages((current) => [
+        ...current,
+        {
+          id: createId(),
+          role: 'assistant',
+          content:
+            `Perfect. I saved this tour request in the Luxor CRM for ${contactDetails.name.trim()} at ${tourSelection?.label}, ${tourSelection?.time}. A Luxor coordinator will confirm final availability by phone or email.`,
+        },
+      ])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The request could not be submitted.'
+      setSubmissionError(message)
+      setMessages((current) => [
+        ...current,
+        {
+          id: createId(),
+          role: 'assistant',
+          content:
+            'I could not save that to the CRM yet. Please check the contact details, or use the full form while we fix the connection.',
+        },
+      ])
+    } finally {
+      setSubmittingInquiry(false)
+    }
+  }
+
+  function renderBookingCard(messageId: string) {
+    return (
+      <motion.div
+        key={`${messageId}-booking`}
+        layout
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+        className="mt-3 rounded-md border border-[#caa24c]/24 bg-[#0d0908] p-3 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Tour request</p>
+            <h3 className="mt-1 font-serif text-2xl leading-none text-[#f7efe3]">Fast booking details</h3>
+          </div>
+          {submitted ? (
+            <span className="rounded-md border border-[#caa24c]/25 bg-[#caa24c] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#050505]">
+              Started
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          {tourDates.map((slot) => {
+            const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
+
+            return (
+              <button
+                key={`${slot.value}-${slot.time}-card`}
+                type="button"
+                onClick={() => setTourSelection(slot)}
+                className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
+                  active
+                    ? 'border-[#f1d27a]/55 bg-[#caa24c] text-[#050505]'
+                    : 'border-[#caa24c]/18 bg-black/25 text-[#eadcc8] hover:border-[#f1d27a]/45'
+                }`}
+              >
+                <span>
+                  <span className="block text-sm font-semibold">{slot.label}</span>
+                  <span className="block text-xs opacity-75">{slot.time}</span>
+                </span>
+                {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <label className="relative block">
+            <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+            <input
+              value={contactDetails.name}
+              onChange={(event) => updateContactDetail('name', event.target.value)}
+              placeholder="Full name"
+              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+            />
+          </label>
+          <label className="relative block">
+            <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+            <input
+              value={contactDetails.email}
+              onChange={(event) => updateContactDetail('email', event.target.value)}
+              placeholder="Email"
+              type="email"
+              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+            />
+          </label>
+          <label className="relative block">
+            <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+            <input
+              value={contactDetails.phone}
+              onChange={(event) => updateContactDetail('phone', event.target.value)}
+              placeholder="Phone"
+              type="tel"
+              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+            />
+          </label>
+          <textarea
+            value={contactDetails.notes}
+            onChange={(event) => updateContactDetail('notes', event.target.value)}
+            placeholder="Event notes, guest count, target month..."
+            className="min-h-20 resize-none rounded-md border border-[#caa24c]/18 bg-black/30 px-3 py-2.5 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+          />
+        </div>
+
+        {submissionError ? (
+          <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200">
+            {submissionError}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={submitTourRequest}
+          disabled={!bookingReady || submitted || submittingInquiry}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {submitted ? 'Request saved' : submittingInquiry ? 'Saving request' : bookingReady ? 'Save to CRM' : 'Pick time + add contact'}
+          <Check className="h-4 w-4" />
+        </button>
+      </motion.div>
+    )
   }
 
   return (
@@ -203,7 +478,7 @@ export function LuxorConciergeChat() {
                     <motion.div
                       layout
                       key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       <motion.div
                         initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
@@ -217,6 +492,7 @@ export function LuxorConciergeChat() {
                       >
                         {message.content}
                       </motion.div>
+                      {message.ui === 'booking' ? renderBookingCard(message.id) : null}
                     </motion.div>
                   ))}
                   {pending ? (
@@ -310,7 +586,10 @@ export function LuxorConciergeChat() {
             <div className="border-t border-[#caa24c]/18 bg-[#0d0908] px-3 py-2">
               <button
                 type="button"
-                onClick={() => setTourPickerOpen((current) => !current)}
+                onClick={() => {
+                  setTourPickerOpen((current) => !current)
+                  if (!hasBookingCard) showBookingCard()
+                }}
                 className="flex w-full items-center justify-between rounded-md border border-[#caa24c]/20 bg-black/20 px-3 py-2.5 text-left transition hover:border-[#f1d27a]/45"
                 aria-expanded={tourPickerOpen}
               >
@@ -321,7 +600,7 @@ export function LuxorConciergeChat() {
                       Tour window
                     </span>
                     <span className="block truncate text-xs text-[#d7c29a]/70">
-                      {tourSelection ? `${tourSelection.date}, ${tourSelection.time}` : 'Tap to pick a time'}
+                      {tourSelection ? `${tourSelection.label}, ${tourSelection.time}` : 'Tap to pick a time'}
                     </span>
                   </span>
                 </span>
@@ -339,11 +618,11 @@ export function LuxorConciergeChat() {
                   >
                     <div className="grid gap-2 pt-2">
                       {tourDates.map((slot) => {
-                        const active = tourSelection?.date === slot.date && tourSelection.time === slot.time
+                        const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
 
                         return (
                           <button
-                            key={`${slot.date}-${slot.time}`}
+                            key={`${slot.value}-${slot.time}`}
                             type="button"
                             onClick={() => setTourSelection(slot)}
                             className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
@@ -353,7 +632,7 @@ export function LuxorConciergeChat() {
                             }`}
                           >
                             <span>
-                              <span className="block text-sm font-semibold">{slot.date}</span>
+                              <span className="block text-sm font-semibold">{slot.label}</span>
                               <span className="block text-xs opacity-75">{slot.time}</span>
                             </span>
                             {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
@@ -367,7 +646,7 @@ export function LuxorConciergeChat() {
                             onClick={submitTourRequest}
                             className="flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a]"
                           >
-                            {submitted ? 'Request started' : 'Start request'}
+                            {submitted ? 'Request saved' : contactComplete ? 'Save to CRM' : 'Add contact info'}
                             <Check className="h-4 w-4" />
                           </button>
                         ) : null}
