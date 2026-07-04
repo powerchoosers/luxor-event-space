@@ -207,9 +207,9 @@ export default function Home() {
 
       <section id="spaces" className="relative isolate overflow-hidden bg-[#120d0c] py-16 sm:py-24 lg:py-28">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_10%,rgba(189,101,117,0.18),transparent_22rem),linear-gradient(180deg,#120d0c,#050505)]" />
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-8">
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-2 lg:items-center lg:px-8">
           <Reveal>
-            <div className="relative aspect-[4/5] overflow-hidden rounded-md border border-[#caa24c]/24 sm:aspect-[16/11] lg:aspect-[5/6]">
+            <div className="relative aspect-[4/5] overflow-hidden rounded-md border border-[#caa24c]/24 sm:aspect-[16/11] lg:aspect-[4/3]">
               <Image src="/spaces-hero.png" alt="Luxor event room layout" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.44))]" />
             </div>
