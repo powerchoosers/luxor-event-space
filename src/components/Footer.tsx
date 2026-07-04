@@ -25,18 +25,6 @@ export const Footer = () => {
         </Link>
 
         <div className="mt-14 grid grid-cols-1 gap-12 text-center lg:grid-cols-12 lg:text-left">
-          {/* Brand Info */}
-          <div className="lg:col-span-5">
-            <p className="mx-auto max-w-sm text-base leading-7 text-[#d7c29a]/68 lg:mx-0">
-              A modern San Antonio event space built for the celebrations families remember.
-              Host your wedding, quinceañera, or baby shower in elegance.
-            </p>
-            <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
-              <p className="flex items-center justify-center gap-3 lg:justify-start"><MapPin className="h-4 w-4 text-[#caa24c]" /> San Antonio, Texas</p>
-              <p>Private venue tours by appointment.</p>
-            </div>
-          </div>
-
           {/* Quick Links */}
           <div className="lg:col-span-3">
             <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">Navigation</h3>
@@ -49,6 +37,21 @@ export const Footer = () => {
                 </li>
               ))}
             </ul>
+          </div>
+
+          {/* Brand Info */}
+          <div className="lg:col-span-5">
+            <p className="mx-auto max-w-sm text-base leading-7 text-[#d7c29a]/68 lg:mx-0">
+              A modern San Antonio event space built for the celebrations families remember.
+              Host your wedding, quinceañera, or baby shower in elegance.
+            </p>
+            <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
+              <p className="flex items-center justify-center gap-3 lg:justify-start">
+                <MapPin className="h-4 w-4 shrink-0 text-[#caa24c]" />
+                <span>803 Castroville Rd #402, San Antonio, TX 78237</span>
+              </p>
+              <p>Private venue tours by appointment.</p>
+            </div>
           </div>
 
           {/* Contact / Action */}

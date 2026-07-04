@@ -162,7 +162,7 @@ export default function Home() {
             </div>
             <div className="mx-auto mt-7 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#d7c29a]/72">
               <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />
-              <span>Private venue tours in San Antonio, Texas.</span>
+              <span>Private venue tours at 803 Castroville Rd #402, San Antonio, TX 78237.</span>
             </div>
             <a
               href="#events"
@@ -180,7 +180,7 @@ export default function Home() {
             ['Events', 'Weddings and private parties'],
             ['Tours', 'Private appointments'],
             ['Style', 'Dark-and-gold setting'],
-            ['Location', 'San Antonio'],
+            ['Location', '803 Castroville Rd #402'],
           ].map(([label, value]) => (
             <div key={label} className="px-3 py-5 text-center sm:px-5 sm:py-7">
               <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-[#caa24c]">{label}</p>

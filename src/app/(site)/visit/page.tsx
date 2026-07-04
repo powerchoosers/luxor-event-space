@@ -46,7 +46,10 @@ export default function VisitPage() {
               ))}
             </div>
             <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left text-sm leading-6 text-[#d7c29a]/70">
-              <p className="flex items-center gap-3"><MapPin className="h-4 w-4 text-[#caa24c]" /> San Antonio, Texas</p>
+              <p className="flex items-center gap-3">
+                <MapPin className="h-4 w-4 shrink-0 text-[#caa24c]" />
+                <span>803 Castroville Rd #402, San Antonio, TX 78237</span>
+              </p>
               <p className="flex items-center gap-3"><Clock className="h-4 w-4 text-[#caa24c]" /> Private tours by appointment</p>
             </div>
           </div>
