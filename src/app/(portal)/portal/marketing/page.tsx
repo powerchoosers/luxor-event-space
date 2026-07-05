@@ -41,7 +41,7 @@ export default function MarketingPage() {
           activeTab === 'overview' ? (
             <button
               onClick={() => setActiveTab('builder')}
-              className="flex items-center gap-2 bg-blue-600 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-blue-600/25"
+              className="flex items-center gap-2 bg-[#caa24c] px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-black hover:bg-[#dfbd68] hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#caa24c]/20"
             >
               <Plus size={16} /> New Campaign
             </button>
@@ -89,7 +89,7 @@ export default function MarketingPage() {
                 <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Operational Sequences</h3>
                 <button
                   onClick={() => setActiveTab('builder')}
-                  className="text-[10px] font-bold uppercase tracking-widest text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition-colors"
+                  className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c] hover:text-[#dfbd68] flex items-center gap-1.5 transition-colors"
                 >
                   <PenSquare size={11} />
                   Build Email
@@ -142,9 +142,9 @@ export default function MarketingPage() {
               </div>
 
               {/* Quick Intelligence Block */}
-              <div className="nodal-void-card rounded-2xl border border-blue-900/20 bg-blue-950/5 p-6 shadow-2xl relative overflow-hidden group">
+              <div className="nodal-void-card rounded-2xl border border-[#caa24c]/10 bg-zinc-900/10 p-6 shadow-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-100 transition-opacity">
-                  <Sparkles size={40} className="text-blue-500" />
+                  <Sparkles size={40} className="text-[#caa24c]" />
                 </div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4">Marketing Intelligence</h4>
                 <p className="text-[11px] text-zinc-400 font-medium leading-relaxed italic mb-4">
@@ -152,7 +152,7 @@ export default function MarketingPage() {
                 </p>
                 <button
                   onClick={() => setActiveTab('builder')}
-                  className="text-[10px] font-bold uppercase tracking-widest text-blue-500 flex items-center gap-2 hover:translate-x-1 transition-transform"
+                  className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c] flex items-center gap-2 hover:translate-x-1 transition-transform"
                 >
                   Build This Email <Zap size={14} />
                 </button>
