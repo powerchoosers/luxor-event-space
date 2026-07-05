@@ -49,13 +49,13 @@ function wrapEmail(rows: string): string {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <!--[if mso]>
   <noscript><xml><o:OfficeDocumentSettings>
     <o:PixelsPerInch>96</o:PixelsPerInch>
   </o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@400;600;700;800&display=swap');
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; display: block; }
@@ -231,11 +231,17 @@ function renderDivider(block: DividerBlock): string {
     <td style="padding:8px 48px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="border-top:1px solid rgba(202,162,76,0.35);height:1px;"></td>
-          <td width="20" style="width:20px;text-align:center;padding:0 12px;">
-            <span style="display:inline-block;width:7px;height:7px;background-color:#caa24c;transform:rotate(45deg);margin-top:-4px;font-size:1px;">&nbsp;</span>
+          <td style="vertical-align:middle;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="height:1px;background-color:rgba(202,162,76,0.35);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
           </td>
-          <td style="border-top:1px solid rgba(202,162,76,0.35);height:1px;"></td>
+          <td width="24" align="center" style="vertical-align:middle;font-size:11px;line-height:1;color:#caa24c;font-family:Arial,sans-serif;">&#9670;</td>
+          <td style="vertical-align:middle;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="height:1px;background-color:rgba(202,162,76,0.35);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+          </td>
         </tr>
       </table>
     </td>
@@ -274,11 +280,17 @@ function renderFooter(block: FooterBlock): string {
     <td>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="border-top:1px solid rgba(202,162,76,0.25);height:1px;"></td>
-          <td width="32" style="width:32px;text-align:center;padding:0 10px;vertical-align:middle;">
-            <div style="width:7px;height:7px;background-color:#caa24c;transform:rotate(45deg);display:inline-block;font-size:1px;">&nbsp;</div>
+          <td style="vertical-align:middle;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="height:1px;background-color:rgba(202,162,76,0.25);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
           </td>
-          <td style="border-top:1px solid rgba(202,162,76,0.25);height:1px;"></td>
+          <td width="28" align="center" style="vertical-align:middle;font-size:11px;line-height:1;color:#caa24c;font-family:Arial,sans-serif;">&#9670;</td>
+          <td style="vertical-align:middle;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="height:1px;background-color:rgba(202,162,76,0.25);font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+          </td>
         </tr>
       </table>
     </td>
