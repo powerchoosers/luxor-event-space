@@ -183,14 +183,14 @@ export default function GalleryPage() {
                   className="object-cover transition-transform duration-700 group-hover:scale-[1.035]"
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02)_35%,rgba(0,0,0,0.88))]" />
-                <div className="absolute inset-x-3 bottom-3 sm:inset-x-5 sm:bottom-5">
-                  <div className="flex items-end justify-between gap-4 rounded-md border border-[#caa24c]/24 bg-black/68 p-3 shadow-[0_20px_54px_-26px_rgba(0,0,0,1)] backdrop-blur-md sm:gap-5 sm:p-4">
+                <div className="absolute inset-x-3 bottom-3 flex justify-center sm:inset-x-5 sm:bottom-5">
+                  <div className="flex w-64 max-w-[calc(100%-1rem)] flex-col items-center gap-3 rounded-md border border-[#caa24c]/24 bg-black/68 p-3 text-center shadow-[0_20px_54px_-26px_rgba(0,0,0,1)] backdrop-blur-md sm:w-72 sm:p-4">
                     <div>
                       <p className="font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-[#fff2bf]">{item.category}</p>
                       <h2 className="mt-2 font-serif text-2xl leading-none text-[#f7efe3] sm:text-3xl">{item.title}</h2>
                       <p className="mt-2 max-w-md text-sm leading-5 text-[#eadcc8]/86">{item.caption}</p>
                     </div>
-                    <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#caa24c]/35 bg-black/55 text-[#f1d27a] backdrop-blur-sm transition group-hover:bg-[#caa24c] group-hover:text-[#050505] sm:flex">
+                    <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#caa24c]/35 bg-black/55 text-[#f1d27a] backdrop-blur-sm transition group-hover:bg-[#caa24c] group-hover:text-[#050505] sm:flex">
                       <Maximize2 className="h-4 w-4" />
                     </span>
                   </div>
