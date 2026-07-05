@@ -8,6 +8,7 @@ import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const navLinks = [
+  { label: 'Grand Opening', href: '/grand-opening' },
   { label: 'Events', href: '/events' },
   { label: 'Spaces', href: '/spaces' },
   { label: 'Gallery', href: '/gallery' },

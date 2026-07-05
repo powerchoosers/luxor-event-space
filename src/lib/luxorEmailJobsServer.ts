@@ -150,13 +150,58 @@ export async function processDueLuxorEmailJobs(limit = 25) {
         fromName: 'Luxor Event Space',
       })
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
+      if (job.job_type === 'marketing_campaign') {
+        await markMarketingJobResult(job, 'sent')
+      }
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
       await updateLuxorEmailJob(job.id, { status: 'failed', last_error: message })
+      if (job.job_type === 'marketing_campaign') {
+        await markMarketingJobResult(job, 'failed', message)
+      }
       results.push({ id: job.id, status: 'failed', error: message })
     }
   }
 
   return results
+}
+
+async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {
+  const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+  const recipientId = typeof metadata.marketing_recipient_id === 'string' ? metadata.marketing_recipient_id : null
+  const campaignId = typeof metadata.campaign_id === 'string' ? metadata.campaign_id : null
+
+  if (!recipientId || !campaignId) return
+
+  const now = new Date().toISOString()
+  await supabaseRest(
+    `luxor_marketing_recipients?id=eq.${encodeURIComponent(recipientId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status,
+        sent_at: status === 'sent' ? now : null,
+        last_error: error || null,
+      }),
+    },
+  )
+
+  const recipients = await supabaseRest<{ status: string }[]>(
+    `luxor_marketing_recipients?select=status&campaign_id=eq.${encodeURIComponent(campaignId)}`,
+  )
+  const queued = recipients.filter((recipient) => recipient.status === 'queued').length
+  const sent = recipients.filter((recipient) => recipient.status === 'sent').length
+  const failed = recipients.filter((recipient) => recipient.status === 'failed').length
+
+  await supabaseRest(
+    `luxor_marketing_campaigns?id=eq.${encodeURIComponent(campaignId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: queued > 0 ? 'sending' : failed > 0 && sent === 0 ? 'failed' : 'sent',
+        sent_at: queued === 0 ? now : null,
+      }),
+    },
+  )
 }

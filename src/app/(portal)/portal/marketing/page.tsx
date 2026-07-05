@@ -1,29 +1,105 @@
 'use client'
 
-import React, { useState } from 'react'
-import { 
-  Mail, 
-  Send, 
-  Plus, 
-  Zap, 
-  MousePointer2, 
-  Sparkles,
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+  AlertCircle,
   BarChart3,
-  PenSquare,
+  CalendarClock,
+  CheckCircle2,
   LayoutTemplate,
+  Mail,
+  MousePointer2,
+  PenSquare,
+  Plus,
+  RefreshCw,
+  Send,
 } from 'lucide-react'
-import { PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES } from './emailTemplates'
 
-// ─── Tab type ────────────────────────────────────────────────────────────────
-
 type Tab = 'overview' | 'builder' | 'templates'
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+type Campaign = {
+  id: string
+  created_at: string
+  name: string
+  subject: string
+  status: string
+  audience_label: string | null
+  scheduled_for: string | null
+  sent_at: string | null
+  recipient_count: number
+  sent_count: number
+  queued_count: number
+  failed_count: number
+  open_count: number
+  click_count: number
+  unique_opens: number
+  unique_clicks: number
+  open_rate: number
+  click_rate: number
+}
 
 export default function MarketingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  async function loadCampaigns() {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/marketing/campaigns', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to load campaigns.')
+      setCampaigns(payload.campaigns || [])
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load campaigns.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCampaigns()
+  }, [])
+
+  const stats = useMemo(() => {
+    const recipients = campaigns.reduce((sum, campaign) => sum + Number(campaign.recipient_count || 0), 0)
+    const sent = campaigns.reduce((sum, campaign) => sum + Number(campaign.sent_count || 0), 0)
+    const opens = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_opens || 0), 0)
+    const clicks = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_clicks || 0), 0)
+    const scheduled = campaigns.filter((campaign) => campaign.status === 'scheduled' || campaign.queued_count > 0).length
+
+    return {
+      campaigns: campaigns.length,
+      recipients,
+      scheduled,
+      openRate: sent ? Math.round((opens / sent) * 1000) / 10 : 0,
+      clickRate: sent ? Math.round((clicks / sent) * 1000) / 10 : 0,
+    }
+  }, [campaigns])
+
+  async function cancelCampaign(id: string) {
+    setBusyId(id)
+    try {
+      const response = await fetch(`/api/marketing/campaigns/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to cancel campaign.')
+      await loadCampaigns()
+    } catch (cancelError) {
+      alert(cancelError instanceof Error ? cancelError.message : 'Unable to cancel campaign.')
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 size={14} /> },
@@ -36,30 +112,38 @@ export default function MarketingPage() {
       <PortalPageHeader
         icon={<Mail size={18} />}
         title="Marketing Command"
-        description="Orchestrate automated outreach, build branded emails, and analyze audience engagement."
+        description="Build, schedule, send, and track Luxor email campaigns from one simple control room."
         actions={
           activeTab === 'overview' ? (
-            <button
-              onClick={() => setActiveTab('builder')}
-              className="flex items-center gap-2 bg-[#caa24c] px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-black hover:bg-[#dfbd68] hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#caa24c]/20"
-            >
-              <Plus size={16} /> New Campaign
-            </button>
+            <>
+              <button
+                onClick={loadCampaigns}
+                disabled={loading}
+                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
+              >
+                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Refresh
+              </button>
+              <button
+                onClick={() => setActiveTab('builder')}
+                className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
+              >
+                <Plus size={16} /> New Campaign
+              </button>
+            </>
           ) : null
         }
       />
 
-      {/* Tab Bar */}
       <div className="flex-shrink-0">
-        <div className="flex items-center gap-1 p-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30 w-fit">
+        <div className="flex w-fit items-center gap-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-[0.15em] transition-all ${
+              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.15em] transition-all ${
                 activeTab === tab.id
                   ? 'bg-[#caa24c] text-black shadow-md shadow-[#caa24c]/20'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40'
+                  : 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
               }`}
             >
               {tab.icon}
@@ -69,92 +153,84 @@ export default function MarketingPage() {
         </div>
       </div>
 
-      {/* ── Overview Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <>
-          {/* Engagement Pulse */}
           <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:gap-6">
-            <StatsPanel label="Subscribers" value="8,402" trend="+124" />
-            <StatsPanel label="Open Rate (Avg)" value="42.8%" trend="+2.1%" />
-            <StatsPanel label="Click-Through" value="18.1%" trend="+0.5%" />
-            <StatsPanel label="Bespoke Replies" value="12" trend="+3" />
+            <StatsPanel label="Campaigns" value={String(stats.campaigns)} detail={`${stats.scheduled} scheduled/queued`} />
+            <StatsPanel label="Recipients" value={stats.recipients.toLocaleString()} detail={`${campaigns.length} lists`} />
+            <StatsPanel label="Open Rate" value={`${stats.openRate}%`} detail="unique opens" />
+            <StatsPanel label="Click Rate" value={`${stats.clickRate}%`} detail="unique clicks" />
           </div>
 
-          {/* Main Campaign Grid */}
+          {error ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 text-sm text-rose-300">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold">Marketing data could not load.</p>
+                <p className="mt-1 text-xs text-rose-300/80">{error}</p>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-            
-            {/* Left Column: ACTIVE CAMPAIGNS */}
-            <div className="lg:col-span-2 space-y-4 lg:space-y-6">
+            <div className="space-y-4 lg:col-span-2 lg:space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Operational Sequences</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Campaigns</h3>
                 <button
                   onClick={() => setActiveTab('builder')}
-                  className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c] hover:text-[#dfbd68] flex items-center gap-1.5 transition-colors"
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-colors hover:text-[#dfbd68]"
                 >
                   <PenSquare size={11} />
                   Build Email
                 </button>
               </div>
-              
-              <CampaignCard 
-                title="Q2 Event Space Outreach" 
-                status="Running" 
-                progress={75} 
-                sent={1250} 
-                delivered="99.8%" 
-                type="Sequence"
-              />
-              <CampaignCard 
-                title="Corporate Holiday Early Bird" 
-                status="Scheduled" 
-                progress={0} 
-                sent={0} 
-                delivered="N/A" 
-                type="Broadcast"
-                accent="purple"
-              />
-              <CampaignCard 
-                title="Post-Tour Nurture Loop" 
-                status="Paused" 
-                progress={42} 
-                sent={84} 
-                delivered="100%" 
-                type="Triggered"
-                accent="orange"
-              />
+
+              {loading ? (
+                <div className="rounded-2xl border border-zinc-900 bg-black/30 p-8 text-sm text-zinc-500">Loading campaigns...</div>
+              ) : campaigns.length ? (
+                campaigns.map((campaign) => (
+                  <CampaignCard
+                    key={campaign.id}
+                    campaign={campaign}
+                    busy={busyId === campaign.id}
+                    onCancel={() => cancelCampaign(campaign.id)}
+                  />
+                ))
+              ) : (
+                <PortalEmptyState
+                  icon={<Mail size={34} />}
+                  title="No campaigns yet"
+                  description="Build an email, add recipients, and queue or schedule it. Once it sends, opens and clicks will show here."
+                  action={
+                    <button
+                      onClick={() => setActiveTab('builder')}
+                      className="rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black"
+                    >
+                      Create Campaign
+                    </button>
+                  }
+                />
+              )}
             </div>
 
-            {/* Right Column: AUDIENCE SEGMENTS */}
             <div className="space-y-6">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600 mb-2">Segment Logic</h3>
-              <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl p-6 shadow-2xl divide-y divide-zinc-900/50">
-                <SegmentRow label="Corporate Planners" count="1,250" />
-                <SegmentRow label="Wedding Leads (Unqualified)" count="3,480" />
-                <SegmentRow label="VIP Event Portfolio" count="420" />
-                <SegmentRow label="Tour No-Shows" count="180" />
-                <SegmentRow label="Referral Network" count="1,042" />
-                
-                <div className="pt-6">
-                  <button className="w-full py-2.5 rounded-lg bg-zinc-900/50 border border-zinc-800 text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white transition-colors">
-                    Build Custom Segment
-                  </button>
-                </div>
+              <h3 className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">How To Use It</h3>
+              <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 p-6 shadow-2xl backdrop-blur-xl">
+                <MachineStep icon={<PenSquare size={14} />} title="Build" text="Use the email builder or a template. Keep one clear call-to-action per campaign." />
+                <MachineStep icon={<CalendarClock size={14} />} title="Schedule" text="Paste a recipient list, pick a time, and the site creates cron-ready email jobs." />
+                <MachineStep icon={<BarChart3 size={14} />} title="Measure" text="Every recipient gets a tracking pixel and wrapped links, so opens and clicks return here." />
               </div>
 
-              {/* Quick Intelligence Block */}
-              <div className="nodal-void-card rounded-2xl border border-[#caa24c]/10 bg-zinc-900/10 p-6 shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-100 transition-opacity">
-                  <Sparkles size={40} className="text-[#caa24c]" />
-                </div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-4">Marketing Intelligence</h4>
-                <p className="text-[11px] text-zinc-400 font-medium leading-relaxed italic mb-4">
-                  &ldquo;We recommend re-engaging the &apos;Tour No-Shows&apos; segment using the &apos;Concierge Offer&apos; template. Current conversion probability is estimated at 18.5%.&rdquo;
+              <div className="nodal-void-card rounded-2xl border border-[#caa24c]/10 bg-zinc-900/10 p-6 shadow-2xl">
+                <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-white">Good Next Campaign</h4>
+                <p className="mb-4 text-[11px] font-medium leading-relaxed text-zinc-400">
+                  Re-engage tour no-shows with a short concierge note and one button back to the tour page. That is more useful than a big newsletter because it asks for one clear action.
                 </p>
                 <button
                   onClick={() => setActiveTab('builder')}
-                  className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c] flex items-center gap-2 hover:translate-x-1 transition-transform"
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-transform hover:translate-x-1"
                 >
-                  Build This Email <Zap size={14} />
+                  Build This Email <Send size={14} />
                 </button>
               </div>
             </div>
@@ -162,76 +238,46 @@ export default function MarketingPage() {
         </>
       )}
 
-      {/* ── Email Builder Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'builder' && (
-        <div className="flex-1 min-h-0">
+        <div className="min-h-0 flex-1">
           <EmailBuilderShell />
         </div>
       )}
 
-      {/* ── Templates Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'templates' && (
         <div className="flex-1">
           <div className="mb-6">
             <p className="text-xs text-zinc-500">
-              Choose a template to jump-start your next campaign. Templates open directly in the Email Builder with pre-filled blocks.
+              Choose a template to jump-start your next campaign. Templates open from the builder template button.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {EMAIL_TEMPLATES.map((tpl) => (
               <div
                 key={tpl.id}
-                className="rounded-2xl border border-zinc-800/60 bg-zinc-900/20 overflow-hidden group hover:border-zinc-600 hover:bg-zinc-800/20 transition-all"
+                className="overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 transition-all hover:border-zinc-600 hover:bg-zinc-800/20"
               >
-                {/* Color bar */}
                 <div className="h-1.5 w-full" style={{ background: tpl.previewColor }} />
-                
-                {/* Simulated email preview */}
-                <div className="p-5 border-b border-zinc-800/40" style={{ minHeight: 140 }}>
-                  <div className="rounded-lg overflow-hidden border border-zinc-800/40" style={{ background: '#ffffff10' }}>
-                    {/* Hero simulation */}
-                    <div
-                      className="h-16 flex items-center justify-center"
-                      style={{ background: `linear-gradient(135deg,${tpl.previewColor}30,${tpl.previewColor}10)` }}
-                    >
-                      <div className="text-center px-4">
-                        <div className="h-2.5 rounded-full mx-auto mb-1.5" style={{ background: tpl.previewColor, width: '60%', opacity: 0.8 }} />
-                        <div className="h-1.5 rounded-full mx-auto" style={{ background: `${tpl.previewColor}60`, width: '40%' }} />
-                      </div>
-                    </div>
-                    {/* Content simulation */}
-                    <div className="p-3 space-y-1.5">
-                      {[80, 95, 60, 75].map((w, i) => (
-                        <div key={i} className="h-1 rounded-full bg-zinc-700/40" style={{ width: `${w}%` }} />
-                      ))}
-                      {/* Button simulation */}
-                      <div className="flex justify-center pt-1">
-                        <div className="h-4 rounded-sm px-4" style={{ background: tpl.previewColor, width: 80, opacity: 0.7 }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 <div className="p-5">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h4 className="text-sm font-bold text-white/90 group-hover:text-white transition-colors">{tpl.name}</h4>
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-bold text-white/90">{tpl.name}</h4>
                     <span
-                      className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-sm border flex-shrink-0"
+                      className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
                       style={{ color: tpl.previewColor, borderColor: `${tpl.previewColor}40`, background: `${tpl.previewColor}15` }}
                     >
                       {tpl.category}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 leading-relaxed mb-4">{tpl.description}</p>
+                  <p className="mb-4 text-[11px] leading-relaxed text-zinc-500">{tpl.description}</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-700 font-mono">{tpl.blocks.length} blocks</span>
+                    <span className="font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</span>
                     <button
                       onClick={() => setActiveTab('builder')}
-                      className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95"
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:scale-105 active:scale-95"
                       style={{ background: `${tpl.previewColor}20`, color: tpl.previewColor, border: `1px solid ${tpl.previewColor}30` }}
                     >
                       <PenSquare size={10} />
-                      Use Template
+                      Open Builder
                     </button>
                   </div>
                 </div>
@@ -244,92 +290,85 @@ export default function MarketingPage() {
   )
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatsPanel({ label, value, trend }: { label: string; value: string; trend: string }) {
+function StatsPanel({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="luxor-glass-card rounded-2xl p-6 luxor-glow-gold overflow-hidden group shadow-xl">
-      <p className="text-[10px] uppercase font-black text-zinc-550 tracking-[0.2em] mb-2 relative z-10">{label}</p>
-      <div className="flex items-end justify-between relative z-10">
-        <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300">{value}</h3>
-        <span className="text-[10px] font-bold text-emerald-400 pb-1">{trend}</span>
+    <div className="luxor-glass-card luxor-glow-gold group overflow-hidden rounded-2xl p-6 shadow-xl">
+      <p className="relative z-10 mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</p>
+      <div className="relative z-10 flex items-end justify-between">
+        <h3 className="font-mono text-2xl font-bold tracking-tight text-white transition-transform duration-300 group-hover:translate-x-1">{value}</h3>
+        <span className="pb-1 text-[10px] font-bold text-zinc-500">{detail}</span>
       </div>
     </div>
   )
 }
 
-function CampaignCard({ title, status, progress, sent, delivered, type, accent = 'blue' }: { 
-  title: string; 
-  status: string; 
-  progress: number; 
-  sent: number; 
-  delivered: string;
-  type: string;
-  accent?: 'blue' | 'purple' | 'orange';
-}) {
-  const accentMap = {
-    blue: 'border-blue-500/20 bg-blue-500/5 text-blue-400',
-    purple: 'border-purple-500/20 bg-purple-500/5 text-purple-400',
-    orange: 'border-orange-500/20 bg-orange-500/5 text-orange-400'
-  }
-
-  const glowMap = {
-    blue: 'luxor-glow-blue',
-    purple: 'luxor-glow-gold',
-    orange: 'luxor-glow-gold'
-  }
+function CampaignCard({ campaign, busy, onCancel }: { campaign: Campaign; busy: boolean; onCancel: () => void }) {
+  const progress = campaign.recipient_count ? Math.round((campaign.sent_count / campaign.recipient_count) * 100) : 0
+  const canCancel = campaign.status === 'scheduled' || campaign.queued_count > 0
 
   return (
-    <div className={`luxor-glass-card rounded-2xl p-6 ${glowMap[accent]} overflow-hidden shadow-xl group`}>
-      <div className="flex items-center justify-between mb-6 relative z-10">
-        <div className="flex items-center gap-4">
-          <div className={`p-2 rounded-lg border flex items-center justify-center ${accentMap[accent]}`}>
-            {type === 'Sequence' ? <Send size={16} /> : type === 'Broadcast' ? <Zap size={16} /> : <Sparkles size={16} />}
+    <div className="luxor-glass-card luxor-glow-blue group overflow-hidden rounded-2xl p-6 shadow-xl">
+      <div className="relative z-10 mb-6 flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/5 p-2 text-blue-400">
+            {campaign.status === 'sent' ? <CheckCircle2 size={16} /> : campaign.status === 'scheduled' ? <CalendarClock size={16} /> : <Send size={16} />}
           </div>
-          <div>
-            <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">{type}</p>
-            <h4 className="text-sm font-bold text-white/90 group-hover:text-blue-400 transition-colors">{title}</h4>
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{campaign.audience_label || 'Manual list'}</p>
+            <h4 className="truncate text-sm font-bold text-white/90 transition-colors group-hover:text-blue-400">{campaign.name}</h4>
+            <p className="mt-1 truncate text-[11px] text-zinc-500">{campaign.subject}</p>
           </div>
         </div>
-        <span className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${
-          status === 'Running' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-          status === 'Scheduled' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 
-          'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
-        }`}>
-          {status}
-        </span>
+        <PortalStatusBadge status={campaign.status} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 relative z-10">
-        <div>
-          <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Total Sends</p>
-          <p className="text-lg font-bold text-white font-mono">{sent.toLocaleString()}</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Click Accuracy</p>
-          <p className="text-lg font-bold text-white font-mono">{delivered}</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Progress</p>
-          <p className="text-lg font-bold text-white font-mono">{progress}%</p>
-        </div>
+      <div className="relative z-10 mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+        <Metric label="Recipients" value={campaign.recipient_count.toLocaleString()} />
+        <Metric label="Sent" value={campaign.sent_count.toLocaleString()} />
+        <Metric label="Open" value={`${campaign.open_rate}%`} />
+        <Metric label="Click" value={`${campaign.click_rate}%`} />
+        <Metric label="Events" value={(campaign.open_count + campaign.click_count).toLocaleString()} />
       </div>
 
-      <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden relative z-10">
-        <div className="h-full bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${progress}%` }} />
+      <div className="relative z-10 mb-4 h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
+        <div className="h-full rounded-full bg-blue-600 transition-all duration-1000" style={{ width: `${progress}%` }} />
+      </div>
+
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[10px] text-zinc-600">
+          {campaign.scheduled_for ? `Scheduled: ${new Date(campaign.scheduled_for).toLocaleString()}` : `Created: ${new Date(campaign.created_at).toLocaleString()}`}
+        </p>
+        {canCancel ? (
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-500/10 disabled:opacity-50"
+          >
+            {busy ? 'Cancelling...' : 'Cancel Queue'}
+          </button>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function SegmentRow({ label, count }: { label: string; count: string }) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="py-4 flex items-center justify-between group/seg">
-      <span className="text-[11px] font-medium text-zinc-400 group-hover/seg:text-zinc-200 transition-colors uppercase tracking-tight">{label}</span>
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-mono font-bold text-white/90 group-hover/seg:text-blue-500 transition-colors">{count}</span>
-        <button className="text-zinc-700 hover:text-zinc-300 transition-colors"><MousePointer2 size={12} /></button>
+    <div>
+      <p className="mb-1 text-[10px] font-bold uppercase text-zinc-500">{label}</p>
+      <p className="font-mono text-lg font-bold text-white">{value}</p>
+    </div>
+  )
+}
+
+function MachineStep({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <div className="border-b border-zinc-900/70 py-4 first:pt-0 last:border-b-0 last:pb-0">
+      <div className="mb-2 flex items-center gap-2 text-[#caa24c]">
+        {icon}
+        <h4 className="text-[10px] font-black uppercase tracking-[0.18em]">{title}</h4>
       </div>
+      <p className="text-[11px] leading-5 text-zinc-500">{text}</p>
     </div>
   )
 }

@@ -13,6 +13,7 @@ import {
   Phone,
   Calendar,
   MoreHorizontal,
+  Sparkles,
   X
 } from 'lucide-react'
 import Link from 'next/link'
@@ -59,6 +60,7 @@ export default function LeadsPage() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [campaignFilter, setCampaignFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
 
@@ -200,8 +202,12 @@ export default function LeadsPage() {
       (lead.phone && lead.phone.includes(searchTerm))
 
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter
+    const matchesCampaign =
+      campaignFilter === 'all' ||
+      (campaignFilter === 'grand_opening' && isGrandOpeningRsvp(lead)) ||
+      (campaignFilter === 'standard' && !isGrandOpeningRsvp(lead))
 
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesStatus && matchesCampaign
   })
 
   const sortedLeads = [...filteredLeads].sort((a, b) => {
@@ -217,8 +223,8 @@ export default function LeadsPage() {
 
   // Computed Metrics
   const totalCount = sortedLeads.length
-  const tourRequests = leads.filter((l) => l.status === 'tour_requested').length
   const newLeadsCount = leads.filter((l) => l.status === 'new').length
+  const grandOpeningCount = leads.filter(isGrandOpeningRsvp).length
   const missingContact = leads.filter((l) => !l.email && !l.phone).length
 
   return (
@@ -231,7 +237,7 @@ export default function LeadsPage() {
           <div className="flex w-full flex-col items-stretch gap-3 xl:w-auto xl:items-end">
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[520px]">
               <LeadMetric label="Live Inquiries" value={String(leads.length)} detail="Forms and chat" />
-              <LeadMetric label="Tour Requests" value={String(tourRequests)} detail="Need confirmation" tone="gold" />
+              <LeadMetric label="Grand Opening" value={String(grandOpeningCount)} detail="RSVP campaign" tone="gold" />
               <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
@@ -269,6 +275,15 @@ export default function LeadsPage() {
                     value: option.value,
                     label: option.value === 'booked' ? 'Booked (Won)' : option.label,
                   })),
+                ]}
+              />
+              <PortalSelect
+                value={campaignFilter}
+                onChange={setCampaignFilter}
+                options={[
+                  { value: 'all', label: 'All Sources' },
+                  { value: 'grand_opening', label: 'Grand Opening RSVPs' },
+                  { value: 'standard', label: 'Standard Leads' },
                 ]}
               />
               <button
@@ -392,9 +407,12 @@ export default function LeadsPage() {
                           <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">
                             {lead.full_name}
                           </p>
-                          <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
-                            {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
+                              {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
+                            </p>
+                            {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
+                          </div>
                         </div>
                       </Link>
                     </td>
@@ -408,7 +426,13 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-6 py-6 font-mono text-xs text-zinc-300">
                       <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
-                      <div className="text-zinc-500 mt-1">{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count needed'}</div>
+                      <div className="text-zinc-500 mt-1">
+                        {isGrandOpeningRsvp(lead)
+                          ? `${lead.attendee_count || lead.guest_count || 1} attending`
+                          : lead.guest_count
+                            ? `${lead.guest_count} guests`
+                            : 'Guest count needed'}
+                      </div>
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-start flex-col">
@@ -419,7 +443,9 @@ export default function LeadsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-6">
-                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{lead.source.replaceAll('_', ' ')}</span>
+                      <span className={`text-xs font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#f1d27a]' : 'text-zinc-500'}`}>
+                        {formatSourceLabel(lead)}
+                      </span>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
@@ -491,13 +517,20 @@ export default function LeadsPage() {
                           <div className="space-y-1.5 border-t border-zinc-900/60 pt-2.5">
                             <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono">
                               <span className="font-semibold text-white/80">{lead.event_type || 'Quinceañera'}</span>
-                              <span className="text-zinc-500">{lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</span>
+                              <span className="text-zinc-500">
+                                {isGrandOpeningRsvp(lead)
+                                  ? `${lead.attendee_count || lead.guest_count || 1} RSVP`
+                                  : lead.guest_count
+                                    ? `${lead.guest_count} guests`
+                                    : 'No count'}
+                              </span>
                             </div>
                             
                             <div className="flex items-center gap-1.5 text-[9px] text-[#caa24c] font-medium uppercase tracking-tight">
                               <Calendar size={11} className="text-zinc-600" />
                               <span>{lead.target_date || 'Date TBD'}</span>
                             </div>
+                            {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
                           </div>
                         </Link>
 
@@ -589,7 +622,11 @@ export default function LeadsPage() {
                           <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? lead.phone ?? 'No contact'}</p>
                         </div>
                       </div>
-                      <p className="text-[10px] text-zinc-650 mt-2 font-medium">{lead.event_type || 'Quinceañera'} • {lead.guest_count || 0} guests</p>
+                      <p className="text-[10px] text-zinc-650 mt-2 font-medium">
+                        {isGrandOpeningRsvp(lead)
+                          ? `Grand Opening RSVP • ${lead.attendee_count || lead.guest_count || 1} attending`
+                          : `${lead.event_type || 'Quinceañera'} • ${lead.guest_count || 0} guests`}
+                      </p>
                     </Link>
 
                     <div className="flex justify-end pt-3 mt-3 border-t border-zinc-900/20">
@@ -742,6 +779,15 @@ function LeadMetric({
   )
 }
 
+function GrandOpeningBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-[#caa24c]/25 bg-[#caa24c]/10 px-2 py-0.5 font-mono text-[8px] font-black uppercase tracking-[0.16em] text-[#f1d27a]">
+      <Sparkles size={9} />
+      Grand Opening RSVP
+    </span>
+  )
+}
+
 function getInitials(name: string) {
   return name
     .split(' ')
@@ -750,6 +796,14 @@ function getInitials(name: string) {
     .map((part) => part[0])
     .join('')
     .toUpperCase()
+}
+
+function isGrandOpeningRsvp(lead: LuxorInquiry) {
+  return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
+}
+
+function formatSourceLabel(lead: LuxorInquiry) {
+  return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
 }
 
 function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {

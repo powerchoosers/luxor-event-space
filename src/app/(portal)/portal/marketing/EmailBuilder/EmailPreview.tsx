@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download } from 'lucide-react'
+import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
 
@@ -17,6 +17,9 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [recipients, setRecipients] = useState('')
   const [sendSubject, setSendSubject] = useState(subject)
+  const [campaignName, setCampaignName] = useState(subject)
+  const [audienceLabel, setAudienceLabel] = useState('Manual list')
+  const [scheduledFor, setScheduledFor] = useState('')
   const [sendStatus, setSendStatus] = useState<SendStatus>('idle')
   const [sendMessage, setSendMessage] = useState('')
   const [copied, setCopied] = useState(false)
@@ -43,40 +46,33 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
     setSendStatus('sending')
     setSendMessage('')
 
-    let successCount = 0
-    let lastError = ''
-
-    for (const email of emails) {
-      try {
-        const res = await fetch('/api/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: email,
-            subject: sendSubject,
-            content: html,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          lastError = data.error || `Failed to send to ${email}`
-        } else {
-          successCount++
-        }
-      } catch {
-        lastError = `Network error sending to ${email}`
+    try {
+      const res = await fetch('/api/marketing/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: campaignName || sendSubject,
+          subject: sendSubject,
+          htmlBody: html,
+          recipientsText: emails.join(','),
+          audienceLabel,
+          scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create campaign.')
       }
-    }
 
-    if (successCount === emails.length) {
       setSendStatus('success')
-      setSendMessage(`✓ Sent to ${successCount} recipient${successCount !== 1 ? 's' : ''} successfully.`)
-    } else if (successCount > 0) {
-      setSendStatus('success')
-      setSendMessage(`Sent to ${successCount}/${emails.length} recipients. Last error: ${lastError}`)
-    } else {
+      setSendMessage(
+        scheduledFor
+          ? `Campaign scheduled for ${new Date(scheduledFor).toLocaleString()} with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}.`
+          : `Campaign queued for ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. The cron sender will process it shortly.`,
+      )
+    } catch (error) {
       setSendStatus('error')
-      setSendMessage(lastError || 'Failed to send. Check your Zoho configuration.')
+      setSendMessage(error instanceof Error ? error.message : 'Failed to create campaign.')
     }
   }
 
@@ -215,6 +211,16 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Campaign Name</label>
+                    <input
+                      className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
+                      placeholder="Example: July open house push"
+                      value={campaignName}
+                      onChange={(e) => setCampaignName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
                     <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Subject Line</label>
                     <input
                       className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
@@ -237,6 +243,28 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                       {recipients.split(',').filter((e) => e.trim()).length} recipient(s)
                     </p>
                   </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Audience Label</label>
+                      <input
+                        className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
+                        placeholder="Wedding leads, no-shows..."
+                        value={audienceLabel}
+                        onChange={(e) => setAudienceLabel(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Schedule Time</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
+                        value={scheduledFor}
+                        onChange={(e) => setScheduledFor(e.target.value)}
+                      />
+                      <p className="text-[10px] text-zinc-600">Leave blank to queue it now.</p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Summary */}
@@ -250,6 +278,14 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                     <div>
                       <p className="text-[9px] text-zinc-600 uppercase tracking-wider">HTML Size</p>
                       <p className="text-sm font-bold text-white/90 font-mono">{(html.length / 1024).toFixed(1)}kb</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Tracking</p>
+                      <p className="text-sm font-bold text-white/90 font-mono">Open + Click</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Send Mode</p>
+                      <p className="text-sm font-bold text-white/90 font-mono">{scheduledFor ? 'Scheduled' : 'Queued'}</p>
                     </div>
                   </div>
                 </div>
@@ -276,14 +312,16 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 py-3.5 text-sm font-black uppercase tracking-[0.15em] text-black shadow-lg shadow-[#caa24c]/20 transition-all hover:bg-[#d4b060] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
                 >
                   {sendStatus === 'sending' ? (
-                    <><Loader2 size={16} className="animate-spin" /> Sending...</>
+                    <><Loader2 size={16} className="animate-spin" /> Creating...</>
+                  ) : scheduledFor ? (
+                    <><CalendarClock size={16} /> Schedule Campaign</>
                   ) : (
-                    <><Send size={16} /> Send Campaign</>
+                    <><Send size={16} /> Queue Campaign</>
                   )}
                 </button>
 
                 <p className="text-[10px] text-zinc-700 text-center">
-                  Sent via Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>
+                  Queued through Luxor Marketing and sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>
                 </p>
               </div>
             </div>

@@ -43,5 +43,8 @@ export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
     throw new Error(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`)
   }
 
-  return (await response.json()) as T
+  const text = await response.text()
+  if (!text) return null as T
+
+  return JSON.parse(text) as T
 }

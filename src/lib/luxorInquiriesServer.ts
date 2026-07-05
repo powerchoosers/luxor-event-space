@@ -37,11 +37,19 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     message: message || null,
     source: compactText(input.source) || 'website',
     flow: compactText(input.flow) || 'tour_request',
+    campaign_key: compactText(input.campaignKey) || null,
+    rsvp_status: normalizeRsvpStatus(input.rsvpStatus),
+    marketing_opt_in: Boolean(input.marketingOptIn),
+    attendee_count: parseGuestCount(input.attendeeCount),
     page_path: compactText(input.pagePath) || null,
     referrer: compactText(input.referrer) || null,
     user_agent: userAgent ? userAgent.slice(0, 500) : null,
     metadata: input.metadata ?? {},
   }
+}
+
+function normalizeRsvpStatus(value: unknown) {
+  return value === 'attending' || value === 'not_attending' || value === 'maybe' ? value : null
 }
 
 export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: string) {

@@ -33,6 +33,10 @@ export type LuxorInquiryInput = {
   message?: string
   source?: string
   flow?: string
+  campaignKey?: string
+  rsvpStatus?: 'attending' | 'not_attending' | 'maybe'
+  marketingOptIn?: boolean
+  attendeeCount?: string
   pagePath?: string
   referrer?: string
   metadata?: Record<string, unknown>
@@ -45,6 +49,10 @@ export type LuxorInquiry = {
   status: LuxorInquiryStatus
   source: string
   flow: string
+  campaign_key: string | null
+  rsvp_status: 'attending' | 'not_attending' | 'maybe' | null
+  marketing_opt_in: boolean
+  attendee_count: number | null
   full_name: string
   email: string | null
   phone: string | null
@@ -189,7 +197,7 @@ export type LuxorPayment = {
 }
 
 export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
-export type LuxorEmailJobKind = 'tour_confirmation' | 'tour_reminder' | 'tour_no_show_reschedule' | 'contract_signature'
+export type LuxorEmailJobKind = 'tour_confirmation' | 'tour_reminder' | 'tour_no_show_reschedule' | 'contract_signature' | 'marketing_campaign'
 
 export type LuxorEmailJob = {
   id: string
@@ -229,5 +237,58 @@ export type LuxorSignatureRequest = {
   signer_ip: string | null
   signer_user_agent: string | null
   expires_at: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorMarketingCampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'cancelled'
+export type LuxorMarketingRecipientStatus = 'queued' | 'sent' | 'failed' | 'cancelled'
+export type LuxorMarketingEventType = 'open' | 'click'
+
+export type LuxorMarketingCampaign = {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  subject: string
+  html_body: string
+  status: LuxorMarketingCampaignStatus
+  audience_label: string | null
+  scheduled_for: string | null
+  sent_at: string | null
+  created_by: string | null
+  recipient_count: number
+  metadata: Record<string, unknown>
+}
+
+export type LuxorMarketingRecipient = {
+  id: string
+  created_at: string
+  updated_at: string
+  campaign_id: string
+  email_job_id: string | null
+  email: string
+  name: string | null
+  status: LuxorMarketingRecipientStatus
+  tracking_token: string
+  sent_at: string | null
+  last_error: string | null
+  open_count: number
+  click_count: number
+  first_opened_at: string | null
+  last_opened_at: string | null
+  last_clicked_at: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorMarketingEvent = {
+  id: string
+  created_at: string
+  campaign_id: string
+  recipient_id: string
+  event_type: LuxorMarketingEventType
+  url: string | null
+  ip_address: string | null
+  user_agent: string | null
+  device_type: string | null
   metadata: Record<string, unknown>
 }

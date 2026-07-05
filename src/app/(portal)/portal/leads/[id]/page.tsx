@@ -25,6 +25,7 @@ import {
   FileSignature,
   NotebookPen,
   ReceiptText,
+  Sparkles,
 } from 'lucide-react'
 import { LuxorBooking, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
@@ -388,6 +389,7 @@ export default function LeadDetailPage({
 
   // Parse chat logs if available in metadata
   const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
+  const isGrandOpeningLead = isGrandOpeningRsvp(lead)
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -417,7 +419,7 @@ export default function LeadDetailPage({
       <PortalPageHeader
         icon={<User size={18} />}
         title={lead.full_name}
-        description={`Event Profile: ${lead.event_type || 'Quinceañera'} • Captured via ${lead.source.replaceAll('_', ' ')} on ${new Date(lead.created_at).toLocaleDateString()}`}
+        description={`Event Profile: ${lead.event_type || 'Quinceañera'} • Captured via ${formatSourceLabel(lead)} on ${new Date(lead.created_at).toLocaleDateString()}`}
         actions={
           <div className="flex flex-wrap items-center gap-3">
             {lead.email && (
@@ -443,22 +445,52 @@ export default function LeadDetailPage({
       <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
         {/* Main Details and Activity Column */}
         <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3" data-client-scroll-column="main">
+          {isGrandOpeningLead ? (
+            <div className="rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/8 p-5 shadow-xl shadow-black/20 luxor-soft-enter">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-black/35 text-[#f1d27a]">
+                    <Sparkles size={18} />
+                  </span>
+                  <div>
+                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-[#f1d27a]">Grand Opening RSVP</p>
+                    <p className="mt-2 text-sm leading-6 text-[#d7c29a]/78">
+                      This person RSVP&apos;d for the Luxor Grand Opening Showcase. Treat this as an event attendance record first, then a future-event lead if they selected an interest.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-md border border-[#caa24c]/25 bg-black/30 px-3 py-2 text-center font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#f1d27a]">
+                  {lead.rsvp_status ? lead.rsvp_status.replaceAll('_', ' ') : 'Attending'}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           {/* Detail Cards Grid */}
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 luxor-soft-enter">
             <DetailItem label="Event Type" value={lead.event_type || 'Quinceañera'} subtext="Spanish ñ spelling active" />
             <DetailItem label="Guest Count" value={lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified'} />
+            {isGrandOpeningLead ? (
+              <>
+                <DetailItem label="RSVP Campaign" value="Grand Opening Showcase" subtext={lead.campaign_key || 'grand opening'} />
+                <DetailItem label="Attending Count" value={`${lead.attendee_count || lead.guest_count || 1} attending`} />
+                <DetailItem label="News Signup" value={lead.marketing_opt_in ? 'Yes' : 'No'} />
+              </>
+            ) : null}
             <DetailItem label="Target Date" value={lead.target_date || 'TBD'} />
             <DetailItem label="Preferred Tour Date" value={lead.preferred_tour_date || 'No tour requested'} />
             <DetailItem label="Preferred Tour Time" value={lead.preferred_tour_time || 'N/A'} />
             <DetailItem label="Email" value={lead.email || 'None'} />
             <DetailItem label="Phone" value={lead.phone || 'None'} />
             <DetailItem label="Flow Type" value={lead.flow.replaceAll('_', ' ')} isMono />
-            <DetailItem label="Source Node" value={lead.source.replaceAll('_', ' ')} isMono />
+            <DetailItem label="Source Node" value={formatSourceLabel(lead)} isMono />
           </div>
 
           {/* User Message */}
           <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 luxor-soft-enter">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-3">Inquiry Message Payload</h4>
+            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-3">
+              {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
+            </h4>
             <p className="text-sm leading-relaxed text-zinc-300 font-medium italic">
               &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
             </p>
@@ -1103,4 +1135,12 @@ function DetailItem({
       {subtext && <p className="text-[9px] text-[#caa24c] mt-1 font-medium italic">{subtext}</p>}
     </div>
   )
+}
+
+function isGrandOpeningRsvp(lead: LuxorInquiry) {
+  return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
+}
+
+function formatSourceLabel(lead: LuxorInquiry) {
+  return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
 }
