@@ -439,15 +439,15 @@ export default function LeadsPage() {
                   ) : (
                     colLeads.map((lead) => (
                       <div key={lead.id} className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-zinc-850 transition-all group relative">
-                        <div className="space-y-3">
+                        <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
                           <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800/60 flex items-center justify-center text-zinc-500 text-[10px] font-bold group-hover:bg-[#caa24c]/10 group-hover:text-[#f1d27a] group-hover:border-[#caa24c]/20 transition-all duration-300">
                               {getInitials(lead.full_name)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <Link href={`/portal/leads/${lead.id}`} className="text-xs font-bold text-white/90 hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
+                              <span className="text-xs font-bold text-white/90 group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
                                 {lead.full_name}
-                              </Link>
+                              </span>
                               <p className="text-[9px] text-zinc-500 truncate font-mono">
                                 {lead.email ?? lead.phone ?? 'No contact'}
                               </p>
@@ -465,7 +465,7 @@ export default function LeadsPage() {
                               <span>{lead.target_date || 'Date TBD'}</span>
                             </div>
                           </div>
-                        </div>
+                        </Link>
 
                         {/* Card Action Controls */}
                         <div className="flex items-center justify-between border-t border-zinc-900/40 pt-3 mt-3">
@@ -543,20 +543,20 @@ export default function LeadsPage() {
               ) : (
                 sortedLeads.filter(l => l.status === 'closed_lost').map((lead) => (
                   <div key={lead.id} className="bg-zinc-950/65 border border-zinc-900/60 p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800 transition-all group">
-                    <div>
+                    <Link href={`/portal/leads/${lead.id}`} className="block">
                       <div className="flex items-center gap-3">
                         <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-850/60 flex items-center justify-center text-zinc-600 text-[10px] font-bold">
                           {getInitials(lead.full_name)}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <Link href={`/portal/leads/${lead.id}`} className="text-xs font-bold text-zinc-400 hover:text-blue-500 block truncate leading-none mb-1">
+                          <span className="text-xs font-bold text-zinc-400 group-hover:text-blue-500 block truncate leading-none mb-1">
                             {lead.full_name}
-                          </Link>
+                          </span>
                           <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? lead.phone ?? 'No contact'}</p>
                         </div>
                       </div>
-                      <p className="text-[10px] text-zinc-600 mt-2 font-medium">{lead.event_type || 'Quinceañera'} • {lead.guest_count || 0} guests</p>
-                    </div>
+                      <p className="text-[10px] text-zinc-650 mt-2 font-medium">{lead.event_type || 'Quinceañera'} • {lead.guest_count || 0} guests</p>
+                    </Link>
 
                     <div className="flex justify-end pt-3 mt-3 border-t border-zinc-900/20">
                       <button
