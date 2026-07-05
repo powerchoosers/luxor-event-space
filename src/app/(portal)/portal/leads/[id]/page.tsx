@@ -20,7 +20,11 @@ import {
   AlertCircle,
   FileText,
   CheckCircle2,
-  Circle
+  Circle,
+  ClipboardCheck,
+  FileSignature,
+  NotebookPen,
+  ReceiptText,
 } from 'lucide-react'
 import { LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
@@ -305,11 +309,7 @@ export default function LeadDetailPage({
   }
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center text-sm font-semibold tracking-widest text-zinc-500 uppercase">
-        Loading Client Dossier...
-      </div>
-    )
+    return <ClientDossierLoading />
   }
 
   if (error || !lead) {
@@ -329,7 +329,7 @@ export default function LeadDetailPage({
   const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
 
   return (
-    <PortalPageFrame>
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <div className="shrink-0 flex items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 transition-colors hover:text-white">
           <ArrowLeft size={14} /> Back to Leads
@@ -379,11 +379,11 @@ export default function LeadDetailPage({
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
         {/* Main Details and Activity Column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3" data-client-scroll-column="main">
           {/* Detail Cards Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 luxor-soft-enter">
             <DetailItem label="Event Type" value={lead.event_type || 'Quinceañera'} subtext="Spanish ñ spelling active" />
             <DetailItem label="Guest Count" value={lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified'} />
             <DetailItem label="Target Date" value={lead.target_date || 'TBD'} />
@@ -396,7 +396,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* User Message */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6">
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 luxor-soft-enter">
             <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-3">Inquiry Message Payload</h4>
             <p className="text-sm leading-relaxed text-zinc-300 font-medium italic">
               &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
@@ -405,7 +405,7 @@ export default function LeadDetailPage({
 
           {/* Chat transcript replay widget if it exists */}
           {chatMessages.length > 0 && (
-            <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/30 overflow-hidden shadow-2xl">
+            <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/30 overflow-hidden shadow-2xl luxor-soft-enter">
               <div className="bg-zinc-950/90 border-b border-zinc-900 px-6 py-4 flex items-center justify-between">
                 <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400">Concierge AI Chat Session Replay</h4>
                 <span className="text-[9px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded uppercase">Elena Concierge</span>
@@ -433,7 +433,8 @@ export default function LeadDetailPage({
           )}
 
           {/* Activity Logs & Notes Section */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl">
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl luxor-soft-enter">
+            <div id="client-activity-log" className="scroll-mt-4" />
             <h3 className="text-xs font-bold uppercase tracking-widest text-white/90 mb-6 flex items-center gap-2">
               <MessageSquare size={16} className="text-zinc-500" />
               Activity Feed & Timeline
@@ -537,9 +538,48 @@ export default function LeadDetailPage({
         </div>
 
         {/* Sidebar Panel Column */}
-        <div className="space-y-6">
+        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-2" data-client-scroll-column="actions">
+          {/* Recommended Client Actions */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
+            <h3 className="font-semibold text-white/90 mb-5 flex items-center gap-2.5">
+              <ClipboardCheck size={16} className="text-zinc-500" />
+              Recommended Actions
+            </h3>
+            <div className="grid gap-2.5">
+              <ClientActionButton
+                icon={<Calendar size={15} />}
+                label="Confirm tour scheduled"
+                detail="Move lifecycle to tour confirmed"
+                onClick={() => handleStatusChange('tour_confirmed')}
+                disabled={updatingStatus || lead.status === 'tour_confirmed'}
+              />
+              <ClientActionButton
+                icon={<NotebookPen size={15} />}
+                label="Log a quick call note"
+                detail="Jump to the activity feed"
+                onClick={() => {
+                  setNoteType('call_log')
+                  document.getElementById('client-activity-log')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+              />
+              <ClientActionButton
+                icon={<FileSignature size={15} />}
+                label="Mark proposal sent"
+                detail="Use after sending pricing"
+                onClick={() => handleStatusChange('proposal_sent')}
+                disabled={updatingStatus || lead.status === 'proposal_sent'}
+              />
+              <ClientActionButton
+                icon={<ReceiptText size={15} />}
+                label="Draft booking invoice"
+                detail="Create deposit or event invoice"
+                onClick={() => setIsInvoiceModalOpen(true)}
+              />
+            </div>
+          </div>
+
           {/* Tasks List Card */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
             <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
               <span className="flex items-center gap-2.5">
                 <Briefcase size={16} className="text-zinc-500" />
@@ -627,7 +667,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Invoices List Card */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
             <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />
@@ -802,6 +842,98 @@ export default function LeadDetailPage({
         </div>
       )}
     </PortalPageFrame>
+  )
+}
+
+function ClientDossierLoading() {
+  return (
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+      <div className="shrink-0 flex items-center justify-between">
+        <div className="h-4 w-32 luxor-skeleton rounded" />
+        <div className="h-8 w-44 luxor-skeleton rounded-lg" />
+      </div>
+
+      <div className="shrink-0 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-3">
+          <div className="h-10 w-56 luxor-skeleton rounded-lg" />
+          <div className="h-4 w-80 max-w-full luxor-skeleton rounded" />
+        </div>
+        <div className="flex gap-3">
+          <div className="h-9 w-32 luxor-skeleton rounded-lg" />
+          <div className="h-9 w-32 luxor-skeleton rounded-lg" />
+          <div className="h-9 w-36 luxor-skeleton rounded-lg" />
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
+        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            {Array.from({ length: 9 }).map((_, index) => (
+              <div key={index} className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4">
+                <div className="h-3 w-24 luxor-skeleton rounded" />
+                <div className="mt-4 h-4 w-28 luxor-skeleton rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-6">
+            <div className="h-3 w-48 luxor-skeleton rounded" />
+            <div className="mt-5 h-5 w-3/4 luxor-skeleton rounded" />
+          </div>
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-6">
+            <div className="h-4 w-56 luxor-skeleton rounded" />
+            <div className="mt-6 grid gap-3">
+              <div className="h-16 luxor-skeleton rounded-xl" />
+              <div className="h-16 w-5/6 luxor-skeleton rounded-xl" />
+              <div className="h-16 w-4/5 luxor-skeleton rounded-xl" />
+            </div>
+          </div>
+        </div>
+
+        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="rounded-2xl border border-zinc-900 bg-black/40 p-6">
+              <div className="h-5 w-44 luxor-skeleton rounded" />
+              <div className="mt-6 grid gap-3">
+                <div className="h-14 luxor-skeleton rounded-xl" />
+                <div className="h-14 luxor-skeleton rounded-xl" />
+                <div className="h-14 w-5/6 luxor-skeleton rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </PortalPageFrame>
+  )
+}
+
+function ClientActionButton({
+  icon,
+  label,
+  detail,
+  onClick,
+  disabled = false,
+}: {
+  icon: React.ReactNode
+  label: string
+  detail: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3.5 py-3 text-left transition-all hover:border-blue-500/25 hover:bg-blue-500/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-blue-400">
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-bold text-zinc-200">{label}</span>
+        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-600">{detail}</span>
+      </span>
+    </button>
   )
 }
 

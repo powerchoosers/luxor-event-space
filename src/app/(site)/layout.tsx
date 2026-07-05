@@ -6,6 +6,7 @@ import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { LuxorConciergeChat } from '@/components/LuxorConciergeChat'
 import { SiteScrollGuard } from '@/components/SiteScrollGuard'
+import { RouteTransition } from '@/components/RouteTransition'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -43,7 +44,7 @@ export default function RootLayout({
         <SiteScrollGuard />
         <Header />
         <main className="flex-grow">
-          {children}
+          <RouteTransition surface="site">{children}</RouteTransition>
         </main>
         <LuxorConciergeChat />
         <Footer />

@@ -333,6 +333,29 @@ body {
   .portal-scrollbar::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg, rgba(147, 197, 253, 1), rgba(37, 99, 235, 0.95));
   }
+
+  .luxor-skeleton {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, rgba(39, 39, 42, 0.55), rgba(63, 63, 70, 0.34), rgba(39, 39, 42, 0.55));
+  }
+
+  .luxor-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(202, 162, 76, 0.16), transparent);
+    animation: luxor-skeleton-sheen 1.35s ease-in-out infinite;
+  }
+
+  .luxor-loading-bar {
+    animation: luxor-loading-bar 1.1s ease-in-out infinite;
+  }
+
+  .luxor-soft-enter {
+    animation: luxor-soft-enter 0.42s cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
 }
 
 @keyframes luxor-ambient {
@@ -358,9 +381,46 @@ body {
   }
 }
 
+@keyframes luxor-skeleton-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes luxor-loading-bar {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  50% {
+    transform: translateX(60%);
+  }
+
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes luxor-soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .luxor-ambient,
-  .luxor-footer-marquee-track {
+  .luxor-footer-marquee-track,
+  .luxor-loading-bar,
+  .luxor-soft-enter,
+  .luxor-skeleton::after {
     animation: none !important;
   }
 }

@@ -20,6 +20,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { RouteTransition } from '@/components/RouteTransition'
 
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
@@ -229,7 +230,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)] p-4 sm:p-6 lg:p-8">
-          {children}
+          <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>
     </body>
