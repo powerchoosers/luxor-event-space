@@ -27,7 +27,7 @@ import {
   ReceiptText,
 } from 'lucide-react'
 import { LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
 export default function LeadDetailPage({
   params,
@@ -339,20 +339,20 @@ export default function LeadDetailPage({
         </Link>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Lead Lifecycle:</span>
-          <select
+          <PortalSelect
             value={lead.status}
             disabled={updatingStatus}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 text-xs font-bold uppercase tracking-wider text-zinc-300 px-3 py-1.5 rounded-lg focus:outline-none focus:border-blue-500"
-          >
-            <option value="new">New Inquiry</option>
-            <option value="contacted">Contacted</option>
-            <option value="tour_requested">Tour Requested</option>
-            <option value="tour_confirmed">Tour Confirmed</option>
-            <option value="proposal_sent">Proposal Sent</option>
-            <option value="booked">Booked (Won)</option>
-            <option value="closed_lost">Closed Lost</option>
-          </select>
+            onChange={handleStatusChange}
+            options={[
+              { value: 'new', label: 'New Inquiry' },
+              { value: 'contacted', label: 'Contacted' },
+              { value: 'tour_requested', label: 'Tour Requested' },
+              { value: 'tour_confirmed', label: 'Tour Confirmed' },
+              { value: 'proposal_sent', label: 'Proposal Sent' },
+              { value: 'booked', label: 'Booked (Won)' },
+              { value: 'closed_lost', label: 'Closed Lost' }
+            ]}
+          />
         </div>
       </div>
 
@@ -444,7 +444,7 @@ export default function LeadDetailPage({
                 Activity Feed & Timeline
               </h3>
               
-              <div className="flex border border-zinc-800 rounded-lg p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
+              <div className="flex border border-zinc-800 rounded-xl p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
                 {(['all', 'notes', 'comms', 'system'] as const).map((tab) => {
                   const labelMap = {
                     all: 'All',
@@ -458,7 +458,7 @@ export default function LeadDetailPage({
                       key={tab}
                       type="button"
                       onClick={() => setActiveFeedTab(tab)}
-                      className={`px-3 py-1 rounded transition-all cursor-pointer ${
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                         isActive
                           ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                           : 'text-zinc-500 hover:text-zinc-350'
@@ -640,22 +640,22 @@ export default function LeadDetailPage({
                 className="w-full bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500"
               />
               <div className="flex gap-2">
-                <input
-                  type="date"
+                <PortalDatePicker
                   value={taskDueDate}
-                  onChange={(e) => setTaskDueDate(e.target.value)}
-                  className="flex-1 bg-zinc-950 border border-zinc-900 text-[10px] text-zinc-500 rounded px-2 py-1 outline-none focus:border-blue-500"
+                  onChange={setTaskDueDate}
+                  className="flex-1"
+                  placeholder="Due Date"
                 />
-                <select
+                <PortalSelect
                   value={taskPriority}
-                  onChange={(e) => setTaskPriority(e.target.value as LuxorTask['priority'])}
-                  className="bg-zinc-950 border border-zinc-900 text-[10px] text-zinc-500 rounded px-2 py-1 outline-none focus:border-blue-500"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
+                  onChange={(val) => setTaskPriority(val as LuxorTask['priority'])}
+                  options={[
+                    { value: 'low', label: 'Low' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'high', label: 'High' },
+                    { value: 'urgent', label: 'Urgent' }
+                  ]}
+                />
               </div>
               <button
                 type="submit"
@@ -780,12 +780,11 @@ export default function LeadDetailPage({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Due Date</label>
-                  <input
-                    type="date"
-                    required
+                  <PortalDatePicker
                     value={invoiceDueDate}
-                    onChange={(e) => setInvoiceDueDate(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                    onChange={setInvoiceDueDate}
+                    className="w-full"
+                    placeholder="Due Date"
                   />
                 </div>
               </div>

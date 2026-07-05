@@ -25,7 +25,8 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
-  PortalModal
+  PortalModal,
+  PortalSelect
 } from '@/components/portal/PortalUI'
 
 export default function LeadsPage() {
@@ -198,11 +199,11 @@ export default function LeadsPage() {
               <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <div className="flex border border-zinc-800 rounded-lg p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+              <div className="flex border border-zinc-800 rounded-xl p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                     viewMode === 'list'
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                       : 'text-zinc-500 hover:text-zinc-350 font-bold'
@@ -213,7 +214,7 @@ export default function LeadsPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode('board')}
-                  className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                     viewMode === 'board'
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                       : 'text-zinc-500 hover:text-zinc-350 font-bold'
@@ -223,20 +224,20 @@ export default function LeadsPage() {
                 </button>
               </div>
 
-              <select
+              <PortalSelect
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-300 focus:outline-none focus:border-blue-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="new">New</option>
-                <option value="contacted">Contacted</option>
-                <option value="tour_requested">Tour Requested</option>
-                <option value="tour_confirmed">Tour Confirmed</option>
-                <option value="proposal_sent">Proposal Sent</option>
-                <option value="booked">Booked (Won)</option>
-                <option value="closed_lost">Closed Lost</option>
-              </select>
+                onChange={setStatusFilter}
+                options={[
+                  { value: 'all', label: 'All Statuses' },
+                  { value: 'new', label: 'New' },
+                  { value: 'contacted', label: 'Contacted' },
+                  { value: 'tour_requested', label: 'Tour Requested' },
+                  { value: 'tour_confirmed', label: 'Tour Confirmed' },
+                  { value: 'proposal_sent', label: 'Proposal Sent' },
+                  { value: 'booked', label: 'Booked (Won)' },
+                  { value: 'closed_lost', label: 'Closed Lost' }
+                ]}
+              />
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -617,18 +618,19 @@ export default function LeadsPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Event Type</label>
-                <select
+                <PortalSelect
                   value={newLeadEventType}
-                  onChange={(e) => setNewLeadEventType(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
-                >
-                  <option value="Wedding">Wedding</option>
-                  <option value="Quinceañera">Quinceañera</option>
-                  <option value="Baby shower">Baby Shower</option>
-                  <option value="Birthday">Birthday</option>
-                  <option value="Corporate event">Corporate</option>
-                  <option value="Private celebration">Celebration</option>
-                </select>
+                  onChange={setNewLeadEventType}
+                  className="w-full"
+                  options={[
+                    { value: 'Wedding', label: 'Wedding' },
+                    { value: 'Quinceañera', label: 'Quinceañera' },
+                    { value: 'Baby shower', label: 'Baby Shower' },
+                    { value: 'Birthday', label: 'Birthday' },
+                    { value: 'Corporate event', label: 'Corporate' },
+                    { value: 'Private celebration', label: 'Celebration' }
+                  ]}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Guest Count</label>

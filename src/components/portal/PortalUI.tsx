@@ -244,3 +244,211 @@ export function PortalDetailSection({
   )
 }
 
+export function PortalSelect({
+  value,
+  onChange,
+  options,
+  className = '',
+  placeholder = 'Select option...',
+  disabled = false,
+}: {
+  value: string
+  onChange: (val: string) => void
+  options: { value: string; label: string }[]
+  className?: string
+  placeholder?: string
+  disabled?: boolean
+}) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const selectedOption = options.find((opt) => opt.value === value)
+
+  return (
+    <div className={`relative min-w-[140px] select-none ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none disabled:opacity-40 disabled:hover:text-zinc-300 disabled:hover:border-zinc-800"
+      >
+        <span>{selectedOption ? selectedOption.label : placeholder}</span>
+        <span className="text-zinc-550 text-[10px]">▼</span>
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 right-0 mt-1.5 z-50 bg-[#080706] border border-zinc-800 rounded-lg shadow-xl p-1 max-h-60 overflow-y-auto portal-scrollbar space-y-0.5">
+            {options.map((opt) => {
+              const isSelected = opt.value === value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value)
+                    setIsOpen(false)
+                  }}
+                  className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded transition-colors ${
+                    isSelected
+                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function PortalDatePicker({
+  value,
+  onChange,
+  className = '',
+  placeholder = 'Select Date...',
+}: {
+  value: string
+  onChange: (val: string) => void
+  className?: string
+  placeholder?: string
+}) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  
+  // Current navigation view month and year
+  const [viewDate, setViewDate] = React.useState(() => {
+    const initial = value ? new Date(value) : new Date()
+    return isNaN(initial.getTime()) ? new Date() : initial
+  })
+
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth() // 0-indexed
+
+  // Format a date to YYYY-MM-DD
+  const formatYYYYMMDD = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ]
+
+  // First day of current view month
+  const firstDayOfMonth = new Date(year, month, 1)
+  const startingDayOfWeek = firstDayOfMonth.getDay() // 0: Sunday, 1: Monday...
+
+  // Total days in current view month
+  const totalDays = new Date(year, month + 1, 0).getDate()
+
+  // Create the day grid array (including padding for empty cells)
+  const dayCells: (Date | null)[] = []
+  for (let i = 0; i < startingDayOfWeek; i++) {
+    dayCells.push(null)
+  }
+  for (let d = 1; d <= totalDays; d++) {
+    dayCells.push(new Date(year, month, d))
+  }
+
+  const handlePrevMonth = () => {
+    setViewDate(new Date(year, month - 1, 1))
+  }
+
+  const handleNextMonth = () => {
+    setViewDate(new Date(year, month + 1, 1))
+  }
+
+  const handleSelectDay = (date: Date) => {
+    onChange(formatYYYYMMDD(date))
+    setIsOpen(false)
+  }
+
+  const formattedDisplay = value
+    ? new Date(value).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : placeholder
+
+  return (
+    <div className={`relative min-w-[140px] select-none ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none"
+      >
+        <span>{formattedDisplay}</span>
+        <span className="text-zinc-550 text-[10px]">📅</span>
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-45" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 mt-2 z-50 bg-[#080706] border border-zinc-800 rounded-xl p-4 shadow-2xl w-64 text-xs">
+            {/* Header navigation */}
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-900 pb-2">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                className="p-1 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white transition-colors"
+              >
+                ◀
+              </button>
+              <span className="font-bold uppercase tracking-wider text-zinc-200">
+                {monthNames[month]} {year}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                className="p-1 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white transition-colors"
+              >
+                ▶
+              </button>
+            </div>
+
+            {/* Weekday Labels */}
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[9px] uppercase tracking-wider text-zinc-550 mb-2">
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+
+            {/* Day Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {dayCells.map((day, idx) => {
+                if (!day) return <span key={`empty-${idx}`} />
+
+                const isSelected = value && formatYYYYMMDD(day) === value
+                const isToday = formatYYYYMMDD(day) === formatYYYYMMDD(new Date())
+                
+                return (
+                  <button
+                    key={day.getTime()}
+                    type="button"
+                    onClick={() => handleSelectDay(day)}
+                    className={`h-7 w-7 rounded-md font-mono flex items-center justify-center transition-all ${
+                      isSelected
+                        ? 'bg-[#caa24c]/20 border border-[#caa24c]/40 text-[#f1d27a] font-bold shadow'
+                        : isToday
+                        ? 'border border-blue-500/30 text-blue-400 font-bold hover:bg-zinc-900'
+                        : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                    }`}
+                  >
+                    {day.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
