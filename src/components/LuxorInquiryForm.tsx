@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import { ArrowRight, CalendarDays, Check, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -31,6 +32,10 @@ export function LuxorInquiryForm({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [eventType, setEventType] = useState('')
+  const [preferredTourDate, setPreferredTourDate] = useState('')
+  const [preferredTourTime, setPreferredTourTime] = useState('')
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
@@ -41,11 +46,11 @@ export function LuxorInquiryForm({
       fullName: String(form.get('fullName') ?? ''),
       email: String(form.get('email') ?? ''),
       phone: String(form.get('phone') ?? ''),
-      eventType: String(form.get('eventType') ?? ''),
+      eventType: eventType,
       targetDate: String(form.get('targetDate') ?? ''),
       guestCount: String(form.get('guestCount') ?? ''),
-      preferredTourDate: String(form.get('preferredTourDate') ?? ''),
-      preferredTourTime: String(form.get('preferredTourTime') ?? ''),
+      preferredTourDate: preferredTourDate,
+      preferredTourTime: preferredTourTime,
       packageInterest: String(form.get('packageInterest') ?? ''),
       message: String(form.get('message') ?? ''),
       source,
@@ -100,18 +105,16 @@ export function LuxorInquiryForm({
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Event type</span>
-              <select
-                name="eventType"
-                className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70"
-              >
-                <option value="">Select event type</option>
-                {eventTypes.map((eventType) => (
-                  <option key={eventType} value={eventType}>{eventType}</option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-col justify-end">
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Event type</span>
+              <PortalSelect
+                value={eventType}
+                onChange={setEventType}
+                className="w-full text-left"
+                placeholder="Select event type"
+                options={eventTypes.map(t => ({ value: t, label: t }))}
+              />
+            </div>
 
             <TextField name="targetDate" label="Target date" placeholder="Month or date" />
             <TextField name="guestCount" label="Guest count" placeholder="Estimated count" inputMode="numeric" />
@@ -119,23 +122,32 @@ export function LuxorInquiryForm({
             <TextField name="email" label="Email" placeholder="you@example.com" type="email" />
             <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" />
 
-            {showTourFields ? (
+            {showTourFields && (
               <>
-                <TextField name="preferredTourDate" label="Tour date" type="date" />
-                <label className="block">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Tour time</span>
-                  <select
-                    name="preferredTourTime"
-                    className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70"
-                  >
-                    <option value="">Flexible</option>
-                    {tourTimes.map((time) => (
-                      <option key={time} value={time}>{time}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className="flex flex-col justify-end">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Tour date</span>
+                  <PortalDatePicker
+                    value={preferredTourDate}
+                    onChange={setPreferredTourDate}
+                    className="w-full text-left"
+                    placeholder="Select Date"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Tour time</span>
+                  <PortalSelect
+                    value={preferredTourTime}
+                    onChange={setPreferredTourTime}
+                    className="w-full text-left font-mono"
+                    placeholder="Select Time"
+                    options={[
+                      { value: '', label: 'Flexible' },
+                      ...tourTimes.map(t => ({ value: t, label: t }))
+                    ]}
+                  />
+                </div>
               </>
-            ) : null}
+            )}
           </div>
 
           <label className="mt-5 block">

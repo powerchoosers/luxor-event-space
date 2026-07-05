@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import {
   ArrowRight,
   CalendarDays,
@@ -135,6 +136,57 @@ export function LuxorConciergeChat() {
   const [pending, setPending] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
+  
+  const [customDate, setCustomDate] = useState('')
+  const [customTime, setCustomTime] = useState('10:00 AM')
+  const [showCustomTime, setShowCustomTime] = useState(false)
+
+  const timeSlotOptions = [
+    { value: '10:00 AM', label: '10:00 AM' },
+    { value: '11:30 AM', label: '11:30 AM' },
+    { value: '1:00 PM', label: '1:00 PM' },
+    { value: '2:30 PM', label: '2:30 PM' },
+    { value: '4:00 PM', label: '4:00 PM' },
+    { value: '5:30 PM', label: '5:30 PM' }
+  ]
+
+  const handleCustomDateChange = (dateStr: string) => {
+    setCustomDate(dateStr)
+    if (dateStr) {
+      const formattedLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      })
+      setTourSelection({
+        label: formattedLabel,
+        value: dateStr,
+        time: customTime
+      })
+    }
+  }
+
+  const handleCustomTimeChange = (timeStr: string) => {
+    setCustomTime(timeStr)
+    if (customDate) {
+      const formattedLabel = new Date(customDate + 'T12:00:00').toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      })
+      setTourSelection({
+        label: formattedLabel,
+        value: customDate,
+        time: timeStr
+      })
+    } else {
+      setTourSelection({
+        label: 'Custom Slot',
+        value: '',
+        time: timeStr
+      })
+    }
+  }
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [eventPickerOpen, setEventPickerOpen] = useState(true)
   const [submitted, setSubmitted] = useState(false)
@@ -354,29 +406,74 @@ export function LuxorConciergeChat() {
           ) : null}
         </div>
 
-        <div className="mt-3 grid gap-2">
-          {tourDates.map((slot) => {
-            const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
+        {!showCustomTime ? (
+          <div className="mt-3 grid gap-2">
+            {tourDates.map((slot) => {
+              const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
 
-            return (
-              <button
-                key={`${slot.value}-${slot.time}-card`}
-                type="button"
-                onClick={() => setTourSelection(slot)}
-                className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
-                  active
-                    ? 'border-[#f1d27a]/55 bg-[#caa24c] text-[#050505]'
-                    : 'border-[#caa24c]/18 bg-black/25 text-[#eadcc8] hover:border-[#f1d27a]/45'
-                }`}
-              >
-                <span>
-                  <span className="block text-sm font-semibold">{slot.label}</span>
-                  <span className="block text-xs opacity-75">{slot.time}</span>
-                </span>
-                {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={`${slot.value}-${slot.time}-card`}
+                  type="button"
+                  onClick={() => setTourSelection(slot)}
+                  className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
+                    active
+                      ? 'border-[#f1d27a]/55 bg-[#caa24c] text-[#050505]'
+                      : 'border-[#caa24c]/18 bg-black/25 text-[#eadcc8] hover:border-[#f1d27a]/45'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">{slot.label}</span>
+                    <span className="block text-xs opacity-75">{slot.time}</span>
+                  </span>
+                  {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2 bg-black/40 p-3 rounded-lg border border-[#caa24c]/18 text-left">
+            <div className="space-y-1">
+              <span className="block text-[9px] uppercase tracking-widest text-zinc-550 font-bold">Select Date</span>
+              <PortalDatePicker
+                value={customDate}
+                onChange={handleCustomDateChange}
+                placeholder="Pick Date"
+                className="w-full text-xs font-mono text-[#f8f3ed]"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="block text-[9px] uppercase tracking-widest text-zinc-550 font-bold">Select Time</span>
+              <PortalSelect
+                value={customTime}
+                onChange={handleCustomTimeChange}
+                options={timeSlotOptions}
+                className="w-full text-xs"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="mt-2.5 flex justify-end px-1">
+          <button
+            type="button"
+            onClick={() => {
+              const nextVal = !showCustomTime
+              setShowCustomTime(nextVal)
+              if (nextVal) {
+                if (customDate) {
+                  handleCustomDateChange(customDate)
+                } else {
+                  setTourSelection(null)
+                }
+              } else {
+                setTourSelection(null)
+              }
+            }}
+            className="text-[9px] font-black uppercase tracking-widest text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+          >
+            {showCustomTime ? '◀ Use Suggested Slots' : '📅 Choose another date/time...'}
+          </button>
         </div>
 
         <div className="mt-3 grid gap-2">

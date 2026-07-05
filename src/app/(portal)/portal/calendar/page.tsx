@@ -37,7 +37,7 @@ export default async function CalendarPage() {
             <p className="text-zinc-500 font-medium uppercase tracking-widest text-xs">CRM Schedule</p>
             <h2 className="mt-2 text-2xl font-bold text-white font-serif tracking-tight">Requested Tours</h2>
           </div>
-          <CalendarIcon className="h-6 w-6 text-blue-500" />
+          <CalendarIcon className="h-6 w-6 text-[#caa24c]" />
         </div>
 
         {loadError ? (
@@ -56,17 +56,17 @@ export default async function CalendarPage() {
           <div className="relative ml-4 space-y-8 border-l-2 border-zinc-900/70 py-2">
             {upcomingTours.map(([date, tours]) => (
               <section key={date} className="relative pl-10">
-                <div className="absolute -left-[9px] top-2 h-4 w-4 rounded-full bg-[#002FA7] shadow-[0_0_16px_#002FA7]" />
+                <div className="absolute -left-[9px] top-2 h-4 w-4 rounded-full bg-[#caa24c] shadow-[0_0_16px_rgba(202,162,76,0.5)]" />
                 <h3 className="text-2xl font-bold text-white font-serif">{formatCalendarDate(date)}</h3>
 
                 <div className="mt-4 grid gap-4">
                   {tours.map((tour) => (
-                    <article key={tour.id} className="nodal-module-glass rounded-xl border border-zinc-800/50 p-6 transition-all hover:bg-zinc-900/40 hover:border-zinc-700/60 group">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <article key={tour.id} className="luxor-glass-card rounded-xl p-6 transition-all hover:border-[#caa24c]/30 group luxor-glow-gold relative overflow-hidden">
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 relative z-10">
                         <div>
                           <Link href={`/portal/leads/${tour.id}`} className="inline-flex items-center gap-2 group/title">
-                            <h4 className="text-xl font-bold text-white group-hover/title:text-blue-400 transition-colors">{tour.full_name}</h4>
-                            <ExternalLink size={14} className="text-zinc-600 group-hover/title:text-blue-400 transition-colors" />
+                            <h4 className="text-xl font-bold text-white group-hover/title:text-[#f1d27a] transition-colors">{tour.full_name}</h4>
+                            <ExternalLink size={14} className="text-zinc-650 group-hover/title:text-[#f1d27a] transition-colors" />
                           </Link>
                           <div className="flex flex-wrap gap-3 text-zinc-400 font-mono text-sm mt-2">
                             <span className="flex items-center gap-1.5 rounded bg-black/50 border border-zinc-800 px-2.5 py-1">
@@ -79,22 +79,22 @@ export default async function CalendarPage() {
                             </span>
                           </div>
                         </div>
-                        <span className="max-w-fit rounded bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400 border border-zinc-850">
+                        <span className="max-w-fit rounded bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-450 border border-zinc-850">
                           {tour.event_type ?? "Event type needed"}
                         </span>
                       </div>
 
-                      <div className="mt-6 flex flex-wrap gap-6 border-t border-zinc-800/50 pt-5 text-sm">
-                        <div className="flex items-center gap-2 text-zinc-500 font-medium">
+                      <div className="mt-6 flex flex-wrap gap-6 border-t border-zinc-850/50 pt-5 text-sm relative z-10">
+                        <div className="flex items-center gap-2 text-zinc-550 font-medium">
                           <MapPin size={16} className="text-zinc-650" /> Luxor Event Space
                         </div>
-                        <div className="text-zinc-500 font-medium font-mono text-xs">
+                        <div className="text-zinc-550 font-medium font-mono text-xs">
                           {tour.email ?? tour.phone ?? "Contact method needed"}
                         </div>
                       </div>
 
                       {tour.message ? (
-                        <p className="mt-4 rounded-lg border border-zinc-900 bg-black/30 p-4 text-sm leading-6 text-zinc-400">
+                        <p className="mt-4 rounded-lg border border-zinc-900 bg-black/30 p-4 text-sm leading-6 text-zinc-450 relative z-10">
                           {tour.message}
                         </p>
                       ) : null}
