@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLuxorInquiry, listLuxorInquiries, getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { createLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -81,6 +81,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid inquiry status.' }, { status: 400 })
       }
       updates.status = status
+      updates.pipeline_stage = updates.pipeline_stage || stageForStatus(status)
     }
 
     const updated = await updateLuxorInquiry(id, updates)

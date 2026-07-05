@@ -1,174 +1,285 @@
-import React from "react";
-import { Calendar as CalendarIcon, Clock, MapPin, User, ArrowRight, ExternalLink } from "lucide-react";
-import Link from "next/link";
-import { listLuxorTourRequests } from "@/lib/luxorInquiriesServer";
-import { LuxorInquiry } from "@/lib/luxorInquiryTypes";
-import { formatTourSlotTime, LuxorTourSlot } from "@/lib/luxorTourSlots";
-import { listUpcomingLuxorTourSlots } from "@/lib/luxorTourSlotsServer";
-import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
+'use client'
 
-export default async function CalendarPage() {
-  let tourRequests: LuxorInquiry[] = [];
-  let tourSlots: LuxorTourSlot[] = [];
-  let loadError: string | null = null;
+import React, { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, UserCheck, UserX } from 'lucide-react'
+import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
+import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import type { LuxorBooking, LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 
-  try {
-    const [requests, slots] = await Promise.all([
-      listLuxorTourRequests(100),
-      listUpcomingLuxorTourSlots(100),
-    ]);
-    tourRequests = requests;
-    tourSlots = slots;
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : "Unable to load Luxor calendar.";
+type CalendarPayload = {
+  tours: LuxorInquiry[]
+  slots: LuxorTourSlot[]
+  bookings: (LuxorBooking & { paid_total?: number; balance_due?: number })[]
+}
+
+export default function CalendarPage() {
+  const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
+  const [view, setView] = useState<PortalCalendarView>('month')
+  const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [] })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await fetch('/api/calendar-data')
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to load calendar.')
+      setData(payload)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load calendar.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const calendarDays = groupCalendarByDate(tourRequests, tourSlots);
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const updateAttendance = async (tour: LuxorInquiry, attendance: string) => {
+    try {
+      setBusyId(tour.id)
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: tour.id, action: 'attendance', attendance }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to update attendance.')
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update attendance.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const queueTourEmail = async (tour: LuxorInquiry, jobType: string) => {
+    try {
+      setBusyId(`${tour.id}-${jobType}`)
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: tour.id, action: 'send-email', jobType }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to queue email.')
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to queue email.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const sendContract = async (booking: LuxorBooking) => {
+    try {
+      setBusyId(`contract-${booking.id}`)
+      const response = await fetch('/api/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to send contract.')
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send contract.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const tourItems = useMemo<PortalCalendarItem[]>(() => {
+    const tourCards = data.tours
+      .filter((tour) => tour.preferred_tour_date)
+      .map((tour) => ({
+        id: `tour-${tour.id}`,
+        date: tour.preferred_tour_date!,
+        title: tour.full_name,
+        subtitle: `${tour.preferred_tour_time || 'Flexible time'} • ${tour.event_type || 'Event'}${tour.guest_count ? ` • ${tour.guest_count} guests` : ''}`,
+        tone: tour.tour_attendance_status === 'no_show' ? 'rose' : tour.tour_attendance_status === 'attended' ? 'green' : 'gold',
+        content: (
+          <TourControls
+            tour={tour}
+            busyId={busyId}
+            onAttendance={updateAttendance}
+            onEmail={queueTourEmail}
+          />
+        ),
+      } satisfies PortalCalendarItem))
+
+    const slotCards = data.slots.map((slot) => ({
+      id: `slot-${slot.id}`,
+      date: slot.slot_date,
+      title: slot.title || 'Published tour slot',
+      subtitle: `${formatTime(slot.start_time)}${slot.end_time ? ` - ${formatTime(slot.end_time)}` : ''} • ${Math.max(0, slot.capacity - slot.booked_count)} open`,
+      tone: 'blue',
+    } satisfies PortalCalendarItem))
+
+    return [...tourCards, ...slotCards]
+  }, [busyId, data.slots, data.tours])
+
+  const eventItems = useMemo<PortalCalendarItem[]>(() => {
+    return data.bookings
+      .filter((booking) => booking.event_date)
+      .map((booking) => ({
+        id: `booking-${booking.id}`,
+        date: booking.event_date!,
+        title: booking.client_name,
+        subtitle: `${booking.event_type || 'Event'}${booking.guest_count ? ` • ${booking.guest_count} guests` : ''}`,
+        tone: booking.status === 'confirmed' ? 'green' : booking.status === 'cancelled' ? 'rose' : 'gold',
+        content: (
+          <EventControls
+            booking={booking}
+            busyId={busyId}
+            onSendContract={sendContract}
+          />
+        ),
+      } satisfies PortalCalendarItem))
+  }, [busyId, data.bookings])
 
   return (
-    <PortalPageFrame className="max-w-6xl">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <PortalPageHeader
         icon={<CalendarIcon size={18} />}
-        title="Event Calendar"
-        description="Published tour availability and live tour requests from the Luxor booking flow."
+        title="Tours & Booked Events"
+        description="Separate calendars for tour operations and confirmed event days."
         actions={
-          <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
-            {tourSlots.length} slots / {tourRequests.length} requests
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">
+              <button
+                type="button"
+                onClick={() => setActiveCalendar('tours')}
+                className={`rounded-lg px-3 py-2 ${activeCalendar === 'tours' ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}
+              >
+                Tour Calendar
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCalendar('events')}
+                className={`rounded-lg px-3 py-2 ${activeCalendar === 'events' ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}
+              >
+                Booked Events
+              </button>
+            </div>
+            <button type="button" onClick={loadData} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+              <RefreshCw size={13} /> Refresh
+            </button>
           </div>
         }
       />
 
-      <div className="nodal-void-card portal-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-900 bg-black/40 p-5 shadow-2xl backdrop-blur-xl sm:p-8">
-        <div className="mb-8 flex items-center justify-between border-b border-zinc-900/50 pb-6">
-          <div>
-            <p className="text-zinc-500 font-medium uppercase tracking-widest text-xs">CRM Schedule</p>
-            <h2 className="mt-2 text-2xl font-bold text-white font-serif tracking-tight">Tour Availability</h2>
-          </div>
-          <CalendarIcon className="h-6 w-6 text-[#caa24c]" />
+      {error ? (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center text-sm text-[color:var(--portal-muted)]">
+          Loading calendar...
         </div>
-
-        {loadError ? (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
-            {loadError}
-          </div>
-        ) : calendarDays.length === 0 ? (
-          <div className="rounded-xl border border-zinc-900 bg-zinc-950/60 p-10 text-center">
-            <CalendarIcon size={42} className="mx-auto text-zinc-800" />
-            <h3 className="mt-5 text-xl font-bold text-white">No tour slots published</h3>
-            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500">
-              Add rows to the Luxor tour slots table and the public booking flow will show those openings.
-            </p>
-          </div>
-        ) : (
-          <div className="relative ml-4 space-y-8 border-l-2 border-zinc-900/70 py-2">
-            {calendarDays.map(({ date, slots, tours }) => (
-              <section key={date} className="relative pl-10">
-                <div className="absolute -left-[9px] top-2 h-4 w-4 rounded-full bg-[#caa24c] shadow-[0_0_16px_rgba(202,162,76,0.5)]" />
-                <h3 className="text-2xl font-bold text-white font-serif">{formatCalendarDate(date)}</h3>
-
-                {slots.length > 0 ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {slots.map((slot) => (
-                      <article key={slot.id} className="rounded-xl border border-[#caa24c]/18 bg-[#caa24c]/5 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Published slot</p>
-                            <p className="mt-1 font-mono text-sm font-bold text-white">
-                              {formatTourSlotTime(slot.start_time)}
-                              {slot.end_time ? ` - ${formatTourSlotTime(slot.end_time)}` : ''}
-                            </p>
-                          </div>
-                          <span className="rounded bg-black/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                            {slot.status}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-xs leading-5 text-zinc-500">
-                          {Math.max(0, slot.capacity - slot.booked_count)} of {slot.capacity} spots open
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="mt-4 grid gap-4">
-                  {tours.map((tour) => (
-                    <article key={tour.id} className="luxor-glass-card rounded-xl p-6 transition-all hover:border-[#caa24c]/30 group luxor-glow-gold relative overflow-hidden">
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 relative z-10">
-                        <div>
-                          <Link href={`/portal/leads/${tour.id}`} className="inline-flex items-center gap-2 group/title">
-                            <h4 className="text-xl font-bold text-white group-hover/title:text-[#f1d27a] transition-colors">{tour.full_name}</h4>
-                            <ExternalLink size={14} className="text-zinc-650 group-hover/title:text-[#f1d27a] transition-colors" />
-                          </Link>
-                          <div className="flex flex-wrap gap-3 text-zinc-400 font-mono text-sm mt-2">
-                            <span className="flex items-center gap-1.5 rounded bg-black/50 border border-zinc-800 px-2.5 py-1">
-                              <Clock size={14} className="text-[#caa24c]" />
-                              {tour.preferred_tour_time ?? "Flexible time"}
-                            </span>
-                            <span className="flex items-center gap-1.5 rounded bg-black/50 border border-zinc-800 px-2.5 py-1">
-                              <User size={14} className="text-[#caa24c]" />
-                              {tour.guest_count ? `${tour.guest_count} guests` : "Guest count needed"}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="max-w-fit rounded bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-450 border border-zinc-850">
-                          {tour.event_type ?? "Event type needed"}
-                        </span>
-                      </div>
-
-                      <div className="mt-6 flex flex-wrap gap-6 border-t border-zinc-850/50 pt-5 text-sm relative z-10">
-                        <div className="flex items-center gap-2 text-zinc-550 font-medium">
-                          <MapPin size={16} className="text-zinc-650" /> Luxor Event Space
-                        </div>
-                        <div className="text-zinc-550 font-medium font-mono text-xs">
-                          {tour.email ?? tour.phone ?? "Contact method needed"}
-                        </div>
-                      </div>
-
-                      {tour.message ? (
-                        <p className="mt-4 rounded-lg border border-zinc-900 bg-black/30 p-4 text-sm leading-6 text-zinc-450 relative z-10">
-                          {tour.message}
-                        </p>
-                      ) : null}
-                    </article>
-                  ))}
-                  {tours.length === 0 ? (
-                    <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-sm text-zinc-500">
-                      No requests have picked this date yet.
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
+      ) : activeCalendar === 'tours' ? (
+        <PortalCalendar title={`${data.tours.length} tour requests / ${data.slots.length} published slots`} items={tourItems} view={view} onViewChange={setView} />
+      ) : (
+        <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />
+      )}
     </PortalPageFrame>
-  );
+  )
 }
 
-function groupCalendarByDate(tours: LuxorInquiry[], slots: LuxorTourSlot[]) {
-  const groups: Record<string, { date: string; slots: LuxorTourSlot[]; tours: LuxorInquiry[] }> = {};
-
-  for (const slot of slots) {
-    groups[slot.slot_date] ??= { date: slot.slot_date, slots: [], tours: [] };
-    groups[slot.slot_date].slots.push(slot);
-  }
-
-  for (const tour of tours) {
-    if (!tour.preferred_tour_date) continue;
-
-    groups[tour.preferred_tour_date] ??= { date: tour.preferred_tour_date, slots: [], tours: [] };
-    groups[tour.preferred_tour_date].tours.push(tour);
-  }
-
-  return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
+function TourControls({
+  tour,
+  busyId,
+  onAttendance,
+  onEmail,
+}: {
+  tour: LuxorInquiry
+  busyId: string | null
+  onAttendance: (tour: LuxorInquiry, attendance: string) => void
+  onEmail: (tour: LuxorInquiry, jobType: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      {tour.message ? <p className="line-clamp-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{tour.message}</p> : null}
+      <div className="flex flex-wrap gap-1.5">
+        <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'attended')} icon={<UserCheck size={11} />} label="Attended" />
+        <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'no_show')} icon={<UserX size={11} />} label="No-show" />
+        <ActionButton disabled={busyId === `${tour.id}-tour_confirmation`} onClick={() => onEmail(tour, 'tour_confirmation')} icon={<Send size={11} />} label="Confirm email" />
+        <ActionButton disabled={busyId === `${tour.id}-tour_no_show_reschedule`} onClick={() => onEmail(tour, 'tour_no_show_reschedule')} icon={<Mail size={11} />} label="Reschedule" />
+      </div>
+      <div className="flex items-center justify-between">
+        <PortalStatusBadge status={tour.tour_attendance_status || 'pending'} />
+        <Link href={`/portal/leads/${tour.id}`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+          Open <ExternalLink size={10} className="inline" />
+        </Link>
+      </div>
+    </div>
+  )
 }
 
-function formatCalendarDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(`${value}T12:00:00`));
+function EventControls({
+  booking,
+  busyId,
+  onSendContract,
+}: {
+  booking: LuxorBooking & { paid_total?: number; balance_due?: number }
+  busyId: string | null
+  onSendContract: (booking: LuxorBooking) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 text-[10px] text-[color:var(--portal-muted)]">
+        <span>Contract: <b className="text-[color:var(--portal-text)]">{(booking.contract_status || 'not_sent').replaceAll('_', ' ')}</b></span>
+        <span>Balance: <b className="text-[color:var(--portal-text)]">${Number(booking.balance_due || 0).toLocaleString()}</b></span>
+        <span>Paid: <b className="text-[color:var(--portal-text)]">${Number(booking.paid_total || 0).toLocaleString()}</b></span>
+        <span>Deposit: <b className="text-[color:var(--portal-text)]">{booking.security_deposit_status || 'not collected'}</b></span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <PortalStatusBadge status={booking.status} />
+        <PortalStatusBadge status={booking.contract_status || 'not_sent'} />
+        <ActionButton disabled={busyId === `contract-${booking.id}` || booking.contract_status === 'signed'} onClick={() => onSendContract(booking)} icon={<Check size={11} />} label="Send contract" />
+      </div>
+      {booking.inquiry_id ? (
+        <Link href={`/portal/leads/${booking.inquiry_id}`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+          Client record <ExternalLink size={10} className="inline" />
+        </Link>
+      ) : null}
+    </div>
+  )
+}
+
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] disabled:opacity-45"
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function formatTime(value: string) {
+  const [hours = '0', minutes = '0'] = value.split(':')
+  const date = new Date()
+  date.setHours(Number(hours), Number(minutes), 0, 0)
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date)
 }

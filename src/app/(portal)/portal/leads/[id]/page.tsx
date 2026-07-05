@@ -26,7 +26,7 @@ import {
   NotebookPen,
   ReceiptText,
 } from 'lucide-react'
-import { LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
+import { LuxorBooking, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
 export default function LeadDetailPage({
@@ -40,6 +40,7 @@ export default function LeadDetailPage({
   const [notes, setNotes] = useState<LuxorNote[]>([])
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [bookings, setBookings] = useState<LuxorBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -101,6 +102,12 @@ export default function LeadDetailPage({
       if (invoicesRes.ok) {
         const invoicesData = await invoicesRes.json()
         setInvoices(invoicesData)
+      }
+
+      const bookingsRes = await fetch(`/api/bookings?inquiryId=${id}`)
+      if (bookingsRes.ok) {
+        const bookingsData = await bookingsRes.json()
+        setBookings(bookingsData)
       }
     } catch (err) {
       console.error(err)
@@ -308,6 +315,57 @@ export default function LeadDetailPage({
       alert('Error creating invoice.')
     } finally {
       setSubmittingInvoice(false)
+    }
+  }
+
+  const handleSendContract = async (bookingId: string) => {
+    try {
+      const res = await fetch('/api/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send contract.')
+      await fetchAllData()
+      alert('Contract signature email queued.')
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to send contract.')
+    }
+  }
+
+  const handleCreateBookingFromLead = async () => {
+    if (!lead) return
+
+    const eventDate = window.prompt('Event date for the booking? Use YYYY-MM-DD format.')
+    if (!eventDate) return
+
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiry_id: lead.id,
+          client_name: lead.full_name,
+          email: lead.email,
+          phone: lead.phone,
+          event_type: lead.event_type,
+          event_date: eventDate,
+          guest_count: lead.guest_count,
+          status: 'tentative',
+          contract_total: getInvoiceTotal(),
+          deposit_required: Math.round(getInvoiceTotal() * 0.25),
+          notes: lead.message,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create booking.')
+      await handleStatusChange('booked')
+      await fetchAllData()
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to create booking.')
     }
   }
 
@@ -617,6 +675,12 @@ export default function LeadDetailPage({
                 detail="Create deposit or event invoice"
                 onClick={() => setIsInvoiceModalOpen(true)}
               />
+              <ClientActionButton
+                icon={<FileSignature size={15} />}
+                label="Create booking record"
+                detail="Adds this client to booked event calendar"
+                onClick={handleCreateBookingFromLead}
+              />
             </div>
           </div>
 
@@ -704,6 +768,47 @@ export default function LeadDetailPage({
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Booking and Contract Card */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
+            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+              <span className="flex items-center gap-2.5">
+                <FileSignature size={16} className="text-zinc-500" />
+                Booking & Contract
+              </span>
+              <span className="font-mono text-xs text-zinc-500">{bookings.length} records</span>
+            </h3>
+
+            {bookings.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
+                No booking record is linked yet. Once this lead becomes a reserved event, the booked event calendar and contract signing flow will use that booking.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bookings.map((booking) => (
+                  <div key={booking.id} className="rounded-xl border border-zinc-900 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-white">{booking.event_date || 'Event date TBD'}</p>
+                        <p className="mt-1 text-[10px] text-zinc-500">
+                          {(booking.contract_status || 'not_sent').replaceAll('_', ' ')} • ${Number(booking.contract_total || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <PortalStatusBadge status={booking.status} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSendContract(booking.id)}
+                      disabled={booking.contract_status === 'signed'}
+                      className="mt-4 w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] hover:bg-[#caa24c]/12 disabled:opacity-45"
+                    >
+                      {booking.contract_status === 'signed' ? 'Contract Signed' : 'Send Contract'}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

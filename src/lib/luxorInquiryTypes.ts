@@ -7,6 +7,19 @@ export type LuxorInquiryStatus =
   | 'booked'
   | 'closed_lost'
 
+export type LuxorPipelineStage =
+  | 'inquiry'
+  | 'tour'
+  | 'proposal_sent'
+  | 'book_reserve'
+  | 'planning_begins'
+  | 'final_details'
+  | 'setup_event_day'
+  | 'after_event'
+  | 'closed_lost'
+
+export type LuxorTourAttendanceStatus = 'pending' | 'attended' | 'no_show' | 'rescheduled' | 'cancelled'
+
 export type LuxorInquiryInput = {
   fullName: string
   email?: string
@@ -46,6 +59,12 @@ export type LuxorInquiry = {
   referrer: string | null
   user_agent: string | null
   metadata: Record<string, unknown>
+  pipeline_stage?: LuxorPipelineStage | null
+  tour_attendance_status?: LuxorTourAttendanceStatus | null
+  tour_confirmed_at?: string | null
+  tour_reminder_sent_at?: string | null
+  tour_no_show_email_sent_at?: string | null
+  tour_response_token?: string | null
 }
 
 export function compactText(value: unknown) {
@@ -119,3 +138,96 @@ export type LuxorTask = {
   status: LuxorTaskStatus
 }
 
+export type LuxorBookingStatus = 'draft' | 'tentative' | 'confirmed' | 'completed' | 'cancelled'
+export type LuxorContractStatus = 'not_sent' | 'sent' | 'viewed' | 'signed' | 'needs_follow_up' | 'void'
+
+export type LuxorBooking = {
+  id: string
+  created_at: string
+  updated_at: string
+  inquiry_id: string | null
+  invoice_id: string | null
+  client_name: string
+  email: string | null
+  phone: string | null
+  event_type: string | null
+  event_date: string | null
+  start_time: string | null
+  end_time: string | null
+  guest_count: number | null
+  package_name: string | null
+  status: LuxorBookingStatus
+  booked_at: string | null
+  contract_total: number
+  deposit_required: number
+  final_payment_due_date: string | null
+  contract_status?: LuxorContractStatus | null
+  contract_sent_at?: string | null
+  contract_signed_at?: string | null
+  security_deposit_status?: string | null
+  notes: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorPaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'void'
+
+export type LuxorPayment = {
+  id: string
+  created_at: string
+  updated_at: string
+  booking_id: string | null
+  invoice_id: string | null
+  inquiry_id: string | null
+  amount: number
+  status: LuxorPaymentStatus
+  payment_method: string | null
+  paid_at: string | null
+  processor: string | null
+  processor_reference: string | null
+  notes: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
+export type LuxorEmailJobKind = 'tour_confirmation' | 'tour_reminder' | 'tour_no_show_reschedule' | 'contract_signature'
+
+export type LuxorEmailJob = {
+  id: string
+  created_at: string
+  updated_at: string
+  inquiry_id: string | null
+  booking_id: string | null
+  signature_request_id: string | null
+  job_type: LuxorEmailJobKind
+  status: LuxorEmailJobStatus
+  recipient_email: string
+  subject: string
+  body: string
+  scheduled_for: string
+  sent_at: string | null
+  last_error: string | null
+  attempts: number
+  metadata: Record<string, unknown>
+}
+
+export type LuxorSignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'void'
+
+export type LuxorSignatureRequest = {
+  id: string
+  created_at: string
+  updated_at: string
+  booking_id: string
+  inquiry_id: string | null
+  client_name: string
+  client_email: string
+  token: string
+  status: LuxorSignatureStatus
+  contract_title: string
+  contract_body: string
+  signed_name: string | null
+  signed_at: string | null
+  signer_ip: string | null
+  signer_user_agent: string | null
+  expires_at: string | null
+  metadata: Record<string, unknown>
+}

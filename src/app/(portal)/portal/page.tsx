@@ -13,6 +13,7 @@ import {
   DollarSign
 } from "lucide-react";
 import Link from "next/link";
+import { listLuxorBookingsWithPayments } from "@/lib/luxorBookingsServer";
 import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { LuxorInquiry, LuxorNote } from "@/lib/luxorInquiryTypes";
@@ -21,12 +22,16 @@ import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead
 export default async function PortalOverview() {
   let leads: LuxorInquiry[] = [];
   let recentNotes: LuxorNote[] = [];
+  let bookings: Awaited<ReturnType<typeof listLuxorBookingsWithPayments>> = [];
   let loadError: string | null = null;
 
 
   try {
-    leads = await listLuxorInquiries(100);
-    recentNotes = await listRecentNotes(5);
+    [leads, recentNotes, bookings] = await Promise.all([
+      listLuxorInquiries(100),
+      listRecentNotes(5),
+      listLuxorBookingsWithPayments(25).catch(() => []),
+    ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
   }
@@ -39,7 +44,17 @@ export default async function PortalOverview() {
 
   // Count upcoming tours
   const todayStr = new Date().toISOString().split('T')[0];
-  const upcomingEvents = leads.filter(l => l.preferred_tour_date && l.preferred_tour_date >= todayStr);
+  const upcomingTours = leads
+    .filter(l => l.preferred_tour_date && l.preferred_tour_date >= todayStr)
+    .sort((a, b) => String(a.preferred_tour_date).localeCompare(String(b.preferred_tour_date)))
+  const noShowTours = leads.filter(l => l.tour_attendance_status === 'no_show');
+  const weekEnd = new Date();
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const weekEndStr = weekEnd.toISOString().split('T')[0];
+  const toursThisWeek = upcomingTours.filter(l => l.preferred_tour_date && l.preferred_tour_date <= weekEndStr);
+  const upcomingBookings = bookings
+    .filter((booking) => booking.event_date && booking.event_date >= todayStr && booking.status !== 'cancelled')
+    .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))
 
   return (
     <PortalPageFrame className="min-h-full pb-10 group/portal">
@@ -84,7 +99,7 @@ export default async function PortalOverview() {
         <MetricCard
           label="Tour Follow-Up"
           value={String(needsTourFollowUp.length)}
-          change={`${upcomingEvents.length} dated`}
+          change={`${upcomingTours.length} dated`}
           trend="neutral"
           icon={<Calendar size={16} />}
           color="orange"
@@ -104,6 +119,35 @@ export default async function PortalOverview() {
           trend={bookedLeads.length > 0 ? "up" : "neutral"}
           icon={<Users size={16} />}
           color="green"
+        />
+      </div>
+
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <OpsCard
+          title="Upcoming Tours"
+          value={String(upcomingTours.length)}
+          detail={upcomingTours[0] ? `${upcomingTours[0].full_name} on ${formatShortDate(upcomingTours[0].preferred_tour_date)}` : 'No dated tours'}
+          href="/portal/calendar"
+        />
+        <OpsCard
+          title="Tours This Week"
+          value={String(toursThisWeek.length)}
+          detail="Confirm, remind, or mark attendance"
+          href="/portal/calendar"
+        />
+        <OpsCard
+          title="No-Shows"
+          value={String(noShowTours.length)}
+          detail={noShowTours.length ? 'Send reschedule emails' : 'No no-shows waiting'}
+          href="/portal/calendar"
+          tone={noShowTours.length ? 'rose' : 'green'}
+        />
+        <OpsCard
+          title="Booked Events"
+          value={String(upcomingBookings.length)}
+          detail={upcomingBookings[0] ? `${upcomingBookings[0].client_name} on ${formatShortDate(upcomingBookings[0].event_date)}` : 'No booked event dates'}
+          href="/portal/calendar"
+          tone="gold"
         />
       </div>
 
@@ -247,6 +291,40 @@ export default async function PortalOverview() {
       </div>
     </PortalPageFrame>
   );
+}
+
+function OpsCard({
+  title,
+  value,
+  detail,
+  href,
+  tone = 'blue',
+}: {
+  title: string
+  value: string
+  detail: string
+  href: string
+  tone?: 'blue' | 'gold' | 'green' | 'rose'
+}) {
+  const tones = {
+    blue: 'border-blue-500/15 bg-blue-500/5 text-blue-300',
+    gold: 'border-[#caa24c]/20 bg-[#caa24c]/8 text-[#f1d27a]',
+    green: 'border-emerald-500/15 bg-emerald-500/5 text-emerald-300',
+    rose: 'border-rose-500/20 bg-rose-500/8 text-rose-300',
+  }
+
+  return (
+    <Link href={href} className={`rounded-2xl border p-5 transition-transform hover:-translate-y-1 ${tones[tone]}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{title}</p>
+      <p className="mt-3 font-mono text-3xl font-bold text-white">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-zinc-400">{detail}</p>
+    </Link>
+  )
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return 'TBD'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T12:00:00`))
 }
 
 function MetricCard({ label, value, change, trend, icon, color }: { 

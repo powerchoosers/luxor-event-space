@@ -14,6 +14,7 @@ import {
   Phone,
   Search,
   Settings,
+  Moon,
   Users
 } from 'lucide-react'
 import Link from 'next/link'
@@ -37,6 +38,11 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [portalTheme, setPortalTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window === 'undefined') return 'dark'
+    const savedTheme = window.localStorage.getItem('luxor-portal-theme')
+    return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark'
+  })
   
   // Notification State
   const [notificationCount, setNotificationCount] = useState(0)
@@ -45,6 +51,14 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
   // Header Global Search State
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+
+  const togglePortalTheme = () => {
+    setPortalTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark'
+      window.localStorage.setItem('luxor-portal-theme', next)
+      return next
+    })
+  }
 
   // Derived Search Results
   const searchResults = searchQuery.trim().length >= 2
@@ -89,7 +103,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
   }
 
   return (
-    <body className="h-screen overflow-hidden bg-[#080706] font-sans text-zinc-400 selection:bg-[#caa24c]/30">
+    <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <aside className={`fixed left-0 top-0 z-50 hidden h-full border-r border-[#caa24c]/10 bg-[#050505]/90 backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.14),transparent_16rem)]" />
         <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
@@ -160,7 +174,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
             <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} collapsed={sidebarCollapsed} />
             <form action="/api/auth/logout" method="post">
-              <button className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
+              <button type="submit" className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
                 <LogOut size={18} className="transition-transform group-hover:translate-x-1" />
                 <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>Log Out</span>
               </button>
@@ -225,6 +239,16 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
             <Link href="/" className="hidden items-center gap-2 rounded-lg border border-[#caa24c]/18 bg-[#120d0c]/70 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:border-[#f1d27a]/40 hover:text-[#f1d27a] md:inline-flex">
               Public site <ExternalLink size={12} />
             </Link>
+
+            <button
+              type="button"
+              onClick={togglePortalTheme}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/18 bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:border-[#f1d27a]/40 hover:text-[#f1d27a]"
+              aria-label="Toggle portal theme"
+            >
+              <Moon size={12} />
+              {portalTheme === 'dark' ? 'Light' : 'Dark'}
+            </button>
             
             {/* Bell Notifications */}
             <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Notifications">
@@ -273,7 +297,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           })}
         </nav>
 
-        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)] p-4 sm:p-6 lg:p-8">
+        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)] p-4 sm:p-6 lg:p-8">
           <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>

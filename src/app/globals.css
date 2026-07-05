@@ -38,6 +38,72 @@ body {
   color: var(--foreground);
 }
 
+body[data-portal-theme='dark'] {
+  --portal-bg: #080706;
+  --portal-card: rgba(0, 0, 0, 0.4);
+  --portal-soft: rgba(9, 9, 11, 0.78);
+  --portal-text: rgba(255, 255, 255, 0.92);
+  --portal-muted: #a1a1aa;
+  --portal-faint: #52525b;
+  --portal-border: rgba(202, 162, 76, 0.12);
+}
+
+body[data-portal-theme='light'] {
+  --portal-bg: #f6f0e6;
+  --portal-card: rgba(255, 255, 255, 0.78);
+  --portal-soft: rgba(250, 246, 238, 0.9);
+  --portal-text: #18120c;
+  --portal-muted: #6f6256;
+  --portal-faint: #a79584;
+  --portal-border: rgba(124, 91, 36, 0.2);
+  color: var(--portal-muted);
+}
+
+body[data-portal-theme='light'] aside,
+body[data-portal-theme='light'] header,
+body[data-portal-theme='light'] .nodal-void-card,
+body[data-portal-theme='light'] .luxor-glass-card,
+body[data-portal-theme='light'] .portal-surface {
+  background: var(--portal-card) !important;
+  border-color: var(--portal-border) !important;
+  color: var(--portal-muted);
+}
+
+body[data-portal-theme='light'] .bg-black\/40,
+body[data-portal-theme='light'] .bg-black\/60,
+body[data-portal-theme='light'] .bg-black\/30,
+body[data-portal-theme='light'] .bg-zinc-950,
+body[data-portal-theme='light'] .bg-zinc-950\/60,
+body[data-portal-theme='light'] .bg-zinc-950\/50,
+body[data-portal-theme='light'] .bg-zinc-950\/40,
+body[data-portal-theme='light'] .bg-zinc-900\/50 {
+  background-color: var(--portal-soft) !important;
+}
+
+body[data-portal-theme='light'] .text-white,
+body[data-portal-theme='light'] .text-white\/90,
+body[data-portal-theme='light'] .text-zinc-200,
+body[data-portal-theme='light'] .text-zinc-300,
+body[data-portal-theme='light'] .text-zinc-350,
+body[data-portal-theme='light'] .text-zinc-400 {
+  color: var(--portal-text) !important;
+}
+
+body[data-portal-theme='light'] .text-zinc-500,
+body[data-portal-theme='light'] .text-zinc-550,
+body[data-portal-theme='light'] .text-zinc-600,
+body[data-portal-theme='light'] .text-zinc-650 {
+  color: var(--portal-muted) !important;
+}
+
+body[data-portal-theme='light'] input,
+body[data-portal-theme='light'] textarea,
+body[data-portal-theme='light'] select {
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: var(--portal-text) !important;
+  border-color: var(--portal-border) !important;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(202, 162, 76, 0.58) rgba(8, 7, 6, 0.82);

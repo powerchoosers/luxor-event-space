@@ -25,7 +25,7 @@ export default function MarketingPage() {
 
       {/* Engagement Pulse */}
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:gap-6">
-         <StatsPanel label="Audience Size" value="8,402" trend="+124" />
+         <StatsPanel label="Subscribers" value="8,402" trend="+124" />
          <StatsPanel label="Open Rate (Avg)" value="42.8%" trend="+2.1%" />
          <StatsPanel label="Click-Through" value="18.1%" trend="+0.5%" />
          <StatsPanel label="Bespoke Replies" value="12" trend="+3" />

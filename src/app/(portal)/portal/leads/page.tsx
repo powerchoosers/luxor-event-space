@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react'
 import Link from 'next/link'
-import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -35,6 +35,17 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'proposal_sent', label: 'Proposal Sent' },
   { value: 'booked', label: 'Booked' },
   { value: 'closed_lost', label: 'Closed Lost' },
+]
+
+const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
+  { id: 'inquiry', label: 'Inquiry', short: 'Inquiry', tone: 'blue', status: 'new' },
+  { id: 'tour', label: 'Tour', short: 'Tour', tone: 'purple', status: 'tour_requested' },
+  { id: 'proposal_sent', label: 'Proposal Sent', short: 'Proposal', tone: 'indigo', status: 'proposal_sent' },
+  { id: 'book_reserve', label: 'Book & Reserve', short: 'Reserve', tone: 'green', status: 'booked' },
+  { id: 'planning_begins', label: 'Planning Begins', short: 'Planning', tone: 'cyan', status: 'booked' },
+  { id: 'final_details', label: 'Final Details', short: 'Details', tone: 'amber', status: 'booked' },
+  { id: 'setup_event_day', label: 'Set Up + Event Day', short: 'Event Day', tone: 'rose', status: 'booked' },
+  { id: 'after_event', label: 'After Event', short: 'After', tone: 'zinc', status: 'booked' },
 ]
 
 export default function LeadsPage() {
@@ -149,6 +160,35 @@ export default function LeadsPage() {
       console.error(err)
       alert('Error updating status.')
       fetchLeads() // Re-sync from database if error
+    }
+  }
+
+  const handleMovePipelineStage = async (leadId: string, newStage: LuxorPipelineStage) => {
+    const column = PIPELINE_COLUMNS.find((item) => item.id === newStage)
+    try {
+      setLeads((prev) =>
+        prev.map((lead) => (
+          lead.id === leadId
+            ? { ...lead, pipeline_stage: newStage, status: column?.status || lead.status }
+            : lead
+        ))
+      )
+
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: leadId,
+          pipeline_stage: newStage,
+          ...(column?.status ? { status: column.status } : {}),
+          author: 'Portal Owner',
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to update pipeline stage.')
+    } catch (err) {
+      console.error(err)
+      alert('Error updating pipeline stage.')
+      fetchLeads()
     }
   }
 
@@ -400,15 +440,8 @@ export default function LeadsPage() {
         </PortalTableCard>
       ) : (
         <div className="flex-1 min-h-0 overflow-x-auto portal-scrollbar pb-4 flex gap-4 select-none">
-          {([
-            { id: 'new', label: 'New', tone: 'blue' },
-            { id: 'contacted', label: 'Contacted', tone: 'cyan' },
-            { id: 'tour_requested', label: 'Tour Req.', tone: 'purple' },
-            { id: 'tour_confirmed', label: 'Tour Conf.', tone: 'amber' },
-            { id: 'proposal_sent', label: 'Proposal', tone: 'indigo' },
-            { id: 'booked', label: 'Booked', tone: 'green' }
-          ] as { id: LuxorInquiryStatus; label: string; tone: string }[]).map((col, colIndex, colArray) => {
-            const colLeads = sortedLeads.filter(l => l.status === col.id)
+          {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
+            const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
             return (
               <div key={col.id} className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/15 border border-zinc-900/60 rounded-2xl flex flex-col h-[calc(100vh-21rem)] overflow-hidden">
                 {/* Column Header */}
@@ -420,9 +453,11 @@ export default function LeadsPage() {
                       col.tone === 'purple' ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.5)]' :
                       col.tone === 'amber' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' :
                       col.tone === 'indigo' ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.5)]' :
+                      col.tone === 'rose' ? 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.5)]' :
+                      col.tone === 'zinc' ? 'bg-zinc-500 shadow-[0_0_8px_rgba(113,113,122,0.5)]' :
                       'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
                     }`} />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{col.label}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{col.short}</span>
                   </div>
                   <span className="text-[9px] font-mono font-bold text-zinc-500 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-md">
                     {colLeads.length}
@@ -485,7 +520,7 @@ export default function LeadsPage() {
                             {colIndex > 0 && (
                               <button
                                 type="button"
-                                onClick={() => handleMoveStatus(lead.id, colArray[colIndex - 1].id)}
+                                onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex - 1].id)}
                                 className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                                 title={`Move to ${colArray[colIndex - 1].label}`}
                               >
@@ -495,7 +530,7 @@ export default function LeadsPage() {
                             {colIndex < colArray.length - 1 && (
                               <button
                                 type="button"
-                                onClick={() => handleMoveStatus(lead.id, colArray[colIndex + 1].id)}
+                                onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex + 1].id)}
                                 className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                                 title={`Move to ${colArray[colIndex + 1].label}`}
                               >
@@ -715,6 +750,15 @@ function getInitials(name: string) {
     .map((part) => part[0])
     .join('')
     .toUpperCase()
+}
+
+function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
+  if (lead.pipeline_stage) return lead.pipeline_stage
+  if (lead.status === 'tour_requested' || lead.status === 'tour_confirmed') return 'tour'
+  if (lead.status === 'proposal_sent') return 'proposal_sent'
+  if (lead.status === 'booked') return 'book_reserve'
+  if (lead.status === 'closed_lost') return 'closed_lost'
+  return 'inquiry'
 }
 
 function formatDate(value: string) {
