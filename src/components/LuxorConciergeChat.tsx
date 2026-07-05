@@ -804,7 +804,7 @@ export function LuxorConciergeChat() {
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             type="button"
             onClick={() => setOpen(true)}
-            className="absolute bottom-0 right-0 group flex items-center gap-3 rounded-full border border-[#f1d27a]/45 bg-[#0d0908] py-2 pl-2 pr-4 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] whitespace-nowrap"
+            className="absolute bottom-0 right-0 group flex h-16 w-16 items-center justify-center rounded-full border border-[#f1d27a]/45 bg-[#0d0908] p-1 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap"
             aria-label="Open Luxor concierge chat"
           >
             <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
