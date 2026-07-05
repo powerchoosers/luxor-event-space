@@ -311,7 +311,7 @@ export function LuxorConciergeChat() {
           id: createId(),
           role: 'assistant',
           content:
-            `Perfect. I saved this tour request in the Luxor CRM for ${contactDetails.name.trim()} at ${tourSelection?.label}, ${tourSelection?.time}. A Luxor coordinator will confirm final availability by phone or email.`,
+            `Perfect, ${contactDetails.name.trim()}. Your tour request for ${tourSelection?.label} at ${tourSelection?.time} is started. A Luxor coordinator will confirm final availability by phone or email. Is there anything else I can help you with while you plan?`,
         },
       ])
     } catch (error) {
@@ -323,7 +323,7 @@ export function LuxorConciergeChat() {
           id: createId(),
           role: 'assistant',
           content:
-            'I could not save that to the CRM yet. Please check the contact details, or use the full form while we fix the connection.',
+            'I could not submit that tour request yet. Please check the contact details, or use the full form while we fix the connection.',
         },
       ])
     } finally {
@@ -339,7 +339,8 @@ export function LuxorConciergeChat() {
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-        className="mt-3 rounded-md border border-[#caa24c]/24 bg-[#0d0908] p-3 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]"
+        className="mt-3 w-full rounded-md border border-[#caa24c]/24 bg-[#0d0908] p-3 shadow-[0_18px_50px_-34px_rgba(0,0,0,1)]"
+        data-booking-card
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -428,7 +429,7 @@ export function LuxorConciergeChat() {
           disabled={!bookingReady || submitted || submittingInquiry}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {submitted ? 'Request saved' : submittingInquiry ? 'Saving request' : bookingReady ? 'Save to CRM' : 'Pick time + add contact'}
+          {submitted ? 'Tour requested' : submittingInquiry ? 'Booking tour' : bookingReady ? 'Book tour' : 'Pick time + add contact'}
           <Check className="h-4 w-4" />
         </button>
       </motion.div>
@@ -478,7 +479,7 @@ export function LuxorConciergeChat() {
                     <motion.div
                       layout
                       key={message.id}
-                      className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+                      className={`flex flex-col ${message.ui === 'booking' ? 'w-full items-stretch' : message.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       <motion.div
                         initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
@@ -646,7 +647,7 @@ export function LuxorConciergeChat() {
                             onClick={submitTourRequest}
                             className="flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a]"
                           >
-                            {submitted ? 'Request saved' : contactComplete ? 'Save to CRM' : 'Add contact info'}
+                            {submitted ? 'Tour requested' : contactComplete ? 'Book tour' : 'Add contact info'}
                             <Check className="h-4 w-4" />
                           </button>
                         ) : null}

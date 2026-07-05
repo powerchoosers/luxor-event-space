@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { ArrowRight, CalendarDays, Check, Loader2, Sparkles } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 
@@ -80,12 +80,11 @@ export function LuxorInquiryForm({
       onSubmit={handleSubmit}
       className={`rounded-md border border-[#caa24c]/22 bg-[#080706] shadow-[0_34px_90px_-58px_rgba(0,0,0,0.95)] ${compact ? 'p-5' : 'p-5 sm:p-8'}`}
     >
-      <div className="mb-6 flex items-start justify-between gap-5 border-b border-[#caa24c]/20 pb-5">
+      <div className="mb-6 border-b border-[#caa24c]/20 pb-5">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Tour request</p>
           <h2 className="mt-2 font-serif text-3xl leading-none text-[#f7efe3]">{title}</h2>
         </div>
-        <Sparkles className="h-6 w-6 shrink-0 text-[#caa24c]" />
       </div>
 
       {submitted ? (

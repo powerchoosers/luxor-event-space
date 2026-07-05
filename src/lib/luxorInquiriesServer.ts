@@ -94,6 +94,14 @@ export async function listLuxorInquiries(limit = 50) {
   )
 }
 
+export async function getLuxorInquiry(id: string) {
+  const [inquiry] = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
+  )
+
+  return inquiry ?? null
+}
+
 export async function listLuxorTourRequests(limit = 100) {
   return supabaseRest<LuxorInquiry[]>(
     `luxor_inquiries?select=*&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,

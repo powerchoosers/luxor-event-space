@@ -47,6 +47,18 @@ const planningSteps = [
   ['Celebrate', 'Arrive to a room prepared for your event.'],
 ]
 
+const tourPrepPoints = [
+  'Confirm your guest flow',
+  'Talk through package fit',
+  'Check date availability',
+  'Picture photos, dinner, and dancing',
+]
+
+const tourPrepCards = [
+  ['Bring', 'Guest range, target dates, and any must-have moments.'],
+  ['Ask', 'Layout, timing, decor, package options, and next steps.'],
+]
+
 const faqs = [
   [
     'How do I check my date?',
@@ -328,9 +340,25 @@ export default function Home() {
               title="Come see if the room feels right."
               copy="Tell us the basics. The Luxor team can follow up with availability, package details, and tour options."
             />
+            <div className="mt-8 grid gap-3">
+              {tourPrepPoints.map((point) => (
+                <div key={point} className="flex items-center gap-3 border-t border-[#caa24c]/16 pt-4 text-sm leading-6 text-[#d7c29a]/76">
+                  <Check className="h-4 w-4 shrink-0 text-[#caa24c]" />
+                  <span>{point}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:max-w-xl">
+              {tourPrepCards.map(([title, copy]) => (
+                <div key={title} className="rounded-md border border-[#caa24c]/18 bg-black/20 p-5">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#caa24c]">{title}</p>
+                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                </div>
+              ))}
+            </div>
             <div className="mt-8 flex items-start gap-3 text-sm leading-6 text-[#d7c29a]/70">
               <CalendarDays className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />
-              <span>Best for layout, guest count, decor, timing, and package questions.</span>
+              <span>Private tours are the best time to compare layout, guest count, decor, timing, and packages.</span>
             </div>
           </Reveal>
 

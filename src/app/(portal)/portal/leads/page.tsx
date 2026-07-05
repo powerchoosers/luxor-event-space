@@ -37,22 +37,23 @@ export default async function LeadsPage() {
         title="Leads & Clients"
         description="Monitor and manage the intake pipeline of event space prospects."
         actions={
-          <>
-          <button className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-sm font-semibold text-zinc-300 hover:bg-zinc-800 transition-all">
-            <Filter size={16} /> Filters
-          </button>
-          <button className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-sm font-bold text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20">
-            <Plus size={16} /> New Lead
-          </button>
-          </>
+          <div className="flex w-full flex-col items-stretch gap-3 xl:w-auto xl:items-end">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[520px]">
+              <LeadMetric label="Live inquiries" value={String(leads.length)} detail="Forms and chat" />
+              <LeadMetric label="Tour requests" value={String(tourRequests)} detail="Need confirmation" tone="gold" />
+              <LeadMetric label="New leads" value={String(newLeads)} detail={missingContact ? `${missingContact} missing contact` : "Ready for follow-up"} tone="green" />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-sm font-semibold text-zinc-300 hover:bg-zinc-800 transition-all">
+                <Filter size={16} /> Filters
+              </button>
+              <button className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-sm font-bold text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20">
+                <Plus size={16} /> New Lead
+              </button>
+            </div>
+          </div>
         }
       />
-
-      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3">
-        <LeadMetric label="Live inquiries" value={String(leads.length)} detail="Captured from forms and chat" />
-        <LeadMetric label="Tour requests" value={String(tourRequests)} detail="Need availability confirmation" tone="gold" />
-        <LeadMetric label="New leads" value={String(newLeads)} detail={missingContact ? `${missingContact} missing contact method` : "Ready for follow-up"} tone="green" />
-      </div>
 
       <PortalTableCard
         controls={
@@ -116,7 +117,7 @@ export default async function LeadsPage() {
               ) : leads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
                   <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
+                    <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60">
                       <div className="relative">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
                           {getInitials(lead.full_name)}
@@ -127,7 +128,7 @@ export default async function LeadsPage() {
                         <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">{lead.full_name}</p>
                         <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">{lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}</p>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-6 py-6 font-mono">
                     <StatusBadge status={formatStatus(lead.status)} />
@@ -146,6 +147,9 @@ export default async function LeadsPage() {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
+                      <Link href={`/portal/leads/${lead.id}`} className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800" title="Open Client">
+                        <ExternalLink size={14} />
+                      </Link>
                       <ActionButton icon={<Mail size={14} />} tooltip="Send Email" />
                       <ActionButton icon={<Phone size={14} />} tooltip="Call Lead" />
                       <ActionButton icon={<Calendar size={14} />} tooltip="Schedule Tour" />
@@ -179,13 +183,15 @@ function LeadMetric({
   };
 
   return (
-    <div className="rounded-2xl border border-[#caa24c]/10 bg-black/36 p-5 shadow-xl shadow-black/20">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">{label}</p>
-      <div className="mt-3 flex items-end justify-between gap-4">
-        <p className="font-mono text-3xl font-bold text-white">{value}</p>
-        <span className={`rounded border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${tones[tone]}`}>Live</span>
+    <div className="rounded-xl border border-[#caa24c]/10 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
+        <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${tones[tone]}`}>Live</span>
       </div>
-      <p className="mt-2 text-xs font-medium text-zinc-500">{detail}</p>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <p className="font-mono text-2xl font-bold text-white">{value}</p>
+        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-zinc-500">{detail}</p>
+      </div>
     </div>
   );
 }

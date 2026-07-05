@@ -31,7 +31,7 @@ export default function VisitPage() {
         <div className="relative z-10 mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div className="mx-auto max-w-2xl text-center">
             <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
-            <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
+            <h1 className="mx-auto max-w-2xl font-serif text-4xl leading-[0.94] sm:text-5xl lg:text-6xl">
               Come see if the room feels right.
             </h1>
             <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
