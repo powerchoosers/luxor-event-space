@@ -55,12 +55,13 @@ interface EditableProps {
 function Editable({ value, onChange, style, className, multiline, placeholder, 'data-field': dataField }: EditableProps) {
   const ref = useRef<HTMLDivElement>(null)
 
-  // Sync external value changes without clobbering caret
   const lastValue = useRef(value)
-  if (ref.current && lastValue.current !== value && document.activeElement !== ref.current) {
-    ref.current.innerText = value
-    lastValue.current = value
-  }
+  React.useEffect(() => {
+    if (ref.current && lastValue.current !== value && document.activeElement !== ref.current) {
+      ref.current.innerText = value
+      lastValue.current = value
+    }
+  }, [value])
 
   const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
     const text = e.currentTarget.innerText
