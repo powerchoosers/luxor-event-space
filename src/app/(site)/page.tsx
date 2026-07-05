@@ -297,7 +297,8 @@ export default function Home() {
               ].map(([src, alt]) => (
                 <figure key={src} className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
                   <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
-                  <figcaption className="absolute inset-x-4 bottom-4 border-t border-[#caa24c]/45 pt-3 font-mono text-[10px] uppercase tracking-[0.28em] text-[#f1d27a]">
+                  <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.82))]" />
+                  <figcaption className="absolute inset-x-4 bottom-4 rounded-md border border-[#caa24c]/28 bg-black/68 px-3 py-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-[#fff2bf] shadow-[0_16px_44px_-22px_rgba(0,0,0,1)] backdrop-blur-md">
                     {alt}
                   </figcaption>
                 </figure>
