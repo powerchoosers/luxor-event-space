@@ -22,7 +22,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(202,162,76,0.13),transparent_28%,transparent_72%,rgba(189,101,117,0.08)),linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:auto,72px_72px,72px_72px]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#caa24c]/60 to-transparent" />
 
-      <section className="relative hidden min-h-screen border-r border-[#caa24c]/12 px-10 py-10 lg:flex lg:flex-col">
+      <section className="relative hidden min-h-screen px-10 py-10 lg:flex lg:flex-col">
         <Link href="/" className="inline-flex w-fit items-center gap-4">
           <span className="flex h-14 w-14 items-center justify-center rounded-md border border-[#caa24c]/28 bg-[#caa24c]/8">
             <Image src="/luxor-palm-mark.png" alt="" width={34} height={34} className="opacity-90" priority />
@@ -33,7 +33,8 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
           </span>
         </Link>
 
-        <div className="mt-auto max-w-xl pb-8">
+        <div className="flex flex-1 items-center">
+          <div className="max-w-xl -translate-y-4">
           <p className="font-mono text-[10px] font-black uppercase tracking-[0.38em] text-[#caa24c]">Private Access</p>
           <h1 className="mt-5 font-serif text-6xl leading-[0.92] text-[#f7efe3]">
             Luxor owner portal.
@@ -42,10 +43,11 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
             Client follow-up, event operations, invoices, and Zoho communications are protected behind the Luxor mailbox.
           </p>
 
-          <div className="mt-10 grid max-w-md gap-3">
+          <div className="mt-9 grid max-w-md gap-2">
             <StatusLine label="Zoho identity" value="Required" />
             <StatusLine label="Approved mailbox" value="booking@luxoratlaspalmas.com" />
             <StatusLine label="Alias sending" value="hello@luxoratlaspalmas.com" />
+          </div>
           </div>
         </div>
       </section>
