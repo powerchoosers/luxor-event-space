@@ -20,6 +20,8 @@ npm run build
 
 The site uses Next.js, React, TypeScript, and Tailwind CSS. The local development URL is `http://localhost:3000`.
 
+Do not run `npm run build` after every small change. During normal iteration, prefer targeted checks such as `npm run typecheck`, `npm run lint -- --quiet`, and browser validation for the affected page. Run `npm run build` only before deployment/release, when the user explicitly asks for a build, or when a change is likely to affect production compilation.
+
 ## Current Site Conventions
 
 - Public site routes include `/`, `/events`, `/spaces`, `/gallery`, `/pricing`, `/visit`, and `/tour`. Header and footer navigation should point to these real pages, not homepage hash anchors, unless a section jump is intentional.

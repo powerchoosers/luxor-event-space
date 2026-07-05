@@ -1,45 +1,13 @@
 import 'server-only'
 
 import { compactText, LuxorInquiry, LuxorInquiryInput, parseGuestCount } from './luxorInquiryTypes'
-
-type SupabaseError = {
-  message?: string
-  error?: string
-  details?: string
-  hint?: string
-}
-
-function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !serviceRoleKey) {
-    throw new Error('Missing SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.')
-  }
-
-  return { url: url.replace(/\/$/, ''), serviceRoleKey }
-}
-
-async function supabaseRest<T>(path: string, init: RequestInit = {}) {
-  const { url, serviceRoleKey } = getSupabaseConfig()
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as SupabaseError
-    throw new Error(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`)
-  }
-
-  return (await response.json()) as T
-}
+import { supabaseRest } from './supabaseRestServer'
+import {
+  applyTourSlotToInquiry,
+  assertTourSlotCanBeBooked,
+  getLuxorTourSlot,
+  reserveLuxorTourSlot,
+} from './luxorTourSlotsServer'
 
 export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const fullName = compactText(input.fullName)
@@ -77,6 +45,16 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
 
 export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const row = normalizeInquiry(input, userAgent)
+  const selectedTourSlotId =
+    typeof row.metadata?.selectedTourSlotId === 'string' ? row.metadata.selectedTourSlotId : null
+
+  const selectedTourSlot = selectedTourSlotId ? await getLuxorTourSlot(selectedTourSlotId) : null
+
+  if (selectedTourSlotId) {
+    assertTourSlotCanBeBooked(selectedTourSlot)
+    applyTourSlotToInquiry(row, selectedTourSlot!)
+  }
+
   const status = row.preferred_tour_date || row.preferred_tour_time ? 'tour_requested' : 'new'
 
   const [created] = await supabaseRest<LuxorInquiry[]>('luxor_inquiries?select=*', {
@@ -84,6 +62,10 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ ...row, status }),
   })
+
+  if (created && selectedTourSlot) {
+    await reserveLuxorTourSlot(selectedTourSlot)
+  }
 
   return created
 }
@@ -122,4 +104,3 @@ export async function updateLuxorInquiry(id: string, updates: Partial<Record<str
   )
   return updated ?? null
 }
-

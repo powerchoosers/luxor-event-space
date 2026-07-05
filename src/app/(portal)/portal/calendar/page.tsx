@@ -3,30 +3,37 @@ import { Calendar as CalendarIcon, Clock, MapPin, User, ArrowRight, ExternalLink
 import Link from "next/link";
 import { listLuxorTourRequests } from "@/lib/luxorInquiriesServer";
 import { LuxorInquiry } from "@/lib/luxorInquiryTypes";
+import { formatTourSlotTime, LuxorTourSlot } from "@/lib/luxorTourSlots";
+import { listUpcomingLuxorTourSlots } from "@/lib/luxorTourSlotsServer";
 import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
 
 export default async function CalendarPage() {
   let tourRequests: LuxorInquiry[] = [];
+  let tourSlots: LuxorTourSlot[] = [];
   let loadError: string | null = null;
 
   try {
-    tourRequests = await listLuxorTourRequests(100);
+    const [requests, slots] = await Promise.all([
+      listLuxorTourRequests(100),
+      listUpcomingLuxorTourSlots(100),
+    ]);
+    tourRequests = requests;
+    tourSlots = slots;
   } catch (error) {
-    loadError = error instanceof Error ? error.message : "Unable to load Luxor tour requests.";
+    loadError = error instanceof Error ? error.message : "Unable to load Luxor calendar.";
   }
 
-  const groupedTours = groupToursByDate(tourRequests);
-  const upcomingTours = Object.entries(groupedTours);
+  const calendarDays = groupCalendarByDate(tourRequests, tourSlots);
 
   return (
     <PortalPageFrame className="max-w-6xl">
       <PortalPageHeader
         icon={<CalendarIcon size={18} />}
         title="Event Calendar"
-        description="Live tour requests from the public Luxor booking flow."
+        description="Published tour availability and live tour requests from the Luxor booking flow."
         actions={
           <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
-            {tourRequests.length} active tour requests
+            {tourSlots.length} slots / {tourRequests.length} requests
           </div>
         }
       />
@@ -35,7 +42,7 @@ export default async function CalendarPage() {
         <div className="mb-8 flex items-center justify-between border-b border-zinc-900/50 pb-6">
           <div>
             <p className="text-zinc-500 font-medium uppercase tracking-widest text-xs">CRM Schedule</p>
-            <h2 className="mt-2 text-2xl font-bold text-white font-serif tracking-tight">Requested Tours</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white font-serif tracking-tight">Tour Availability</h2>
           </div>
           <CalendarIcon className="h-6 w-6 text-[#caa24c]" />
         </div>
@@ -44,20 +51,44 @@ export default async function CalendarPage() {
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
             {loadError}
           </div>
-        ) : upcomingTours.length === 0 ? (
+        ) : calendarDays.length === 0 ? (
           <div className="rounded-xl border border-zinc-900 bg-zinc-950/60 p-10 text-center">
             <CalendarIcon size={42} className="mx-auto text-zinc-800" />
-            <h3 className="mt-5 text-xl font-bold text-white">No requested tours yet</h3>
+            <h3 className="mt-5 text-xl font-bold text-white">No tour slots published</h3>
             <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500">
-              When someone submits the homepage, visit page, or tour page form with a preferred tour date, it will show up here.
+              Add rows to the Luxor tour slots table and the public booking flow will show those openings.
             </p>
           </div>
         ) : (
           <div className="relative ml-4 space-y-8 border-l-2 border-zinc-900/70 py-2">
-            {upcomingTours.map(([date, tours]) => (
+            {calendarDays.map(({ date, slots, tours }) => (
               <section key={date} className="relative pl-10">
                 <div className="absolute -left-[9px] top-2 h-4 w-4 rounded-full bg-[#caa24c] shadow-[0_0_16px_rgba(202,162,76,0.5)]" />
                 <h3 className="text-2xl font-bold text-white font-serif">{formatCalendarDate(date)}</h3>
+
+                {slots.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {slots.map((slot) => (
+                      <article key={slot.id} className="rounded-xl border border-[#caa24c]/18 bg-[#caa24c]/5 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Published slot</p>
+                            <p className="mt-1 font-mono text-sm font-bold text-white">
+                              {formatTourSlotTime(slot.start_time)}
+                              {slot.end_time ? ` - ${formatTourSlotTime(slot.end_time)}` : ''}
+                            </p>
+                          </div>
+                          <span className="rounded bg-black/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                            {slot.status}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-zinc-500">
+                          {Math.max(0, slot.capacity - slot.booked_count)} of {slot.capacity} spots open
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="mt-4 grid gap-4">
                   {tours.map((tour) => (
@@ -100,6 +131,11 @@ export default async function CalendarPage() {
                       ) : null}
                     </article>
                   ))}
+                  {tours.length === 0 ? (
+                    <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-sm text-zinc-500">
+                      No requests have picked this date yet.
+                    </div>
+                  ) : null}
                 </div>
               </section>
             ))}
@@ -110,13 +146,22 @@ export default async function CalendarPage() {
   );
 }
 
-function groupToursByDate(tours: LuxorInquiry[]) {
-  return tours.reduce<Record<string, LuxorInquiry[]>>((groups, tour) => {
-    if (!tour.preferred_tour_date) return groups;
+function groupCalendarByDate(tours: LuxorInquiry[], slots: LuxorTourSlot[]) {
+  const groups: Record<string, { date: string; slots: LuxorTourSlot[]; tours: LuxorInquiry[] }> = {};
 
-    groups[tour.preferred_tour_date] = [...(groups[tour.preferred_tour_date] ?? []), tour];
-    return groups;
-  }, {});
+  for (const slot of slots) {
+    groups[slot.slot_date] ??= { date: slot.slot_date, slots: [], tours: [] };
+    groups[slot.slot_date].slots.push(slot);
+  }
+
+  for (const tour of tours) {
+    if (!tour.preferred_tour_date) continue;
+
+    groups[tour.preferred_tour_date] ??= { date: tour.preferred_tour_date, slots: [], tours: [] };
+    groups[tour.preferred_tour_date].tours.push(tour);
+  }
+
+  return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function formatCalendarDate(value: string) {

@@ -8,8 +8,18 @@ import {
   ExternalLink
 } from 'lucide-react'
 import Link from 'next/link'
-import { LuxorInquiry, LuxorNote } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
+import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
+
+const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
+  { value: 'new', label: 'New' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'tour_requested', label: 'Tour Requested' },
+  { value: 'tour_confirmed', label: 'Tour Confirmed' },
+  { value: 'proposal_sent', label: 'Proposal Sent' },
+  { value: 'booked', label: 'Booked' },
+  { value: 'closed_lost', label: 'Closed Lost' },
+]
 
 export default function CommunicationsPage() {
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
@@ -23,20 +33,24 @@ export default function CommunicationsPage() {
   const [noteType, setNoteType] = useState<'email_log' | 'call_log' | 'note'>('email_log')
   const [submittingNote, setSubmittingNote] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const fetchInquiries = async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await fetch('/api/inquiries')
-      if (res.ok) {
-        const data = await res.json()
-        setInquiries(data)
-        if (data.length > 0) {
-          setSelectedId(data[0].id)
-        }
+      if (!res.ok) throw new Error('Failed to load inquiries.')
+
+      const data = await res.json()
+      setInquiries(data)
+      if (data.length > 0) {
+        setSelectedId((current) => current ?? data[0].id)
       }
     } catch (err) {
       console.error(err)
+      setError(err instanceof Error ? err.message : 'Unable to load communication queue.')
     } finally {
       setLoading(false)
     }
@@ -96,6 +110,43 @@ export default function CommunicationsPage() {
     }
   }
 
+  const handleStatusChange = async (newStatus: LuxorInquiryStatus) => {
+    if (!selectedInquiry || selectedInquiry.status === newStatus) return
+
+    try {
+      setUpdatingStatus(true)
+      setInquiries((prev) =>
+        prev.map((inquiry) =>
+          inquiry.id === selectedInquiry.id ? { ...inquiry, status: newStatus } : inquiry
+        )
+      )
+
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedInquiry.id, status: newStatus, author: 'Portal Owner' }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to update inquiry status.')
+      }
+
+      await fetchNotes(selectedInquiry.id)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Unable to update inquiry status.')
+      if (selectedInquiry) {
+        setInquiries((prev) =>
+          prev.map((inquiry) =>
+            inquiry.id === selectedInquiry.id ? { ...inquiry, status: selectedInquiry.status } : inquiry
+          )
+        )
+      }
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
   const selectedInquiry = inquiries.find((i) => i.id === selectedId)
 
   // Filter queue
@@ -122,6 +173,17 @@ export default function CommunicationsPage() {
         }
       />
 
+      <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
+        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Future table needed:</span>{' '}
+        this page records owner notes against live <span className="font-mono text-[#f1d27a]">luxor_inquiries</span>. Actual sent-email threads, inbound replies, call recordings, and SMS history need dedicated communications tables or provider webhooks.
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs font-medium text-red-300">
+          {error}
+        </div>
+      )}
+
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left Side: Queue */}
         <div className="flex min-h-[26rem] flex-col gap-6 lg:col-span-4 h-[calc(100vh-14rem)]">
@@ -146,6 +208,8 @@ export default function CommunicationsPage() {
             <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-zinc-900/30">
               {loading ? (
                 <p className="text-center py-6 text-xs text-zinc-650 font-semibold tracking-wider">SYNCING QUEUE...</p>
+              ) : error ? (
+                <p className="text-center py-6 text-xs text-red-300">{error}</p>
               ) : filteredInquiries.length === 0 ? (
                 <p className="text-center py-6 text-xs text-zinc-550">No clients match search parameters.</p>
               ) : (
@@ -201,7 +265,16 @@ export default function CommunicationsPage() {
                     </p>
                   </div>
                 </div>
-                <PortalStatusBadge status={selectedInquiry.status} />
+                <div className="flex items-center gap-3">
+                  <PortalSelect
+                    value={selectedInquiry.status}
+                    onChange={(value) => handleStatusChange(value as LuxorInquiryStatus)}
+                    options={INQUIRY_STATUS_OPTIONS}
+                    className="min-w-[180px]"
+                    disabled={updatingStatus}
+                  />
+                  <PortalStatusBadge status={selectedInquiry.status} />
+                </div>
               </div>
 
               {/* Chat Timeline & Log Feed */}
@@ -237,7 +310,7 @@ export default function CommunicationsPage() {
                 {/* Internal Comms Log Feed */}
                 <div className="space-y-4">
                   <div className="text-[10px] font-black uppercase tracking-widest text-zinc-550 mb-4">
-                    Owner Activity Feed & Logged Transmissions
+                    Owner Follow-Up Notes
                   </div>
 
                   {loadingNotes ? (
@@ -293,7 +366,7 @@ export default function CommunicationsPage() {
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                       }`}
                     >
-                      Log Email Sent
+                      Log Email Note
                     </button>
                     <button
                       type="button"
@@ -304,7 +377,7 @@ export default function CommunicationsPage() {
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                       }`}
                     >
-                      Log Call Made
+                      Log Call Note
                     </button>
                     <button
                       type="button"
@@ -323,7 +396,7 @@ export default function CommunicationsPage() {
                       type="text"
                       value={noteContent}
                       onChange={(e) => setNoteContent(e.target.value)}
-                      placeholder="Type details to record (e.g. Sent custom wedding proposal details or Called client back to confirm guest size)..."
+                      placeholder="Type the follow-up details to record, such as proposal sent manually or call outcome..."
                       className="flex-1 bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-[#caa24c]"
                     />
                     <button

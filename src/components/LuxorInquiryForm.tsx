@@ -4,7 +4,8 @@ import { FormEvent, useState } from 'react'
 import { ArrowRight, CalendarDays, Check, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
+import { PortalSelect } from '@/components/portal/PortalUI'
+import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -17,7 +18,6 @@ type LuxorInquiryFormProps = {
 }
 
 const eventTypes = ['Wedding', 'Quinceañera', 'Baby shower', 'Birthday', 'Corporate event', 'Private celebration']
-const tourTimes = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM']
 
 export function LuxorInquiryForm({
   source,
@@ -33,8 +33,18 @@ export function LuxorInquiryForm({
   const [error, setError] = useState<string | null>(null)
 
   const [eventType, setEventType] = useState('')
+  const [preferredTourSlotId, setPreferredTourSlotId] = useState('')
   const [preferredTourDate, setPreferredTourDate] = useState('')
   const [preferredTourTime, setPreferredTourTime] = useState('')
+  const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
+
+  function handleTourSlotChange(slotId: string) {
+    const selectedSlot = tourSlots.find((slot) => slot.id === slotId)
+
+    setPreferredTourSlotId(slotId)
+    setPreferredTourDate(selectedSlot?.date ?? '')
+    setPreferredTourTime(selectedSlot?.time ?? '')
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,6 +67,7 @@ export function LuxorInquiryForm({
       flow,
       pagePath: window.location.pathname,
       referrer: document.referrer,
+      metadata: preferredTourSlotId ? { selectedTourSlotId: preferredTourSlotId } : undefined,
     }
 
     try {
@@ -123,30 +134,28 @@ export function LuxorInquiryForm({
             <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" />
 
             {showTourFields && (
-              <>
+              <div className="sm:col-span-2">
                 <div className="flex flex-col justify-end">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Tour date</span>
-                  <PortalDatePicker
-                    value={preferredTourDate}
-                    onChange={setPreferredTourDate}
-                    className="w-full text-left"
-                    placeholder="Select Date"
-                  />
-                </div>
-                <div className="flex flex-col justify-end">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Tour time</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Available tour slot</span>
                   <PortalSelect
-                    value={preferredTourTime}
-                    onChange={setPreferredTourTime}
+                    value={preferredTourSlotId}
+                    onChange={handleTourSlotChange}
                     className="w-full text-left font-mono"
-                    placeholder="Select Time"
-                    options={[
-                      { value: '', label: 'Flexible' },
-                      ...tourTimes.map(t => ({ value: t, label: t }))
-                    ]}
+                    placeholder={tourSlotsLoading ? 'Loading availability...' : 'Select an open tour slot'}
+                    disabled={tourSlotsLoading || tourSlots.length === 0}
+                    options={tourSlots.map((slot) => ({ value: slot.id, label: slot.label }))}
                   />
                 </div>
-              </>
+                {tourSlotsError ? (
+                  <p className="mt-2 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200">
+                    {tourSlotsError}
+                  </p>
+                ) : !tourSlotsLoading && tourSlots.length === 0 ? (
+                  <p className="mt-2 rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-2 text-xs leading-5 text-[#d7c29a]/70">
+                    No open tour slots are published right now. Please send your event details and Luxor can follow up with options.
+                  </p>
+                ) : null}
+              </div>
             )}
           </div>
 

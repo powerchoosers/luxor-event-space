@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback } from 'react'
 import {
   Users,
   Search,
-  Filter,
   Plus,
   ChevronDown,
   ChevronLeft,
@@ -24,10 +23,19 @@ import {
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
-  PortalStatusBadge,
   PortalModal,
   PortalSelect
 } from '@/components/portal/PortalUI'
+
+const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
+  { value: 'new', label: 'New' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'tour_requested', label: 'Tour Requested' },
+  { value: 'tour_confirmed', label: 'Tour Confirmed' },
+  { value: 'proposal_sent', label: 'Proposal Sent' },
+  { value: 'booked', label: 'Booked' },
+  { value: 'closed_lost', label: 'Closed Lost' },
+]
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
@@ -134,21 +142,9 @@ export default function LeadsPage() {
       const res = await fetch(`/api/inquiries`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: leadId, status: newStatus }),
+        body: JSON.stringify({ id: leadId, status: newStatus, author: 'Portal Owner' }),
       })
       if (!res.ok) throw new Error('Failed to update status.')
-
-      // Add a status change log entry in notes
-      await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: leadId,
-          content: `Lead status updated to ${newStatus.replace('_', ' ').toUpperCase()} from the Pipeline Board.`,
-          noteType: 'status_change',
-          author: 'Portal System',
-        }),
-      })
     } catch (err) {
       console.error(err)
       alert('Error updating status.')
@@ -229,13 +225,10 @@ export default function LeadsPage() {
                 onChange={setStatusFilter}
                 options={[
                   { value: 'all', label: 'All Statuses' },
-                  { value: 'new', label: 'New' },
-                  { value: 'contacted', label: 'Contacted' },
-                  { value: 'tour_requested', label: 'Tour Requested' },
-                  { value: 'tour_confirmed', label: 'Tour Confirmed' },
-                  { value: 'proposal_sent', label: 'Proposal Sent' },
-                  { value: 'booked', label: 'Booked (Won)' },
-                  { value: 'closed_lost', label: 'Closed Lost' }
+                  ...INQUIRY_STATUS_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.value === 'booked' ? 'Booked (Won)' : option.label,
+                  })),
                 ]}
               />
               <button
@@ -366,7 +359,12 @@ export default function LeadsPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-6 font-mono">
-                      <PortalStatusBadge status={lead.status} />
+                      <PortalSelect
+                        value={lead.status}
+                        onChange={(value) => handleMoveStatus(lead.id, value as LuxorInquiryStatus)}
+                        options={INQUIRY_STATUS_OPTIONS}
+                        className="min-w-[170px]"
+                      />
                     </td>
                     <td className="px-6 py-6 font-mono text-xs text-zinc-300">
                       <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>

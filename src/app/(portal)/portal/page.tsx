@@ -14,34 +14,29 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
-import { listInvoices } from "@/lib/luxorInvoicesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
-import { LuxorInquiry, LuxorInvoice, LuxorNote } from "@/lib/luxorInquiryTypes";
+import { LuxorInquiry, LuxorNote } from "@/lib/luxorInquiryTypes";
 import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard, PortalStatusBadge } from "@/components/portal/PortalUI";
 
 export default async function PortalOverview() {
   let leads: LuxorInquiry[] = [];
-  let invoices: LuxorInvoice[] = [];
   let recentNotes: LuxorNote[] = [];
   let loadError: string | null = null;
 
 
   try {
     leads = await listLuxorInquiries(100);
-    invoices = await listInvoices(100);
     recentNotes = await listRecentNotes(5);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
   }
 
-  // Calculations
-  const paidInvoices = invoices.filter(inv => inv.status === 'paid');
-  const totalRevenue = paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0);
-
   const bookedLeads = leads.filter(l => l.status === 'booked');
   const conversionRate = leads.length > 0 ? (bookedLeads.length / leads.length) * 100 : 0;
 
-  const activeLeads = leads.filter(l => l.status !== 'booked' && l.status !== 'closed_lost');
+  const needsFirstTouch = leads.filter(l => l.status === 'new');
+  const needsTourFollowUp = leads.filter(l => l.status === 'tour_requested');
+  const proposalFollowUp = leads.filter(l => l.status === 'proposal_sent');
 
   // Count upcoming tours
   const todayStr = new Date().toISOString().split('T')[0];
@@ -51,8 +46,8 @@ export default async function PortalOverview() {
     <PortalPageFrame className="min-h-full pb-10 group/portal">
       {/* Page Header */}
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white/90">Portfolio Overview</h1>
-        <p className="text-zinc-500 font-medium text-sm">Real-time command and control for Luxor Event Space operations.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-white/90">Follow-Up Workspace</h1>
+        <p className="text-zinc-500 font-medium text-sm">Live inquiry pipeline and owner follow-up queue for Luxor Event Space.</p>
       </div>
 
       <PortalBridgeCard
@@ -79,42 +74,47 @@ export default async function PortalOverview() {
 
       {/* Metric Grid */}
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-        <MetricCard 
-          label="Total Revenue" 
-          value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          change="+100%" 
-          trend="up" 
-          icon={<DollarSign size={16} />} 
+        <MetricCard
+          label="Needs First Touch"
+          value={String(needsFirstTouch.length)}
+          change="From inquiries"
+          trend={needsFirstTouch.length > 0 ? "up" : "neutral"}
+          icon={<Mail size={16} />}
           color="blue"
         />
-        <MetricCard 
-          label="Conversion Rate" 
-          value={`${conversionRate.toFixed(1)}%`} 
-          change={`${bookedLeads.length} won`} 
-          trend={conversionRate > 0 ? "up" : "neutral"} 
-          icon={<TrendingUp size={16} />} 
-          color="green"
-        />
-        <MetricCard 
-          label="Active Leads" 
-          value={String(activeLeads.length)} 
-          change="Real-time" 
-          trend="neutral" 
-          icon={<Users size={16} />} 
+        <MetricCard
+          label="Tour Follow-Up"
+          value={String(needsTourFollowUp.length)}
+          change={`${upcomingEvents.length} dated`}
+          trend="neutral"
+          icon={<Calendar size={16} />}
           color="orange"
         />
-        <MetricCard 
-          label="Upcoming Events" 
-          value={String(upcomingEvents.length)} 
-          change="Tour dates" 
-          trend="up" 
-          icon={<Calendar size={16} />} 
+        <MetricCard
+          label="Proposal Follow-Up"
+          value={String(proposalFollowUp.length)}
+          change="Needs close"
+          trend="up"
+          icon={<TrendingUp size={16} />}
           color="purple"
+        />
+        <MetricCard
+          label="Booked From Inquiries"
+          value={`${conversionRate.toFixed(1)}%`}
+          change={`${bookedLeads.length} booked`}
+          trend={conversionRate > 0 ? "up" : "neutral"}
+          icon={<Users size={16} />}
+          color="green"
         />
       </div>
 
+      <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
+        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Future table needed:</span>{" "}
+        booked revenue, payments, and event profitability are not shown here because they need a real bookings/payments table. This overview is currently based on live rows from <span className="font-mono text-[#f1d27a]">luxor_inquiries</span>.
+      </div>
+
       {/* Main Dashboard Layout */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 pb-12 lg:grid-cols-3 lg:gap-8">
         {/* Recent Lead Pipeline */}
         <PortalTableCard
           className="lg:col-span-2"
@@ -211,7 +211,7 @@ export default async function PortalOverview() {
                 <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Users size={16} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Add Lead</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Leads</p>
               </Link>
               <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
                 <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">

@@ -5,7 +5,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
+import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
+import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import {
   ArrowRight,
   CalendarDays,
@@ -27,11 +28,7 @@ type Message = {
   ui?: 'booking'
 }
 
-type TourSelection = {
-  label: string
-  value: string
-  time: string
-}
+type TourSelection = PublicLuxorTourSlot
 
 type ContactDetails = {
   name: string
@@ -61,12 +58,6 @@ const eventCards = [
     image: '/corporate.png',
     copy: 'Awards, networking, presentations, and dinner service.',
   },
-]
-
-const tourDates = [
-  { label: 'Sat, Jul 11', value: '2026-07-11', time: '10:30 AM' },
-  { label: 'Sun, Jul 12', value: '2026-07-12', time: '1:00 PM' },
-  { label: 'Tue, Jul 14', value: '2026-07-14', time: '6:15 PM' },
 ]
 
 const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event']
@@ -136,57 +127,7 @@ export function LuxorConciergeChat() {
   const [pending, setPending] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
-  
-  const [customDate, setCustomDate] = useState('')
-  const [customTime, setCustomTime] = useState('10:00 AM')
-  const [showCustomTime, setShowCustomTime] = useState(false)
-
-  const timeSlotOptions = [
-    { value: '10:00 AM', label: '10:00 AM' },
-    { value: '11:30 AM', label: '11:30 AM' },
-    { value: '1:00 PM', label: '1:00 PM' },
-    { value: '2:30 PM', label: '2:30 PM' },
-    { value: '4:00 PM', label: '4:00 PM' },
-    { value: '5:30 PM', label: '5:30 PM' }
-  ]
-
-  const handleCustomDateChange = (dateStr: string) => {
-    setCustomDate(dateStr)
-    if (dateStr) {
-      const formattedLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-      })
-      setTourSelection({
-        label: formattedLabel,
-        value: dateStr,
-        time: customTime
-      })
-    }
-  }
-
-  const handleCustomTimeChange = (timeStr: string) => {
-    setCustomTime(timeStr)
-    if (customDate) {
-      const formattedLabel = new Date(customDate + 'T12:00:00').toLocaleDateString(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-      })
-      setTourSelection({
-        label: formattedLabel,
-        value: customDate,
-        time: timeStr
-      })
-    } else {
-      setTourSelection({
-        label: 'Custom Slot',
-        value: '',
-        time: timeStr
-      })
-    }
-  }
+  const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [eventPickerOpen, setEventPickerOpen] = useState(true)
   const [submitted, setSubmitted] = useState(false)
@@ -330,7 +271,7 @@ export function LuxorConciergeChat() {
       phone: contactDetails.phone,
       eventType: selectedEvent?.label ?? inferEventType(messages, contactDetails.notes),
       guestCount: inferGuestCount(messages, contactDetails.notes),
-      preferredTourDate: tourSelection?.value ?? '',
+      preferredTourDate: tourSelection?.date ?? '',
       preferredTourTime: tourSelection?.time ?? '',
       message: contactDetails.notes,
       source: 'chat_widget',
@@ -339,7 +280,8 @@ export function LuxorConciergeChat() {
       referrer: document.referrer,
       metadata: {
         selectedEvent: selectedEvent?.label ?? null,
-        selectedTourLabel: tourSelection ? `${tourSelection.label}, ${tourSelection.time}` : null,
+        selectedTourSlotId: tourSelection?.id ?? null,
+        selectedTourLabel: tourSelection?.label ?? null,
         chatMessages: messages.map(({ role, content }) => ({ role, content })),
       },
     }
@@ -363,7 +305,7 @@ export function LuxorConciergeChat() {
           id: createId(),
           role: 'assistant',
           content:
-            `Perfect, ${contactDetails.name.trim()}. Your tour request for ${tourSelection?.label} at ${tourSelection?.time} is started. A Luxor coordinator will confirm final availability by phone or email. Is there anything else I can help you with while you plan?`,
+            `Perfect, ${contactDetails.name.trim()}. Your tour request for ${tourSelection?.label} is started. A Luxor coordinator will confirm final availability by phone or email. Is there anything else I can help you with while you plan?`,
         },
       ])
     } catch (error) {
@@ -406,14 +348,26 @@ export function LuxorConciergeChat() {
           ) : null}
         </div>
 
-        {!showCustomTime ? (
-          <div className="mt-3 grid gap-2">
-            {tourDates.map((slot) => {
-              const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
+        <div className="mt-3 grid gap-2">
+          {tourSlotsLoading ? (
+            <p className="rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
+              Loading current tour openings...
+            </p>
+          ) : tourSlotsError ? (
+            <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs leading-5 text-red-200">
+              {tourSlotsError}
+            </p>
+          ) : tourSlots.length === 0 ? (
+            <p className="rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
+              No open tour slots are published right now. Use the full form and Luxor can follow up with options.
+            </p>
+          ) : (
+            tourSlots.map((slot) => {
+              const active = tourSelection?.id === slot.id
 
               return (
                 <button
-                  key={`${slot.value}-${slot.time}-card`}
+                  key={`${slot.id}-card`}
                   type="button"
                   onClick={() => setTourSelection(slot)}
                   className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
@@ -423,57 +377,14 @@ export function LuxorConciergeChat() {
                   }`}
                 >
                   <span>
-                    <span className="block text-sm font-semibold">{slot.label}</span>
+                    <span className="block text-sm font-semibold">{slot.dateLabel}</span>
                     <span className="block text-xs opacity-75">{slot.time}</span>
                   </span>
                   {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
                 </button>
               )
-            })}
-          </div>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-2 bg-black/40 p-3 rounded-lg border border-[#caa24c]/18 text-left">
-            <div className="space-y-1">
-              <span className="block text-[9px] uppercase tracking-widest text-zinc-550 font-bold">Select Date</span>
-              <PortalDatePicker
-                value={customDate}
-                onChange={handleCustomDateChange}
-                placeholder="Pick Date"
-                className="w-full text-xs font-mono text-[#f8f3ed]"
-              />
-            </div>
-            <div className="space-y-1">
-              <span className="block text-[9px] uppercase tracking-widest text-zinc-550 font-bold">Select Time</span>
-              <PortalSelect
-                value={customTime}
-                onChange={handleCustomTimeChange}
-                options={timeSlotOptions}
-                className="w-full text-xs"
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="mt-2.5 flex justify-end px-1">
-          <button
-            type="button"
-            onClick={() => {
-              const nextVal = !showCustomTime
-              setShowCustomTime(nextVal)
-              if (nextVal) {
-                if (customDate) {
-                  handleCustomDateChange(customDate)
-                } else {
-                  setTourSelection(null)
-                }
-              } else {
-                setTourSelection(null)
-              }
-            }}
-            className="text-[9px] font-black uppercase tracking-widest text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-          >
-            {showCustomTime ? '◀ Use Suggested Slots' : '📅 Choose another date/time...'}
-          </button>
+            })
+          )}
         </div>
 
         <div className="mt-3 grid gap-2">
@@ -526,7 +437,7 @@ export function LuxorConciergeChat() {
           disabled={!bookingReady || submitted || submittingInquiry}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {submitted ? 'Tour requested' : submittingInquiry ? 'Booking tour' : bookingReady ? 'Book tour' : 'Pick time + add contact'}
+          {submitted ? 'Tour requested' : submittingInquiry ? 'Booking tour' : bookingReady ? 'Book tour' : 'Pick available time + add contact'}
           <Check className="h-4 w-4" />
         </button>
       </motion.div>
@@ -698,7 +609,7 @@ export function LuxorConciergeChat() {
                       Tour window
                     </span>
                     <span className="block truncate text-xs text-[#d7c29a]/70">
-                      {tourSelection ? `${tourSelection.label}, ${tourSelection.time}` : 'Tap to pick a time'}
+                      {tourSelection ? tourSelection.label : 'Tap to pick a time'}
                     </span>
                   </span>
                 </span>
@@ -715,12 +626,25 @@ export function LuxorConciergeChat() {
                     className="overflow-hidden"
                   >
                     <div className="grid gap-2 pt-2">
-                      {tourDates.map((slot) => {
-                        const active = tourSelection?.value === slot.value && tourSelection.time === slot.time
+                      {tourSlotsLoading ? (
+                        <p className="rounded-md border border-[#caa24c]/18 bg-[#080706] px-3 py-3 text-xs text-[#d7c29a]/70">
+                          Loading current tour openings...
+                        </p>
+                      ) : tourSlotsError ? (
+                        <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs text-red-200">
+                          {tourSlotsError}
+                        </p>
+                      ) : tourSlots.length === 0 ? (
+                        <p className="rounded-md border border-[#caa24c]/18 bg-[#080706] px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
+                          No open tour slots are published right now.
+                        </p>
+                      ) : (
+                        tourSlots.map((slot) => {
+                        const active = tourSelection?.id === slot.id
 
                         return (
                           <button
-                            key={`${slot.value}-${slot.time}`}
+                            key={slot.id}
                             type="button"
                             onClick={() => setTourSelection(slot)}
                             className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
@@ -730,13 +654,14 @@ export function LuxorConciergeChat() {
                             }`}
                           >
                             <span>
-                              <span className="block text-sm font-semibold">{slot.label}</span>
+                              <span className="block text-sm font-semibold">{slot.dateLabel}</span>
                               <span className="block text-xs opacity-75">{slot.time}</span>
                             </span>
                             {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
                           </button>
                         )
-                      })}
+                      })
+                      )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         {tourSelection ? (
                           <button
