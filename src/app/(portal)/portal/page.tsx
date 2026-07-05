@@ -1,5 +1,5 @@
 import React from "react";
-import { 
+import {
   ArrowUpRight, 
   ArrowDownRight, 
   TrendingUp, 
@@ -32,7 +32,6 @@ export default async function PortalOverview() {
   }
 
   const bookedLeads = leads.filter(l => l.status === 'booked');
-  const conversionRate = leads.length > 0 ? (bookedLeads.length / leads.length) * 100 : 0;
 
   const needsFirstTouch = leads.filter(l => l.status === 'new');
   const needsTourFollowUp = leads.filter(l => l.status === 'tour_requested');
@@ -94,23 +93,23 @@ export default async function PortalOverview() {
           label="Proposal Follow-Up"
           value={String(proposalFollowUp.length)}
           change="Needs close"
-          trend="up"
+          trend={proposalFollowUp.length > 0 ? "up" : "neutral"}
           icon={<TrendingUp size={16} />}
           color="purple"
         />
         <MetricCard
-          label="Booked From Inquiries"
-          value={`${conversionRate.toFixed(1)}%`}
+          label="Booked Inquiries"
+          value={String(bookedLeads.length)}
           change={`${bookedLeads.length} booked`}
-          trend={conversionRate > 0 ? "up" : "neutral"}
+          trend={bookedLeads.length > 0 ? "up" : "neutral"}
           icon={<Users size={16} />}
           color="green"
         />
       </div>
 
       <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
-        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Future table needed:</span>{" "}
-        booked revenue, payments, and event profitability are not shown here because they need a real bookings/payments table. This overview is currently based on live rows from <span className="font-mono text-[#f1d27a]">luxor_inquiries</span>.
+        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Financial foundation created:</span>{" "}
+        Supabase now has booking, payment, expense, and financial summary tables. This overview still prioritizes live inquiry follow-up until booking/payment entry screens are wired into the portal.
       </div>
 
       {/* Main Dashboard Layout */}

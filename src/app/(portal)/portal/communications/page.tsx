@@ -5,7 +5,9 @@ import {
   Search,
   History,
   Phone,
-  ExternalLink
+  ExternalLink,
+  Mail,
+  Send
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
@@ -35,6 +37,11 @@ export default function CommunicationsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [sendFrom, setSendFrom] = useState('hello@luxoratlaspalmas.com')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailContent, setEmailContent] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSendStatus, setEmailSendStatus] = useState<string | null>(null)
 
   const fetchInquiries = async () => {
     try {
@@ -110,6 +117,58 @@ export default function CommunicationsPage() {
     }
   }
 
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedInquiry?.email || !emailSubject.trim() || !emailContent.trim()) return
+
+    try {
+      setSendingEmail(true)
+      setEmailSendStatus(null)
+
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: selectedInquiry.email,
+          from: sendFrom,
+          fromName: 'Luxor Event Space',
+          subject: emailSubject,
+          content: emailContent,
+        }),
+      })
+
+      const result = (await res.json().catch(() => ({}))) as { error?: string; messageId?: string }
+
+      if (!res.ok) {
+        throw new Error(result.error ?? 'Failed to send email.')
+      }
+
+      const logRes = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: selectedInquiry.id,
+          content: `Email sent from ${sendFrom} to ${selectedInquiry.email}\nSubject: ${emailSubject}\n\n${emailContent}`,
+          noteType: 'email_log',
+          author: 'Admin Owner',
+        }),
+      })
+
+      if (logRes.ok) {
+        const newNote = await logRes.json()
+        setNotes((prev) => [...prev, newNote])
+      }
+
+      setEmailContent('')
+      setEmailSubject('')
+      setEmailSendStatus(result.messageId ? `Email sent. Zoho message ID: ${result.messageId}` : 'Email sent through Zoho.')
+    } catch (err) {
+      setEmailSendStatus(err instanceof Error ? err.message : 'Unable to send email.')
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   const handleStatusChange = async (newStatus: LuxorInquiryStatus) => {
     if (!selectedInquiry || selectedInquiry.status === newStatus) return
 
@@ -174,8 +233,8 @@ export default function CommunicationsPage() {
       />
 
       <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
-        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Future table needed:</span>{' '}
-        this page records owner notes against live <span className="font-mono text-[#f1d27a]">luxor_inquiries</span>. Actual sent-email threads, inbound replies, call recordings, and SMS history need dedicated communications tables or provider webhooks.
+        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Zoho sending active:</span>{' '}
+        outbound email sends through the Luxor Zoho mailbox and records a follow-up log against the selected inquiry. Inbound replies still need Zoho webhooks or sync tables before this becomes a full email thread view.
       </div>
 
       {error && (
@@ -279,6 +338,60 @@ export default function CommunicationsPage() {
 
               {/* Chat Timeline & Log Feed */}
               <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-black/20 p-6 space-y-6">
+                <form onSubmit={handleSendEmail} className="rounded-xl border border-[#caa24c]/16 bg-black/35 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Mail size={15} className="text-[#f1d27a]" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Send Zoho Email</span>
+                    </div>
+                    <select
+                      value={sendFrom}
+                      onChange={(event) => setSendFrom(event.target.value)}
+                      className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-300 outline-none focus:border-[#caa24c]"
+                    >
+                      <option value="hello@luxoratlaspalmas.com">hello@luxoratlaspalmas.com</option>
+                      <option value="booking@luxoratlaspalmas.com">booking@luxoratlaspalmas.com</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
+                    <input
+                      type="email"
+                      value={selectedInquiry.email || ''}
+                      readOnly
+                      className="rounded-md border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs text-zinc-500 outline-none"
+                      placeholder="Client has no email"
+                    />
+                    <input
+                      type="text"
+                      value={emailSubject}
+                      onChange={(event) => setEmailSubject(event.target.value)}
+                      className="rounded-md border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]"
+                      placeholder="Subject"
+                    />
+                  </div>
+
+                  <textarea
+                    value={emailContent}
+                    onChange={(event) => setEmailContent(event.target.value)}
+                    className="min-h-28 w-full resize-none rounded-md border border-zinc-900 bg-zinc-950 px-3 py-3 text-xs leading-5 text-zinc-300 outline-none focus:border-[#caa24c]"
+                    placeholder="Write the message to send through Zoho..."
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className={`text-[11px] font-medium ${emailSendStatus?.startsWith('Email sent') ? 'text-emerald-300' : 'text-zinc-500'}`}>
+                      {emailSendStatus || (selectedInquiry.email ? `Ready to send to ${selectedInquiry.email}` : 'Add a client email before sending.')}
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={sendingEmail || !selectedInquiry.email || !emailSubject.trim() || !emailContent.trim()}
+                      className="inline-flex items-center gap-2 rounded-md bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-black hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Send size={13} />
+                      {sendingEmail ? 'Sending' : 'Send Email'}
+                    </button>
+                  </div>
+                </form>
                 
                 {/* Concierge Replay */}
                 {chatMessages.length > 0 && (

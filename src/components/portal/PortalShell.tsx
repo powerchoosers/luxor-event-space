@@ -9,6 +9,8 @@ import {
   LogOut,
   Mail,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Phone,
   Search,
   Settings,
@@ -33,6 +35,7 @@ const navItems = [
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   
   // Notification State
   const [notificationCount, setNotificationCount] = useState(0)
@@ -86,23 +89,60 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   return (
     <body className="h-screen overflow-hidden bg-[#080706] font-sans text-zinc-400 selection:bg-[#caa24c]/30">
-      <aside className="fixed left-0 top-0 z-50 hidden h-full w-64 border-r border-[#caa24c]/10 bg-[#050505]/90 backdrop-blur-xl lg:block">
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full border-r border-[#caa24c]/10 bg-[#050505]/90 backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.14),transparent_16rem)]" />
-        <div className="flex h-full flex-col p-6">
-          <Link href="/portal" className="mb-8 block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
-            <LuxorWordmark
-              compact
-              horizontal
-              subline={false}
-              className="[&_.luxor-wordmark]:!text-[1.55rem]"
-              markClassName="!h-12 !w-12"
-            />
-            <p className="ml-[3.65rem] mt-1 text-[10px] font-medium uppercase leading-none tracking-widest text-[#caa24c]">
-              Owner Portal
-            </p>
-          </Link>
+        <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
+          <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
+            <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
+              {sidebarCollapsed ? (
+                <LuxorWordmark
+                  compact
+                  horizontal
+                  subline={false}
+                  className="[&_.luxor-wordmark]:hidden"
+                  markClassName="!h-11 !w-11"
+                />
+              ) : (
+                <>
+                  <LuxorWordmark
+                    compact
+                    horizontal
+                    subline={false}
+                    className="[&_.luxor-wordmark]:!text-[1.55rem]"
+                    markClassName="!h-12 !w-12"
+                  />
+                  <p className="ml-[3.65rem] mt-1 text-[10px] font-medium uppercase leading-none tracking-widest text-[#caa24c]">
+                    Owner Portal
+                  </p>
+                </>
+              )}
+            </Link>
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/15 bg-[#120d0c]/70 text-zinc-500 transition-colors hover:border-[#caa24c]/40 hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                aria-label="Collapse sidebar"
+                aria-expanded="true"
+              >
+                <PanelLeftClose size={17} />
+              </button>
+            ) : null}
+          </div>
 
-          <div className="mb-6 rounded-xl border border-[#caa24c]/16 bg-[#120d0c]/72 p-4 shadow-[inset_0_1px_0_rgba(241,210,122,0.08)]">
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="mb-4 inline-flex h-10 w-10 items-center justify-center self-center rounded-lg border border-[#caa24c]/15 bg-[#120d0c]/70 text-zinc-500 transition-colors hover:border-[#caa24c]/40 hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+              aria-label="Expand sidebar"
+              aria-expanded="false"
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+          ) : null}
+
+          <div className={`mb-6 overflow-hidden rounded-xl border border-[#caa24c]/16 bg-[#120d0c]/72 shadow-[inset_0_1px_0_rgba(241,210,122,0.08)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-h-0 border-transparent p-0 opacity-0' : 'max-h-44 p-4 opacity-100'}`}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#caa24c]">Website Signal</p>
             <p className="mt-2 text-xs leading-5 text-zinc-400">Tour requests from the public site flow directly into this workspace.</p>
             <Link href="/" className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:text-[#f1d27a]">
@@ -112,21 +152,21 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
           <nav className="flex-1 space-y-1">
             {navItems.map((item) => (
-              <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href)} />
+              <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href)} collapsed={sidebarCollapsed} />
             ))}
           </nav>
 
           <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
-            <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} />
-            <button className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400">
+            <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} collapsed={sidebarCollapsed} />
+            <button className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
               <LogOut size={18} className="transition-transform group-hover:translate-x-1" />
-              <span>Log Out</span>
+              <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>Log Out</span>
             </button>
           </div>
         </div>
       </aside>
 
-      <main className="flex h-screen flex-col lg:pl-64">
+      <main className={`flex h-screen flex-col transition-[padding-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-[#caa24c]/10 bg-[#050505]/75 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/portal" className="flex min-w-0 items-center rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 lg:hidden" aria-label="Luxor portal overview">
@@ -243,16 +283,22 @@ function SidebarLink({
   icon,
   label,
   active,
+  collapsed,
 }: {
   href: string
   icon: React.ReactNode
   label: string
   active: boolean
+  collapsed: boolean
 }) {
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all relative border ${
+      title={collapsed ? label : undefined}
+      aria-label={label}
+      className={`group relative flex items-center rounded-lg border text-sm font-medium transition-all ${
+        collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'
+      } ${
         active
           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
@@ -264,7 +310,7 @@ function SidebarLink({
       <span className={`${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
         {icon}
       </span>
-      <span>{label}</span>
+      <span className={`${collapsed ? 'sr-only' : ''}`}>{label}</span>
     </Link>
   )
 }
