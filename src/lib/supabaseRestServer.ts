@@ -1,6 +1,7 @@
 import 'server-only'
 
 type SupabaseError = {
+  code?: string
   message?: string
   error?: string
   details?: string
@@ -20,6 +21,7 @@ function getSupabaseConfig() {
 
 export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
   const { url, serviceRoleKey } = getSupabaseConfig()
+  const method = (init.method ?? 'GET').toUpperCase()
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
@@ -33,6 +35,11 @@ export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as SupabaseError
+
+    if (method === 'GET' && response.status === 404 && payload.code === 'PGRST205') {
+      return [] as T
+    }
+
     throw new Error(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`)
   }
 
