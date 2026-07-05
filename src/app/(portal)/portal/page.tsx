@@ -5,9 +5,7 @@ import {
   TrendingUp, 
   Users, 
   Calendar, 
-  Euro,
   Mail,
-  MoreVertical,
   Activity,
   ChevronRight,
   ExternalLink,
@@ -191,32 +189,32 @@ export default async function PortalOverview() {
         {/* Action Center & Recent Notes */}
         <div className="space-y-6">
           {/* Quick Actions */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
+          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 luxor-glow-gold shadow-2xl">
             <h3 className="font-semibold text-white/90 mb-6 flex items-center gap-3">
-              <TrendingUp size={18} className="text-zinc-400" />
+              <TrendingUp size={18} className="text-[#caa24c]" />
               Quick Actions
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/portal/marketing" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+              <Link href="/portal/marketing" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Mail size={16} />
                 </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Marketing</p>
               </Link>
-              <Link href="/portal/invoices" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
-                  <Euro size={16} />
+              <Link href="/portal/invoices" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
+                  <DollarSign size={16} />
                 </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Invoices</p>
               </Link>
-              <Link href="/portal/leads" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+              <Link href="/portal/leads" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Users size={16} />
                 </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Add Lead</p>
               </Link>
-              <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+              <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Calendar size={16} />
                 </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Tours Calendar</p>
@@ -225,11 +223,9 @@ export default async function PortalOverview() {
           </div>
 
           {/* Activity feed / telemetry hybrid */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl overflow-hidden relative">
-            <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-blue-600/5 blur-[120px] rounded-full pointer-events-none" />
-            
+          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 luxor-glow-gold shadow-2xl overflow-hidden relative">
             <h3 className="font-semibold text-white/90 mb-5 flex items-center gap-3">
-              <Activity size={18} className="text-zinc-400" />
+              <Activity size={18} className="text-[#caa24c]" />
               Recent Workspace Updates
             </h3>
             <div className="space-y-4 relative z-10">
@@ -263,19 +259,26 @@ function MetricCard({ label, value, change, trend, icon, color }: {
   color: 'blue' | 'green' | 'orange' | 'purple';
 }) {
   const colorMap = {
-    blue: 'text-blue-500 bg-blue-500/10 border-blue-500/20 shadow-blue-500/10',
-    green: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-emerald-500/10',
-    orange: 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-amber-500/10',
-    purple: 'text-purple-500 bg-purple-500/10 border-purple-500/20 shadow-purple-500/10'
+    blue: 'text-blue-400 bg-blue-500/5 border-blue-500/10 shadow-blue-500/5',
+    green: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/10 shadow-emerald-500/5',
+    orange: 'text-amber-500 bg-amber-500/5 border-amber-500/10 shadow-amber-500/5',
+    purple: 'text-purple-400 bg-purple-500/5 border-purple-500/10 shadow-purple-500/5'
+  };
+
+  const glowMap = {
+    blue: 'luxor-glow-blue',
+    green: 'luxor-glow-green',
+    orange: 'luxor-glow-gold',
+    purple: 'luxor-glow-gold'
   };
 
   return (
-    <div className="nodal-void-card rounded-2xl p-6 border border-zinc-900 bg-black/40 backdrop-blur-xl transition-all hover:translate-y-[-4px] hover:border-zinc-800 group shadow-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-2.5 rounded-lg border flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] ${colorMap[color]}`}>
+    <div className={`luxor-glass-card rounded-2xl p-6 ${glowMap[color]} overflow-hidden group`}>
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <div className={`p-2.5 rounded-xl border flex items-center justify-center shadow-inner ${colorMap[color]}`}>
           {icon}
         </div>
-        <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-sm border ${
+        <div className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${
           trend === 'up' ? 'text-emerald-400 bg-emerald-400/5 border-emerald-400/10' : 
           trend === 'down' ? 'text-rose-400 bg-rose-400/5 border-rose-400/10' : 
           'text-zinc-500 bg-zinc-500/5 border-zinc-500/10'
@@ -285,9 +288,9 @@ function MetricCard({ label, value, change, trend, icon, color }: {
           {change}
         </div>
       </div>
-      <div>
-        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">{label}</p>
-        <h4 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left duration-300">
+      <div className="relative z-10">
+        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">{label}</p>
+        <h4 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300">
           {value}
         </h4>
       </div>

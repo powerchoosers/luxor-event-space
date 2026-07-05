@@ -4,14 +4,7 @@ import React, { useEffect, useState } from 'react'
 import {
   FileText,
   Search,
-  Download,
-  Printer,
-  MoreVertical,
-  Send,
-  Plus,
-  ArrowRight,
-  ExternalLink,
-  DollarSign
+  ExternalLink
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInvoice } from '@/lib/luxorInquiryTypes'
@@ -239,21 +232,24 @@ function StatsPanel({
   trend: string
   isNegative?: boolean
 }) {
+  const isPaid = label.toLowerCase().includes('paid')
+  const glowClass = isPaid ? 'luxor-glow-green' : 'luxor-glow-gold'
+
   return (
-    <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl group hover:border-zinc-800 transition-all shadow-xl">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase font-black text-zinc-650 tracking-[0.2em]">{label}</p>
+    <div className={`luxor-glass-card rounded-2xl p-6 ${glowClass} overflow-hidden group shadow-xl`}>
+      <div className="flex items-center justify-between mb-3 relative z-10">
+        <p className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em]">{label}</p>
         <span
-          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+          className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
             isNegative
-              ? 'bg-rose-500/5 text-rose-500 border-rose-500/10'
-              : 'bg-emerald-500/5 text-emerald-500 border-emerald-500/10'
+              ? 'bg-rose-500/5 text-rose-400 border-rose-500/10'
+              : 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10'
           }`}
         >
           {trend}
         </span>
       </div>
-      <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">
+      <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300 relative z-10">
         {value}
       </h3>
     </div>

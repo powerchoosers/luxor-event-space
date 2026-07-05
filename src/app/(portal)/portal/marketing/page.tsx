@@ -104,11 +104,11 @@ export default function MarketingPage() {
 
 function StatsPanel({ label, value, trend }: { label: string; value: string; trend: string }) {
   return (
-    <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl group hover:border-zinc-800 transition-all shadow-xl">
-      <p className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em] mb-2">{label}</p>
-      <div className="flex items-end justify-between">
-        <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">{value}</h3>
-        <span className="text-[10px] font-bold text-emerald-500 pb-1">{trend}</span>
+    <div className="luxor-glass-card rounded-2xl p-6 luxor-glow-gold overflow-hidden group shadow-xl">
+      <p className="text-[10px] uppercase font-black text-zinc-550 tracking-[0.2em] mb-2 relative z-10">{label}</p>
+      <div className="flex items-end justify-between relative z-10">
+        <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300">{value}</h3>
+        <span className="text-[10px] font-bold text-emerald-400 pb-1">{trend}</span>
       </div>
     </div>
   );
@@ -124,48 +124,54 @@ function CampaignCard({ title, status, progress, sent, delivered, type, accent =
   accent?: 'blue' | 'purple' | 'orange';
 }) {
   const accentMap = {
-    blue: 'border-blue-500/20 bg-blue-500/10 text-blue-500',
-    purple: 'border-purple-500/20 bg-purple-500/10 text-purple-500',
-    orange: 'border-orange-500/20 bg-orange-500/10 text-orange-500'
+    blue: 'border-blue-500/20 bg-blue-500/5 text-blue-400',
+    purple: 'border-purple-500/20 bg-purple-500/5 text-purple-400',
+    orange: 'border-orange-500/20 bg-orange-500/5 text-orange-400'
+  };
+
+  const glowMap = {
+    blue: 'luxor-glow-blue',
+    purple: 'luxor-glow-gold',
+    orange: 'luxor-glow-gold'
   };
 
   return (
-    <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl p-6 shadow-xl group hover:border-zinc-800 transition-all">
-       <div className="flex items-center justify-between mb-6">
+    <div className={`luxor-glass-card rounded-2xl p-6 ${glowMap[accent]} overflow-hidden shadow-xl group`}>
+       <div className="flex items-center justify-between mb-6 relative z-10">
          <div className="flex items-center gap-4">
            <div className={`p-2 rounded-lg border flex items-center justify-center ${accentMap[accent]}`}>
              {type === 'Sequence' ? <Send size={16} /> : type === 'Broadcast' ? <Zap size={16} /> : <Sparkles size={16} />}
            </div>
            <div>
-             <p className="text-[9px] font-black uppercase text-zinc-600 tracking-widest">{type}</p>
+             <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">{type}</p>
              <h4 className="text-sm font-bold text-white/90 group-hover:text-blue-400 transition-colors">{title}</h4>
            </div>
          </div>
          <span className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${
-           status === 'Running' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 
-           status === 'Scheduled' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
+           status === 'Running' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+           status === 'Scheduled' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 
            'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
          }`}>
            {status}
          </span>
        </div>
 
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 relative z-10">
           <div>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase mb-1">Total Sends</p>
+            <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Total Sends</p>
             <p className="text-lg font-bold text-white font-mono">{sent.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase mb-1">Click Accuracy</p>
+            <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Click Accuracy</p>
             <p className="text-lg font-bold text-white font-mono">{delivered}</p>
           </div>
           <div>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase mb-1">Progress</p>
+            <p className="text-[10px] text-zinc-550 font-bold uppercase mb-1">Progress</p>
             <p className="text-lg font-bold text-white font-mono">{progress}%</p>
           </div>
        </div>
 
-       <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+       <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden relative z-10">
          <div className="h-full bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${progress}%` }} />
        </div>
     </div>

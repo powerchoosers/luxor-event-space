@@ -68,6 +68,9 @@ export default function LeadDetailPage({
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
+  // Timeline tab filtering
+  const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
+
   const fetchAllData = async () => {
     try {
       setLoading(true)
@@ -435,10 +438,38 @@ export default function LeadDetailPage({
           {/* Activity Logs & Notes Section */}
           <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl luxor-soft-enter">
             <div id="client-activity-log" className="scroll-mt-4" />
-            <h3 className="text-xs font-bold uppercase tracking-widest text-white/90 mb-6 flex items-center gap-2">
-              <MessageSquare size={16} className="text-zinc-500" />
-              Activity Feed & Timeline
-            </h3>
+            <div className="flex flex-col gap-4 mb-6 border-b border-zinc-900 pb-3 md:flex-row md:items-center md:justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-white/90 flex items-center gap-2">
+                <MessageSquare size={16} className="text-[#caa24c]" />
+                Activity Feed & Timeline
+              </h3>
+              
+              <div className="flex border border-zinc-800 rounded-lg p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
+                {(['all', 'notes', 'comms', 'system'] as const).map((tab) => {
+                  const labelMap = {
+                    all: 'All',
+                    notes: 'Notes',
+                    comms: 'Calls & Emails',
+                    system: 'Status Logs',
+                  }
+                  const isActive = activeFeedTab === tab
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveFeedTab(tab)}
+                      className={`px-3 py-1 rounded transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                          : 'text-zinc-500 hover:text-zinc-350'
+                      }`}
+                    >
+                      {labelMap[tab]}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             <div className="mb-8 bg-zinc-950/40 p-4 border border-zinc-900 rounded-xl">
               <form onSubmit={handlePostNote} className="space-y-4">
@@ -477,7 +508,7 @@ export default function LeadDetailPage({
                       onClick={() => setNoteType('email_log')}
                       className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
                         noteType === 'email_log'
-                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                          ? 'bg-purple-500/10 text-[#bd6575] border-[#bd6575]/20'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                       }`}
                     >
@@ -487,7 +518,7 @@ export default function LeadDetailPage({
                   <button
                     type="submit"
                     disabled={submittingNote || !noteContent.trim()}
-                    className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-blue-500 disabled:opacity-40 disabled:hover:scale-100 transition-all active:scale-95 hover:scale-105"
+                    className="inline-flex items-center gap-1.5 bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/30 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-[#caa24c]/20 disabled:opacity-40 transition-all active:scale-95 hover:scale-105"
                   >
                     Post Log <Send size={10} />
                   </button>
@@ -495,45 +526,56 @@ export default function LeadDetailPage({
               </form>
             </div>
 
-            {notes.length === 0 ? (
-              <div className="text-center py-6 text-xs text-zinc-600">No client feed events or notes recorded yet.</div>
-            ) : (
-              <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
-                {notes.map((note) => {
-                  let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-800/50'
-                  let typeLabel = 'System Log'
-                  if (note.note_type === 'note') {
-                    badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                    typeLabel = 'Note'
-                  } else if (note.note_type === 'call_log') {
-                    badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    typeLabel = 'Call Log'
-                  } else if (note.note_type === 'email_log') {
-                    badgeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                    typeLabel = 'Email'
-                  } else if (note.note_type === 'status_change') {
-                    badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    typeLabel = 'Status'
-                  }
+            {(() => {
+              const filteredNotes = notes.filter((note) => {
+                if (activeFeedTab === 'notes') return note.note_type === 'note'
+                if (activeFeedTab === 'comms') return note.note_type === 'call_log' || note.note_type === 'email_log'
+                if (activeFeedTab === 'system') return note.note_type === 'status_change'
+                return true
+              })
 
-                  return (
-                    <div key={note.id} className="relative group">
-                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-blue-500 transition-all" />
-                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{note.author}</span>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${badgeColor}`}>
-                            {typeLabel}
-                          </span>
-                          <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
+              return filteredNotes.length === 0 ? (
+                <div className="text-center py-6 text-xs text-zinc-650 italic">
+                  No workspace entries match the active filter.
+                </div>
+              ) : (
+                <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
+                  {filteredNotes.map((note) => {
+                    let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-800/50'
+                    let typeLabel = 'System Log'
+                    if (note.note_type === 'note') {
+                      badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      typeLabel = 'Note'
+                    } else if (note.note_type === 'call_log') {
+                      badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      typeLabel = 'Call Log'
+                    } else if (note.note_type === 'email_log') {
+                      badgeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                      typeLabel = 'Email'
+                    } else if (note.note_type === 'status_change') {
+                      badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      typeLabel = 'Status'
+                    }
+
+                    return (
+                      <div key={note.id} className="relative group">
+                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-[#caa24c] transition-all animate-pulse" />
+                        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{note.author}</span>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${badgeColor}`}>
+                              {typeLabel}
+                            </span>
+                            <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
+                          </div>
                         </div>
+                        <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
                       </div>
-                      <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
@@ -924,14 +966,14 @@ function ClientActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3.5 py-3 text-left transition-all hover:border-blue-500/25 hover:bg-blue-500/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
+      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3.5 py-3 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-blue-400">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-[#f1d27a]">
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold text-zinc-200">{label}</span>
-        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-600">{detail}</span>
+        <span className="block text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{label}</span>
+        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-655">{detail}</span>
       </span>
     </button>
   )
@@ -949,8 +991,8 @@ function DetailItem({
   subtext?: string
 }) {
   return (
-    <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4">
-      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-1.5">{label}</div>
+    <div className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl shadow-lg">
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-550 mb-2">{label}</div>
       <p className={`text-xs font-bold text-zinc-200 leading-normal ${isMono ? 'font-mono' : ''}`}>
         {value}
       </p>

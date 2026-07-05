@@ -12,8 +12,7 @@ import {
   Phone,
   Search,
   Settings,
-  Users,
-  X
+  Users
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -241,26 +240,26 @@ function SidebarLink({
   href,
   icon,
   label,
-  active = false,
+  active,
 }: {
   href: string
   icon: React.ReactNode
   label: string
-  active?: boolean
+  active: boolean
 }) {
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all relative ${
+      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all relative border ${
         active
-          ? 'border border-[#caa24c]/18 bg-[#120d0c] text-white shadow-inner shadow-[#caa24c]/5 font-semibold'
-          : 'text-zinc-500 hover:bg-zinc-900/40 hover:text-zinc-300'
+          ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
+          : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
       }`}
     >
       {active && (
-        <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
+        <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c] shadow-[0_0_8px_rgba(202,162,76,0.6)]" />
       )}
-      <span className={`${active ? 'text-[#caa24c] shadow-[0_0_15px_rgba(202,162,76,0.26)]' : 'text-zinc-650 group-hover:text-zinc-400'} transition-colors`}>
+      <span className={`${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
         {icon}
       </span>
       <span>{label}</span>

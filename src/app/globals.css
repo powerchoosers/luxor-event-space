@@ -356,6 +356,69 @@ body {
   .luxor-soft-enter {
     animation: luxor-soft-enter 0.42s cubic-bezier(0.23, 1, 0.32, 1) both;
   }
+
+  .luxor-glow-blue {
+    position: relative;
+  }
+
+  .luxor-glow-blue::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .luxor-glow-gold {
+    position: relative;
+  }
+
+  .luxor-glow-gold::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(202, 162, 76, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .luxor-glow-green {
+    position: relative;
+  }
+
+  .luxor-glow-green::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .luxor-glass-card {
+    position: relative;
+    border: 1px solid rgba(202, 162, 76, 0.12);
+    background: linear-gradient(185deg, rgba(16, 12, 11, 0.75) 0%, rgba(5, 5, 5, 0.85) 100%);
+    box-shadow: 0 20px 50px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(24px);
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .luxor-glass-card:hover {
+    border-color: rgba(202, 162, 76, 0.24);
+    box-shadow: 0 30px 60px -25px rgba(202, 162, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transform: translateY(-4px);
+  }
 }
 
 @keyframes luxor-ambient {

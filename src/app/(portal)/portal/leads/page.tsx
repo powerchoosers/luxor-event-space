@@ -7,6 +7,8 @@ import {
   Filter,
   Plus,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Mail,
   Phone,
@@ -15,7 +17,7 @@ import {
   X
 } from 'lucide-react'
 import Link from 'next/link'
-import { LuxorInquiry, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -30,6 +32,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // View mode toggle
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('board')
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -118,6 +123,38 @@ export default function LeadsPage() {
     }
   }
 
+  const handleMoveStatus = async (leadId: string, newStatus: LuxorInquiryStatus) => {
+    try {
+      // Optimistically update status locally
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
+      )
+
+      const res = await fetch(`/api/inquiries`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: leadId, status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Failed to update status.')
+
+      // Add a status change log entry in notes
+      await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: leadId,
+          content: `Lead status updated to ${newStatus.replace('_', ' ').toUpperCase()} from the Pipeline Board.`,
+          noteType: 'status_change',
+          author: 'Portal System',
+        }),
+      })
+    } catch (err) {
+      console.error(err)
+      alert('Error updating status.')
+      fetchLeads() // Re-sync from database if error
+    }
+  }
+
   // Filter & Sort Inquiries
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
@@ -161,6 +198,31 @@ export default function LeadsPage() {
               <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="flex border border-zinc-800 rounded-lg p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                    viewMode === 'list'
+                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                      : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                  }`}
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('board')}
+                  className={`px-3 py-1.5 rounded transition-all cursor-pointer ${
+                    viewMode === 'board'
+                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                      : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                  }`}
+                >
+                  Board
+                </button>
+              </div>
+
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -176,6 +238,7 @@ export default function LeadsPage() {
                 <option value="closed_lost">Closed Lost</option>
               </select>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(true)}
                 className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
               >
@@ -186,151 +249,331 @@ export default function LeadsPage() {
         }
       />
 
-      <PortalTableCard
-        controls={
-          <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-            <div className="relative w-full md:w-96">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search leads by name, email, or phone..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-medium placeholder:text-zinc-700"
-              />
-            </div>
-            <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest relative">
-              <span className="text-zinc-600">Sort by:</span>
-              <button
-                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-                className="flex items-center gap-1 text-zinc-300 hover:text-white transition-colors"
-              >
-                {sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'} <ChevronDown size={14} />
-              </button>
-              {sortDropdownOpen && (
-                <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-lg shadow-xl p-1.5 min-w-[120px] space-y-1">
-                  <button
-                    onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
-                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
-                  >
-                    Recently Active
-                  </button>
-                  <button
-                    onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
-                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
-                  >
-                    Name
-                  </button>
-                  <button
-                    onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
-                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
-                  >
-                    Guest Count
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        }
-        footer={
-          <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-600 tracking-widest">
-            <p>
-              Showing <span className="text-zinc-400">{totalCount}</span> live Luxor inquiries
-            </p>
-          </div>
-        }
-      >
-        <PortalStickyTable minWidth="1060px">
-          <PortalStickyThead>
-            <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em]">
-              <th className="px-8 py-5">Full Name & Contact</th>
-              <th className="px-6 py-5">Status</th>
-              <th className="px-6 py-5">Event Parameters</th>
-              <th className="px-6 py-5">Intake Date</th>
-              <th className="px-6 py-5">Source Node</th>
-              <th className="px-8 py-5 text-right">Engagement</th>
-            </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/30">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
-                  FETCHING RECORDS...
-                </td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-red-300">
-                  {error}
-                </td>
-              </tr>
-            ) : sortedLeads.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500">
-                  <div className="max-w-xl">
-                    <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
-                    <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              sortedLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
-                  <td className="px-8 py-6">
-                    <Link
-                      href={`/portal/leads/${lead.id}`}
-                      className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
+      {viewMode === 'list' ? (
+        <PortalTableCard
+          controls={
+            <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+              <div className="relative w-full md:w-96">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search leads by name, email, or phone..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-zinc-350 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-medium placeholder:text-zinc-700"
+                />
+              </div>
+              <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest relative">
+                <span className="text-zinc-650">Sort by:</span>
+                <button
+                  type="button"
+                  onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                  className="flex items-center gap-1 text-zinc-350 hover:text-white transition-colors"
+                >
+                  {sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'} <ChevronDown size={14} />
+                </button>
+                {sortDropdownOpen && (
+                  <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-lg shadow-xl p-1.5 min-w-[120px] space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-450 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
                     >
-                      <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
-                          {getInitials(lead.full_name)}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">
-                          {lead.full_name}
-                        </p>
-                        <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
-                          {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
-                        </p>
-                      </div>
-                    </Link>
+                      Recently Active
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                    >
+                      Name
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                    >
+                      Guest Count
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          }
+          footer={
+            <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-600 tracking-widest">
+              <p>
+                Showing <span className="text-zinc-400">{totalCount}</span> live Luxor inquiries
+              </p>
+            </div>
+          }
+        >
+          <PortalStickyTable minWidth="1060px">
+            <PortalStickyThead>
+              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em]">
+                <th className="px-8 py-5">Full Name & Contact</th>
+                <th className="px-6 py-5">Status</th>
+                <th className="px-6 py-5">Event Parameters</th>
+                <th className="px-6 py-5">Intake Date</th>
+                <th className="px-6 py-5">Source Node</th>
+                <th className="px-8 py-5 text-right">Engagement</th>
+              </tr>
+            </PortalStickyThead>
+            <tbody className="divide-y divide-zinc-900/30">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
+                    FETCHING RECORDS...
                   </td>
-                  <td className="px-6 py-6 font-mono">
-                    <PortalStatusBadge status={lead.status} />
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-12 text-sm text-red-300">
+                    {error}
                   </td>
-                  <td className="px-6 py-6 font-mono text-xs text-zinc-300">
-                    <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
-                    <div className="text-zinc-500 mt-1">{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count needed'}</div>
-                  </td>
-                  <td className="px-6 py-6">
-                    <div className="flex items-start flex-col">
-                      <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
-                      <span className="text-[10px] text-[#caa24c] font-medium uppercase tracking-tighter mt-1">
-                        {lead.target_date || 'Date requested'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6">
-                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{lead.source.replaceAll('_', ' ')}</span>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
-                      <Link
-                        href={`/portal/leads/${lead.id}`}
-                        className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800"
-                        title="Open Dossier"
-                      >
-                        <ExternalLink size={14} />
-                      </Link>
+                </tr>
+              ) : sortedLeads.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500">
+                    <div className="max-w-xl">
+                      <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
+                      <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </PortalStickyTable>
-      </PortalTableCard>
+              ) : (
+                sortedLeads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
+                    <td className="px-8 py-6">
+                      <Link
+                        href={`/portal/leads/${lead.id}`}
+                        className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                      >
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
+                            {getInitials(lead.full_name)}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">
+                            {lead.full_name}
+                          </p>
+                          <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
+                            {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
+                          </p>
+                        </div>
+                      </Link>
+                    </td>
+                    <td className="px-6 py-6 font-mono">
+                      <PortalStatusBadge status={lead.status} />
+                    </td>
+                    <td className="px-6 py-6 font-mono text-xs text-zinc-300">
+                      <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
+                      <div className="text-zinc-500 mt-1">{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count needed'}</div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-start flex-col">
+                        <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
+                        <span className="text-[10px] text-[#caa24c] font-medium uppercase tracking-tighter mt-1">
+                          {lead.target_date || 'Date requested'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{lead.source.replaceAll('_', ' ')}</span>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
+                        <Link
+                          href={`/portal/leads/${lead.id}`}
+                          className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800"
+                          title="Open Dossier"
+                        >
+                          <ExternalLink size={14} />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </PortalStickyTable>
+        </PortalTableCard>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-x-auto portal-scrollbar pb-4 flex gap-4 select-none">
+          {([
+            { id: 'new', label: 'New', tone: 'blue' },
+            { id: 'contacted', label: 'Contacted', tone: 'cyan' },
+            { id: 'tour_requested', label: 'Tour Req.', tone: 'purple' },
+            { id: 'tour_confirmed', label: 'Tour Conf.', tone: 'amber' },
+            { id: 'proposal_sent', label: 'Proposal', tone: 'indigo' },
+            { id: 'booked', label: 'Booked', tone: 'green' }
+          ] as { id: LuxorInquiryStatus; label: string; tone: string }[]).map((col, colIndex, colArray) => {
+            const colLeads = sortedLeads.filter(l => l.status === col.id)
+            return (
+              <div key={col.id} className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/15 border border-zinc-900/60 rounded-2xl flex flex-col h-[calc(100vh-21rem)] overflow-hidden">
+                {/* Column Header */}
+                <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      col.tone === 'blue' ? 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]' :
+                      col.tone === 'cyan' ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]' :
+                      col.tone === 'purple' ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.5)]' :
+                      col.tone === 'amber' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' :
+                      col.tone === 'indigo' ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.5)]' :
+                      'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                    }`} />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{col.label}</span>
+                  </div>
+                  <span className="text-[9px] font-mono font-bold text-zinc-500 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-md">
+                    {colLeads.length}
+                  </span>
+                </div>
+
+                {/* Cards Container */}
+                <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
+                  {colLeads.length === 0 ? (
+                    <div className="border border-dashed border-zinc-900/40 rounded-xl py-8 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-650">
+                      No leads
+                    </div>
+                  ) : (
+                    colLeads.map((lead) => (
+                      <div key={lead.id} className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-zinc-850 transition-all group relative">
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800/60 flex items-center justify-center text-zinc-500 text-[10px] font-bold group-hover:bg-[#caa24c]/10 group-hover:text-[#f1d27a] group-hover:border-[#caa24c]/20 transition-all duration-300">
+                              {getInitials(lead.full_name)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <Link href={`/portal/leads/${lead.id}`} className="text-xs font-bold text-white/90 hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
+                                {lead.full_name}
+                              </Link>
+                              <p className="text-[9px] text-zinc-500 truncate font-mono">
+                                {lead.email ?? lead.phone ?? 'No contact'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 border-t border-zinc-900/60 pt-2.5">
+                            <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono">
+                              <span className="font-semibold text-white/80">{lead.event_type || 'Quinceañera'}</span>
+                              <span className="text-zinc-500">{lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 text-[9px] text-[#caa24c] font-medium uppercase tracking-tight">
+                              <Calendar size={11} className="text-zinc-600" />
+                              <span>{lead.target_date || 'Date TBD'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card Action Controls */}
+                        <div className="flex items-center justify-between border-t border-zinc-900/40 pt-3 mt-3">
+                          <div className="flex gap-1.5">
+                            {lead.email && (
+                              <a href={`mailto:${lead.email}`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Send Email">
+                                <Mail size={11} />
+                              </a>
+                            )}
+                            {lead.phone && (
+                              <a href={`tel:${lead.phone}`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Call Phone">
+                                <Phone size={11} />
+                              </a>
+                            )}
+                          </div>
+
+                          <div className="flex gap-1">
+                            {colIndex > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveStatus(lead.id, colArray[colIndex - 1].id)}
+                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                                title={`Move to ${colArray[colIndex - 1].label}`}
+                              >
+                                <ChevronLeft size={12} />
+                              </button>
+                            )}
+                            {colIndex < colArray.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveStatus(lead.id, colArray[colIndex + 1].id)}
+                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                                title={`Move to ${colArray[colIndex + 1].label}`}
+                              >
+                                <ChevronRight size={12} />
+                              </button>
+                            )}
+                            {lead.status !== 'closed_lost' && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveStatus(lead.id, 'closed_lost')}
+                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-650 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                                title="Mark Lost"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Lost Leads Drawer / Collapsed Last Column */}
+          <div className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/5 border border-zinc-900/40 rounded-2xl flex flex-col h-[calc(100vh-21rem)] overflow-hidden opacity-60 hover:opacity-100 transition-all duration-300">
+            <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shadow-[0_0_8px_rgba(113,113,122,0.5)]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Closed Lost</span>
+              </div>
+              <span className="text-[9px] font-mono font-bold text-zinc-650 bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded-md">
+                {sortedLeads.filter(l => l.status === 'closed_lost').length}
+              </span>
+            </div>
+
+            <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
+              {sortedLeads.filter(l => l.status === 'closed_lost').length === 0 ? (
+                <div className="border border-dashed border-zinc-900/40 rounded-xl py-8 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-700">
+                  No lost leads
+                </div>
+              ) : (
+                sortedLeads.filter(l => l.status === 'closed_lost').map((lead) => (
+                  <div key={lead.id} className="bg-zinc-950/65 border border-zinc-900/60 p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800 transition-all group">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-850/60 flex items-center justify-center text-zinc-600 text-[10px] font-bold">
+                          {getInitials(lead.full_name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/portal/leads/${lead.id}`} className="text-xs font-bold text-zinc-400 hover:text-blue-500 block truncate leading-none mb-1">
+                            {lead.full_name}
+                          </Link>
+                          <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? lead.phone ?? 'No contact'}</p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-zinc-600 mt-2 font-medium">{lead.event_type || 'Quinceañera'} • {lead.guest_count || 0} guests</p>
+                    </div>
+
+                    <div className="flex justify-end pt-3 mt-3 border-t border-zinc-900/20">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveStatus(lead.id, 'new')}
+                        className="text-[9px] font-black uppercase tracking-wider text-blue-500/80 hover:text-blue-400"
+                      >
+                        Re-Open Lead
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual Lead Addition Modal */}
       {isModalOpen && (

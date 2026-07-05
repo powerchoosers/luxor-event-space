@@ -2,17 +2,9 @@
 
 import React, { useEffect, useState } from 'react'
 import {
-  Send,
   Search,
   History,
   Phone,
-  Mail,
-  X,
-  Plus,
-  Radio,
-  MessageSquare,
-  Clock,
-  ArrowRight,
   ExternalLink
 } from 'lucide-react'
 import Link from 'next/link'
@@ -163,12 +155,12 @@ export default function CommunicationsPage() {
                     <div
                       key={inq.id}
                       onClick={() => setSelectedId(inq.id)}
-                      className={`p-5 flex flex-col gap-2 hover:bg-zinc-900/40 transition-all cursor-pointer group ${
-                        isActive ? 'bg-zinc-900/60 border-l-2 border-blue-500' : ''
+                      className={`p-5 flex flex-col gap-2 hover:bg-zinc-900/30 transition-all cursor-pointer group ${
+                        isActive ? 'bg-[#caa24c]/5 border-l-2 border-[#caa24c]' : 'border-l-2 border-transparent'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <h4 className={`text-xs font-bold uppercase tracking-widest ${isActive ? 'text-white' : 'text-zinc-350'} group-hover:text-blue-400 transition-colors`}>
+                        <h4 className={`text-xs font-bold uppercase tracking-widest ${isActive ? 'text-white' : 'text-zinc-350'} group-hover:text-[#f1d27a] transition-colors`}>
                           {inq.full_name}
                         </h4>
                         <span className="text-[9px] font-mono text-zinc-600">
