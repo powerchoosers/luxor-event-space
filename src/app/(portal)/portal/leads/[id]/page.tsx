@@ -502,7 +502,7 @@ export default function LeadDetailPage({
                 Activity Feed & Timeline
               </h3>
               
-              <div className="flex border border-zinc-800 rounded-xl p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
+              <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
                 {(['all', 'notes', 'comms', 'system'] as const).map((tab) => {
                   const labelMap = {
                     all: 'All',
@@ -516,7 +516,7 @@ export default function LeadDetailPage({
                       key={tab}
                       type="button"
                       onClick={() => setActiveFeedTab(tab)}
-                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                         isActive
                           ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                           : 'text-zinc-500 hover:text-zinc-350'
@@ -542,7 +542,7 @@ export default function LeadDetailPage({
                     <button
                       type="button"
                       onClick={() => setNoteType('note')}
-                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
                         noteType === 'note'
                           ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
@@ -553,7 +553,7 @@ export default function LeadDetailPage({
                     <button
                       type="button"
                       onClick={() => setNoteType('call_log')}
-                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
                         noteType === 'call_log'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
@@ -564,7 +564,7 @@ export default function LeadDetailPage({
                     <button
                       type="button"
                       onClick={() => setNoteType('email_log')}
-                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
                         noteType === 'email_log'
                           ? 'bg-purple-500/10 text-[#bd6575] border-[#bd6575]/20'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'

@@ -235,11 +235,11 @@ export default function LeadsPage() {
               <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <div className="flex border border-zinc-800 rounded-xl p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+              <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                     viewMode === 'list'
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                       : 'text-zinc-500 hover:text-zinc-350 font-bold'
@@ -250,7 +250,7 @@ export default function LeadsPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode('board')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                     viewMode === 'board'
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                       : 'text-zinc-500 hover:text-zinc-350 font-bold'
@@ -307,25 +307,25 @@ export default function LeadsPage() {
                   {sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'} <ChevronDown size={14} />
                 </button>
                 {sortDropdownOpen && (
-                  <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-lg shadow-xl p-1.5 min-w-[120px] space-y-1">
+                  <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-md shadow-xl p-1.5 min-w-[120px] space-y-1">
                     <button
                       type="button"
                       onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-450 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-450 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
                     >
                       Recently Active
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
                     >
                       Name
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
                     >
                       Guest Count
                     </button>

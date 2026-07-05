@@ -268,7 +268,7 @@ export function PortalSelect({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none disabled:opacity-40 disabled:hover:text-zinc-300 disabled:hover:border-zinc-800"
+        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none disabled:opacity-40 disabled:hover:text-zinc-300 disabled:hover:border-zinc-800"
       >
         <span>{selectedOption ? selectedOption.label : placeholder}</span>
         <span className="text-zinc-550 text-[10px]">▼</span>
@@ -276,7 +276,7 @@ export function PortalSelect({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute left-0 right-0 mt-1.5 z-50 bg-[#080706] border border-zinc-800 rounded-lg shadow-xl p-1 max-h-60 overflow-y-auto portal-scrollbar space-y-0.5">
+          <div className="absolute left-0 right-0 mt-1.5 z-50 bg-[#080706] border border-zinc-800 rounded-md shadow-xl p-1 max-h-60 overflow-y-auto portal-scrollbar space-y-0.5">
             {options.map((opt) => {
               const isSelected = opt.value === value
               return (
@@ -287,7 +287,7 @@ export function PortalSelect({
                     onChange(opt.value)
                     setIsOpen(false)
                   }}
-                  className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded transition-colors ${
+                  className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-md transition-colors ${
                     isSelected
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
@@ -381,7 +381,7 @@ export function PortalDatePicker({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none"
+        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none"
       >
         <span>{formattedDisplay}</span>
         <span className="text-zinc-550 text-[10px]">📅</span>
@@ -390,7 +390,7 @@ export function PortalDatePicker({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-45" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 z-50 bg-[#080706] border border-zinc-800 rounded-xl p-4 shadow-2xl w-64 text-xs">
+          <div className="absolute right-0 mt-2 z-50 bg-[#080706] border border-zinc-800 rounded-md p-4 shadow-2xl w-64 text-xs">
             {/* Header navigation */}
             <div className="flex items-center justify-between mb-4 border-b border-zinc-900 pb-2">
               <button
@@ -451,4 +451,3 @@ export function PortalDatePicker({
     </div>
   )
 }
-

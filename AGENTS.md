@@ -25,6 +25,11 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 ## Current Site Conventions
 
 - Public site routes include `/`, `/events`, `/spaces`, `/gallery`, `/pricing`, `/visit`, and `/tour`. Header and footer navigation should point to these real pages, not homepage hash anchors, unless a section jump is intentional.
+- Portal routes live under `/portal` and are private owner-workspace routes. Do not place portal login screens inside the public `(site)` route group because that adds the public header, footer, and Elena concierge widget.
+- The portal login route is `/portal/login` and should use the dedicated `(auth)` layout. It signs users in through Zoho via `/api/auth/zoho/login` and returns through `/api/auth/callback/zoho`.
+- The owner portal is protected by the signed `luxor_portal_session` cookie. Logout uses `/api/auth/logout` and must clear that cookie before redirecting to `/portal/login`.
+- Zoho sender access is limited by `LUXOR_ZOHO_LOGIN_EMAIL` and `LUXOR_ZOHO_ALLOWED_SENDERS`. The intended Luxor mailbox is `booking@luxoratlaspalmas.com`, with `hello@luxoratlaspalmas.com` as an allowed alias.
+- Zoho mail env var names are allowed in docs, but never write real values into tracked files or chat summaries: `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_ACCOUNT_ID`, `ZOHO_REFRESH_TOKEN`, `ZOHO_ACCOUNTS_SERVER`, `ZOHO_BASE_URL`, `LUXOR_PORTAL_SESSION_SECRET`.
 - Desktop heroes should feel balanced as one composition. Use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page intentionally uses a split hero with a strong visual on the other side.
 - Do not wrap above-the-fold hero content in scroll-triggered `Reveal`; first viewport content must render immediately.
 - Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
@@ -50,4 +55,4 @@ The GitHub repository is ready for a standard Vercel Next.js deployment:
 - Root directory: repository root
 - Build command: `npm run build`
 - Output/framework detection: Next.js defaults
-- No environment variables are currently required by the public website
+- The public website can run without secrets, but portal and Zoho mail features require the server-only env vars listed above in Vercel. Do not expose them with `NEXT_PUBLIC_`.
