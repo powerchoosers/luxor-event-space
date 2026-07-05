@@ -371,19 +371,19 @@ function renderEmailHeader(): string {
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;">
               <tr>
                 <!-- Palm mark image -->
-                <td style="vertical-align:middle;padding-right:10px;">
+                <td style="vertical-align:middle;padding-right:14px;">
                   <img
                     src="${palmMarkUrl}"
                     alt=""
-                    width="36"
-                    height="27"
-                    style="display:block;width:36px;height:27px;object-fit:contain;"
+                    width="52"
+                    height="39"
+                    style="display:block;width:52px;height:39px;object-fit:contain;"
                   />
                 </td>
                 <!-- LUXOR text + subline -->
                 <td style="vertical-align:middle;">
-                  <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:22px;font-weight:500;letter-spacing:0.115em;color:#caa24c;text-transform:uppercase;line-height:1;">LUXOR</p>
-                  <p style="margin:2px 0 0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:6px;font-weight:500;letter-spacing:0.5em;color:rgba(202,162,76,0.6);text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
+                  <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:32px;font-weight:500;letter-spacing:0.22em;color:#caa24c;text-transform:uppercase;line-height:1;">LUXOR</p>
+                  <p style="margin:4px 0 0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:7.2px;font-weight:500;letter-spacing:0.4em;color:rgba(202,162,76,0.6);text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
                 </td>
               </tr>
             </table>

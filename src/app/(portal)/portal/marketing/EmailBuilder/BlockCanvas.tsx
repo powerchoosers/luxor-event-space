@@ -632,12 +632,12 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
             {/* Gold shimmer top bar */}
             <div style={{ height: 3, background: 'linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24)' }} />
             {/* Logo header band */}
-            <div style={{ background: '#080605', padding: '18px 48px', borderLeft: '1px solid rgba(202,162,76,0.22)', borderRight: '1px solid rgba(202,162,76,0.22)', borderBottom: '1px solid rgba(202,162,76,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <div style={{ background: '#080605', padding: '18px 48px', borderLeft: '1px solid rgba(202,162,76,0.22)', borderRight: '1px solid rgba(202,162,76,0.22)', borderBottom: '1px solid rgba(202,162,76,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`${SITE_BASE_URL}/luxor-palm-mark.png`} alt="" width={30} height={22} style={{ width: 30, height: 22, objectFit: 'contain', display: 'block' }} />
+              <img src={`${SITE_BASE_URL}/luxor-palm-mark.png`} alt="" width={52} height={39} style={{ width: 52, height: 39, objectFit: 'contain', display: 'block' }} />
               <div>
-                <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500, letterSpacing: '0.115em', color: GOLD, textTransform: 'uppercase', lineHeight: 1 }}>LUXOR</div>
-                <div style={{ fontFamily: SERIF, fontSize: 5.5, fontWeight: 500, letterSpacing: '0.48em', color: GOLD_DIM, textTransform: 'uppercase', marginTop: 2 }}>AT LAS PALMAS EVENTS</div>
+                <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 500, letterSpacing: '0.22em', color: GOLD, textTransform: 'uppercase', lineHeight: 1 }}>LUXOR</div>
+                <div style={{ fontFamily: SERIF, fontSize: 7.2, fontWeight: 500, letterSpacing: '0.4em', color: GOLD_DIM, textTransform: 'uppercase', marginTop: 4 }}>AT LAS PALMAS EVENTS</div>
               </div>
             </div>
           </div>
