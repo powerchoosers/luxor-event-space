@@ -18,7 +18,7 @@ function createBlock(type: BlockType): EmailBlock {
     case 'hero':
       return { id, type, headline: 'Your Headline Here', subheadline: 'A compelling sub-headline that draws your reader in.', backgroundImage: '', overlayOpacity: 0.55, textAlign: 'center', ctaLabel: 'Learn More', ctaUrl: 'https://luxoratlaspalmas.com', ctaVisible: true }
     case 'text':
-      return { id, type, content: 'Write your message here. You can edit this text in the inspector panel on the right.', fontSize: 15, textAlign: 'left', color: '#444444' }
+      return { id, type, content: 'Write your message here. You can edit this text directly on the canvas.', fontSize: 15, textAlign: 'left', color: 'rgba(215,194,154,0.78)' }
     case 'image_text':
       return { id, type, imageUrl: '', imageAlt: 'Luxor Event Space', imagePosition: 'left', headline: 'Your Section Headline', body: 'Supporting copy that describes this section. Keep it concise and compelling.', ctaLabel: 'Find Out More', ctaUrl: 'https://luxoratlaspalmas.com' }
     case 'button':

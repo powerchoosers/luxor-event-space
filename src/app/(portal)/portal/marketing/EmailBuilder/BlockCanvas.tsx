@@ -57,9 +57,11 @@ function Editable({ value, onChange, style, className, multiline, placeholder, '
 
   const lastValue = useRef(value)
   React.useEffect(() => {
-    if (ref.current && lastValue.current !== value && document.activeElement !== ref.current) {
-      ref.current.innerText = value
-      lastValue.current = value
+    if (ref.current && ref.current.innerText !== value) {
+      if (document.activeElement !== ref.current) {
+        ref.current.innerText = value
+        lastValue.current = value
+      }
     }
   }, [value])
 
@@ -94,9 +96,7 @@ function Editable({ value, onChange, style, className, multiline, placeholder, '
         wordBreak: 'break-word',
         ...style,
       }}
-    >
-      {value}
-    </div>
+    />
   )
 }
 

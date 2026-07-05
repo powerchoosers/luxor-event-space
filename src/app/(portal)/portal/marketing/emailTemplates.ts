@@ -150,7 +150,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'Thank you for your interest in Luxor. Whether you are planning a corporate gathering, a wedding, a quinceañera, or an intimate celebration, our team is here to make your vision a reality.\n\nWe would love to learn more about what you have in mind.',
         fontSize: 15,
         textAlign: 'center',
-        color: '#444444',
+        color: 'rgba(215,194,154,0.78)',
       },
       {
         id: 'button-1',
@@ -235,7 +235,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'At Luxor, every Quinceañera is a masterpiece. From the first waltz to the final toast, our dedicated team ensures every detail reflects her personality and style.\n\nOur all-inclusive packages include:\n- Elegant ballroom with up to 300 guests\n- Premium catering coordination\n- Ambient lighting & sound design\n- Full event planning support',
         fontSize: 15,
         textAlign: 'left',
-        color: '#333333',
+        color: 'rgba(215,194,154,0.78)',
       },
       {
         id: 'image-text-1',
@@ -277,7 +277,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'Thank you for your inquiry.',
         fontSize: 22,
         textAlign: 'center',
-        color: '#111111',
+        color: '#f7efe3',
       },
       {
         id: 'text-2',
@@ -285,7 +285,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'We have reviewed your event details and are confident that Luxor can deliver a seamless, impressive experience for your team and clients.\n\nFrom board meetings and product launches to gala dinners and team-building events -- our corporate packages are designed to make you look exceptional.',
         fontSize: 15,
         textAlign: 'left',
-        color: '#444444',
+        color: 'rgba(215,194,154,0.78)',
       },
       {
         id: 'two-col-1',
@@ -336,7 +336,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'This season, give your guests an experience they will remember long after the last glass is raised. Our holiday packages include:\n\n- Complimentary seasonal decor\n- Exclusive early-bird pricing (book by December 1)\n- Priority date selection\n- Dedicated holiday event coordinator',
         fontSize: 15,
         textAlign: 'center',
-        color: '#333333',
+        color: 'rgba(215,194,154,0.78)',
       },
       { id: 'divider-1', type: 'divider', color: '#e74c3c', thickness: 2, style: 'solid' },
       {
@@ -367,7 +367,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'Your Tour is Confirmed',
         fontSize: 26,
         textAlign: 'center',
-        color: '#111111',
+        color: '#f7efe3',
       },
       {
         id: 'text-2',
@@ -375,7 +375,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'We are looking forward to showing you around Luxor. Please find your tour details below:\n\nDate & Time: [INSERT DATE]\nLocation: Luxor Event Space, Las Palmas\nYour Host: [INSERT HOST NAME]\n\nIf you need to reschedule or have any questions before your visit, do not hesitate to reach out -- we are here to help.',
         fontSize: 15,
         textAlign: 'center',
-        color: '#444444',
+        color: 'rgba(215,194,154,0.78)',
       },
       { id: 'divider-1', type: 'divider', color: '#27ae60', thickness: 1, style: 'solid' },
       {
@@ -384,7 +384,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         content: 'What to expect during your tour:\n- A full walkthrough of our event spaces\n- Capacity planning and layout options\n- Catering & AV demonstrations\n- Pricing and package overview\n- Q&A with our event team',
         fontSize: 14,
         textAlign: 'left',
-        color: '#555555',
+        color: 'rgba(215,194,154,0.78)',
       },
       {
         id: 'button-1',
