@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, TwoColumnBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
+import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
 
 interface InspectorProps {
   block: EmailBlock
@@ -10,7 +10,6 @@ interface InspectorProps {
 
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-1.5'
 const inputCls = 'w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors'
-const textareaCls = `${inputCls} resize-none`
 const selectCls = `${inputCls} cursor-pointer`
 const fieldCls = 'space-y-1.5'
 
@@ -32,12 +31,9 @@ function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: He
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <Field label="Headline">
-        <input className={inputCls} value={block.headline} onChange={(e) => u({ headline: e.target.value })} />
-      </Field>
-      <Field label="Sub-headline">
-        <textarea className={textareaCls} rows={3} value={block.subheadline} onChange={(e) => u({ subheadline: e.target.value })} />
-      </Field>
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        💡 <strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.
+      </div>
       <Field label="Background Image URL">
         <input className={inputCls} placeholder="https://..." value={block.backgroundImage} onChange={(e) => u({ backgroundImage: e.target.value })} />
       </Field>
@@ -55,7 +51,7 @@ function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: He
         </Field>
       </RowFields>
       <div className="border-t border-zinc-800/60 pt-4 space-y-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between">
           <label className={labelCls + ' mb-0'}>Show CTA Button</label>
           <button
             onClick={() => u({ ctaVisible: !block.ctaVisible })}
@@ -65,14 +61,9 @@ function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: He
           </button>
         </div>
         {block.ctaVisible && (
-          <>
-            <Field label="CTA Label">
-              <input className={inputCls} value={block.ctaLabel} onChange={(e) => u({ ctaLabel: e.target.value })} />
-            </Field>
-            <Field label="CTA URL">
-              <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
-            </Field>
-          </>
+          <Field label="CTA URL">
+            <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
+          </Field>
         )}
       </div>
     </div>
@@ -84,9 +75,9 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
   const u = (patch: Partial<TextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <Field label="Content">
-        <textarea className={textareaCls} rows={7} value={block.content} onChange={(e) => u({ content: e.target.value })} />
-      </Field>
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        💡 <strong>Paragraph text</strong> can be typed directly on the canvas.
+      </div>
       <RowFields>
         <Field label="Font Size (px)">
           <input type="number" className={inputCls} min={10} max={60} value={block.fontSize} onChange={(e) => u({ fontSize: Number(e.target.value) })} />
@@ -114,6 +105,9 @@ function ImageTextInspector({ block, onChange }: { block: ImageTextBlock; onChan
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        💡 <strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.
+      </div>
       <Field label="Image URL">
         <input className={inputCls} placeholder="https://..." value={block.imageUrl} onChange={(e) => u({ imageUrl: e.target.value })} />
       </Field>
@@ -128,20 +122,9 @@ function ImageTextInspector({ block, onChange }: { block: ImageTextBlock; onChan
           </select>
         </Field>
       </RowFields>
-      <Field label="Headline">
-        <input className={inputCls} value={block.headline} onChange={(e) => u({ headline: e.target.value })} />
+      <Field label="CTA URL">
+        <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
       </Field>
-      <Field label="Body">
-        <textarea className={textareaCls} rows={4} value={block.body} onChange={(e) => u({ body: e.target.value })} />
-      </Field>
-      <RowFields>
-        <Field label="CTA Label">
-          <input className={inputCls} value={block.ctaLabel} onChange={(e) => u({ ctaLabel: e.target.value })} />
-        </Field>
-        <Field label="CTA URL">
-          <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
-        </Field>
-      </RowFields>
     </div>
   )
 }
@@ -151,9 +134,9 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
   const u = (patch: Partial<ButtonBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <Field label="Label">
-        <input className={inputCls} value={block.label} onChange={(e) => u({ label: e.target.value })} />
-      </Field>
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        💡 <strong>Button text</strong> can be typed directly on the button on the canvas.
+      </div>
       <Field label="URL">
         <input className={inputCls} placeholder="https://..." value={block.url} onChange={(e) => u({ url: e.target.value })} />
       </Field>
@@ -183,27 +166,14 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
 }
 
 // ─── Two Column Inspector ─────────────────────────────────────────────────────
-function TwoColumnInspector({ block, onChange }: { block: TwoColumnBlock; onChange: (b: TwoColumnBlock) => void }) {
-  const u = (patch: Partial<TwoColumnBlock>) => onChange({ ...block, ...patch })
+function TwoColumnInspector() {
   return (
     <div className="space-y-4">
-      <div className="border border-zinc-800/60 rounded-lg p-3 space-y-3">
-        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Left Column</p>
-        <Field label="Headline">
-          <input className={inputCls} value={block.leftHeadline} onChange={(e) => u({ leftHeadline: e.target.value })} />
-        </Field>
-        <Field label="Body">
-          <textarea className={textareaCls} rows={3} value={block.leftBody} onChange={(e) => u({ leftBody: e.target.value })} />
-        </Field>
-      </div>
-      <div className="border border-zinc-800/60 rounded-lg p-3 space-y-3">
-        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Right Column</p>
-        <Field label="Headline">
-          <input className={inputCls} value={block.rightHeadline} onChange={(e) => u({ rightHeadline: e.target.value })} />
-        </Field>
-        <Field label="Body">
-          <textarea className={textareaCls} rows={3} value={block.rightBody} onChange={(e) => u({ rightBody: e.target.value })} />
-        </Field>
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-4 text-center leading-relaxed">
+        📢 <strong>Two Columns</strong> content (headlines and body paragraphs) is edited entirely in-place.
+        <br />
+        <br />
+        Simply click on the text areas on the canvas and start typing.
       </div>
     </div>
   )
@@ -253,24 +223,16 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
   const u = (patch: Partial<FooterBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <Field label="Company Name">
-        <input className={inputCls} value={block.companyName} onChange={(e) => u({ companyName: e.target.value })} />
+      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        💡 <strong>Address</strong> and <strong>phone/details</strong> can be typed directly on the footer on the canvas.
+      </div>
+      <Field label="Website">
+        <input className={inputCls} value={block.website} onChange={(e) => u({ website: e.target.value })} />
       </Field>
-      <Field label="Address">
-        <input className={inputCls} value={block.address} onChange={(e) => u({ address: e.target.value })} />
-      </Field>
-      <RowFields>
-        <Field label="Phone">
-          <input className={inputCls} value={block.phone} onChange={(e) => u({ phone: e.target.value })} />
-        </Field>
-        <Field label="Website">
-          <input className={inputCls} value={block.website} onChange={(e) => u({ website: e.target.value })} />
-        </Field>
-      </RowFields>
       <Field label="Unsubscribe URL">
         <input className={inputCls} placeholder="#unsubscribe" value={block.unsubscribeUrl} onChange={(e) => u({ unsubscribeUrl: e.target.value })} />
       </Field>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between border-t border-zinc-800/60 pt-4">
         <label className={labelCls + ' mb-0'}>Show Social Links</label>
         <button
           onClick={() => u({ showSocial: !block.showSocial })}
@@ -317,7 +279,7 @@ export function BlockInspector({ block, onChange }: InspectorProps) {
         {block.type === 'text'        && <TextInspector block={block} onChange={onChange as (b: TextBlock) => void} />}
         {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} />}
         {block.type === 'button'      && <ButtonInspector block={block} onChange={onChange as (b: ButtonBlock) => void} />}
-        {block.type === 'two_column'  && <TwoColumnInspector block={block} onChange={onChange as (b: TwoColumnBlock) => void} />}
+        {block.type === 'two_column'  && <TwoColumnInspector />}
         {block.type === 'divider'     && <DividerInspector block={block} onChange={onChange as (b: DividerBlock) => void} />}
         {block.type === 'spacer'      && <SpacerInspector block={block} onChange={onChange as (b: SpacerBlock) => void} />}
         {block.type === 'footer'      && <FooterInspector block={block} onChange={onChange as (b: FooterBlock) => void} />}

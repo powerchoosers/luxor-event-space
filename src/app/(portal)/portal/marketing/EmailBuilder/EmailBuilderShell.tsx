@@ -231,6 +231,7 @@ export function EmailBuilderShell() {
             onSelect={setSelectedId}
             onDelete={handleDelete}
             onReorder={handleReorder}
+            onChange={handleBlockChange}
           />
         </div>
 
