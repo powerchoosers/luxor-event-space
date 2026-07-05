@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { to, subject, content, from, fromName } = body
 

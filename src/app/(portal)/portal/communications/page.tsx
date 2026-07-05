@@ -23,6 +23,16 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
+type ZohoInboxMessage = {
+  id: string
+  subject: string
+  from: string
+  to: string
+  receivedAt: string | null
+  summary: string
+  hasAttachment: boolean
+}
+
 export default function CommunicationsPage() {
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,6 +52,9 @@ export default function CommunicationsPage() {
   const [emailContent, setEmailContent] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSendStatus, setEmailSendStatus] = useState<string | null>(null)
+  const [inboxMessages, setInboxMessages] = useState<ZohoInboxMessage[]>([])
+  const [inboxMailbox, setInboxMailbox] = useState('')
+  const [loadingInbox, setLoadingInbox] = useState(false)
 
   const fetchInquiries = async () => {
     try {
@@ -80,6 +93,36 @@ export default function CommunicationsPage() {
 
   useEffect(() => {
     fetchInquiries()
+  }, [])
+
+  useEffect(() => {
+    let active = true
+
+    const fetchInbox = async () => {
+      try {
+        setLoadingInbox(true)
+        const res = await fetch('/api/email/inbox?limit=8')
+        if (!res.ok) return
+
+        const data = await res.json() as { mailbox?: string; messages?: ZohoInboxMessage[] }
+        if (active) {
+          setInboxMessages(data.messages || [])
+          setInboxMailbox(data.mailbox || '')
+        }
+      } catch (err) {
+        console.error('Failed to fetch Zoho inbox:', err)
+      } finally {
+        if (active) setLoadingInbox(false)
+      }
+    }
+
+    fetchInbox()
+    const interval = setInterval(fetchInbox, 60000)
+
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {
@@ -392,6 +435,39 @@ export default function CommunicationsPage() {
                     </button>
                   </div>
                 </form>
+
+                <div className="rounded-xl border border-zinc-900 bg-black/30 p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Mail size={15} className="text-[#f1d27a]" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Recent Zoho Inbox</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-600">{inboxMailbox || 'Luxor mailbox'}</span>
+                  </div>
+
+                  {loadingInbox && inboxMessages.length === 0 ? (
+                    <p className="text-xs text-zinc-650 italic">Syncing Zoho inbox...</p>
+                  ) : inboxMessages.length === 0 ? (
+                    <p className="text-xs text-zinc-600 italic">No recent inbox messages returned from Zoho.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {inboxMessages.map((message) => (
+                        <div key={message.id || `${message.from}-${message.subject}`} className="rounded-lg border border-zinc-900 bg-zinc-950/70 px-3 py-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="truncate text-xs font-bold text-zinc-200">{message.subject}</p>
+                            <span className="shrink-0 text-[9px] font-mono text-zinc-600">
+                              {message.receivedAt ? new Date(Number(message.receivedAt) || message.receivedAt).toLocaleDateString() : 'No date'}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate text-[10px] text-zinc-500">{message.from}</p>
+                          {message.summary ? (
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-400">{message.summary}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 
                 {/* Concierge Replay */}
                 {chatMessages.length > 0 && (

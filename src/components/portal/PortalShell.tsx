@@ -22,6 +22,7 @@ import React, { useEffect, useState } from 'react'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
+import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
@@ -32,7 +33,7 @@ const navItems = [
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Event Calendar' },
 ]
 
-export function PortalShell({ children }: { children: React.ReactNode }) {
+export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -158,10 +159,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
           <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
             <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} collapsed={sidebarCollapsed} />
-            <button className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
-              <LogOut size={18} className="transition-transform group-hover:translate-x-1" />
-              <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>Log Out</span>
-            </button>
+            <form action="/api/auth/logout" method="post">
+              <button className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
+                <LogOut size={18} className="transition-transform group-hover:translate-x-1" />
+                <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>Log Out</span>
+              </button>
+            </form>
           </div>
         </div>
       </aside>
@@ -240,8 +243,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             <div className="mx-1 hidden h-8 w-px bg-zinc-900 sm:block" />
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
-                <p className="text-xs font-semibold leading-none text-white">Admin Owner</p>
-                <p className="mt-1 text-[10px] font-medium uppercase leading-none tracking-tighter text-zinc-500">Owner Portfolio</p>
+                <p className="text-xs font-semibold leading-none text-white">{session.email}</p>
+                <p className="mt-1 text-[10px] font-medium uppercase leading-none tracking-tighter text-zinc-500">Zoho Authorized</p>
               </div>
               <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800 ring-2 ring-zinc-900">
                 <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-650 opacity-80" />

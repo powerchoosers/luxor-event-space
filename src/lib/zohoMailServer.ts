@@ -14,6 +14,19 @@ type ZohoSendResponse = {
   }
 }
 
+type ZohoMessageSummary = {
+  messageId?: string
+  message_id?: string
+  subject?: string
+  fromAddress?: string
+  sender?: string
+  toAddress?: string
+  receivedTime?: string
+  sentDateInGMT?: string
+  summary?: string
+  hasAttachment?: boolean
+}
+
 const DEFAULT_LOGIN_EMAIL = 'booking@luxoratlaspalmas.com'
 const DEFAULT_ALLOWED_SENDERS = ['booking@luxoratlaspalmas.com', 'hello@luxoratlaspalmas.com']
 
@@ -156,4 +169,41 @@ export async function sendLuxorZohoEmail(input: {
     from,
     to,
   }
+}
+
+export async function listLuxorZohoInbox(limit = 25) {
+  const { accountId, baseUrl } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const params = new URLSearchParams({
+    limit: String(Math.min(Math.max(limit, 1), 50)),
+  })
+
+  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+    cache: 'no-store',
+  })
+
+  const resultText = await response.text()
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      cachedAccessToken = null
+    }
+
+    throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
+  }
+
+  const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+
+  return (result.data || []).map((message) => ({
+    id: message.messageId || message.message_id || '',
+    subject: message.subject || '(No subject)',
+    from: message.fromAddress || message.sender || 'Unknown sender',
+    to: message.toAddress || '',
+    receivedAt: message.receivedTime || message.sentDateInGMT || null,
+    summary: message.summary || '',
+    hasAttachment: Boolean(message.hasAttachment),
+  }))
 }

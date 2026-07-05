@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listInvoices, listInvoicesByInquiry, createInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const inquiryId = searchParams.get('inquiryId')
 
@@ -21,6 +27,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { client_name, event_type, description, line_items, subtotal, tax_rate, total, due_date, inquiry_id, notes } = body
 
@@ -50,6 +61,11 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { id, ...updates } = body
 

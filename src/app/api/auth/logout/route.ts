@@ -1,0 +1,15 @@
+import { NextResponse } from 'next/server'
+import { LUXOR_PORTAL_SESSION_COOKIE } from '@/lib/luxorPortalAuth'
+
+export async function POST(request: Request) {
+  const response = NextResponse.redirect(new URL('/portal/login', request.url))
+  response.cookies.set(LUXOR_PORTAL_SESSION_COOKIE, '', {
+    httpOnly: true,
+    secure: new URL(request.url).protocol === 'https:',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  })
+
+  return response
+}

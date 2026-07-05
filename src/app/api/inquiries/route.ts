@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, listLuxorInquiries, getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -15,6 +16,11 @@ const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -53,6 +59,11 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { id, status, author, ...updates } = body
 

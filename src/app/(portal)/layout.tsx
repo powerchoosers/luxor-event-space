@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import React from "react";
 import { PortalShell } from "@/components/portal/PortalShell";
+import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { redirect } from 'next/navigation'
 import '../globals.css'
 
 const manrope = Manrope({
@@ -27,12 +29,22 @@ export default function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return <ProtectedPortalLayout>{children}</ProtectedPortalLayout>
+}
+
+async function ProtectedPortalLayout({ children }: { children: React.ReactNode }) {
+  const session = await getLuxorPortalSession()
+
+  if (!session) {
+    redirect('/portal/login')
+  }
+
   return (
     <html
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell>{children}</PortalShell>
+      <PortalShell session={session}>{children}</PortalShell>
     </html>
   );
 }

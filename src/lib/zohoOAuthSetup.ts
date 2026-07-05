@@ -5,7 +5,9 @@ const DEFAULT_SCOPES = [
   'email',
   'profile',
   'ZohoMail.messages.CREATE',
+  'ZohoMail.messages.READ',
   'ZohoMail.accounts.READ',
+  'ZohoMail.folders.READ',
 ]
 
 export function getZohoRedirectUri(request: Request) {
@@ -19,6 +21,8 @@ export function getZohoAuthUrl(request: Request) {
   const clientId = process.env.ZOHO_CLIENT_ID
   const accountsServer = (process.env.ZOHO_ACCOUNTS_SERVER || 'https://accounts.zoho.com').replace(/\/$/, '')
   const redirectUri = getZohoRedirectUri(request)
+  const { searchParams } = new URL(request.url)
+  const setupMode = searchParams.get('setup') === '1'
 
   if (!clientId) {
     throw new Error('Missing ZOHO_CLIENT_ID.')
@@ -33,7 +37,25 @@ export function getZohoAuthUrl(request: Request) {
     prompt: 'consent',
   })
 
+  if (setupMode) {
+    params.set('state', 'setup')
+  }
+
   return `${accountsServer}/oauth/v2/auth?${params.toString()}`
+}
+
+function decodeZohoEmailFromIdToken(idToken: string | undefined) {
+  if (!idToken) return null
+
+  try {
+    const [, payload] = idToken.split('.')
+    if (!payload) return null
+
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { email?: string; Email?: string }
+    return String(decoded.email || decoded.Email || '').trim().toLowerCase() || null
+  } catch {
+    return null
+  }
 }
 
 export async function exchangeZohoCodeForSetup(request: Request, code: string) {
@@ -59,10 +81,20 @@ export async function exchangeZohoCodeForSetup(request: Request, code: string) {
   })
 
   const tokenText = await tokenResponse.text()
-  const tokenData = tokenText ? JSON.parse(tokenText) as { access_token?: string; refresh_token?: string; error?: string; error_description?: string } : {}
+  const tokenData = tokenText ? JSON.parse(tokenText) as { access_token?: string; refresh_token?: string; id_token?: string; error?: string; error_description?: string } : {}
 
   if (!tokenResponse.ok || tokenData.error || !tokenData.access_token) {
     throw new Error(tokenData.error_description || tokenData.error || `Zoho token exchange failed with ${tokenResponse.status}: ${tokenText}`)
+  }
+
+  let userEmail = decodeZohoEmailFromIdToken(tokenData.id_token)
+
+  if (!userEmail) {
+    const userResponse = await fetch(`${accountsServer}/oauth/user/info`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    })
+    const userData = await userResponse.json().catch(() => ({})) as { Email?: string; email?: string; email_id?: string; principal_name?: string }
+    userEmail = String(userData.Email || userData.email || userData.email_id || userData.principal_name || '').trim().toLowerCase()
   }
 
   const accountsResponse = await fetch('https://mail.zoho.com/api/v1/accounts', {
@@ -88,5 +120,6 @@ export async function exchangeZohoCodeForSetup(request: Request, code: string) {
     refreshToken: tokenData.refresh_token || '',
     accountId,
     mailboxAddress: account.mailboxAddress || account.emailAddress || null,
+    userEmail,
   }
 }
