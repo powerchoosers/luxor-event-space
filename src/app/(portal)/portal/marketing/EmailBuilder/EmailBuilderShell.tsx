@@ -30,7 +30,7 @@ function createBlock(type: BlockType): EmailBlock {
     case 'spacer':
       return { id, type, height: 32 }
     case 'footer':
-      return { id, type, companyName: 'Luxor Event Space', address: 'Las Palmas, Gran Canaria, Spain', phone: '+34 XXX XXX XXX', website: 'luxoratlaspalmas.com', unsubscribeUrl: '#unsubscribe', showSocial: true, instagramUrl: 'https://instagram.com/luxoratlaspalmas', facebookUrl: 'https://facebook.com/luxoratlaspalmas' }
+      return { id, type, companyName: 'Luxor Event Space', address: '803 Castroville Rd #402, San Antonio, TX 78237', phone: 'Private venue tours by appointment.', website: 'luxoratlaspalmas.com', unsubscribeUrl: '#unsubscribe', showSocial: true, instagramUrl: 'https://instagram.com/luxoratlaspalmas', facebookUrl: 'https://facebook.com/luxoratlaspalmas' }
     default:
       return { id, type: 'spacer', height: 24 } as EmailBlock
   }
