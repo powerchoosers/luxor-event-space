@@ -193,11 +193,13 @@ export default function Home() {
             ['Tours', 'Private appointments'],
             ['Style', 'Dark-and-gold setting'],
             ['Location', '803 Castroville Rd #402'],
-          ].map(([label, value]) => (
-            <div key={label} className="px-3 py-5 text-center sm:px-5 sm:py-7">
-              <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-[#caa24c]">{label}</p>
-              <p className="mt-2 text-sm leading-5 text-[#f7efe3] sm:font-serif sm:text-xl">{value}</p>
-            </div>
+          ].map(([label, value], index) => (
+            <Reveal key={label} delay={index * 70} variant="scale" amount={16}>
+              <div className="px-3 py-5 text-center sm:px-5 sm:py-7">
+                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-[#caa24c]">{label}</p>
+                <p className="mt-2 text-sm leading-5 text-[#f7efe3] sm:font-serif sm:text-xl">{value}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -214,8 +216,8 @@ export default function Home() {
           </Reveal>
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:mt-12 lg:grid-cols-4">
-            {eventCards.map((event) => (
-              <Reveal key={event.title}>
+            {eventCards.map((event, index) => (
+              <Reveal key={event.title} delay={index * 90} variant="scale" amount={18}>
                 <EventCardView event={event} />
               </Reveal>
             ))}
@@ -294,14 +296,16 @@ export default function Home() {
                 ['/tour-header.png', 'Grand hall'],
                 ['/baby-shower.png', 'Private celebration'],
                 ['/corporate.png', 'Corporate dinner'],
-              ].map(([src, alt]) => (
-                <figure key={src} className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
-                  <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.82))]" />
-                  <figcaption className="absolute bottom-4 left-1/2 w-52 -translate-x-1/2 rounded-md border border-[#caa24c]/28 bg-black/68 px-3 py-2.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#fff2bf] shadow-[0_16px_44px_-22px_rgba(0,0,0,1)] backdrop-blur-md sm:w-56">
-                    {alt}
-                  </figcaption>
-                </figure>
+              ].map(([src, alt], index) => (
+                <Reveal key={src} delay={index * 90} variant="scale" amount={18}>
+                  <figure className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
+                    <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
+                    <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.82))]" />
+                    <figcaption className="absolute bottom-4 left-1/2 w-52 -translate-x-1/2 rounded-md border border-[#caa24c]/28 bg-black/68 px-3 py-2.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#fff2bf] shadow-[0_16px_44px_-22px_rgba(0,0,0,1)] backdrop-blur-md sm:w-56">
+                      {alt}
+                    </figcaption>
+                  </figure>
+                </Reveal>
               ))}
             </div>
           </Reveal>
@@ -350,11 +354,13 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:max-w-xl">
-              {tourPrepCards.map(([title, copy]) => (
-                <div key={title} className="rounded-md border border-[#caa24c]/18 bg-black/20 p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#caa24c]">{title}</p>
-                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
-                </div>
+              {tourPrepCards.map(([title, copy], index) => (
+                <Reveal key={title} delay={index * 80} variant="scale" amount={14}>
+                  <div className="rounded-md border border-[#caa24c]/18 bg-black/20 p-5">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#caa24c]">{title}</p>
+                    <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                  </div>
+                </Reveal>
               ))}
             </div>
             <div className="mt-8 flex items-start gap-3 text-sm leading-6 text-[#d7c29a]/70">

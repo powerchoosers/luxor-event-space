@@ -1,6 +1,7 @@
-import { ArrowRight, LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
+import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { ZohoLoginButton } from './ZohoLoginButton'
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -81,14 +82,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
               </div>
             ) : null}
 
-            <Link
-              href="/api/auth/zoho/login"
-              className="group mt-7 flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-[#caa24c] px-5 text-sm font-black uppercase tracking-[0.18em] text-black shadow-lg shadow-[#caa24c]/10 transition-colors hover:bg-[#f1d27a]"
-            >
-              <Mail className="h-4 w-4" />
-              Sign in with Zoho
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
+            <ZohoLoginButton />
 
             <div className="mt-6 rounded-lg border border-zinc-800 bg-black/35 px-4 py-3">
               <div className="flex items-start gap-3">
