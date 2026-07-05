@@ -186,15 +186,15 @@ export default function CommunicationsPage() {
               {/* Header */}
               <div className="bg-[#0c0c0c] rounded-t-xl py-3.5 px-6 border-b border-zinc-900 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-full bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-500 font-bold text-xs uppercase">
+                  <div className="w-8 h-8 rounded-full bg-[#caa24c]/10 border border-[#caa24c]/20 flex items-center justify-center text-[#f1d27a] font-bold text-xs uppercase">
                     {selectedInquiry.full_name[0]}
                   </div>
                   <div>
                     <Link
                       href={`/portal/leads/${selectedInquiry.id}`}
-                      className="text-xs font-bold text-white uppercase tracking-widest leading-none hover:text-blue-400 inline-flex items-center gap-1"
+                      className="text-xs font-bold text-white uppercase tracking-widest leading-none hover:text-[#f1d27a] inline-flex items-center gap-1"
                     >
-                      {selectedInquiry.full_name} <ExternalLink size={12} className="text-zinc-600" />
+                      {selectedInquiry.full_name} <ExternalLink size={12} className="text-zinc-650" />
                     </Link>
                     <p className="text-[10px] text-zinc-500 font-medium mt-1">
                       {selectedInquiry.email || selectedInquiry.phone || 'No direct contact'}
@@ -311,7 +311,7 @@ export default function CommunicationsPage() {
                       onClick={() => setNoteType('note')}
                       className={`px-3 py-1 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
                         noteType === 'note'
-                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border-[#caa24c]/20'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-500'
                       }`}
                     >
@@ -324,12 +324,12 @@ export default function CommunicationsPage() {
                       value={noteContent}
                       onChange={(e) => setNoteContent(e.target.value)}
                       placeholder="Type details to record (e.g. Sent custom wedding proposal details or Called client back to confirm guest size)..."
-                      className="flex-1 bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                      className="flex-1 bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-[#caa24c]"
                     />
                     <button
                       type="submit"
                       disabled={submittingNote || !noteContent.trim()}
-                      className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-xs font-bold uppercase tracking-widest text-white disabled:opacity-40"
+                      className="bg-[#caa24c] hover:bg-[#f1d27a] text-black px-4 py-2 rounded text-xs font-bold uppercase tracking-widest disabled:opacity-40"
                     >
                       Record Log
                     </button>
