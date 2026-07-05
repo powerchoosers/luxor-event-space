@@ -62,3 +62,60 @@ export function parseGuestCount(value: unknown) {
   const parsed = Number.parseInt(value.replace(/[^\d]/g, ''), 10)
   return Number.isFinite(parsed) ? Math.max(0, parsed) : null
 }
+
+// --- Invoice Types ---
+export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
+
+export type LuxorInvoiceLineItem = {
+  description: string
+  quantity: number
+  unitPrice: number
+  total: number
+}
+
+export type LuxorInvoice = {
+  id: string
+  created_at: string
+  updated_at: string
+  inquiry_id: string | null
+  client_name: string
+  event_type: string | null
+  description: string | null
+  line_items: LuxorInvoiceLineItem[]
+  subtotal: number
+  tax_rate: number
+  total: number
+  status: LuxorInvoiceStatus
+  due_date: string | null
+  paid_at: string | null
+  notes: string | null
+}
+
+// --- Note Types ---
+export type LuxorNoteType = 'note' | 'call_log' | 'email_log' | 'status_change'
+
+export type LuxorNote = {
+  id: string
+  created_at: string
+  inquiry_id: string
+  author: string
+  content: string
+  note_type: LuxorNoteType
+}
+
+// --- Task Types ---
+export type LuxorTaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type LuxorTaskStatus = 'pending' | 'completed' | 'cancelled'
+
+export type LuxorTask = {
+  id: string
+  created_at: string
+  inquiry_id: string
+  title: string
+  description: string | null
+  due_date: string | null
+  completed_at: string | null
+  priority: LuxorTaskPriority
+  status: LuxorTaskStatus
+}
+

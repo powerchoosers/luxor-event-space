@@ -1,5 +1,6 @@
 import React from "react";
-import { Calendar as CalendarIcon, Clock, MapPin, User } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, MapPin, User, ArrowRight, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { listLuxorTourRequests } from "@/lib/luxorInquiriesServer";
 import { LuxorInquiry } from "@/lib/luxorInquiryTypes";
 import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
@@ -60,31 +61,34 @@ export default async function CalendarPage() {
 
                 <div className="mt-4 grid gap-4">
                   {tours.map((tour) => (
-                    <article key={tour.id} className="nodal-module-glass rounded-xl border border-zinc-800/50 p-6 transition-colors hover:bg-zinc-900/40">
+                    <article key={tour.id} className="nodal-module-glass rounded-xl border border-zinc-800/50 p-6 transition-all hover:bg-zinc-900/40 hover:border-zinc-700/60 group">
                       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                         <div>
-                          <h4 className="text-xl font-bold text-white mb-2">{tour.full_name}</h4>
-                          <div className="flex flex-wrap gap-3 text-zinc-400 font-mono text-sm">
+                          <Link href={`/portal/leads/${tour.id}`} className="inline-flex items-center gap-2 group/title">
+                            <h4 className="text-xl font-bold text-white group-hover/title:text-blue-400 transition-colors">{tour.full_name}</h4>
+                            <ExternalLink size={14} className="text-zinc-600 group-hover/title:text-blue-400 transition-colors" />
+                          </Link>
+                          <div className="flex flex-wrap gap-3 text-zinc-400 font-mono text-sm mt-2">
                             <span className="flex items-center gap-1.5 rounded bg-black/50 border border-zinc-800 px-2.5 py-1">
-                              <Clock size={14} className="text-[#002FA7]" />
+                              <Clock size={14} className="text-[#caa24c]" />
                               {tour.preferred_tour_time ?? "Flexible time"}
                             </span>
                             <span className="flex items-center gap-1.5 rounded bg-black/50 border border-zinc-800 px-2.5 py-1">
-                              <User size={14} className="text-[#002FA7]" />
+                              <User size={14} className="text-[#caa24c]" />
                               {tour.guest_count ? `${tour.guest_count} guests` : "Guest count needed"}
                             </span>
                           </div>
                         </div>
-                        <span className="max-w-fit rounded bg-[#002FA7]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-400 border border-[#002FA7]/30">
+                        <span className="max-w-fit rounded bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400 border border-zinc-850">
                           {tour.event_type ?? "Event type needed"}
                         </span>
                       </div>
 
                       <div className="mt-6 flex flex-wrap gap-6 border-t border-zinc-800/50 pt-5 text-sm">
                         <div className="flex items-center gap-2 text-zinc-500 font-medium">
-                          <MapPin size={16} className="text-zinc-600" /> Luxor Event Space
+                          <MapPin size={16} className="text-zinc-650" /> Luxor Event Space
                         </div>
-                        <div className="text-zinc-500 font-medium">
+                        <div className="text-zinc-500 font-medium font-mono text-xs">
                           {tour.email ?? tour.phone ?? "Contact method needed"}
                         </div>
                       </div>

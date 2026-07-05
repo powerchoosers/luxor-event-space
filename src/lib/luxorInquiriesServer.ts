@@ -107,3 +107,19 @@ export async function listLuxorTourRequests(limit = 100) {
     `luxor_inquiries?select=*&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
+
+export async function updateLuxorInquiry(id: string, updates: Partial<Record<string, unknown>>) {
+  const [updated] = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  )
+  return updated ?? null
+}
+

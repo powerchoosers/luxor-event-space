@@ -13,11 +13,13 @@ import {
   Search,
   Settings,
   Users,
+  X
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import React from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import React, { useEffect, useState } from 'react'
+import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
@@ -30,6 +32,57 @@ const navItems = [
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+  
+  // Notification State
+  const [notificationCount, setNotificationCount] = useState(0)
+  const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
+  
+  // Header Global Search State
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+
+  // Derived Search Results
+  const searchResults = searchQuery.trim().length >= 2
+    ? inquiries.filter((inq) =>
+        inq.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (inq.email && inq.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (inq.event_type && inq.event_type.toLowerCase().includes(searchQuery.toLowerCase()))
+      ).slice(0, 5)
+    : []
+
+  useEffect(() => {
+    let active = true
+    const loadData = async () => {
+      try {
+        const res = await fetch('/api/inquiries')
+        if (res.ok && active) {
+          const data = await res.json()
+          setInquiries(data)
+          
+          // Count 'new' or 'tour_requested' inquiries as unhandled notifications
+          const unhandled = data.filter((i: LuxorInquiry) => i.status === 'new' || i.status === 'tour_requested').length
+          setNotificationCount(unhandled)
+        }
+      } catch (err) {
+        console.error('Failed to sync notification counter:', err)
+      }
+    }
+
+    loadData()
+    // Poll notifications status every 30 seconds
+    const interval = setInterval(loadData, 30000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [pathname])
+
+  const selectSearchResult = (id: string) => {
+    setSearchQuery('')
+    setSearchFocused(false)
+    router.push(`/portal/leads/${id}`)
+  }
 
   return (
     <body className="h-screen overflow-hidden bg-[#080706] font-sans text-zinc-400 selection:bg-[#caa24c]/30">
@@ -83,13 +136,43 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             <Link href="/portal" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/80 bg-white p-1.5 shadow-[0_14px_34px_-22px_rgba(241,210,122,0.85)] lg:hidden" aria-label="Luxor portal overview">
               <Image src="/luxor-brand-mark.png" alt="Luxor" width={32} height={32} className="h-full w-full object-contain" priority />
             </Link>
-            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 sm:flex">
-              <Search size={14} className="shrink-0 text-zinc-600" />
+            
+            {/* Header Search Command Bar */}
+            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border border-zinc-850 bg-zinc-950 px-3 py-1.5 sm:flex group">
+              <Search size={14} className="shrink-0 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
-                placeholder="Search leads, events, or invoices..."
-                className="w-full bg-transparent px-2 text-xs font-medium text-zinc-300 outline-none placeholder:text-zinc-600"
+                value={searchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search clients, events, or emails..."
+                className="w-full bg-transparent px-2 text-xs font-semibold text-zinc-300 outline-none placeholder:text-zinc-650"
               />
+              
+              {/* Search Results Dropdown overlay */}
+              {searchFocused && searchResults.length > 0 && (
+                <div className="absolute left-0 top-11 z-50 w-full rounded-xl border border-zinc-900 bg-[#080706] shadow-2xl p-2 space-y-1">
+                  <div className="text-[8px] font-black uppercase tracking-wider text-zinc-600 px-3 py-1 border-b border-zinc-950 mb-1">
+                    Matching Dossier Records
+                  </div>
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      onClick={() => selectSearchResult(result.id)}
+                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded hover:bg-zinc-900 transition-colors"
+                    >
+                      <div className="truncate pr-2">
+                        <p className="text-xs font-bold text-white leading-tight">{result.full_name}</p>
+                        <p className="text-[9px] text-zinc-500 truncate mt-0.5">{result.email || 'No email registered'}</p>
+                      </div>
+                      <span className="shrink-0 text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">
+                        {result.event_type || 'Booking'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -97,13 +180,21 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             <Link href="/" className="hidden items-center gap-2 rounded-lg border border-[#caa24c]/18 bg-[#120d0c]/70 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:border-[#f1d27a]/40 hover:text-[#f1d27a] md:inline-flex">
               Public site <ExternalLink size={12} />
             </Link>
-            <button className="relative rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Notifications">
+            
+            {/* Bell Notifications */}
+            <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Notifications">
               <Bell size={18} className="text-zinc-400 transition-colors" />
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-black bg-blue-500" />
-            </button>
-            <button className="rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Messages">
+              {notificationCount > 0 && (
+                <span className="absolute right-1.5 top-1.5 h-4 min-w-4 rounded-full border border-black bg-blue-600 text-[8px] font-black text-white flex items-center justify-center px-1 font-mono">
+                  {notificationCount}
+                </span>
+              )}
+            </Link>
+
+            <Link href="/portal/communications" className="rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Messages">
               <MessageSquare size={18} className="text-zinc-400" />
-            </button>
+            </Link>
+            
             <div className="mx-1 hidden h-8 w-px bg-zinc-900 sm:block" />
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
@@ -111,7 +202,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                 <p className="mt-1 text-[10px] font-medium uppercase leading-none tracking-tighter text-zinc-500">Owner Portfolio</p>
               </div>
               <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800 ring-2 ring-zinc-900">
-                <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-600 opacity-80" />
+                <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-650 opacity-80" />
               </div>
             </div>
           </div>
@@ -130,7 +221,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                     : 'border-zinc-900 bg-zinc-950 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
                 }`}
               >
-                <span className={active ? 'text-[#caa24c]' : 'text-zinc-600'}>{item.icon}</span>
+                <span className={active ? 'text-[#caa24c]' : 'text-zinc-650'}>{item.icon}</span>
                 {item.label}
               </Link>
             )
@@ -159,13 +250,16 @@ function SidebarLink({
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all relative ${
         active
-          ? 'border border-[#caa24c]/18 bg-[#120d0c] text-white shadow-inner shadow-[#caa24c]/5'
+          ? 'border border-[#caa24c]/18 bg-[#120d0c] text-white shadow-inner shadow-[#caa24c]/5 font-semibold'
           : 'text-zinc-500 hover:bg-zinc-900/40 hover:text-zinc-300'
       }`}
     >
-      <span className={`${active ? 'text-[#caa24c] shadow-[0_0_15px_rgba(202,162,76,0.26)]' : 'text-zinc-600 group-hover:text-zinc-400'} transition-colors`}>
+      {active && (
+        <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
+      )}
+      <span className={`${active ? 'text-[#caa24c] shadow-[0_0_15px_rgba(202,162,76,0.26)]' : 'text-zinc-650 group-hover:text-zinc-400'} transition-colors`}>
         {icon}
       </span>
       <span>{label}</span>

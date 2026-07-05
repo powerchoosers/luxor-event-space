@@ -1,189 +1,828 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+'use client'
+
+import React, { useEffect, useState, use, startTransition } from 'react'
+import Link from 'next/link'
 import {
   ArrowLeft,
   Calendar,
-  CheckCircle2,
+  CheckCircle,
   Clock,
   Mail,
   MessageSquare,
   Phone,
   User,
   Users,
-} from "lucide-react";
-import { getLuxorInquiry } from "@/lib/luxorInquiriesServer";
-import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
+  Plus,
+  Send,
+  Trash2,
+  DollarSign,
+  Briefcase,
+  AlertCircle,
+  FileText,
+  CheckCircle2,
+  Circle
+} from 'lucide-react'
+import { LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
+import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 
-export default async function LeadDetailPage({
+export default function LeadDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }) {
-  const { id } = await params;
-  const lead = await getLuxorInquiry(id);
+  const { id } = use(params)
 
-  if (!lead) notFound();
+  const [lead, setLead] = useState<LuxorInquiry | null>(null)
+  const [notes, setNotes] = useState<LuxorNote[]>([])
+  const [tasks, setTasks] = useState<LuxorTask[]>([])
+  const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const emailHref = lead.email ? `mailto:${lead.email}?subject=${encodeURIComponent("Luxor Event Space tour request")}` : undefined;
-  const phoneHref = lead.phone ? `tel:${lead.phone}` : undefined;
+  // Note drafting state
+  const [noteContent, setNoteContent] = useState('')
+  const [noteType, setNoteType] = useState<'note' | 'call_log' | 'email_log'>('note')
+  const [submittingNote, setSubmittingNote] = useState(false)
+
+  // Task adding state
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDesc, setTaskDesc] = useState('')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskPriority, setTaskPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium')
+  const [submittingTask, setSubmittingTask] = useState(false)
+
+  // Invoice creation state
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+  const [invoiceDesc, setInvoiceDesc] = useState('')
+  const [invoiceDueDate, setInvoiceDueDate] = useState('')
+  const [invoiceItems, setInvoiceItems] = useState<LuxorInvoiceLineItem[]>([
+    { description: 'Venue Rental Fee', quantity: 1, unitPrice: 2500, total: 2500 },
+  ])
+  const [invoiceNotes, setInvoiceNotes] = useState('')
+  const [submittingInvoice, setSubmittingInvoice] = useState(false)
+
+  // Status editing state
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Fetch lead
+      const leadRes = await fetch(`/api/inquiries?id=${id}`)
+      if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
+      const leadData = await leadRes.json()
+      setLead(leadData)
+
+      // Fetch notes
+      const notesRes = await fetch(`/api/notes?inquiryId=${id}`)
+      if (notesRes.ok) {
+        const notesData = await notesRes.json()
+        setNotes(notesData)
+      }
+
+      // Fetch tasks
+      const tasksRes = await fetch(`/api/tasks?inquiryId=${id}`)
+      if (tasksRes.ok) {
+        const tasksData = await tasksRes.json()
+        setTasks(tasksData)
+      }
+
+      // Fetch invoices
+      const invoicesRes = await fetch(`/api/invoices?inquiryId=${id}`)
+      if (invoicesRes.ok) {
+        const invoicesData = await invoicesRes.json()
+        setInvoices(invoicesData)
+      }
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAllData()
+  }, [id])
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!lead) return
+    try {
+      setUpdatingStatus(true)
+      const res = await fetch(`/api/inquiries`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Failed to update status.')
+      const updated = await res.json()
+      setLead(updated)
+
+      // Add a status change log entry in notes
+      await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: id,
+          content: `Lead status updated to ${newStatus.replace('_', ' ').toUpperCase()}`,
+          noteType: 'status_change',
+          author: 'Portal System',
+        }),
+      })
+
+      // Refresh notes list
+      const notesRes = await fetch(`/api/notes?inquiryId=${id}`)
+      if (notesRes.ok) {
+        const notesData = await notesRes.json()
+        setNotes(notesData)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Error updating status.')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handlePostNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!noteContent.trim()) return
+    try {
+      setSubmittingNote(true)
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: id,
+          content: noteContent,
+          noteType,
+          author: 'Admin Owner',
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to post note.')
+      const note = await res.json()
+      setNotes((prev) => [...prev, note])
+      setNoteContent('')
+    } catch (err) {
+      console.error(err)
+      alert('Error saving note.')
+    } finally {
+      setSubmittingNote(false)
+    }
+  }
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!taskTitle.trim()) return
+    try {
+      setSubmittingTask(true)
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: id,
+          title: taskTitle,
+          description: taskDesc || null,
+          dueDate: taskDueDate || null,
+          priority: taskPriority,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to create task.')
+      const task = await res.json()
+      setTasks((prev) => [task, ...prev])
+      setTaskTitle('')
+      setTaskDesc('')
+      setTaskDueDate('')
+      setTaskPriority('medium')
+    } catch (err) {
+      console.error(err)
+      alert('Error adding task.')
+    } finally {
+      setSubmittingTask(false)
+    }
+  }
+
+  const handleToggleTask = async (task: LuxorTask) => {
+    try {
+      const isCompleted = task.status === 'completed'
+      const newStatus = isCompleted ? 'pending' : 'completed'
+      const completedAt = isCompleted ? null : new Date().toISOString()
+
+      const res = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: task.id,
+          status: newStatus,
+          completed_at: completedAt,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to update task.')
+      const updated = await res.json()
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+    } catch (err) {
+      console.error(err)
+      alert('Failed to update task status.')
+    }
+  }
+
+  const handleInvoiceItemChange = (index: number, field: keyof LuxorInvoiceLineItem, val: string | number) => {
+    const updated = [...invoiceItems]
+    const item = { ...updated[index] }
+
+    if (field === 'quantity') {
+      item.quantity = Math.max(1, Number(val))
+    } else if (field === 'unitPrice') {
+      item.unitPrice = Math.max(0, Number(val))
+    } else if (field === 'description') {
+      item.description = String(val)
+    }
+
+    item.total = item.quantity * item.unitPrice
+    updated[index] = item
+    setInvoiceItems(updated)
+  }
+
+  const addInvoiceItem = () => {
+    setInvoiceItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0, total: 0 }])
+  }
+
+  const removeInvoiceItem = (index: number) => {
+    if (invoiceItems.length === 1) return
+    setInvoiceItems((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const getInvoiceSubtotal = () => invoiceItems.reduce((acc, item) => acc + item.total, 0)
+  const getInvoiceTax = () => getInvoiceSubtotal() * 0.0825
+  const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
+
+  const handleCreateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!lead) return
+
+    try {
+      setSubmittingInvoice(true)
+      const subtotal = getInvoiceSubtotal()
+      const taxRate = 0.0825
+      const total = getInvoiceTotal()
+
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_name: lead.full_name,
+          event_type: lead.event_type || 'Event Booking',
+          description: invoiceDesc || `${lead.event_type || 'Event'} Booking fee`,
+          line_items: invoiceItems,
+          subtotal,
+          tax_rate: taxRate,
+          total,
+          due_date: invoiceDueDate || null,
+          inquiry_id: id,
+          notes: invoiceNotes || null,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to create invoice.')
+      const invoice = await res.json()
+      setInvoices((prev) => [invoice, ...prev])
+      setIsInvoiceModalOpen(false)
+      
+      // Reset invoice form
+      setInvoiceDesc('')
+      setInvoiceDueDate('')
+      setInvoiceNotes('')
+      setInvoiceItems([{ description: 'Venue Rental Fee', quantity: 1, unitPrice: 2500, total: 2500 }])
+    } catch (err) {
+      console.error(err)
+      alert('Error creating invoice.')
+    } finally {
+      setSubmittingInvoice(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center text-sm font-semibold tracking-widest text-zinc-500 uppercase">
+        Loading Client Dossier...
+      </div>
+    )
+  }
+
+  if (error || !lead) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-4 text-center">
+        <AlertCircle className="h-10 w-10 text-red-500/80" />
+        <h3 className="text-lg font-bold text-white">Dossier Unavailable</h3>
+        <p className="max-w-md text-sm text-zinc-500 leading-relaxed">{error || 'The requested client inquiry could not be found.'}</p>
+        <Link href="/portal/leads" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-300 transition-all hover:text-white">
+          <ArrowLeft size={12} /> Back to Leads
+        </Link>
+      </div>
+    )
+  }
+
+  // Parse chat logs if available in metadata
+  const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
 
   return (
     <PortalPageFrame>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 transition-colors hover:text-white">
-          <ArrowLeft size={14} />
-          Back to leads
+          <ArrowLeft size={14} /> Back to Leads
         </Link>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Lead Lifecycle:</span>
+          <select
+            value={lead.status}
+            disabled={updatingStatus}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 text-xs font-bold uppercase tracking-wider text-zinc-300 px-3 py-1.5 rounded-lg focus:outline-none focus:border-blue-500"
+          >
+            <option value="new">New Inquiry</option>
+            <option value="contacted">Contacted</option>
+            <option value="tour_requested">Tour Requested</option>
+            <option value="tour_confirmed">Tour Confirmed</option>
+            <option value="proposal_sent">Proposal Sent</option>
+            <option value="booked">Booked (Won)</option>
+            <option value="closed_lost">Closed Lost</option>
+          </select>
+        </div>
       </div>
 
       <PortalPageHeader
         icon={<User size={18} />}
         title={lead.full_name}
-        description={`${lead.event_type ?? "Event type needed"} inquiry captured from ${lead.source.replaceAll("_", " ")}.`}
+        description={`Event Profile: ${lead.event_type || 'Quinceañera'} • Captured via ${lead.source.replaceAll('_', ' ')} on ${new Date(lead.created_at).toLocaleDateString()}`}
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            {emailHref ? (
-              <Link href={emailHref} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition-all hover:bg-zinc-800">
-                <Mail size={16} /> Email
-              </Link>
-            ) : null}
-            {phoneHref ? (
-              <Link href={phoneHref} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition-all hover:bg-zinc-800">
-                <Phone size={16} /> Call
-              </Link>
-            ) : null}
-            <Link href="/portal/calendar" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-500">
-              <Calendar size={16} /> Calendar
-            </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800 transition-all">
+                <Mail size={14} /> Email client
+              </a>
+            )}
+            {lead.phone && (
+              <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800 transition-all">
+                <Phone size={14} /> Call client
+              </a>
+            )}
+            <button
+              onClick={() => setIsInvoiceModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-lg hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all"
+            >
+              <DollarSign size={14} /> Draft Invoice
+            </button>
           </div>
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-2xl border border-[#caa24c]/10 bg-black/40 p-6 shadow-2xl shadow-black/30">
-          <div className="flex items-start justify-between gap-5 border-b border-[#caa24c]/10 pb-5">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Client dossier</p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">Inquiry details</h2>
-            </div>
-            <StatusBadge status={formatStatus(lead.status)} />
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main Details and Activity Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Detail Cards Grid */}
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            <DetailItem label="Event Type" value={lead.event_type || 'Quinceañera'} subtext="Spanish ñ spelling active" />
+            <DetailItem label="Guest Count" value={lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified'} />
+            <DetailItem label="Target Date" value={lead.target_date || 'TBD'} />
+            <DetailItem label="Preferred Tour Date" value={lead.preferred_tour_date || 'No tour requested'} />
+            <DetailItem label="Preferred Tour Time" value={lead.preferred_tour_time || 'N/A'} />
+            <DetailItem label="Email" value={lead.email || 'None'} />
+            <DetailItem label="Phone" value={lead.phone || 'None'} />
+            <DetailItem label="Flow Type" value={lead.flow.replaceAll('_', ' ')} isMono />
+            <DetailItem label="Source Node" value={lead.source.replaceAll('_', ' ')} isMono />
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <DetailItem label="Email" value={lead.email ?? "Needed"} icon={<Mail size={15} />} />
-            <DetailItem label="Phone" value={lead.phone ?? "Needed"} icon={<Phone size={15} />} />
-            <DetailItem label="Event type" value={lead.event_type ?? "Needed"} icon={<CheckCircle2 size={15} />} />
-            <DetailItem label="Guest count" value={lead.guest_count ? `${lead.guest_count} guests` : "Needed"} icon={<Users size={15} />} />
-            <DetailItem label="Target date" value={lead.target_date ?? "Needed"} icon={<Calendar size={15} />} />
-            <DetailItem label="Package" value={lead.package_interest ?? "Not specified"} icon={<CheckCircle2 size={15} />} />
-          </div>
-
-          <div className="mt-6 rounded-xl border border-zinc-900 bg-zinc-950/50 p-5">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-              <MessageSquare size={14} />
-              Visitor notes
-            </div>
-            <p className="mt-3 text-sm leading-7 text-zinc-400">
-              {lead.message ?? "No message was included with this inquiry."}
+          {/* User Message */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-3">Inquiry Message Payload</h4>
+            <p className="text-sm leading-relaxed text-zinc-300 font-medium italic">
+              &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
             </p>
           </div>
-        </section>
 
-        <aside className="space-y-5">
-          <section className="rounded-2xl border border-[#caa24c]/10 bg-black/40 p-6 shadow-2xl shadow-black/30">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Tour request</p>
-            <div className="mt-5 space-y-4">
-              <DetailItem label="Preferred date" value={lead.preferred_tour_date ?? "Needs scheduling"} icon={<Calendar size={15} />} />
-              <DetailItem label="Preferred time" value={lead.preferred_tour_time ?? "Flexible or needed"} icon={<Clock size={15} />} />
-              <DetailItem label="Captured" value={formatDate(lead.created_at)} icon={<Clock size={15} />} />
+          {/* Chat transcript replay widget if it exists */}
+          {chatMessages.length > 0 && (
+            <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/30 overflow-hidden shadow-2xl">
+              <div className="bg-zinc-950/90 border-b border-zinc-900 px-6 py-4 flex items-center justify-between">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400">Concierge AI Chat Session Replay</h4>
+                <span className="text-[9px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded uppercase">Elena Concierge</span>
+              </div>
+              <div className="p-6 max-h-[350px] overflow-y-auto space-y-4 portal-scrollbar bg-black/40">
+                {chatMessages.map((msg, index) => {
+                  const isUser = msg.role === 'user'
+                  return (
+                    <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-xs font-medium leading-relaxed ${
+                        isUser
+                          ? 'bg-[#caa24c]/10 text-white border border-[#caa24c]/20'
+                          : 'bg-zinc-900 text-zinc-300 border border-zinc-800/50'
+                      }`}>
+                        <div className="text-[8px] font-bold uppercase tracking-widest text-zinc-500 mb-1">
+                          {isUser ? 'Client' : 'Elena AI'}
+                        </div>
+                        {msg.content}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </section>
+          )}
 
-          <section className="rounded-2xl border border-[#caa24c]/10 bg-black/40 p-6 shadow-2xl shadow-black/30">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Client functions</p>
-            <div className="mt-5 grid gap-3">
-              <ActionLink href={emailHref} icon={<Mail size={16} />} label="Send follow-up email" disabled={!emailHref} />
-              <ActionLink href={phoneHref} icon={<Phone size={16} />} label="Call client" disabled={!phoneHref} />
-              <ActionLink href="/portal/calendar" icon={<Calendar size={16} />} label="Review tour calendar" />
-              <ActionLink href="/portal/communications" icon={<MessageSquare size={16} />} label="Open communications" />
+          {/* Activity Logs & Notes Section */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-white/90 mb-6 flex items-center gap-2">
+              <MessageSquare size={16} className="text-zinc-500" />
+              Activity Feed & Timeline
+            </h3>
+
+            <div className="mb-8 bg-zinc-950/40 p-4 border border-zinc-900 rounded-xl">
+              <form onSubmit={handlePostNote} className="space-y-4">
+                <textarea
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  placeholder="Record call summary, email response details, or general client notes..."
+                  className="w-full h-24 bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed font-sans"
+                />
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNoteType('note')}
+                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                        noteType === 'note'
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      General Note
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNoteType('call_log')}
+                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                        noteType === 'call_log'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      Call Log
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNoteType('email_log')}
+                      className={`px-3 py-1.5 rounded text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                        noteType === 'email_log'
+                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      Email Thread
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submittingNote || !noteContent.trim()}
+                    className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-blue-500 disabled:opacity-40 disabled:hover:scale-100 transition-all active:scale-95 hover:scale-105"
+                  >
+                    Post Log <Send size={10} />
+                  </button>
+                </div>
+              </form>
             </div>
-          </section>
-        </aside>
+
+            {notes.length === 0 ? (
+              <div className="text-center py-6 text-xs text-zinc-600">No client feed events or notes recorded yet.</div>
+            ) : (
+              <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
+                {notes.map((note) => {
+                  let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-800/50'
+                  let typeLabel = 'System Log'
+                  if (note.note_type === 'note') {
+                    badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                    typeLabel = 'Note'
+                  } else if (note.note_type === 'call_log') {
+                    badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    typeLabel = 'Call Log'
+                  } else if (note.note_type === 'email_log') {
+                    badgeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                    typeLabel = 'Email'
+                  } else if (note.note_type === 'status_change') {
+                    badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    typeLabel = 'Status'
+                  }
+
+                  return (
+                    <div key={note.id} className="relative group">
+                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-blue-500 transition-all" />
+                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{note.author}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${badgeColor}`}>
+                            {typeLabel}
+                          </span>
+                          <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar Panel Column */}
+        <div className="space-y-6">
+          {/* Tasks List Card */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
+            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+              <span className="flex items-center gap-2.5">
+                <Briefcase size={16} className="text-zinc-500" />
+                Tasks & Checklist
+              </span>
+              <span className="font-mono text-xs text-zinc-500">{tasks.filter((t) => t.status === 'pending').length} remaining</span>
+            </h3>
+
+            {/* Quick Task Add Form */}
+            <form onSubmit={handleAddTask} className="mb-6 space-y-3 bg-zinc-950/50 border border-zinc-900 p-3 rounded-lg">
+              <input
+                type="text"
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                placeholder="New follow-up task..."
+                className="w-full bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={taskDueDate}
+                  onChange={(e) => setTaskDueDate(e.target.value)}
+                  className="flex-1 bg-zinc-950 border border-zinc-900 text-[10px] text-zinc-500 rounded px-2 py-1 outline-none focus:border-blue-500"
+                />
+                <select
+                  value={taskPriority}
+                  onChange={(e) => setTaskPriority(e.target.value as LuxorTask['priority'])}
+                  className="bg-zinc-950 border border-zinc-900 text-[10px] text-zinc-500 rounded px-2 py-1 outline-none focus:border-blue-500"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={submittingTask || !taskTitle.trim()}
+                className="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] uppercase tracking-widest disabled:opacity-40"
+              >
+                Add Task
+              </button>
+            </form>
+
+            {tasks.length === 0 ? (
+              <p className="text-center py-4 text-xs text-zinc-600">No follow-up tasks currently assigned.</p>
+            ) : (
+              <div className="space-y-3 max-h-[300px] overflow-y-auto portal-scrollbar">
+                {tasks.map((task) => {
+                  const isCompleted = task.status === 'completed'
+                  let prioColor = 'text-zinc-500 bg-zinc-500/5'
+                  if (task.priority === 'high') prioColor = 'text-amber-500 bg-amber-500/5 border-amber-500/10'
+                  else if (task.priority === 'urgent') prioColor = 'text-red-500 bg-red-500/5 border-red-500/10 animate-pulse'
+
+                  return (
+                    <div key={task.id} className="flex items-start justify-between gap-3 p-3 border border-zinc-900 rounded-lg hover:border-zinc-800 transition-colors">
+                      <button
+                        onClick={() => handleToggleTask(task)}
+                        className="p-0.5 rounded text-zinc-500 hover:text-blue-500 transition-colors mt-0.5"
+                      >
+                        {isCompleted ? (
+                          <CheckCircle2 size={16} className="text-emerald-500" />
+                        ) : (
+                          <Circle size={16} className="text-zinc-700" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-bold text-white/95 truncate leading-tight ${isCompleted ? 'line-through text-zinc-600 font-medium' : ''}`}>
+                          {task.title}
+                        </p>
+                        {task.due_date && (
+                          <p className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center gap-1">
+                            <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${prioColor}`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Invoices List Card */}
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
+            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+              <span className="flex items-center gap-2.5">
+                <FileText size={16} className="text-zinc-500" />
+                Invoices & Revenue
+              </span>
+              <button
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="text-[10px] font-black uppercase text-blue-500 tracking-wider flex items-center gap-1 hover:text-blue-400"
+              >
+                <Plus size={12} /> New Invoice
+              </button>
+            </h3>
+
+            {invoices.length === 0 ? (
+              <p className="text-center py-4 text-xs text-zinc-600">No invoice records generated yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {invoices.map((inv) => (
+                  <div key={inv.id} className="p-4 border border-zinc-900 rounded-xl hover:border-zinc-800 transition-colors flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{inv.id.slice(0, 8).toUpperCase()}</p>
+                      <p className="text-sm font-mono font-bold text-white mt-1">${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      {inv.due_date && <p className="text-[10px] text-zinc-600 mt-1">Due: {new Date(inv.due_date).toLocaleDateString()}</p>}
+                    </div>
+                    <PortalStatusBadge status={inv.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Invoice drafting modal */}
+      {isInvoiceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsInvoiceModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-xl rounded-2xl border border-zinc-900 bg-[#080706] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Draft Event Invoice</h3>
+              <button onClick={() => setIsInvoiceModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
+                Close
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateInvoice} className="flex-1 overflow-y-auto p-6 space-y-4 portal-scrollbar bg-[#080706]">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Invoice Description / Summary</label>
+                <input
+                  type="text"
+                  required
+                  value={invoiceDesc}
+                  onChange={(e) => setInvoiceDesc(e.target.value)}
+                  placeholder="e.g. Wedding Booking & Reception fee"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Client Name</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={lead.full_name}
+                    className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-500 rounded px-3 py-2 outline-none cursor-not-allowed"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Due Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={invoiceDueDate}
+                    onChange={(e) => setInvoiceDueDate(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Line Items builder */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Line Items</label>
+                  <button
+                    type="button"
+                    onClick={addInvoiceItem}
+                    className="text-[9px] font-black uppercase text-blue-500 tracking-wider flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add Row
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {invoiceItems.map((item, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        required
+                        value={item.description}
+                        onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
+                        placeholder="Item description..."
+                        className="flex-1 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={item.quantity}
+                        onChange={(e) => handleInvoiceItemChange(index, 'quantity', e.target.value)}
+                        placeholder="Qty"
+                        className="w-14 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500 text-center"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={item.unitPrice}
+                        onChange={(e) => handleInvoiceItemChange(index, 'unitPrice', e.target.value)}
+                        placeholder="Price"
+                        className="w-24 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500 text-right font-mono"
+                      />
+                      {invoiceItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeInvoiceItem(index)}
+                          className="text-zinc-600 hover:text-red-400 p-1"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial Totals */}
+              <div className="bg-zinc-950/70 border border-zinc-900 rounded-xl p-4 space-y-2 text-right">
+                <div className="flex justify-between text-xs text-zinc-500">
+                  <span>Subtotal:</span>
+                  <span className="font-mono text-zinc-300">${getInvoiceSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-xs text-zinc-500 border-b border-zinc-900/50 pb-2">
+                  <span>Sales Tax (8.25%):</span>
+                  <span className="font-mono text-zinc-300">${getInvoiceTax().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-white pt-1">
+                  <span>Total Amount Due:</span>
+                  <span className="font-mono text-[#caa24c]">${getInvoiceTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Invoice Notes / Memo</label>
+                <textarea
+                  value={invoiceNotes}
+                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  placeholder="Notes shown on invoice..."
+                  className="w-full h-16 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded p-2 outline-none focus:border-blue-500 leading-relaxed font-sans"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingInvoice}
+                className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 disabled:opacity-40"
+              >
+                Create Invoice
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </PortalPageFrame>
-  );
+  )
 }
 
-function DetailItem({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function DetailItem({
+  label,
+  value,
+  isMono = false,
+  subtext,
+}: {
+  label: string
+  value: string
+  isMono?: boolean
+  subtext?: string
+}) {
   return (
     <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4">
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
-        <span className="text-zinc-500">{icon}</span>
-        {label}
-      </div>
-      <p className="mt-2 text-sm font-semibold text-zinc-200">{value}</p>
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-1.5">{label}</div>
+      <p className={`text-xs font-bold text-zinc-200 leading-normal ${isMono ? 'font-mono' : ''}`}>
+        {value}
+      </p>
+      {subtext && <p className="text-[9px] text-[#caa24c] mt-1 font-medium italic">{subtext}</p>}
     </div>
-  );
-}
-
-function ActionLink({
-  href,
-  icon,
-  label,
-  disabled = false,
-}: {
-  href?: string;
-  icon: React.ReactNode;
-  label: string;
-  disabled?: boolean;
-}) {
-  if (disabled || !href) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/40 px-4 py-3 text-sm font-semibold text-zinc-700">
-        {icon}
-        {label}
-      </div>
-    );
-  }
-
-  return (
-    <Link href={href} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm font-semibold text-zinc-300 transition-colors hover:border-blue-500/35 hover:bg-blue-500/10 hover:text-white">
-      {icon}
-      {label}
-    </Link>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    New: "bg-blue-500/10 text-blue-500 border border-blue-500/20",
-    "Tour Requested": "bg-purple-500/10 text-purple-500 border border-purple-500/20",
-    Contacted: "bg-amber-500/10 text-amber-500 border border-amber-500/20",
-    "Tour Confirmed": "bg-orange-500/10 text-orange-500 border border-orange-500/20",
-    Booked: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-    "Closed Lost": "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20",
-  };
-
-  return (
-    <span className={`rounded-sm px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] ${styles[status] ?? styles.New}`}>
-      {status}
-    </span>
-  );
-}
-
-function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  )
 }

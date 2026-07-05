@@ -1,34 +1,151 @@
-import React from "react";
-import { 
-  Users, 
-  Search, 
-  Filter, 
-  Plus, 
-  ChevronDown, 
-  MoreHorizontal,
+'use client'
+
+import React, { useEffect, useState, useCallback } from 'react'
+import {
+  Users,
+  Search,
+  Filter,
+  Plus,
+  ChevronDown,
+  ExternalLink,
   Mail,
   Phone,
   Calendar,
-  ExternalLink,
-} from "lucide-react";
-import Link from "next/link";
-import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
-import { LuxorInquiry } from "@/lib/luxorInquiryTypes";
-import { PortalPageFrame, PortalPageHeader, PortalStickyTable, PortalStickyThead, PortalTableCard } from "@/components/portal/PortalUI";
+  MoreHorizontal,
+  X
+} from 'lucide-react'
+import Link from 'next/link'
+import { LuxorInquiry, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import {
+  PortalPageFrame,
+  PortalPageHeader,
+  PortalStickyTable,
+  PortalStickyThead,
+  PortalTableCard,
+  PortalStatusBadge,
+  PortalModal
+} from '@/components/portal/PortalUI'
 
-export default async function LeadsPage() {
-  let leads: LuxorInquiry[] = [];
-  let loadError: string | null = null;
+export default function LeadsPage() {
+  const [leads, setLeads] = useState<LuxorInquiry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Search & Filter State
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
 
-  try {
-    leads = await listLuxorInquiries(75);
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : "Unable to load Luxor inquiries.";
+  // New Lead Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newLeadName, setNewLeadName] = useState('')
+  const [newLeadEmail, setNewLeadEmail] = useState('')
+  const [newLeadPhone, setNewLeadPhone] = useState('')
+  const [newLeadEventType, setNewLeadEventType] = useState('Wedding')
+  const [newLeadGuestCount, setNewLeadGuestCount] = useState('')
+  const [newLeadTargetDate, setNewLeadTargetDate] = useState('')
+  const [newLeadMessage, setNewLeadMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/inquiries')
+      if (!res.ok) throw new Error('Failed to load inquiries.')
+      const data = await res.json()
+      setLeads(data)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Unable to load inquiries.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchLeads()
+  }, [fetchLeads])
+
+  const handleCreateLead = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newLeadName.trim()) return
+
+    try {
+      setSubmitting(true)
+      const payload: LuxorInquiryInput = {
+        fullName: newLeadName,
+        email: newLeadEmail || undefined,
+        phone: newLeadPhone || undefined,
+        eventType: newLeadEventType,
+        guestCount: newLeadGuestCount || undefined,
+        targetDate: newLeadTargetDate || undefined,
+        message: newLeadMessage || undefined,
+        source: 'portal_manual',
+        flow: 'manual_entry',
+        pagePath: '/portal/leads',
+      }
+
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to create lead.')
+      }
+
+      setIsModalOpen(false)
+      // Reset form
+      setNewLeadName('')
+      setNewLeadEmail('')
+      setNewLeadPhone('')
+      setNewLeadEventType('Wedding')
+      setNewLeadGuestCount('')
+      setNewLeadTargetDate('')
+      setNewLeadMessage('')
+      
+      // Reload inquiries
+      fetchLeads()
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to create lead.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const tourRequests = leads.filter((lead) => lead.status === "tour_requested").length;
-  const newLeads = leads.filter((lead) => lead.status === "new").length;
-  const missingContact = leads.filter((lead) => !lead.email && !lead.phone).length;
+  // Filter & Sort Inquiries
+  const filteredLeads = leads.filter((lead) => {
+    const matchesSearch =
+      lead.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (lead.phone && lead.phone.includes(searchTerm))
+
+    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter
+
+    return matchesSearch && matchesStatus
+  })
+
+  const sortedLeads = [...filteredLeads].sort((a, b) => {
+    if (sortBy === 'name') {
+      return a.full_name.localeCompare(b.full_name)
+    }
+    if (sortBy === 'guests') {
+      return (b.guest_count || 0) - (a.guest_count || 0)
+    }
+    // Default: recently active (created_at desc)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  // Computed Metrics
+  const totalCount = sortedLeads.length
+  const tourRequests = leads.filter((l) => l.status === 'tour_requested').length
+  const newLeadsCount = leads.filter((l) => l.status === 'new').length
+  const missingContact = leads.filter((l) => !l.email && !l.phone).length
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -39,16 +156,30 @@ export default async function LeadsPage() {
         actions={
           <div className="flex w-full flex-col items-stretch gap-3 xl:w-auto xl:items-end">
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-              <LeadMetric label="Live inquiries" value={String(leads.length)} detail="Forms and chat" />
-              <LeadMetric label="Tour requests" value={String(tourRequests)} detail="Need confirmation" tone="gold" />
-              <LeadMetric label="New leads" value={String(newLeads)} detail={missingContact ? `${missingContact} missing contact` : "Ready for follow-up"} tone="green" />
+              <LeadMetric label="Live Inquiries" value={String(leads.length)} detail="Forms and chat" />
+              <LeadMetric label="Tour Requests" value={String(tourRequests)} detail="Need confirmation" tone="gold" />
+              <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <button className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-sm font-semibold text-zinc-300 hover:bg-zinc-800 transition-all">
-                <Filter size={16} /> Filters
-              </button>
-              <button className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-sm font-bold text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20">
-                <Plus size={16} /> New Lead
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-zinc-300 focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Statuses</option>
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="tour_requested">Tour Requested</option>
+                <option value="tour_confirmed">Tour Confirmed</option>
+                <option value="proposal_sent">Proposal Sent</option>
+                <option value="booked">Booked (Won)</option>
+                <option value="closed_lost">Closed Lost</option>
+              </select>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
+              >
+                <Plus size={14} /> New Lead
               </button>
             </div>
           </div>
@@ -57,130 +188,267 @@ export default async function LeadsPage() {
 
       <PortalTableCard
         controls={
-        <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-          <div className="relative w-full md:w-96">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-            <input 
-              type="text" 
-              placeholder="Search leads by name, email, or company..." 
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-medium placeholder:text-zinc-700"
-            />
-          </div>
-          <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
-            <span className="text-zinc-600">Sort by:</span>
-            <button className="flex items-center gap-1 text-zinc-300 hover:text-white transition-colors">
-              Recently Active <ChevronDown size={14} />
-            </button>
-          </div>
-        </div>
-        }
-        footer={
-          <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-600 tracking-widest">
-            <p>Showing <span className="text-zinc-400">{leads.length}</span> live Luxor inquiries</p>
-            <div className="flex gap-2">
-              <button className="px-3 py-1.5 border border-zinc-800 rounded hover:bg-zinc-900 disabled:opacity-30">Prev</button>
-              <button className="px-3 py-1.5 border border-zinc-800 rounded hover:bg-zinc-900">Next</button>
+          <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+            <div className="relative w-full md:w-96">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search leads by name, email, or phone..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-medium placeholder:text-zinc-700"
+              />
+            </div>
+            <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest relative">
+              <span className="text-zinc-600">Sort by:</span>
+              <button
+                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                className="flex items-center gap-1 text-zinc-300 hover:text-white transition-colors"
+              >
+                {sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'} <ChevronDown size={14} />
+              </button>
+              {sortDropdownOpen && (
+                <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-lg shadow-xl p-1.5 min-w-[120px] space-y-1">
+                  <button
+                    onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
+                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                  >
+                    Recently Active
+                  </button>
+                  <button
+                    onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
+                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                  >
+                    Name
+                  </button>
+                  <button
+                    onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
+                    className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded"
+                  >
+                    Guest Count
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         }
+        footer={
+          <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-600 tracking-widest">
+            <p>
+              Showing <span className="text-zinc-400">{totalCount}</span> live Luxor inquiries
+            </p>
+          </div>
+        }
       >
-          <PortalStickyTable minWidth="1060px">
-            <PortalStickyThead>
-              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em]">
-                <th className="px-8 py-5">Full Name & ID</th>
-                <th className="px-6 py-5">Status</th>
-                <th className="px-6 py-5">Contract Value</th>
-                <th className="px-6 py-5">Last Touch</th>
-                <th className="px-6 py-5">Channel</th>
-                <th className="px-8 py-5 text-right">Engagement</th>
+        <PortalStickyTable minWidth="1060px">
+          <PortalStickyThead>
+            <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em]">
+              <th className="px-8 py-5">Full Name & Contact</th>
+              <th className="px-6 py-5">Status</th>
+              <th className="px-6 py-5">Event Parameters</th>
+              <th className="px-6 py-5">Intake Date</th>
+              <th className="px-6 py-5">Source Node</th>
+              <th className="px-8 py-5 text-right">Engagement</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-zinc-900/30">
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
+                  FETCHING RECORDS...
+                </td>
               </tr>
-            </PortalStickyThead>
-            <tbody className="divide-y divide-zinc-900/30">
-              {loadError ? (
-                <tr>
-                  <td colSpan={6} className="px-8 py-12 text-sm text-red-300">
-                    {loadError}
-                  </td>
-                </tr>
-              ) : leads.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500">
-                    <div className="max-w-xl">
-                      <p className="text-base font-semibold text-zinc-300">No Luxor inquiries yet.</p>
-                      <p className="mt-2 leading-6">New public booking requests will appear here as soon as a visitor submits the form or chat tour request.</p>
-                      <Link href="/tour" className="mt-5 inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/24 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#f1d27a] transition-colors hover:bg-[#caa24c]/16">
-                        Check tour funnel <ExternalLink size={12} />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ) : leads.map((lead) => (
+            ) : error ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-red-300">
+                  {error}
+                </td>
+              </tr>
+            ) : sortedLeads.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500">
+                  <div className="max-w-xl">
+                    <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
+                    <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              sortedLeads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
                   <td className="px-8 py-6">
-                    <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60">
+                    <Link
+                      href={`/portal/leads/${lead.id}`}
+                      className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                    >
                       <div className="relative">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
                           {getInitials(lead.full_name)}
                         </div>
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-black" title="New inquiry" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">{lead.full_name}</p>
-                        <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">{lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}</p>
+                        <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">
+                          {lead.full_name}
+                        </p>
+                        <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
+                          {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
+                        </p>
                       </div>
                     </Link>
                   </td>
                   <td className="px-6 py-6 font-mono">
-                    <StatusBadge status={formatStatus(lead.status)} />
+                    <PortalStatusBadge status={lead.status} />
                   </td>
-                  <td className="px-6 py-6 font-mono text-sm group-hover:text-blue-400 transition-colors">
-                    {lead.guest_count ? `${lead.guest_count} guests` : "Count needed"}
+                  <td className="px-6 py-6 font-mono text-xs text-zinc-300">
+                    <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
+                    <div className="text-zinc-500 mt-1">{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count needed'}</div>
                   </td>
                   <td className="px-6 py-6">
                     <div className="flex items-start flex-col">
                       <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
-                      <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-tighter">{lead.preferred_tour_date ? `Tour ${lead.preferred_tour_date}` : lead.target_date ?? "Date needed"}</span>
+                      <span className="text-[10px] text-[#caa24c] font-medium uppercase tracking-tighter mt-1">
+                        {lead.target_date || 'Date requested'}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-6">
-                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{lead.source.replaceAll("_", " ")}</span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{lead.source.replaceAll('_', ' ')}</span>
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
-                      <Link href={`/portal/leads/${lead.id}`} className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800" title="Open Client">
+                      <Link
+                        href={`/portal/leads/${lead.id}`}
+                        className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800"
+                        title="Open Dossier"
+                      >
                         <ExternalLink size={14} />
                       </Link>
-                      <ActionButton icon={<Mail size={14} />} tooltip="Send Email" />
-                      <ActionButton icon={<Phone size={14} />} tooltip="Call Lead" />
-                      <ActionButton icon={<Calendar size={14} />} tooltip="Schedule Tour" />
-                      <ActionButton icon={<MoreHorizontal size={14} />} tooltip="More" />
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </PortalStickyTable>
+              ))
+            )}
+          </tbody>
+        </PortalStickyTable>
       </PortalTableCard>
+
+      {/* Manual Lead Addition Modal */}
+      {isModalOpen && (
+        <PortalModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add New Client / Lead">
+          <form onSubmit={handleCreateLead} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Full Name</label>
+              <input
+                type="text"
+                required
+                value={newLeadName}
+                onChange={(e) => setNewLeadName(e.target.value)}
+                placeholder="Client name..."
+                className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Email Address</label>
+                <input
+                  type="email"
+                  value={newLeadEmail}
+                  onChange={(e) => setNewLeadEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Phone Number</label>
+                <input
+                  type="text"
+                  value={newLeadPhone}
+                  onChange={(e) => setNewLeadPhone(e.target.value)}
+                  placeholder="214-555-0199"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Event Type</label>
+                <select
+                  value={newLeadEventType}
+                  onChange={(e) => setNewLeadEventType(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                >
+                  <option value="Wedding">Wedding</option>
+                  <option value="Quinceañera">Quinceañera</option>
+                  <option value="Baby shower">Baby Shower</option>
+                  <option value="Birthday">Birthday</option>
+                  <option value="Corporate event">Corporate</option>
+                  <option value="Private celebration">Celebration</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Guest Count</label>
+                <input
+                  type="number"
+                  value={newLeadGuestCount}
+                  onChange={(e) => setNewLeadGuestCount(e.target.value)}
+                  placeholder="200"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500 text-center"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Target Month/Date</label>
+                <input
+                  type="text"
+                  value={newLeadTargetDate}
+                  onChange={(e) => setNewLeadTargetDate(e.target.value)}
+                  placeholder="Oct 2026"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Initial Inquiry Details / Message</label>
+              <textarea
+                value={newLeadMessage}
+                onChange={(e) => setNewLeadMessage(e.target.value)}
+                placeholder="Include setup, package needs, or specific booking parameters..."
+                className="w-full h-20 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded p-2 outline-none focus:border-blue-500 leading-relaxed font-sans"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 disabled:opacity-40"
+            >
+              Add Client Lead
+            </button>
+          </form>
+        </PortalModal>
+      )}
     </PortalPageFrame>
-  );
+  )
 }
 
 function LeadMetric({
   label,
   value,
   detail,
-  tone = "blue",
+  tone = 'blue',
 }: {
   label: string
   value: string
   detail: string
-  tone?: "blue" | "gold" | "green"
+  tone?: 'blue' | 'gold' | 'green'
 }) {
   const tones = {
-    blue: "text-blue-400 border-blue-500/15 bg-blue-500/5",
-    gold: "text-[#f1d27a] border-[#caa24c]/18 bg-[#caa24c]/8",
-    green: "text-emerald-400 border-emerald-500/15 bg-emerald-500/5",
-  };
+    blue: 'text-blue-400 border-blue-500/15 bg-blue-500/5',
+    gold: 'text-[#f1d27a] border-[#caa24c]/18 bg-[#caa24c]/8',
+    green: 'text-emerald-400 border-emerald-500/15 bg-emerald-500/5',
+  }
 
   return (
     <div className="rounded-xl border border-[#caa24c]/10 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
@@ -190,59 +458,27 @@ function LeadMetric({
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
         <p className="font-mono text-2xl font-bold text-white">{value}</p>
-        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-zinc-500">{detail}</p>
+        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[#d7c29a]/60">{detail}</p>
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    "New": "bg-blue-500/10 text-blue-500 border border-blue-500/20",
-    "Tour Requested": "bg-purple-500/10 text-purple-500 border border-purple-500/20",
-    "Contacted": "bg-amber-500/10 text-amber-500 border border-amber-500/20",
-    "Tour Confirmed": "bg-orange-500/10 text-orange-500 border border-orange-500/20",
-    "Booked": "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-    "Closed Lost": "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20",
-  };
-
-  return (
-    <span className={`px-2.5 py-1 rounded-sm text-[9px] font-bold uppercase tracking-[0.1em] ${styles[status] ?? styles.New}`}>
-      {status}
-    </span>
-  );
+  )
 }
 
 function getInitials(name: string) {
   return name
-    .split(" ")
+    .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
-function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+    .join('')
+    .toUpperCase()
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function ActionButton({ icon, tooltip }: { icon: React.ReactNode; tooltip: string }) {
-  return (
-    <button className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800" title={tooltip}>
-      {icon}
-    </button>
-  );
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
 }

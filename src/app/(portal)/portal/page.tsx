@@ -11,12 +11,44 @@ import {
   Activity,
   ChevronRight,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  DollarSign
 } from "lucide-react";
 import Link from "next/link";
-import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard } from "@/components/portal/PortalUI";
+import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
+import { listInvoices } from "@/lib/luxorInvoicesServer";
+import { listRecentNotes } from "@/lib/luxorNotesServer";
+import { LuxorInquiry, LuxorInvoice, LuxorNote } from "@/lib/luxorInquiryTypes";
+import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard, PortalStatusBadge } from "@/components/portal/PortalUI";
 
-export default function PortalOverview() {
+export default async function PortalOverview() {
+  let leads: LuxorInquiry[] = [];
+  let invoices: LuxorInvoice[] = [];
+  let recentNotes: LuxorNote[] = [];
+  let loadError: string | null = null;
+
+
+  try {
+    leads = await listLuxorInquiries(100);
+    invoices = await listInvoices(100);
+    recentNotes = await listRecentNotes(5);
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
+  }
+
+  // Calculations
+  const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+  const totalRevenue = paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0);
+
+  const bookedLeads = leads.filter(l => l.status === 'booked');
+  const conversionRate = leads.length > 0 ? (bookedLeads.length / leads.length) * 100 : 0;
+
+  const activeLeads = leads.filter(l => l.status !== 'booked' && l.status !== 'closed_lost');
+
+  // Count upcoming tours
+  const todayStr = new Date().toISOString().split('T')[0];
+  const upcomingEvents = leads.filter(l => l.preferred_tour_date && l.preferred_tour_date >= todayStr);
+
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden group/portal">
       {/* Page Header */}
@@ -41,37 +73,43 @@ export default function PortalOverview() {
         }
       />
 
+      {loadError && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400">
+          Telemetry Warning: {loadError} (Running in Offline/Fallback Simulation)
+        </div>
+      )}
+
       {/* Metric Grid */}
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
         <MetricCard 
           label="Total Revenue" 
-          value="$128,430.00" 
-          change="+12.5%" 
+          value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          change="+100%" 
           trend="up" 
-          icon={<Euro size={16} />} 
+          icon={<DollarSign size={16} />} 
           color="blue"
         />
         <MetricCard 
           label="Conversion Rate" 
-          value="18.2%" 
-          change="+2.1%" 
-          trend="up" 
+          value={`${conversionRate.toFixed(1)}%`} 
+          change={`${bookedLeads.length} won`} 
+          trend={conversionRate > 0 ? "up" : "neutral"} 
           icon={<TrendingUp size={16} />} 
           color="green"
         />
         <MetricCard 
           label="Active Leads" 
-          value="48" 
-          change="-3.5%" 
-          trend="down" 
+          value={String(activeLeads.length)} 
+          change="Real-time" 
+          trend="neutral" 
           icon={<Users size={16} />} 
           color="orange"
         />
         <MetricCard 
           label="Upcoming Events" 
-          value="12" 
-          change="+0" 
-          trend="neutral" 
+          value={String(upcomingEvents.length)} 
+          change="Tour dates" 
+          trend="up" 
           icon={<Calendar size={16} />} 
           color="purple"
         />
@@ -88,62 +126,70 @@ export default function PortalOverview() {
               <Activity size={18} className="text-blue-500" />
               <h3 className="font-semibold text-white/90">Leads Pipeline Activity</h3>
             </div>
-            <button className="text-xs font-semibold text-blue-500 hover:text-blue-400 transition-colors uppercase tracking-widest flex items-center gap-1">
+            <Link href="/portal/leads" className="text-xs font-semibold text-blue-500 hover:text-blue-400 transition-colors uppercase tracking-widest flex items-center gap-1">
               View All <ChevronRight size={14} />
-            </button>
+            </Link>
           </div>
           }
         >
-          
-            <PortalStickyTable minWidth="820px">
-              <PortalStickyThead>
-                <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest border-b border-zinc-900/50">
-                  <th className="px-6 py-4">Lead Source</th>
-                  <th className="px-6 py-4">Contact</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Est. Value</th>
-                  <th className="px-6 py-4 text-right">Action</th>
+          <PortalStickyTable minWidth="820px">
+            <PortalStickyThead>
+              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest border-b border-zinc-900/50">
+                <th className="px-6 py-4">Lead Source</th>
+                <th className="px-6 py-4">Contact</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Parameters</th>
+                <th className="px-6 py-4 text-right">Action</th>
+              </tr>
+            </PortalStickyThead>
+            <tbody className="divide-y divide-zinc-900/30">
+              {leads.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
+                    NO ACTIVE INQUIRIES REGISTERED
+                  </td>
                 </tr>
-              </PortalStickyThead>
-              <tbody className="divide-y divide-zinc-900/30">
-                <LeadRow 
-                  source="Web Form" 
-                  name="Marcus Thorne" 
-                  email="marcus@example.com"
-                  status="Qualified" 
-                  value="$8,500.00" 
-                  statusColor="bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                />
-                <LeadRow 
-                  source="Instagram Ads" 
-                  name="Sarah J. Williams" 
-                  email="sarah.w@example.com"
-                  status="Negotiation" 
-                  value="$12,200.00" 
-                  statusColor="bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                />
-                <LeadRow 
-                  source="Referral" 
-                  name="David Miller" 
-                  email="d.miller@example.com"
-                  status="Proposing" 
-                  value="$5,400.00" 
-                  statusColor="bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                />
-                <LeadRow 
-                  source="Direct Mail" 
-                  name="Elena Petrova" 
-                  email="elena_p@example.com"
-                  status="Closed Lead" 
-                  value="$15,000.00" 
-                  statusColor="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                />
-              </tbody>
-            </PortalStickyTable>
+              ) : (
+                leads.slice(0, 5).map((lead) => (
+                  <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500 group-hover:bg-zinc-800 group-hover:text-blue-500 transition-colors">
+                          {lead.source[0]?.toUpperCase() || 'W'}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white leading-none mb-1 uppercase tracking-widest">{lead.source.replaceAll('_', ' ')}</p>
+                          <p className="text-[10px] text-zinc-500 font-medium">Inquiry intake</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div>
+                        <p className="text-sm font-semibold text-white/90 leading-none mb-1 group-hover:translate-x-1 transition-transform">{lead.full_name}</p>
+                        <p className="text-[10px] text-zinc-500 font-medium">{lead.email || lead.phone || 'No contact details'}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <PortalStatusBadge status={lead.status} />
+                    </td>
+                    <td className="px-6 py-5 text-zinc-400 font-mono text-xs">
+                      <span className="text-zinc-300 font-bold block">{lead.event_type || 'Wedding'}</span>
+                      <span className="text-zinc-500 text-[10px] mt-0.5">{lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</span>
+                    </td>
+                    <td className="px-6 py-5 text-right">
+                      <Link href={`/portal/leads/${lead.id}`} className="inline-flex p-2 transition-colors hover:bg-zinc-800 rounded-md text-zinc-600 hover:text-zinc-300">
+                        <ExternalLink size={14} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </PortalStickyTable>
         </PortalTableCard>
 
-        {/* Action Center */}
-        <div className="space-y-8">
+        {/* Action Center & Recent Notes */}
+        <div className="space-y-6">
           {/* Quick Actions */}
           <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl">
             <h3 className="font-semibold text-white/90 mb-6 flex items-center gap-3">
@@ -151,26 +197,55 @@ export default function PortalOverview() {
               Quick Actions
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              <QuickActionButton icon={<Mail size={16} />} label="Send Campaign" />
-              <QuickActionButton icon={<Euro size={16} />} label="Draft Invoice" />
-              <QuickActionButton icon={<Users size={16} />} label="Add Contact" />
-              <QuickActionButton icon={<Calendar size={16} />} label="Record Tour" />
+              <Link href="/portal/marketing" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+                  <Mail size={16} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Marketing</p>
+              </Link>
+              <Link href="/portal/invoices" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+                  <Euro size={16} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Invoices</p>
+              </Link>
+              <Link href="/portal/leads" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+                  <Users size={16} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Add Lead</p>
+              </Link>
+              <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
+                  <Calendar size={16} />
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Tours Calendar</p>
+              </Link>
             </div>
           </div>
 
-          {/* System Performance Status */}
+          {/* Activity feed / telemetry hybrid */}
           <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl overflow-hidden relative">
-            {/* Background Glow */}
             <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-blue-600/5 blur-[120px] rounded-full pointer-events-none" />
             
-            <h3 className="font-semibold text-white/90 mb-6 flex items-center gap-3">
+            <h3 className="font-semibold text-white/90 mb-5 flex items-center gap-3">
               <Activity size={18} className="text-zinc-400" />
-              System Telemetry
+              Recent Workspace Updates
             </h3>
             <div className="space-y-4 relative z-10">
-              <StatProgressBar label="CRM Fulfillment Rate" value={98.2} />
-              <StatProgressBar label="Server Response (API)" value={14} unit="ms" />
-              <StatProgressBar label="Mail Delivery Score" value={99.9} />
+              {recentNotes.length === 0 ? (
+                <p className="text-xs text-zinc-500 italic">No notes or status log events recorded recently.</p>
+              ) : (
+                recentNotes.map((note) => (
+                  <div key={note.id} className="border-b border-zinc-900/60 pb-3 last:border-b-0 last:pb-0">
+                    <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
+                      <span>{note.author}</span>
+                      <span>{new Date(note.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-xs text-zinc-300 line-clamp-2 leading-relaxed">{note.content}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -215,80 +290,6 @@ function MetricCard({ label, value, change, trend, icon, color }: {
         <h4 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left duration-300">
           {value}
         </h4>
-      </div>
-    </div>
-  );
-}
-
-function LeadRow({ source, name, email, status, value, statusColor }: { 
-  source: string; 
-  name: string; 
-  email: string;
-  status: string; 
-  value: string; 
-  statusColor: string;
-}) {
-  return (
-    <tr className="hover:bg-zinc-900/40 transition-colors group">
-      <td className="px-6 py-5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500 group-hover:bg-zinc-800 group-hover:text-blue-500 transition-colors">
-            {source[0]}
-          </div>
-          <div>
-            <p className="text-xs font-bold text-white leading-none mb-1 uppercase tracking-widest">{source}</p>
-            <p className="text-[10px] text-zinc-500 font-medium">Auto-Ingest v2.1</p>
-          </div>
-        </div>
-      </td>
-      <td className="px-6 py-5">
-        <div>
-          <p className="text-sm font-semibold text-white/90 leading-none mb-1 group-hover:translate-x-1 transition-transform">{name}</p>
-          <p className="text-[10px] text-zinc-500 font-medium">{email}</p>
-        </div>
-      </td>
-      <td className="px-6 py-5">
-        <span className={`text-[9px] uppercase font-bold tracking-[0.1em] px-2.5 py-1 rounded-sm ${statusColor}`}>
-          {status}
-        </span>
-      </td>
-      <td className="px-6 py-5 text-zinc-400 font-mono text-sm group-hover:text-white transition-colors">
-        {value}
-      </td>
-      <td className="px-6 py-5 text-right">
-        <button className="p-2 transition-colors hover:bg-zinc-800 rounded-md">
-          <MoreVertical size={16} className="text-zinc-600 hover:text-zinc-300" />
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function QuickActionButton({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <button className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-105 transition-all shadow-lg group">
-      <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-inner">
-        {icon}
-      </div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">{label}</p>
-    </button>
-  );
-}
-
-function StatProgressBar({ label, value, unit = "%" }: { label: string; value: number; unit?: string }) {
-  return (
-    <div className="space-y-1.5 group/bar">
-      <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
-        <span className="text-zinc-500 group-hover/bar:text-zinc-300 transition-colors">{label}</span>
-        <span className="text-zinc-400 font-mono">
-          {value}{unit}
-        </span>
-      </div>
-      <div className="h-1 w-full bg-zinc-900 rounded-full overflow-hidden">
-        <div 
-          className="h-full bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.4)] transition-all duration-1000 ease-out group-hover/bar:bg-blue-500" 
-          style={{ width: `${value > 100 ? 100 : value}%` }}
-        />
       </div>
     </div>
   );

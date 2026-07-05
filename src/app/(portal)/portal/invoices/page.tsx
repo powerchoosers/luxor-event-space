@@ -1,23 +1,94 @@
-import React from "react";
-import { 
-  FileText, 
-  Search, 
-  Download, 
-  Printer, 
-  MoreVertical, 
+'use client'
+
+import React, { useEffect, useState } from 'react'
+import {
+  FileText,
+  Search,
+  Download,
+  Printer,
+  MoreVertical,
   Send,
-  Plus
-} from "lucide-react";
-import { PortalPageFrame, PortalPageHeader, PortalStickyTable, PortalStickyThead, PortalTableCard } from "@/components/portal/PortalUI";
+  Plus,
+  ArrowRight,
+  ExternalLink,
+  DollarSign
+} from 'lucide-react'
+import Link from 'next/link'
+import { LuxorInvoice } from '@/lib/luxorInquiryTypes'
+import {
+  PortalPageFrame,
+  PortalPageHeader,
+  PortalStickyTable,
+  PortalStickyThead,
+  PortalTableCard,
+  PortalStatusBadge
+} from '@/components/portal/PortalUI'
 
 export default function InvoicesPage() {
-  const invoices = [
-    { id: "INV-2984", client: "Alexandra Chen", project: "Grand Hall Booking", amount: "$4,500.00", status: "Paid", date: "Apr 2, 2026", due: "Apr 15, 2026" },
-    { id: "INV-2985", client: "Robert Fox", project: "Corporate Summit", amount: "$12,200.00", status: "Pending", date: "Apr 4, 2026", due: "Apr 18, 2026" },
-    { id: "INV-2986", client: "Fox Capital", project: "VIP Catering", amount: "$2,800.00", status: "Overdue", date: "Mar 28, 2026", due: "Apr 1, 2026" },
-    { id: "INV-2987", client: "Jane Cooper", project: "Wedding Social", amount: "$8,000.00", status: "Draft", date: "Apr 5, 2026", due: "Apr 20, 2026" },
-    { id: "INV-2842", client: "Cody Fisher", project: "Studio Rentals", amount: "$15,000.00", status: "Paid", date: "Mar 25, 2026", due: "Apr 15, 2026" },
-  ];
+  const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/invoices')
+      if (!res.ok) throw new Error('Failed to load invoices.')
+      const data = await res.json()
+      setInvoices(data)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch invoices.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchInvoices()
+  }, [])
+
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          status: newStatus,
+          paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to update invoice status.')
+      const updated = await res.json()
+      setInvoices((prev) => prev.map((inv) => (inv.id === id ? updated : inv)))
+    } catch (err) {
+      console.error(err)
+      alert('Error updating status.')
+    }
+  }
+
+  // Filter invoices
+  const filteredInvoices = invoices.filter((inv) => {
+    return (
+      inv.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.event_type && inv.event_type.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+  })
+
+  // Computations
+  const paidInvoices = invoices.filter((inv) => inv.status === 'paid')
+  const netRevenue = paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+
+  const outstandingInvoices = invoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue')
+  const outstandingAR = outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+
+  const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue')
+  const overdueAR = overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -26,119 +97,165 @@ export default function InvoicesPage() {
         title="Revenue & Invoicing"
         description="Financial command center for tracking Luxor's event contract performance."
         actions={
-          <>
-           <button className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-5 py-2.5 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-all uppercase tracking-wider">
-             Financial Audit Report
-           </button>
-           <button className="flex items-center gap-2 bg-blue-600 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.15em] text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/25">
-             <Plus size={16} /> Create Invoice
-           </button>
-          </>
+          <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-450">
+            {invoices.length} total invoice records
+          </div>
         }
       />
 
       {/* Financial Health Summary */}
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3 lg:gap-6">
-         <StatsPanel label="Net Revenue (MTD)" value="$42,850.00" trend="+12.5%" />
-         <StatsPanel label="Outstanding AR" value="$18,400.00" trend="-4.2%" isNegative />
-         <StatsPanel label="Avg Collection Time" value="4.2 Days" trend="-1d" />
+        <StatsPanel
+          label="Net Revenue Paid"
+          value={`$${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          trend={`${paidInvoices.length} paid`}
+        />
+        <StatsPanel
+          label="Outstanding A/R"
+          value={`$${outstandingAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          trend={`${outstandingInvoices.length} unpaid`}
+          isNegative={outstandingAR > 0}
+        />
+        <StatsPanel
+          label="Overdue Receivables"
+          value={`$${overdueAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          trend={`${overdueInvoices.length} overdue`}
+          isNegative={overdueAR > 0}
+        />
       </div>
 
       <PortalTableCard
         controls={
-        <div className="flex items-center justify-between gap-4">
-           <div className="relative w-full md:w-96 group">
-             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 group-hover:text-blue-500 transition-colors" />
-             <input 
-              type="text" 
-              placeholder="Filter by ID, Client, or Amount..." 
-              className="w-full bg-[#080808] border border-zinc-900 rounded-lg pl-10 pr-4 py-2.5 text-xs text-zinc-400 focus:outline-none focus:border-blue-700/50 transition-all font-mono"
-             />
-           </div>
-           <div className="flex items-center gap-3">
-             <button className="p-2 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-500 transition-colors"><Download size={16} /></button>
-             <button className="p-2 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-500 transition-colors"><Printer size={16} /></button>
-           </div>
-        </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative w-full md:w-96 group">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Filter by ID, Client name, or Event type..."
+                className="w-full bg-[#080808] border border-zinc-900 rounded-lg pl-10 pr-4 py-2.5 text-xs text-zinc-400 focus:outline-none focus:border-blue-700/50 transition-all font-mono"
+              />
+            </div>
+          </div>
         }
       >
-          <PortalStickyTable minWidth="980px">
-            <PortalStickyThead>
-              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.2em] border-b border-zinc-900/50 bg-[#0c0c0c]">
-                <th className="px-8 py-5">Invoice ID</th>
-                <th className="px-6 py-5">Client Portfolio</th>
-                <th className="px-6 py-5">Value (USD)</th>
-                <th className="px-6 py-5">Issue Date</th>
-                <th className="px-6 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Fulfillment</th>
+        <PortalStickyTable minWidth="980px">
+          <PortalStickyThead>
+            <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.2em] border-b border-zinc-900/50 bg-[#0c0c0c]">
+              <th className="px-8 py-5">Invoice ID</th>
+              <th className="px-6 py-5">Client Portfolio</th>
+              <th className="px-6 py-5">Value (USD)</th>
+              <th className="px-6 py-5">Date Summary</th>
+              <th className="px-6 py-5">Fulfillment</th>
+              <th className="px-8 py-5 text-right">Lifecycle status</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-zinc-900/30">
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
+                  FETCHING LEDGER...
+                </td>
               </tr>
-            </PortalStickyThead>
-            <tbody className="divide-y divide-zinc-900/30">
-              {invoices.map((inv) => (
+            ) : error ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-red-350">
+                  {error}
+                </td>
+              </tr>
+            ) : filteredInvoices.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-550 text-center">
+                  No invoice records match search parameters.
+                </td>
+              </tr>
+            ) : (
+              filteredInvoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-zinc-900/40 transition-colors group">
-                  <td className="px-8 py-6 font-mono text-sm text-zinc-400 group-hover:text-amber-500/80 transition-colors">
-                    {inv.id}
+                  <td className="px-8 py-6 font-mono text-sm text-zinc-400 group-hover:text-[#caa24c] transition-colors">
+                    {inv.id.slice(0, 8).toUpperCase()}
                   </td>
                   <td className="px-6 py-6">
                     <div>
-                      <p className="text-sm font-semibold text-white/90 leading-none mb-1">{inv.client}</p>
-                      <p className="text-[10px] text-zinc-500 font-medium italic">{inv.project}</p>
+                      {inv.inquiry_id ? (
+                        <Link
+                          href={`/portal/leads/${inv.inquiry_id}`}
+                          className="text-sm font-semibold text-white/90 leading-none mb-1 hover:text-blue-400 inline-flex items-center gap-1.5"
+                        >
+                          {inv.client_name} <ExternalLink size={12} className="text-zinc-650" />
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-semibold text-white/90 leading-none mb-1">{inv.client_name}</p>
+                      )}
+                      <p className="text-[10px] text-zinc-500 font-medium italic mt-1">{inv.event_type || 'Custom Booking'}</p>
                     </div>
                   </td>
                   <td className="px-6 py-6 font-mono text-sm text-white/90 font-bold tracking-tight">
-                    {inv.amount}
+                    ${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-6">
                     <div className="flex flex-col">
-                      <span className="text-xs text-zinc-400 font-medium">{inv.date}</span>
-                      <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-tighter">Due: {inv.due}</span>
+                      <span className="text-xs text-zinc-400 font-medium">{new Date(inv.created_at).toLocaleDateString()}</span>
+                      <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-tighter mt-1">
+                        Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : 'Immediate'}
+                      </span>
                     </div>
                   </td>
-                  <td className="px-6 py-6 font-mono">
-                    <InvoiceStatus status={inv.status} />
+                  <td className="px-6 py-6">
+                    <PortalStatusBadge status={inv.status} />
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                       <button className="p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-600 hover:text-white transition-colors"><Send size={14} /></button>
-                       <button className="p-2 bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-600 hover:text-white transition-colors"><MoreVertical size={14} /></button>
-                    </div>
+                    <select
+                      value={inv.status}
+                      onChange={(e) => handleUpdateStatus(inv.id, e.target.value)}
+                      className="bg-zinc-950 border border-zinc-900 text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-2 py-1 rounded focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="paid">Paid</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </PortalStickyTable>
+              ))
+            )}
+          </tbody>
+        </PortalStickyTable>
       </PortalTableCard>
     </PortalPageFrame>
-  );
+  )
 }
 
-function StatsPanel({ label, value, trend, isNegative = false }: { label: string; value: string; trend: string; isNegative?: boolean }) {
+function StatsPanel({
+  label,
+  value,
+  trend,
+  isNegative = false,
+}: {
+  label: string
+  value: string
+  trend: string
+  isNegative?: boolean
+}) {
   return (
     <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl group hover:border-zinc-800 transition-all shadow-xl">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase font-black text-zinc-600 tracking-[0.2em]">{label}</p>
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-          isNegative ? 'bg-rose-500/5 text-rose-500 border-rose-500/10' : 'bg-emerald-500/5 text-emerald-500 border-emerald-500/10'
-        }`}>
+        <p className="text-[10px] uppercase font-black text-zinc-650 tracking-[0.2em]">{label}</p>
+        <span
+          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+            isNegative
+              ? 'bg-rose-500/5 text-rose-500 border-rose-500/10'
+              : 'bg-emerald-500/5 text-emerald-500 border-emerald-500/10'
+          }`}
+        >
           {trend}
         </span>
       </div>
-      <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">{value}</h3>
+      <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">
+        {value}
+      </h3>
     </div>
-  );
-}
-
-function InvoiceStatus({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    "Paid": "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-    "Pending": "bg-blue-500/10 text-blue-500 border border-blue-500/20",
-    "Overdue": "bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.1)]",
-    "Draft": "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20",
-  };
-
-  return (
-    <span className={`px-2.5 py-1 rounded-sm text-[9px] font-bold uppercase tracking-[0.1em] ${styles[status]}`}>
-      {status}
-    </span>
-  );
+  )
 }
