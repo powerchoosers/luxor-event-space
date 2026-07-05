@@ -48,7 +48,7 @@ export default async function PortalOverview() {
   const upcomingEvents = leads.filter(l => l.preferred_tour_date && l.preferred_tour_date >= todayStr);
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden group/portal">
+    <PortalPageFrame className="min-h-full group/portal">
       {/* Page Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-white/90">Portfolio Overview</h1>
