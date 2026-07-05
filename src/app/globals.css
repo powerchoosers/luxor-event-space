@@ -56,7 +56,11 @@ body[data-portal-theme='light'] {
   --portal-muted: #6f6256;
   --portal-faint: #a79584;
   --portal-border: rgba(124, 91, 36, 0.2);
-  color: var(--portal-muted);
+  color: var(--portal-text);
+  background:
+    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.12), transparent 30rem),
+    linear-gradient(180deg, #faf6ef 0%, #f1e7d8 52%, #f7f0e7 100%);
+  color-scheme: light;
 }
 
 body[data-portal-theme='light'] aside,
@@ -67,6 +71,22 @@ body[data-portal-theme='light'] .portal-surface {
   background: var(--portal-card) !important;
   border-color: var(--portal-border) !important;
   color: var(--portal-muted);
+}
+
+body[data-portal-theme='light'] .bg-\[\#050505\]\/90,
+body[data-portal-theme='light'] .bg-\[\#050505\]\/86,
+body[data-portal-theme='light'] .bg-\[\#050505\]\/75,
+body[data-portal-theme='light'] .bg-\[\#050505\],
+body[data-portal-theme='light'] .bg-\[\#080706\],
+body[data-portal-theme='light'] .bg-\[\#0b0908\],
+body[data-portal-theme='light'] .bg-\[\#0c0c0c\],
+body[data-portal-theme='light'] .bg-\[\#120d0c\]\/72,
+body[data-portal-theme='light'] .bg-\[\#120d0c\]\/70,
+body[data-portal-theme='light'] .bg-\[\#15100d\],
+body[data-portal-theme='light'] .bg-black\/40,
+body[data-portal-theme='light'] .bg-black\/60,
+body[data-portal-theme='light'] .bg-black\/30 {
+  background-color: var(--portal-card) !important;
 }
 
 body[data-portal-theme='light'] .bg-black\/40,
@@ -99,9 +119,22 @@ body[data-portal-theme='light'] .text-zinc-650 {
 body[data-portal-theme='light'] input,
 body[data-portal-theme='light'] textarea,
 body[data-portal-theme='light'] select {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
   color: var(--portal-text) !important;
   border-color: var(--portal-border) !important;
+}
+
+body[data-portal-theme='light'] .border-zinc-900,
+body[data-portal-theme='light'] .border-zinc-950,
+body[data-portal-theme='light'] .border-zinc-900\/50,
+body[data-portal-theme='light'] .border-zinc-900\/30 {
+  border-color: var(--portal-border) !important;
+}
+
+body[data-portal-theme='light'] .text-zinc-700,
+body[data-portal-theme='light'] .text-zinc-800,
+body[data-portal-theme='light'] .text-zinc-900 {
+  color: var(--portal-text) !important;
 }
 
 * {

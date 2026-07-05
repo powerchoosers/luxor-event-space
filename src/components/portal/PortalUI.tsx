@@ -25,7 +25,7 @@ export function PortalPageHeader({
     <div className="flex shrink-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          {icon ? <div className="rounded-lg border border-[#caa24c]/24 bg-[#caa24c]/10 p-2 text-[#caa24c] shadow-[0_0_20px_rgba(202,162,76,0.14)]">{icon}</div> : null}
+          {icon ? <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[#caa24c] shadow-[0_0_20px_rgba(202,162,76,0.14)]">{icon}</div> : null}
           <h1 className="text-2xl font-bold tracking-tight text-white/90 sm:text-3xl">{title}</h1>
         </div>
         <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p>
@@ -47,12 +47,12 @@ export function PortalTableCard({
   className?: string
 }) {
   return (
-    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#caa24c]/10 bg-black/40 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
-      {controls ? <div className="shrink-0 border-b border-[#caa24c]/10 bg-white/[0.02] p-4 sm:p-6">{controls}</div> : null}
+    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
+      {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-6">{controls}</div> : null}
       <div className="portal-scrollbar min-h-[22rem] flex-1 overflow-auto" data-portal-table-scroller>
         {children}
       </div>
-      {footer ? <div className="shrink-0 border-t border-[#caa24c]/10 bg-[#0c0c0c] p-4 sm:p-6">{footer}</div> : null}
+      {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-6">{footer}</div> : null}
     </section>
   )
 }
@@ -115,7 +115,7 @@ export function PortalEmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center p-10 text-center rounded-2xl border border-zinc-900 bg-zinc-950/40">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center">
       {icon ? <div className="mb-4 text-zinc-700">{icon}</div> : null}
       <h3 className="text-base font-bold text-white/90">{title}</h3>
       <p className="mt-2 max-w-md text-xs leading-5 text-zinc-500">{description}</p>
@@ -159,7 +159,7 @@ export function PortalStatusBadge({ status }: { status: string }) {
 
 export function PortalTimeline({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative border-l border-zinc-900 pl-6 space-y-6">
+    <div className="relative space-y-6 border-l border-[color:var(--portal-border)] pl-6">
       {children}
     </div>
   )
@@ -180,7 +180,7 @@ export function PortalTimelineItem({
 }) {
   return (
     <div className="relative">
-      <div className="absolute -left-[31px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border border-zinc-800 bg-[#080706] text-zinc-500 shadow-sm">
+      <div className="absolute -left-[31px] top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] shadow-sm">
         {icon ?? <div className="h-1.5 w-1.5 rounded-full bg-zinc-600" />}
       </div>
       <div>
@@ -210,11 +210,11 @@ export function PortalModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-zinc-900 bg-[#080706] shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
           <h3 className="text-sm font-bold text-white/90 uppercase tracking-widest">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all">
+          <button onClick={onClose} className="rounded-lg p-1 text-[color:var(--portal-muted)] transition-all hover:bg-black/5 hover:text-[color:var(--portal-text)]">
             <span className="text-xs font-bold">Close</span>
           </button>
         </div>
@@ -234,8 +234,8 @@ export function PortalDetailSection({
   action?: React.ReactNode
 }) {
   return (
-    <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl p-6 shadow-xl">
-      <div className="flex items-center justify-between mb-4 border-b border-zinc-900/50 pb-3">
+    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] backdrop-blur-xl p-6 shadow-xl">
+      <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">{title}</h3>
         {action}
       </div>
@@ -268,15 +268,15 @@ export function PortalSelect({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-md text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none disabled:opacity-40 disabled:hover:text-zinc-300 disabled:hover:border-zinc-800"
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[color:var(--portal-border)] focus:outline-none disabled:opacity-40 disabled:hover:text-[color:var(--portal-text)]"
       >
         <span>{selectedOption ? selectedOption.label : placeholder}</span>
-        <span className="text-zinc-550 text-[10px]">▼</span>
+        <span className="text-[10px] text-[color:var(--portal-muted)]">▼</span>
       </button>
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute left-0 right-0 mt-1.5 z-50 bg-[#080706] border border-zinc-800 rounded-md shadow-xl p-1 max-h-60 overflow-y-auto portal-scrollbar space-y-0.5">
+          <div className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl space-y-0.5">
             {options.map((opt) => {
               const isSelected = opt.value === value
               return (
@@ -290,7 +290,7 @@ export function PortalSelect({
                   className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-md transition-colors ${
                     isSelected
                       ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                      : 'text-[color:var(--portal-muted)] hover:bg-black/5 hover:text-[color:var(--portal-text)]'
                   }`}
                 >
                   {opt.label}
@@ -381,39 +381,39 @@ export function PortalDatePicker({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-900/50 border border-zinc-800 px-4 py-2.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors focus:outline-none"
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[color:var(--portal-border)] focus:outline-none"
       >
         <span>{formattedDisplay}</span>
-        <span className="text-zinc-550 text-[10px]">📅</span>
+        <span className="text-[10px] text-[color:var(--portal-muted)]">📅</span>
       </button>
       
       {isOpen && (
         <>
           <div className="fixed inset-0 z-45" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 z-50 bg-[#080706] border border-zinc-800 rounded-md p-4 shadow-2xl w-64 text-xs">
+          <div className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-xs shadow-2xl">
             {/* Header navigation */}
-            <div className="flex items-center justify-between mb-4 border-b border-zinc-900 pb-2">
+            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                className="p-1 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white transition-colors"
+                className="rounded p-1 text-[color:var(--portal-muted)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text)]"
               >
                 ◀
               </button>
-              <span className="font-bold uppercase tracking-wider text-zinc-200">
+              <span className="font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
                 {monthNames[month]} {year}
               </span>
               <button
                 type="button"
                 onClick={handleNextMonth}
-                className="p-1 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white transition-colors"
+                className="rounded p-1 text-[color:var(--portal-muted)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text)]"
               >
                 ▶
               </button>
             </div>
 
             {/* Weekday Labels */}
-            <div className="grid grid-cols-7 gap-1 text-center font-bold text-[9px] uppercase tracking-wider text-zinc-550 mb-2">
+            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
                 <span key={day}>{day}</span>
               ))}
@@ -434,10 +434,10 @@ export function PortalDatePicker({
                     onClick={() => handleSelectDay(day)}
                     className={`h-7 w-7 rounded-md font-mono flex items-center justify-center transition-all ${
                       isSelected
-                        ? 'bg-[#caa24c]/20 border border-[#caa24c]/40 text-[#f1d27a] font-bold shadow'
+                        ? 'border border-[#caa24c]/40 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                         : isToday
-                        ? 'border border-blue-500/30 text-blue-400 font-bold hover:bg-zinc-900'
-                        : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                        ? 'border border-blue-500/30 text-blue-500 font-bold hover:bg-black/5'
+                        : 'text-[color:var(--portal-text)] hover:bg-black/5 hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     {day.getDate()}

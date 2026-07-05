@@ -104,8 +104,18 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full border-r border-[#caa24c]/10 bg-[#050505]/90 backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.14),transparent_16rem)]" />
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full border-r backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
+        portalTheme === 'light'
+          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
+          : 'border-[#caa24c]/10 bg-[#050505]/90'
+      } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div
+          className={`pointer-events-none absolute inset-x-0 top-0 h-48 ${
+            portalTheme === 'light'
+              ? 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.12),transparent_16rem)]'
+              : 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.14),transparent_16rem)]'
+          }`}
+        />
         <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
           <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
             <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
@@ -136,7 +146,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(true)}
-                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/15 bg-[#120d0c]/70 text-zinc-500 transition-colors hover:border-[#caa24c]/40 hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
                 aria-label="Collapse sidebar"
                 aria-expanded="true"
               >
@@ -149,7 +159,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
             <button
               type="button"
               onClick={() => setSidebarCollapsed(false)}
-              className="mb-4 inline-flex h-10 w-10 items-center justify-center self-center rounded-lg border border-[#caa24c]/15 bg-[#120d0c]/70 text-zinc-500 transition-colors hover:border-[#caa24c]/40 hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+              className="mb-4 inline-flex h-10 w-10 items-center justify-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
               aria-label="Expand sidebar"
               aria-expanded="false"
             >
@@ -157,7 +167,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
             </button>
           ) : null}
 
-          <div className={`mb-6 overflow-hidden rounded-xl border border-[#caa24c]/16 bg-[#120d0c]/72 shadow-[inset_0_1px_0_rgba(241,210,122,0.08)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-h-0 border-transparent p-0 opacity-0' : 'max-h-44 p-4 opacity-100'}`}>
+          <div className={`mb-6 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-[inset_0_1px_0_rgba(241,210,122,0.08)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-h-0 border-transparent p-0 opacity-0' : 'max-h-44 p-4 opacity-100'}`}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#caa24c]">Website Signal</p>
             <p className="mt-2 text-xs leading-5 text-zinc-400">Tour requests from the public site flow directly into this workspace.</p>
             <Link href="/" className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:text-[#f1d27a]">
@@ -184,7 +194,11 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
       </aside>
 
       <main className={`flex h-screen flex-col transition-[padding-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-[#caa24c]/10 bg-[#050505]/75 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+        <header className={`z-40 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
+          portalTheme === 'light'
+            ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
+            : 'border-[#caa24c]/10 bg-[#050505]/75'
+        }`}>
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/portal" className="flex min-w-0 items-center rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 lg:hidden" aria-label="Luxor portal overview">
               <LuxorWordmark
@@ -197,7 +211,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
             </Link>
             
             {/* Header Search Command Bar */}
-            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border border-zinc-850 bg-zinc-950 px-3 py-1.5 sm:flex group">
+            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group" style={{ borderColor: 'var(--portal-border)' }}>
               <Search size={14} className="shrink-0 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
@@ -211,8 +225,8 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
               
               {/* Search Results Dropdown overlay */}
               {searchFocused && searchResults.length > 0 && (
-                <div className="absolute left-0 top-11 z-50 w-full rounded-xl border border-zinc-900 bg-[#080706] shadow-2xl p-2 space-y-1">
-                  <div className="text-[8px] font-black uppercase tracking-wider text-zinc-600 px-3 py-1 border-b border-zinc-950 mb-1">
+                <div className="absolute left-0 top-11 z-50 w-full rounded-xl border shadow-2xl p-2 space-y-1 bg-[color:var(--portal-card)]" style={{ borderColor: 'var(--portal-border)' }}>
+                  <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1 border-b mb-1" style={{ borderColor: 'var(--portal-border)' }}>
                     Matching Dossier Records
                   </div>
                   {searchResults.map((result) => (
@@ -236,19 +250,19 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-5">
-            <Link href="/" className="hidden items-center gap-2 rounded-lg border border-[#caa24c]/18 bg-[#120d0c]/70 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:border-[#f1d27a]/40 hover:text-[#f1d27a] md:inline-flex">
-              Public site <ExternalLink size={12} />
-            </Link>
+              <Link href="/" className="hidden items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:text-[#f1d27a] md:inline-flex">
+                Public site <ExternalLink size={12} />
+              </Link>
 
-            <button
-              type="button"
-              onClick={togglePortalTheme}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/18 bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:border-[#f1d27a]/40 hover:text-[#f1d27a]"
-              aria-label="Toggle portal theme"
-            >
-              <Moon size={12} />
-              {portalTheme === 'dark' ? 'Light' : 'Dark'}
-            </button>
+              <button
+                type="button"
+                onClick={togglePortalTheme}
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:text-[#f1d27a]"
+                aria-label="Toggle portal theme"
+              >
+                <Moon size={12} />
+                {portalTheme === 'dark' ? 'Light' : 'Dark'}
+              </button>
             
             {/* Bell Notifications */}
             <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Notifications">
@@ -277,7 +291,11 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           </div>
         </header>
 
-        <nav className="portal-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-[#caa24c]/10 bg-[#050505]/86 px-4 py-3 lg:hidden" aria-label="Portal sections">
+        <nav className={`portal-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b px-4 py-3 lg:hidden ${
+          portalTheme === 'light'
+            ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
+            : 'border-[#caa24c]/10 bg-[#050505]/86'
+        }`} aria-label="Portal sections">
           {navItems.map((item) => {
             const active = isActivePath(pathname, item.href)
             return (
@@ -297,7 +315,11 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           })}
         </nav>
 
-        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)] p-4 sm:p-6 lg:p-8">
+        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 ${
+          portalTheme === 'light'
+            ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
+            : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
+        }`}>
           <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>
