@@ -4,6 +4,19 @@ import React, { useState } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
+import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+
+const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
+  const totalMinutes = 8 * 60 + index * 30
+  const hours24 = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const suffix = hours24 >= 12 ? 'PM' : 'AM'
+  const hours12 = hours24 % 12 || 12
+  return {
+    value: `${String(hours24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+    label: `${hours12}:${String(minutes).padStart(2, '0')} ${suffix}`,
+  }
+})
 
 interface EmailPreviewProps {
   blocks: EmailBlock[]
@@ -19,12 +32,14 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
   const [sendSubject, setSendSubject] = useState(subject)
   const [campaignName, setCampaignName] = useState(subject)
   const [audienceLabel, setAudienceLabel] = useState('Manual list')
-  const [scheduledFor, setScheduledFor] = useState('')
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
   const [sendStatus, setSendStatus] = useState<SendStatus>('idle')
   const [sendMessage, setSendMessage] = useState('')
   const [copied, setCopied] = useState(false)
 
   const html = renderEmailToHtml(subject, blocks)
+  const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
 
   async function handleSend() {
     const emails = recipients
@@ -255,14 +270,25 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Schedule Time</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
-                        value={scheduledFor}
-                        onChange={(e) => setScheduledFor(e.target.value)}
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Schedule Date</label>
+                      <PortalDatePicker
+                        value={scheduledDate}
+                        onChange={setScheduledDate}
+                        className="w-full"
+                        placeholder="Pick a date"
                       />
-                      <p className="text-[10px] text-zinc-600">Leave blank to queue it now.</p>
+                      <p className="text-[10px] text-zinc-600">Choose a date first.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Schedule Time</label>
+                      <PortalSelect
+                        value={scheduledTime}
+                        onChange={setScheduledTime}
+                        className="w-full"
+                        placeholder="Pick a time"
+                        options={scheduleTimeOptions}
+                      />
+                      <p className="text-[10px] text-zinc-600">Leave both fields blank to queue it now.</p>
                     </div>
                   </div>
                 </div>
