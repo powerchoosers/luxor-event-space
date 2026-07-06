@@ -140,8 +140,10 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
-      } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
+      } ${sidebarCollapsed ? 'w-20 overflow-y-auto portal-scrollbar' : 'w-64 overflow-hidden'}`}>
+        <div className={`flex flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+          sidebarCollapsed ? 'p-4 min-h-full' : 'p-6 h-full'
+        }`}>
           <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
             <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
               {sidebarCollapsed ? (
