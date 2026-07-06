@@ -1750,6 +1750,152 @@ function DetailItem({
   )
 }
 
+function LeadStatCard({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string
+  value: string
+  detail: string
+  tone: 'blue' | 'gold' | 'green' | 'slate'
+}) {
+  const toneClasses = {
+    blue: 'border-blue-500/15 bg-blue-500/5 text-blue-400',
+    gold: 'border-[#caa24c]/18 bg-[#caa24c]/8 text-[#f1d27a]',
+    green: 'border-emerald-500/15 bg-emerald-500/5 text-emerald-400',
+    slate: 'border-zinc-800 bg-zinc-950/70 text-zinc-400',
+  }
+
+  return (
+    <div className="rounded-xl border border-zinc-900 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
+        <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${toneClasses[tone]}`}>Live</span>
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <p className="max-w-[70%] font-mono text-lg font-bold text-white leading-tight">{value}</p>
+        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[#d7c29a]/60">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+function formatLeadAge(createdAt: string) {
+  const created = new Date(createdAt).getTime()
+  if (Number.isNaN(created)) return 'Unknown'
+
+  const daysOld = Math.max(0, Math.floor((Date.now() - created) / 86_400_000))
+  if (daysOld === 0) return 'Today'
+  if (daysOld === 1) return '1 day old'
+  return `${daysOld} days old`
+}
+
+function getContactSummary(lead: LuxorInquiry) {
+  if (lead.email && lead.phone) {
+    return { label: 'Email + phone', detail: 'Ready for outreach' }
+  }
+  if (lead.email) {
+    return { label: 'Email only', detail: 'Add a phone if you get one' }
+  }
+  if (lead.phone) {
+    return { label: 'Phone only', detail: 'Email still missing' }
+  }
+  return { label: 'No contact info', detail: 'Needs a phone or email' }
+}
+
+function describeActivityEntry(entry: ActivityEntry) {
+  if (entry.kind === 'email') {
+    return entry.email.direction === 'outgoing' ? 'Email sent' : 'Email received'
+  }
+
+  if (entry.note.note_type === 'call_log') return 'Call logged'
+  if (entry.note.note_type === 'email_log') return 'Email logged'
+  if (entry.note.note_type === 'status_change') return 'Status updated'
+  return 'Note added'
+}
+
+function getLeadNextStep(lead: LuxorInquiry, latestBooking: LuxorBooking | null, latestInvoice: LuxorInvoice | null) {
+  if (lead.status === 'closed_lost') {
+    return {
+      title: 'Re-open or archive',
+      detail: 'Decide whether this should go back into the pipeline',
+    }
+  }
+
+  if (lead.status === 'new') {
+    return {
+      title: 'Reach out today',
+      detail: 'Call or email before the lead cools off',
+    }
+  }
+
+  if (lead.status === 'contacted' || lead.status === 'tour_requested') {
+    return {
+      title: 'Lock the tour',
+      detail: 'Confirm the date, time, and who is coming',
+    }
+  }
+
+  if (lead.status === 'tour_confirmed') {
+    return {
+      title: 'Send proposal',
+      detail: 'Pair pricing with a clear next step',
+    }
+  }
+
+  if (lead.status === 'proposal_sent') {
+    return {
+      title: 'Follow up',
+      detail: 'Check for questions or objections',
+    }
+  }
+
+  if (lead.status === 'booked') {
+    if (!latestBooking) {
+      return {
+        title: 'Create booking',
+        detail: 'The lead is booked, but the booking record is missing',
+      }
+    }
+
+    if (latestBooking.contract_status === 'signed') {
+      return {
+        title: 'Review booking',
+        detail: 'Contract is signed, so keep the record clean',
+      }
+    }
+
+    if (latestBooking.contract_status === 'sent') {
+      return {
+        title: 'Contract follow-up',
+        detail: 'Keep an eye on signature status',
+      }
+    }
+
+    return {
+      title: 'Send contract',
+      detail: latestInvoice ? 'Match the booking to the invoice' : 'Keep the contract moving',
+    }
+  }
+
+  return {
+    title: 'Keep momentum',
+    detail: 'Move this lead toward a booking or decision',
+  }
+}
+
+function getMostRecentBooking(bookings: LuxorBooking[]) {
+  if (bookings.length === 0) return null
+
+  return [...bookings].sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at).getTime()
+    const bTime = new Date(b.updated_at || b.created_at).getTime()
+    return bTime - aTime
+  })[0] ?? null
+}
+
 function isGrandOpeningRsvp(lead: LuxorInquiry) {
   return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
 }
