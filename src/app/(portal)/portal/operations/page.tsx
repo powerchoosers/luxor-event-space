@@ -28,8 +28,13 @@ import {
   PortalPageHeader,
   PortalTableCard,
   PortalStickyTable,
-  PortalStickyThead
+  PortalStickyThead,
+  PortalModal,
+  PortalDatePicker,
+  PortalSelect
 } from '@/components/portal/PortalUI'
+import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog } from '@/app/api/operations/route'
+import type { LuxorTask } from '@/lib/luxorInquiryTypes'
 
 type SubTab =
   | 'dashboard'
@@ -55,6 +60,47 @@ function OperationsPageContent() {
   const tabParam = searchParams.get('tab') as SubTab | null
   const activeTab = tabParam || 'dashboard'
 
+  // Database states
+  const [bills, setBills] = useState<LuxorBill[]>([])
+  const [inventory, setInventory] = useState<LuxorInventoryItem[]>([])
+  const [vendors, setVendors] = useState<LuxorVendor[]>([])
+  const [utilities, setUtilities] = useState<LuxorUtilityReading[]>([])
+  const [cleaningLogs, setCleaningLogs] = useState<LuxorCleaningLog[]>([])
+  const [maintenanceTasks, setMaintenanceTasks] = useState<LuxorTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Modals state
+  const [isBillModalOpen, setIsBillModalOpen] = useState(false)
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false)
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+
+  // Forms state
+  const [billService, setBillService] = useState('')
+  const [billProvider, setBillProvider] = useState('')
+  const [billAmount, setBillAmount] = useState('')
+  const [billDueDate, setBillDueDate] = useState('')
+  const [billFrequency, setBillFrequency] = useState('Monthly')
+
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDescription, setTaskDescription] = useState('')
+  const [taskPriority, setTaskPriority] = useState('medium')
+  const [taskDueDate, setTaskDueDate] = useState('')
+
+  const [invCategory, setInvCategory] = useState('furniture')
+  const [invName, setInvName] = useState('')
+  const [invCount, setInvCount] = useState('')
+  const [invUnit, setInvUnit] = useState('pcs')
+  const [invStatus, setInvStatus] = useState('Good')
+
+  const [vendorType, setVendorType] = useState('DJs & Music')
+  const [vendorName, setVendorName] = useState('')
+  const [vendorEmail, setVendorEmail] = useState('')
+  const [vendorPhone, setVendorPhone] = useState('')
+  const [vendorRating, setVendorRating] = useState('5.0 ⭐')
+  const [vendorCoi, setVendorCoi] = useState('true')
+
   // State for interactive features
   const [readinessTasks, setReadinessTasks] = useState([
     { id: '1', label: 'Utilities Active', checked: true },
@@ -67,32 +113,153 @@ function OperationsPageContent() {
     { id: '8', label: 'Inventory Count Pending', checked: false }
   ])
 
-  const [maintenanceTasks, setMaintenanceTasks] = useState([
-    { id: 'm1', title: 'Replace Restroom Soap Dispenser', status: 'open', priority: 'medium', assignedTo: 'Marco G.' },
-    { id: 'm2', title: 'HVAC Filter Annual Inspection', status: 'open', priority: 'high', assignedTo: 'Air-Pros LLC' },
-    { id: 'm3', title: 'Restock Paper Towels - Pantry', status: 'completed', priority: 'low', assignedTo: 'Maria S.' },
-    { id: 'm4', title: 'Emergency Exit Signs Diagnostic', status: 'open', priority: 'high', assignedTo: 'Elena Concierge' }
-  ])
+  const loadOperationsData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/operations')
+      if (!res.ok) throw new Error('Failed to load operations metrics.')
+      const payload = await res.json()
+      setBills(payload.bills || [])
+      setInventory(payload.inventory || [])
+      setVendors(payload.vendors || [])
+      setUtilities(payload.utilities || [])
+      setCleaningLogs(payload.cleaning || [])
+      setMaintenanceTasks(payload.tasks || [])
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Telemetry Alert: Operations offline.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const [furnitureCounts, setFurnitureCounts] = useState([
-    { name: 'Ghost Chairs', count: 240, target: 250, unit: 'pcs' },
-    { name: 'Round Tables', count: 20, target: 20, unit: 'pcs' },
-    { name: 'Cocktail Tables', count: 12, target: 15, unit: 'pcs' },
-    { name: 'Gold Easels', count: 4, target: 4, unit: 'pcs' }
-  ])
-
-  const [suppliesCounts, setSuppliesCounts] = useState([
-    { name: 'Toilet Paper', count: 12, target: 30, unit: 'rolls', status: 'Low' },
-    { name: 'Liquid Hand Soap', count: 4, target: 10, unit: 'bottles', status: 'Low' },
-    { name: 'Heavy Duty Trash Bags', count: 45, target: 50, unit: 'bags', status: 'Good' },
-    { name: 'Mop Heads', count: 3, target: 5, unit: 'pcs', status: 'Good' }
-  ])
+  useEffect(() => {
+    loadOperationsData()
+  }, [])
 
   const handleToggleReadinessTask = (id: string) => {
     setReadinessTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, checked: !t.checked } : t))
     )
   }
+
+  const handleAddBillSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!billService || !billAmount) return
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'bill',
+          service: billService,
+          provider: billProvider || 'Other',
+          amount: Number(billAmount),
+          due_date: billDueDate,
+          frequency: billFrequency,
+          status: 'unpaid'
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save bill.')
+      const newBill = await res.json()
+      setBills((prev) => [newBill, ...prev])
+      setIsBillModalOpen(false)
+      setBillService('')
+      setBillProvider('')
+      setBillAmount('')
+      setBillDueDate('')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save bill.')
+    }
+  }
+
+  const handleAddTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!taskTitle) return
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'task',
+          title: taskTitle,
+          description: taskDescription,
+          priority: taskPriority,
+          due_date: taskDueDate
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save ticket.')
+      const newTask = await res.json()
+      setMaintenanceTasks((prev) => [newTask, ...prev])
+      setIsTaskModalOpen(false)
+      setTaskTitle('')
+      setTaskDescription('')
+      setTaskDueDate('')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save ticket.')
+    }
+  }
+
+  const handleAddInventorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!invName || !invCount) return
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'inventory',
+          category: invCategory,
+          name: invName,
+          count: Number(invCount),
+          unit: invUnit,
+          status: invStatus
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save inventory count.')
+      const newInv = await res.json()
+      setInventory((prev) => [newInv, ...prev])
+      setIsInventoryModalOpen(false)
+      setInvName('')
+      setInvCount('')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save inventory count.')
+    }
+  }
+
+  const handleAddVendorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!vendorName) return
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'vendor',
+          vendor_type: vendorType,
+          name: vendorName,
+          email: vendorEmail,
+          phone: vendorPhone,
+          rating: vendorRating,
+          coi_active: vendorCoi === 'true'
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save vendor profile.')
+      const newVendor = await res.json()
+      setVendors((prev) => [newVendor, ...prev])
+      setIsVendorModalOpen(false)
+      setVendorName('')
+      setVendorEmail('')
+      setVendorPhone('')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save vendor profile.')
+    }
+  }
+
+  // Derive counts
+  const furnitureCounts = inventory.filter((item: LuxorInventoryItem) => item.category === 'furniture')
+  const suppliesCounts = inventory.filter((item: LuxorInventoryItem) => item.category === 'supplies')
 
   // Calculate readiness score
   const completedCount = readinessTasks.filter((t) => t.checked).length
@@ -143,7 +310,7 @@ function OperationsPageContent() {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <StatsCard label="Readiness Score" value={`${readinessScore}%`} subtitle="Venue Status Score" tone={readinessScore > 90 ? 'green' : 'gold'} />
               <StatsCard label="Bills Due" value="$4,289.99" subtitle="Due this week" tone="gold" />
-              <StatsCard label="Maintenance" value={String(maintenanceTasks.filter(t => t.status === 'open').length)} subtitle="Unresolved issues" tone="blue" />
+              <StatsCard label="Maintenance" value={String(maintenanceTasks.filter(t => t.status === 'pending').length)} subtitle="Unresolved issues" tone="blue" />
               <StatsCard label="Supply Alerts" value={String(suppliesCounts.filter(s => s.status === 'Low').length)} subtitle="Low stock items" tone="gold" />
               <StatsCard label="Sensors Status" value="Active" subtitle="Utilities Online" tone="green" />
             </div>
@@ -189,12 +356,12 @@ function OperationsPageContent() {
                 <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Critical Facility Tasks</h3>
                   <div className="space-y-3 text-xs">
-                    {maintenanceTasks.filter(t => t.status === 'open').slice(0, 3).map(task => (
+                    {maintenanceTasks.filter(t => t.status === 'pending').slice(0, 3).map(task => (
                       <div key={task.id} className="flex items-start gap-3 border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
                         <AlertTriangle size={14} className={task.priority === 'high' ? 'text-rose-400 mt-0.5' : 'text-blue-400 mt-0.5'} />
                         <div>
                           <p className="font-bold text-zinc-300">{task.title}</p>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">Assigned to: {task.assignedTo}</p>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">Assigned to: Facility Operations</p>
                         </div>
                       </div>
                     ))}
@@ -211,7 +378,16 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Operational Bills</h3>
-              <span className="text-[10px] font-mono text-zinc-550 border border-zinc-900 bg-zinc-950 px-3 py-1 rounded">Next due: Rent on Jul 15</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsBillModalOpen(true)}
+                  className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
+                >
+                  <Plus size={14} /> Log Bill
+                </button>
+                <span className="text-[10px] font-mono text-zinc-550 border border-zinc-900 bg-zinc-950 px-3 py-1 rounded">Next due: Rent on Jul 15</span>
+              </div>
             </div>
 
             <PortalTableCard>
@@ -226,22 +402,22 @@ function OperationsPageContent() {
                     </tr>
                   </PortalStickyThead>
                   <tbody className="divide-y divide-zinc-900/30">
-                    {[
-                      { service: 'Venue Base Rent', frequency: 'Monthly', provider: 'Palmas Estates LLC', amount: 4200 },
-                      { service: 'Electric Utility', frequency: 'Monthly (Sensor variable)', provider: 'TXU Energy', amount: 375 },
-                      { service: 'Water & Gas Utility', frequency: 'Monthly (Sensor variable)', provider: 'City Water Dept', amount: 110 },
-                      { service: 'Fiber Internet & Security Uplink', frequency: 'Monthly', provider: 'AT&T Business', amount: 89.99 },
-                      { service: 'Facility Liability Insurance', frequency: 'Annually (Amortized)', provider: 'Nationwide Business', amount: 1200 },
-                      { service: 'Software System: HoneyBook API', frequency: 'Monthly', provider: 'HoneyBook Inc.', amount: 49 },
-                      { service: 'Software System: Zoho Mail', frequency: 'Monthly', provider: 'Zoho Workspace', amount: 12 }
-                    ].map((bill, idx) => (
-                      <tr key={idx} className="hover:bg-zinc-955/20 transition-colors">
-                        <td className="px-8 py-5 font-bold text-white">{bill.service}</td>
-                        <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
-                        <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
-                        <td className="px-8 py-5 text-right font-mono font-bold text-zinc-300">${bill.amount.toLocaleString()}</td>
+                    {bills.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      bills.map((bill, idx) => (
+                        <tr key={bill.id || idx} className="hover:bg-zinc-955/20 transition-colors">
+                          <td className="px-8 py-5 font-bold text-white">{bill.service}</td>
+                          <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
+                          <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
+                          <td className="px-8 py-5 text-right font-mono font-bold text-zinc-300">
+                            ${Number(bill.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </PortalStickyTable>
               </div>
@@ -256,6 +432,7 @@ function OperationsPageContent() {
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Maintenance Task Log</h3>
               <button
                 type="button"
+                onClick={() => setIsTaskModalOpen(true)}
                 className="flex items-center gap-2 bg-[#caa24c]/10 hover:bg-[#caa24c]/20 border border-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
               >
                 <Plus size={14} /> New Maintenance Ticket
@@ -274,29 +451,58 @@ function OperationsPageContent() {
                     </tr>
                   </PortalStickyThead>
                   <tbody className="divide-y divide-zinc-900/30">
-                    {maintenanceTasks.map((task) => (
-                      <tr key={task.id} className="hover:bg-zinc-955/20 transition-colors">
-                        <td className="px-8 py-5">
-                          <p className="text-xs font-bold text-white leading-none">{task.title}</p>
-                          <p className="text-[9px] text-zinc-550 mt-1">Ticket ID: #{task.id}</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                            task.priority === 'high' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                          }`}>
-                            {task.priority}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-zinc-350">{task.assignedTo}</td>
-                        <td className="px-8 py-5 text-right">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider border rounded-md px-2 py-0.5 ${
-                            task.status === 'open' ? 'border-amber-500/25 bg-amber-500/10 text-amber-400' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
-                          }`}>
-                            {task.status}
-                          </span>
-                        </td>
+                    {maintenanceTasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-12 text-center text-xs text-zinc-500">No active maintenance tickets logged.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      maintenanceTasks.map((task) => (
+                        <tr key={task.id} className="hover:bg-zinc-955/20 transition-colors">
+                          <td className="px-8 py-5">
+                            <p className="text-xs font-bold text-white leading-none">{task.title}</p>
+                            <p className="text-[9px] text-zinc-550 mt-1.5">Ticket ID: #{task.id.slice(0, 8)}</p>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                              task.priority === 'high' || task.priority === 'urgent'
+                                ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                                : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5 text-zinc-350">Facility Operations</td>
+                          <td className="px-8 py-5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextStatus = task.status === 'completed' ? 'pending' : 'completed'
+                                fetch('/api/operations', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ type: 'task', id: task.id, status: nextStatus })
+                                })
+                                  .then((res) => {
+                                    if (res.ok) return res.json()
+                                    throw new Error()
+                                  })
+                                  .then((updated) => {
+                                    setMaintenanceTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+                                  })
+                                  .catch(() => alert('Failed to update status.'))
+                              }}
+                              className={`text-[9px] font-black uppercase tracking-wider border rounded-md px-2.5 py-1 transition-all cursor-pointer ${
+                                task.status === 'completed'
+                                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                                  : 'border-amber-500/25 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                              }`}
+                            >
+                              {task.status === 'completed' ? 'Completed' : 'Mark Complete'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </PortalStickyTable>
               </div>
@@ -306,137 +512,178 @@ function OperationsPageContent() {
 
       {/* INVENTORY TAB */}
       {activeTab === 'inventory' && (
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Furniture Inventory */}
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
-                <Building size={16} /> Furniture Inventory Ledger
-              </h3>
-              <div className="space-y-4">
-                {furnitureCounts.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
-                    <div>
-                      <p className="text-xs font-bold text-white">{item.name}</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5">Asset verification logged</p>
-                    </div>
-                    <div className="text-right font-mono">
-                      <span className="text-sm font-bold text-white">{item.count}</span>
-                      <span className="text-xs text-zinc-500"> / {item.target} {item.unit}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Venue Stock & Asset Audits</h3>
+            <button
+              type="button"
+              onClick={() => setIsInventoryModalOpen(true)}
+              className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
+            >
+              <Plus size={14} /> Audit Stock Item
+            </button>
+          </div>
 
-            {/* Cleaning & Hospitality Supplies */}
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
-                <Package size={16} /> Hospitality Supplies Stock
-              </h3>
-              <div className="space-y-4">
-                {suppliesCounts.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
-                    <div>
-                      <p className="text-xs font-bold text-white">{item.name}</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5">Audit: weekly auto-replenish</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
-                        item.status === 'Low' ? 'border-rose-500/25 bg-rose-500/10 text-rose-400' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
-                      }`}>
-                        {item.status}
-                      </span>
-                      <span className="font-mono text-sm font-bold text-white">{item.count} <span className="text-xs text-zinc-500">{item.unit}</span></span>
-                    </div>
-                  </div>
-                ))}
+          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Furniture Inventory */}
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
+                  <Building size={16} /> Furniture Inventory Ledger
+                </h3>
+                <div className="space-y-4">
+                  {furnitureCounts.length === 0 ? (
+                    <p className="text-xs text-zinc-555 italic">No furniture items audited.</p>
+                  ) : (
+                    furnitureCounts.map((item, idx) => (
+                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
+                        <div>
+                          <p className="text-xs font-bold text-white">{item.name}</p>
+                          <p className="text-[10px] text-zinc-550 mt-0.5">Asset verification logged</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
+                            item.status === 'Low' || item.status === 'Out of Stock' ? 'border-rose-500/25 bg-rose-500/10 text-rose-400' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                          }`}>
+                            {item.status || 'Good'}
+                          </span>
+                          <span className="font-mono text-sm font-bold text-white">{item.count} <span className="text-xs text-zinc-500">{item.unit}</span></span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Cleaning & Hospitality Supplies */}
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
+                  <Package size={16} /> Hospitality Supplies Stock
+                </h3>
+                <div className="space-y-4">
+                  {suppliesCounts.length === 0 ? (
+                    <p className="text-xs text-zinc-555 italic">No supplies items audited.</p>
+                  ) : (
+                    suppliesCounts.map((item, idx) => (
+                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
+                        <div>
+                          <p className="text-xs font-bold text-white">{item.name}</p>
+                          <p className="text-[10px] text-zinc-550 mt-0.5">Audit: weekly auto-replenish</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
+                            item.status === 'Low' || item.status === 'Out of Stock' ? 'border-rose-500/25 bg-rose-500/10 text-rose-400' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                          }`}>
+                            {item.status}
+                          </span>
+                          <span className="font-mono text-sm font-bold text-white">{item.count} <span className="text-xs text-zinc-500">{item.unit}</span></span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      )}
-
-      {/* PREFERRED VENDORS TAB */}
+      )}      {/* PREFERRED VENDORS TAB */}
       {activeTab === 'vendors' && (
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { type: 'DJs & Music', name: 'Dallas Sound Masters', email: 'booking@dallassound.com', phone: '214-555-0102', rating: '5.0 ⭐', insured: true },
-              { type: 'Fine Caterers', name: 'Palace Fine Catering', email: 'sales@palacecatering.net', phone: '972-555-0188', rating: '4.9 ⭐', insured: true },
-              { type: 'Security Crew', name: 'Atlas Executive Security', email: 'ops@atlasguard.com', phone: '817-555-9000', rating: '4.8 ⭐', insured: true },
-              { type: 'Florist Services', name: 'Golden Rose Florist', email: 'info@goldenroseflorals.com', phone: '214-555-1212', rating: '4.7 ⭐', insured: true },
-              { type: 'Rentals & Decor', name: 'Grand Gala Rentals', email: 'support@grandgalarentals.com', phone: '972-555-6677', rating: '5.0 ⭐', insured: true },
-              { type: 'Valet Service', name: 'Prestige Valet Co.', email: 'valet@prestigedallas.com', phone: '214-555-4300', rating: '4.9 ⭐', insured: true }
-            ].map((v, idx) => (
-              <div key={idx} className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.type}</span>
-                    <h4 className="text-sm font-serif text-white mt-1">{v.name}</h4>
+        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Preferred Vendor Roster</h3>
+            <button
+              type="button"
+              onClick={() => setIsVendorModalOpen(true)}
+              className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
+            >
+              <Plus size={14} /> Add Preferred Vendor
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {vendors.length === 0 ? (
+                <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
+              ) : (
+                vendors.map((v, idx) => (
+                  <div key={v.id || idx} className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
+                        <h4 className="text-sm font-serif text-white mt-1">{v.name}</h4>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">{v.rating || '5.0 ⭐'}</span>
+                    </div>
+                    <div className="space-y-1 text-xs text-zinc-400">
+                      <p className="truncate">Email: {v.email || 'N/A'}</p>
+                      <p>Phone: {v.phone || 'N/A'}</p>
+                    </div>
+                    <div className="pt-2 border-t border-zinc-900 flex justify-between items-center text-[10px]">
+                      <span className={v.coi_active ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                        {v.coi_active ? 'COI Active / Verified' : 'COI Pending / Inactive'}
+                      </span>
+                      <span className="text-zinc-550 font-mono">Contract locked</span>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">{v.rating}</span>
-                </div>
-                <div className="space-y-1 text-xs text-zinc-400">
-                  <p className="truncate">Email: {v.email}</p>
-                  <p>Phone: {v.phone}</p>
-                </div>
-                <div className="pt-2 border-t border-zinc-900 flex justify-between items-center text-[10px]">
-                  <span className="text-emerald-400 font-bold">COI Active / Verified</span>
-                  <span className="text-zinc-550 font-mono">Contract locked</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* UTILITY SENSORS TAB */}
-      {activeTab === 'utilities' && (
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
-                <Zap size={16} /> Electrical Smart Sensor (TXU)
-              </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                  <span className="text-zinc-500">Current load</span>
-                  <span className="text-white font-mono font-bold">14.5 kWh</span>
-                </div>
-                <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                  <span className="text-zinc-500">Previous Bill Total</span>
-                  <span className="text-white font-mono font-bold">$387.45</span>
-                </div>
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-zinc-500">Alert Threshold Status</span>
-                  <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">Optimal</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400 flex items-center gap-2">
-                <Droplet size={16} /> Water Sensor (City SmartSensor)
-              </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                  <span className="text-zinc-500">Current usage rate</span>
-                  <span className="text-white font-mono font-bold">1.2 GPM</span>
-                </div>
-                <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                  <span className="text-zinc-500">Previous Bill Total</span>
-                  <span className="text-white font-mono font-bold">$105.80</span>
-                </div>
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-zinc-500">Spike anomaly monitor</span>
-                  <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">No Leaks Detected</span>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {activeTab === 'utilities' && (() => {
+        const electricReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'electric') || { current_load: '14.5 kWh', previous_bill_total: 375.00, anomaly_status: 'Optimal' }
+        const waterReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'water') || { current_load: '1.2 GPM', previous_bill_total: 105.80, anomaly_status: 'Optimal' }
+
+        return (
+          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
+                  <Zap size={16} /> Electrical Smart Sensor (TXU)
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
+                    <span className="text-zinc-550">Current load</span>
+                    <span className="text-white font-mono font-bold">{electricReading.current_load}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
+                    <span className="text-zinc-550">Previous Bill Total</span>
+                    <span className="text-white font-mono font-bold">${Number(electricReading.previous_bill_total || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="text-zinc-550">Alert Threshold Status</span>
+                    <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">{electricReading.anomaly_status}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400 flex items-center gap-2">
+                  <Droplet size={16} /> Water Sensor (City SmartSensor)
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
+                    <span className="text-zinc-555">Current usage rate</span>
+                    <span className="text-white font-mono font-bold">{waterReading.current_load}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
+                    <span className="text-zinc-555">Previous Bill Total</span>
+                    <span className="text-white font-mono font-bold">${Number(waterReading.previous_bill_total || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="text-zinc-555">Spike anomaly monitor</span>
+                    <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">
+                      {waterReading.anomaly_status === 'Optimal' ? 'No Leaks Detected' : waterReading.anomaly_status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* CLEANING TAB */}
       {activeTab === 'cleaning' && (
@@ -487,6 +734,340 @@ function OperationsPageContent() {
           </div>
         </div>
       )}
+
+      {/* 1. New Bill Modal */}
+      <PortalModal
+        isOpen={isBillModalOpen}
+        onClose={() => setIsBillModalOpen(false)}
+        title="Log Operational Bill"
+      >
+        <form onSubmit={handleAddBillSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Service Name</label>
+            <input
+              type="text"
+              required
+              value={billService}
+              onChange={(e) => setBillService(e.target.value)}
+              placeholder="e.g. Electric Utility Usage"
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Provider / Account</label>
+            <input
+              type="text"
+              required
+              value={billProvider}
+              onChange={(e) => setBillProvider(e.target.value)}
+              placeholder="e.g. TXU Energy"
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Amount (USD)</label>
+              <input
+                type="number"
+                required
+                value={billAmount}
+                onChange={(e) => setBillAmount(e.target.value)}
+                placeholder="120.00"
+                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Frequency</label>
+              <PortalSelect
+                value={billFrequency}
+                onChange={setBillFrequency}
+                options={[
+                  { value: 'Monthly', label: 'Monthly' },
+                  { value: 'Quarterly', label: 'Quarterly' },
+                  { value: 'Annually', label: 'Annually' }
+                ]}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Due Date</label>
+            <PortalDatePicker
+              value={billDueDate}
+              onChange={setBillDueDate}
+              placeholder="Select due date..."
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setIsBillModalOpen(false)}
+              className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+            >
+              Save Bill
+            </button>
+          </div>
+        </form>
+      </PortalModal>
+
+      {/* 2. New Maintenance Ticket Modal */}
+      <PortalModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        title="New Maintenance Ticket"
+      >
+        <form onSubmit={handleAddTaskSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Ticket Title</label>
+            <input
+              type="text"
+              required
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
+              placeholder="e.g. Repair lobby exit sign back light"
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Description</label>
+            <textarea
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              placeholder="e.g. Back light has been flickering since last event load-out."
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none h-20 resize-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Priority</label>
+              <PortalSelect
+                value={taskPriority}
+                onChange={setTaskPriority}
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' }
+                ]}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Due Date</label>
+              <PortalDatePicker
+                value={taskDueDate}
+                onChange={setTaskDueDate}
+                placeholder="Select target date..."
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setIsTaskModalOpen(false)}
+              className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+            >
+              Log Ticket
+            </button>
+          </div>
+        </form>
+      </PortalModal>
+
+      {/* 3. New Inventory Audit Modal */}
+      <PortalModal
+        isOpen={isInventoryModalOpen}
+        onClose={() => setIsInventoryModalOpen(false)}
+        title="Audit Inventory Count"
+      >
+        <form onSubmit={handleAddInventorySubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Category</label>
+            <PortalSelect
+              value={invCategory}
+              onChange={setInvCategory}
+              options={[
+                { value: 'furniture', label: 'Furniture Assets' },
+                { value: 'supplies', label: 'Hospitality Supplies' },
+                { value: 'decor', label: 'Decor Inventory' },
+                { value: 'other', label: 'Other Items' }
+              ]}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Item Name</label>
+            <input
+              type="text"
+              required
+              value={invName}
+              onChange={(e) => setInvName(e.target.value)}
+              placeholder="e.g. Round Banquets"
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1 col-span-2">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Quantity In Stock</label>
+              <input
+                type="number"
+                required
+                value={invCount}
+                onChange={(e) => setInvCount(e.target.value)}
+                placeholder="250"
+                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Unit</label>
+              <input
+                type="text"
+                required
+                value={invUnit}
+                onChange={(e) => setInvUnit(e.target.value)}
+                placeholder="pcs"
+                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-505">Status Level</label>
+            <PortalSelect
+              value={invStatus}
+              onChange={setInvStatus}
+              options={[
+                { value: 'Good', label: 'Good (Adequate stock)' },
+                { value: 'Low', label: 'Low (Needs replenish)' },
+                { value: 'Out of Stock', label: 'Out of Stock (Replenish Urgent)' }
+              ]}
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setIsInventoryModalOpen(false)}
+              className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+            >
+              Audit Item
+            </button>
+          </div>
+        </form>
+      </PortalModal>
+
+      {/* 4. New Vendor Profile Modal */}
+      <PortalModal
+        isOpen={isVendorModalOpen}
+        onClose={() => setIsVendorModalOpen(false)}
+        title="Add Preferred Vendor"
+      >
+        <form onSubmit={handleAddVendorSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Vendor Type</label>
+            <PortalSelect
+              value={vendorType}
+              onChange={setVendorType}
+              options={[
+                { value: 'DJs & Music', label: 'DJs & Music' },
+                { value: 'Fine Caterers', label: 'Fine Caterers' },
+                { value: 'Security Crew', label: 'Security Crew' },
+                { value: 'Florist Services', label: 'Florist Services' },
+                { value: 'Rentals & Decor', label: 'Rentals & Decor' },
+                { value: 'Valet Service', label: 'Valet Service' },
+                { value: 'Bartenders', label: 'Bartenders' },
+                { value: 'Photographers', label: 'Photographers' }
+              ]}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Business Name</label>
+            <input
+              type="text"
+              required
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+              placeholder="e.g. Prestige Valet Co."
+              className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-550">Email</label>
+              <input
+                type="email"
+                value={vendorEmail}
+                onChange={(e) => setVendorEmail(e.target.value)}
+                placeholder="sales@prestige.com"
+                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-555">Phone</label>
+              <input
+                type="text"
+                value={vendorPhone}
+                onChange={(e) => setVendorPhone(e.target.value)}
+                placeholder="214-555-0100"
+                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-550">Rating</label>
+              <PortalSelect
+                value={vendorRating}
+                onChange={setVendorRating}
+                options={[
+                  { value: '5.0 ⭐', label: '5.0 ⭐' },
+                  { value: '4.9 ⭐', label: '4.9 ⭐' },
+                  { value: '4.8 ⭐', label: '4.8 ⭐' },
+                  { value: '4.7 ⭐', label: '4.7 ⭐' },
+                  { value: '4.5 ⭐', label: '4.5 ⭐' }
+                ]}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-550">Active COI Insurance</label>
+              <PortalSelect
+                value={vendorCoi}
+                onChange={setVendorCoi}
+                options={[
+                  { value: 'true', label: 'Yes - Active COI' },
+                  { value: 'false', label: 'No - Pending COI' }
+                ]}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => setIsVendorModalOpen(false)}
+              className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+            >
+              Add Vendor
+            </button>
+          </div>
+        </form>
+      </PortalModal>
     </PortalPageFrame>
   )
 }

@@ -41,36 +41,49 @@ export default function FinancesPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
+type LuxorBookingExpense = {
+  id: string
+  created_at: string
+  updated_at: string
+  booking_id: string | null
+  category: string
+  description: string | null
+  vendor_name: string | null
+  amount: number
+  incurred_on: string
+  status: string
+  notes: string | null
+  metadata: Record<string, unknown>
+}
+
   // Add Expense form state
   const [isAddingExpense, setIsAddingExpense] = useState(false)
   const [expenseCategory, setExpenseCategory] = useState('Supplies')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseDesc, setExpenseDesc] = useState('')
-  const [expenses, setExpenses] = useState([
-    { id: '1', desc: 'Rent & Lease Payment', category: 'Rent', amount: 4200, date: '2026-07-01' },
-    { id: '2', desc: 'Ballroom Floor Buffing', category: 'Maintenance', amount: 350, date: '2026-07-02' },
-    { id: '3', desc: 'Internet & Security Systems', category: 'Utilities', amount: 89.99, date: '2026-07-03' },
-    { id: '4', desc: 'Ghost Chairs (Restock)', category: 'Inventory', amount: 800, date: '2026-07-04' }
-  ])
+  const [expenses, setExpenses] = useState<LuxorBookingExpense[]>([])
 
   const fetchFinanceData = async () => {
     try {
       setLoading(true)
       setError(null)
-      const [invRes, bookRes] = await Promise.all([
+      const [invRes, bookRes, expRes] = await Promise.all([
         fetch('/api/invoices'),
-        fetch('/api/bookings')
+        fetch('/api/bookings'),
+        fetch('/api/expenses')
       ])
 
-      if (!invRes.ok || !bookRes.ok) throw new Error('Failed to load financial records.')
+      if (!invRes.ok || !bookRes.ok || !expRes.ok) throw new Error('Failed to load financial records.')
 
-      const [invData, bookData] = await Promise.all([
+      const [invData, bookData, expData] = await Promise.all([
         invRes.json(),
-        bookRes.json()
+        bookRes.json(),
+        expRes.json()
       ])
 
       setInvoices(invData)
       setBookings(bookData)
+      setExpenses(expData)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to fetch financial metrics.')
@@ -104,20 +117,32 @@ export default function FinancesPage() {
     }
   }
 
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expenseAmount || !expenseDesc) return
-    const newExp = {
-      id: String(expenses.length + 1),
-      desc: expenseDesc,
-      category: expenseCategory,
-      amount: Number(expenseAmount),
-      date: new Date().toISOString().split('T')[0]
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: expenseCategory,
+          amount: Number(expenseAmount),
+          description: expenseDesc,
+          incurred_on: new Date().toISOString().split('T')[0],
+          status: 'paid'
+        })
+      })
+
+      if (!res.ok) throw new Error('Failed to save expense.')
+      const newExp = await res.json()
+      setExpenses((prev) => [newExp, ...prev])
+      setExpenseDesc('')
+      setExpenseAmount('')
+      setIsAddingExpense(false)
+    } catch (err) {
+      console.error(err)
+      alert('Error saving expense: ' + (err instanceof Error ? err.message : 'Unknown error'))
     }
-    setExpenses([newExp, ...expenses])
-    setExpenseDesc('')
-    setExpenseAmount('')
-    setIsAddingExpense(false)
   }
 
   // Financial Calculations
@@ -130,7 +155,7 @@ export default function FinancesPage() {
   const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue')
   const overdueAR = overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
 
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
   const monthlyProfit = Math.max(netRevenue - totalExpenses, 0)
 
   // Payments extraction
@@ -490,10 +515,16 @@ export default function FinancesPage() {
                   <tbody className="divide-y divide-zinc-900/30">
                     {expenses.map((exp) => (
                       <tr key={exp.id} className="hover:bg-zinc-950/20 transition-colors">
-                        <td className="px-8 py-5 font-mono text-xs text-zinc-500">{new Date(exp.date).toLocaleDateString()}</td>
-                        <td className="px-6 py-5 font-bold text-white">{exp.desc}</td>
+                        <td className="px-8 py-5 font-mono text-xs text-zinc-500">
+                          {exp.incurred_on ? new Date(exp.incurred_on).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-5 font-bold text-white">
+                          {exp.description || 'General Operational Expense'}
+                        </td>
                         <td className="px-6 py-5 font-mono font-bold uppercase tracking-widest text-[9px] text-[#caa24c]/85">{exp.category}</td>
-                        <td className="px-8 py-5 text-right font-mono font-bold text-rose-400">-${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-8 py-5 text-right font-mono font-bold text-rose-400">
+                          -${Number(exp.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
