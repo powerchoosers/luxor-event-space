@@ -319,7 +319,7 @@ export default function LeadsPage() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => setActiveTab(tab.id as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients')}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               activeTab === tab.id
                 ? 'bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#f1d27a]'
@@ -346,7 +346,7 @@ export default function LeadsPage() {
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMoveStatus={handleMoveStatus} />}
 
         {activeTab === 'pipeline' && (
-          {viewMode === 'list' ? (
+          viewMode === 'list' ? (
         <PortalTableCard
           controls={
             <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
@@ -692,7 +692,9 @@ export default function LeadsPage() {
             </div>
           </div>
         </div>
-      )}
+      )
+        )}
+      </div>
 
       {/* Manual Lead Addition Modal */}
       {isModalOpen && (
@@ -871,3 +873,348 @@ function formatDate(value: string) {
     minute: '2-digit',
   }).format(new Date(value))
 }
+
+// --- SUB-TAB COMPONENTS FOR LEADS & CLIENTS ---
+
+function LeadsDashboard({ leads }: { leads: LuxorInquiry[] }) {
+  const newInquiries = leads.filter(l => l.status === 'new').length
+  const toursScheduled = leads.filter(l => l.status === 'tour_requested').length
+  const toursCompleted = leads.filter(l => l.status === 'tour_confirmed' || l.tour_attendance_status === 'attended').length
+  const proposalsSent = leads.filter(l => l.status === 'proposal_sent').length
+  const depositsReceived = leads.filter(l => l.status === 'booked').length
+  const totalLeads = leads.length
+  const conversionRate = totalLeads > 0 ? ((depositsReceived / totalLeads) * 100).toFixed(1) : '0.0'
+
+  // Upcoming tours
+  const upcomingTours = leads
+    .filter(l => (l.status === 'tour_requested' || l.status === 'tour_confirmed') && l.preferred_tour_date)
+    .slice(0, 5)
+
+  // Recent leads
+  const recentLeads = [...leads].slice(0, 5)
+
+  // Funnel calculations
+  const total = leads.length || 1
+  const tourStageCount = leads.filter(l => ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(l.status)).length
+  const proposalStageCount = leads.filter(l => ['proposal_sent', 'booked'].includes(l.status)).length
+  const bookedStageCount = leads.filter(l => l.status === 'booked').length
+
+  const tourPct = ((tourStageCount / total) * 100).toFixed(0)
+  const proposalPct = ((proposalStageCount / total) * 100).toFixed(0)
+  const bookedPct = ((bookedStageCount / total) * 100).toFixed(0)
+
+  return (
+    <div className="h-full overflow-y-auto portal-scrollbar pr-1 space-y-6 pb-8">
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <StatsCard label="New Inquiries" value={newInquiries} subtitle="Awaiting response" tone="blue" />
+        <StatsCard label="Tours Scheduled" value={toursScheduled} subtitle="Active bookings" tone="purple" />
+        <StatsCard label="Tours Completed" value={toursCompleted} subtitle="Tours held" tone="cyan" />
+        <StatsCard label="Proposals Sent" value={proposalsSent} subtitle="Out for signature" tone="gold" />
+        <StatsCard label="Deposits Received" value={depositsReceived} subtitle="Booked clients" tone="green" />
+        <StatsCard label="Conversion Rate" value={`${conversionRate}%`} subtitle="Lead-to-booking" tone="green" />
+      </div>
+
+      {/* Charts & Lists Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Sales Funnel */}
+        <div className="luxor-glass-card rounded-2xl p-6 lg:col-span-1 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
+            <TrendingUp size={15} className="text-[#caa24c]" /> Sales Funnel Analysis
+          </h3>
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                <span className="text-[color:var(--portal-text)]">1. New Inquiries</span>
+                <span className="font-mono text-zinc-400">{total} leads (100%)</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+                <div className="h-full rounded-full bg-blue-500 w-full" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                <span className="text-[color:var(--portal-text)]">2. Tours Booked</span>
+                <span className="font-mono text-zinc-400">{tourStageCount} ({tourPct}%)</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+                <div className="h-full rounded-full bg-purple-500" style={{ width: `${tourPct}%` }} />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                <span className="text-[color:var(--portal-text)]">3. Proposals Out</span>
+                <span className="font-mono text-zinc-400">{proposalStageCount} ({proposalPct}%)</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+                <div className="h-full rounded-full bg-amber-500" style={{ width: `${proposalPct}%` }} />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                <span className="text-[color:var(--portal-text)]">4. Booked Event Days</span>
+                <span className="font-mono text-emerald-400">{bookedStageCount} ({bookedPct}%)</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${bookedPct}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Upcoming Tours */}
+        <div className="luxor-glass-card rounded-2xl p-6 lg:col-span-2 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
+              <Calendar size={15} className="text-[#caa24c]" /> Upcoming Scheduled Tours
+            </h3>
+            {upcomingTours.length === 0 ? (
+              <p className="text-xs text-zinc-500 font-medium py-4 text-center">No upcoming tours scheduled this week.</p>
+            ) : (
+              <div className="space-y-4">
+                {upcomingTours.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between border-b border-[color:var(--portal-border)]/50 pb-3 border-dashed last:border-b-0 last:pb-0">
+                    <div>
+                      <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-white hover:text-[#caa24c] transition-colors">{t.full_name}</Link>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">{t.event_type || 'Event'} • {t.guest_count || 'Flexible'} guests</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-[#caa24c]">{t.preferred_tour_date}</p>
+                      <p className="text-[9px] text-zinc-500 mt-0.5">{t.preferred_tour_time || 'Flexible'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="pt-4 border-t border-[color:var(--portal-border)]/50 mt-4">
+            <Link href="/portal/calendar" className="text-xs font-bold text-[#caa24c] hover:text-[#b0883b] flex items-center gap-1 justify-center">
+              View Calendar Schedule <ChevronRight size={13} />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity / Inquiries List */}
+      <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-between justify-between">
+          <span>Recent Lead Submissions</span>
+          <span className="text-[9px] font-semibold text-zinc-500 lowercase tracking-normal">last 5 entries</span>
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-[color:var(--portal-border)] text-zinc-550 font-bold uppercase tracking-wider text-[10px]">
+                <th className="pb-3">Client Name</th>
+                <th className="pb-3">Event Type</th>
+                <th className="pb-3">Intake Date</th>
+                <th className="pb-3">Source Channel</th>
+                <th className="pb-3 text-right">Pipeline Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900/30">
+              {recentLeads.map((l) => (
+                <tr key={l.id} className="hover:bg-zinc-950/20 transition-colors">
+                  <td className="py-4 font-bold text-white">
+                    <Link href={`/portal/leads/${l.id}`} className="hover:text-[#caa24c] transition-colors">{l.full_name}</Link>
+                    <span className="block text-[10px] text-zinc-500 font-normal font-mono mt-0.5">{l.email || 'No email registered'}</span>
+                  </td>
+                  <td className="py-4 text-zinc-300 font-medium">{l.event_type || 'Quinceañera'}</td>
+                  <td className="py-4 text-zinc-400 font-medium">{formatDate(l.created_at)}</td>
+                  <td className="py-4 font-mono font-bold text-[#caa24c]/80 uppercase tracking-widest text-[9px]">{isGrandOpeningRsvp(l) ? 'RSVP' : l.source.replaceAll('_', ' ')}</td>
+                  <td className="py-4 text-right">
+                    <span className="text-[9px] font-bold uppercase tracking-wider border rounded-md px-2 py-0.5 border-[#caa24c]/25 bg-[#caa24c]/10 text-[#f1d27a]">{l.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatsCard({
+  label,
+  value,
+  subtitle,
+  tone = 'blue',
+}: {
+  label: string
+  value: string | number
+  subtitle: string
+  tone?: 'blue' | 'purple' | 'cyan' | 'gold' | 'green'
+}) {
+  const styles = {
+    blue: 'border-blue-500/10 bg-blue-500/5 text-blue-400',
+    purple: 'border-purple-500/10 bg-purple-500/5 text-purple-400',
+    cyan: 'border-cyan-500/10 bg-cyan-500/5 text-cyan-400',
+    gold: 'border-[#caa24c]/10 bg-[#caa24c]/5 text-[#f1d27a]',
+    green: 'border-emerald-500/10 bg-emerald-500/5 text-emerald-400',
+  }
+
+  return (
+    <div className="luxor-glass-card rounded-xl p-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[110px]">
+      <div>
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</p>
+        <p className="font-mono text-xl font-bold text-white mt-1.5">{value}</p>
+      </div>
+      <p className="text-[10px] text-zinc-500 font-medium leading-none mt-3">{subtitle}</p>
+    </div>
+  )
+}
+
+function LeadsClientsTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+  const clients = leads.filter(l => l.status === 'booked')
+  return (
+    <PortalTableCard
+      controls={
+        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
+      }
+    >
+      <div className="overflow-x-auto">
+        <PortalStickyTable minWidth="900px">
+          <PortalStickyThead>
+            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+              <th className="px-8 py-5">Client Name</th>
+              <th className="px-6 py-5">Event Type</th>
+              <th className="px-6 py-5">Guest Count</th>
+              <th className="px-6 py-5">Target Event Date</th>
+              <th className="px-8 py-5 text-right">Action</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-zinc-900/30">
+            {clients.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No booked clients in pipeline currently.</td>
+              </tr>
+            ) : (
+              clients.map((c) => (
+                <tr key={c.id} className="hover:bg-zinc-950/20 transition-colors">
+                  <td className="px-8 py-5">
+                    <Link href={`/portal/leads/${c.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{c.full_name}</Link>
+                    <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">{c.email || 'No email registered'}</p>
+                  </td>
+                  <td className="px-6 py-5 text-zinc-350 font-medium">{c.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{c.guest_count || 'Flexible'} guests</td>
+                  <td className="px-6 py-5 text-[#caa24c] font-bold font-mono">{c.target_date || 'TBD'}</td>
+                  <td className="px-8 py-5 text-right">
+                    <Link href={`/portal/leads/${c.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Dossier →</Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </PortalStickyTable>
+      </div>
+    </PortalTableCard>
+  )
+}
+
+function LeadsToursTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+  const tours = leads.filter(l => l.status === 'tour_requested' || l.status === 'tour_confirmed')
+  return (
+    <PortalTableCard
+      controls={
+        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({tours.length})</h3>
+      }
+    >
+      <div className="overflow-x-auto">
+        <PortalStickyTable minWidth="900px">
+          <PortalStickyThead>
+            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+              <th className="px-8 py-5">Client Name</th>
+              <th className="px-6 py-5">Tour Time Preference</th>
+              <th className="px-6 py-5">Event Type</th>
+              <th className="px-6 py-5">Lifecycle Status</th>
+              <th className="px-8 py-5 text-right">Action</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-zinc-900/30">
+            {tours.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No tours currently scheduled.</td>
+              </tr>
+            ) : (
+              tours.map((t) => (
+                <tr key={t.id} className="hover:bg-zinc-950/20 transition-colors">
+                  <td className="px-8 py-5">
+                    <Link href={`/portal/leads/${t.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{t.full_name}</Link>
+                    <p className="text-[10px] text-zinc-550 mt-0.5">{t.email || t.phone}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="text-xs font-bold text-[#caa24c]">{t.preferred_tour_date || 'Date Pending'}</p>
+                    <p className="text-[10px] text-zinc-550 mt-0.5">{t.preferred_tour_time || 'Time TBD'}</p>
+                  </td>
+                  <td className="px-6 py-5 text-zinc-350 font-medium">{t.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 font-mono">
+                    <PortalSelect
+                      value={t.status}
+                      onChange={(val) => onMoveStatus(t.id, val as LuxorInquiryStatus)}
+                      options={INQUIRY_STATUS_OPTIONS}
+                    />
+                  </td>
+                  <td className="px-8 py-5 text-right">
+                    <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </PortalStickyTable>
+      </div>
+    </PortalTableCard>
+  )
+}
+
+function LeadsProposalsTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+  const proposals = leads.filter(l => l.status === 'proposal_sent')
+  return (
+    <PortalTableCard
+      controls={
+        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({proposals.length})</h3>
+      }
+    >
+      <div className="overflow-x-auto">
+        <PortalStickyTable minWidth="900px">
+          <PortalStickyThead>
+            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+              <th className="px-8 py-5">Client Name</th>
+              <th className="px-6 py-5">Event Type</th>
+              <th className="px-6 py-5">Guest Count</th>
+              <th className="px-6 py-5">Intake Source</th>
+              <th className="px-8 py-5 text-right">Action</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-zinc-900/30">
+            {proposals.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No proposals awaiting signature.</td>
+              </tr>
+            ) : (
+              proposals.map((p) => (
+                <tr key={p.id} className="hover:bg-zinc-955/20 transition-colors">
+                  <td className="px-8 py-5">
+                    <Link href={`/portal/leads/${p.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{p.full_name}</Link>
+                    <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">{p.email || 'No email'}</p>
+                  </td>
+                  <td className="px-6 py-5 text-zinc-350 font-medium">{p.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{p.guest_count || 'Flexible'} guests</td>
+                  <td className="px-6 py-5 font-mono font-bold uppercase tracking-widest text-[9px] text-[#caa24c]/85">{isGrandOpeningRsvp(p) ? 'RSVP' : p.source.replaceAll('_', ' ')}</td>
+                  <td className="px-8 py-5 text-right">
+                    <Link href={`/portal/leads/${p.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Review Proposal →</Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </PortalStickyTable>
+      </div>
+    </PortalTableCard>
+  )
+}
+

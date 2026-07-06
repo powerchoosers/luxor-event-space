@@ -6,7 +6,7 @@ import { CalendarDays, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 const navLinks = [
-  { label: 'Grand Opening', href: '/grand-opening' },
+  { label: 'Grand Opening', href: '/grand-opening-rsvp' },
   { label: 'Events', href: '/events' },
   { label: 'Spaces', href: '/spaces' },
   { label: 'Gallery', href: '/gallery' },
