@@ -134,11 +134,6 @@ export default async function PortalOverview() {
         />
       </div>
 
-      <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
-        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Financial foundation created:</span>{" "}
-        Supabase now has booking, payment, expense, and financial summary tables. This overview still prioritizes live inquiry follow-up until booking/payment entry screens are wired into the portal.
-      </div>
-
       {/* Main Dashboard Layout */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 pb-12 lg:grid-cols-3 lg:gap-8">
         {/* Recent Lead Pipeline */}

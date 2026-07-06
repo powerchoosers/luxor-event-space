@@ -110,18 +110,11 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
-          : 'border-transparent bg-[linear-gradient(180deg,rgba(202,162,76,0.06)_0%,rgba(202,162,76,0.022)_14%,rgba(5,5,5,0.96)_44%,rgba(5,5,5,0.99)_100%)]'
+          : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
       } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div
-          className={`pointer-events-none absolute inset-x-0 top-0 h-48 ${
-            portalTheme === 'light'
-              ? 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.12),transparent_16rem)]'
-              : 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.06),transparent_20rem)]'
-          }`}
-        />
         <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
           <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
             <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
