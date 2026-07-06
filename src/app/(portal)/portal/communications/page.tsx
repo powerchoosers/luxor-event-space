@@ -57,6 +57,7 @@ export default function CommunicationsPage() {
   const [emailMessages, setEmailMessages] = useState<ZohoInboxMessage[]>([])
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
   const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
+  const [zohoReconnectRequired, setZohoReconnectRequired] = useState(false)
 
   const selectedInquiry = inquiries.find((i) => i.id === selectedId)
 
@@ -105,13 +106,24 @@ export default function CommunicationsPage() {
     try {
       setLoadingEmailMessages(true)
       setEmailThreadError(null)
+      setZohoReconnectRequired(false)
       const res = await fetch(`/api/email/inbox?limit=50&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
-      const data = await res.json().catch(() => ({})) as { mailbox?: string; messages?: ZohoInboxMessage[]; error?: string }
-      if (!res.ok) throw new Error(data.error || 'Unable to load client email history.')
+      const data = await res.json().catch(() => ({})) as {
+        mailbox?: string
+        messages?: ZohoInboxMessage[]
+        error?: string
+        reconnectRequired?: boolean
+      }
+      if (!res.ok) {
+        setZohoReconnectRequired(Boolean(data.reconnectRequired))
+        throw new Error(data.error || 'Unable to load client email history.')
+      }
       setEmailMessages(data.messages || [])
     } catch (err) {
       setEmailMessages([])
-      setEmailThreadError(err instanceof Error ? err.message : 'Unable to load client email history.')
+      const message = err instanceof Error ? err.message : 'Unable to load client email history.'
+      setEmailThreadError(message)
+      setZohoReconnectRequired((current) => current || message.includes('reconnected with email search permission'))
     } finally {
       setLoadingEmailMessages(false)
     }
@@ -453,7 +465,17 @@ export default function CommunicationsPage() {
                   ) : loadingEmailMessages && emailMessages.length === 0 ? (
                     <p className="text-xs text-zinc-650 italic">Loading emails for {selectedInquiry.email}...</p>
                   ) : emailThreadError ? (
-                    <p className="text-xs leading-5 text-rose-300">{emailThreadError}</p>
+                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+                      <p className="text-xs leading-5 text-rose-300">{emailThreadError}</p>
+                      {zohoReconnectRequired ? (
+                        <a
+                          href="/api/auth/zoho/login?setup=1"
+                          className="mt-3 inline-flex rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
+                        >
+                          Reconnect Zoho Search
+                        </a>
+                      ) : null}
+                    </div>
                   ) : emailMessages.length === 0 ? (
                     <p className="text-xs text-zinc-600 italic">No Zoho messages found yet for this email address.</p>
                   ) : (

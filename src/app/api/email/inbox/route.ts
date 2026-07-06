@@ -24,6 +24,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch Zoho inbox.'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const scopeError = message.includes('INVALID_OAUTHSCOPE')
+
+    return NextResponse.json(
+      {
+        error: scopeError
+          ? 'Zoho needs to be reconnected with email search permission before client email history can load.'
+          : message,
+        reconnectRequired: scopeError,
+      },
+      { status: scopeError ? 403 : 500 },
+    )
   }
 }
