@@ -158,8 +158,27 @@ export default function MarketingPage() {
         title="Marketing Command"
         description="Build, schedule, send, and track Luxor email campaigns from one simple control room."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Navigation Tabs */}
+          <div className="flex flex-col items-end gap-2.5">
+            {/* Top row: Campaign Actions (only in overview mode) */}
+            {activeTab === 'overview' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadCampaigns}
+                  disabled={loading}
+                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3.5 py-2 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
+                </button>
+                <button
+                  onClick={() => setActiveTab('builder')}
+                  className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
+                >
+                  <Plus size={13} /> New Campaign
+                </button>
+              </div>
+            )}
+
+            {/* Bottom row: Navigation Tabs */}
             <div className="flex items-center gap-1 p-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30">
               {tabs.map((tab) => (
                 <button
@@ -176,24 +195,6 @@ export default function MarketingPage() {
                 </button>
               ))}
             </div>
-
-            {activeTab === 'overview' && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={loadCampaigns}
-                  disabled={loading}
-                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-                </button>
-                <button
-                  onClick={() => setActiveTab('builder')}
-                  className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
-                >
-                  <Plus size={14} /> New Campaign
-                </button>
-              </div>
-            )}
           </div>
         }
       />
