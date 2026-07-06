@@ -14,7 +14,10 @@ import {
   Calendar,
   MoreHorizontal,
   Sparkles,
-  X
+  X,
+  TrendingUp,
+  UserCheck,
+  FileCheck
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
@@ -53,6 +56,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Tab control
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients'>('dashboard')
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('board')
@@ -226,7 +232,6 @@ export default function LeadsPage() {
   const newLeadsCount = leads.filter((l) => l.status === 'new').length
   const grandOpeningCount = leads.filter(isGrandOpeningRsvp).length
   const missingContact = leads.filter((l) => !l.email && !l.phone).length
-
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <PortalPageHeader
@@ -241,51 +246,55 @@ export default function LeadsPage() {
               <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                    viewMode === 'list'
-                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                      : 'text-zinc-500 hover:text-zinc-350 font-bold'
-                  }`}
-                >
-                  List
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('board')}
-                  className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                    viewMode === 'board'
-                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                      : 'text-zinc-500 hover:text-zinc-350 font-bold'
-                  }`}
-                >
-                  Board
-                </button>
-              </div>
+              {activeTab === 'pipeline' && (
+                <>
+                  <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('list')}
+                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                        viewMode === 'list'
+                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                      }`}
+                    >
+                      List
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('board')}
+                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                        viewMode === 'board'
+                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                      }`}
+                    >
+                      Board
+                    </button>
+                  </div>
 
-              <PortalSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={[
-                  { value: 'all', label: 'All Statuses' },
-                  ...INQUIRY_STATUS_OPTIONS.map((option) => ({
-                    value: option.value,
-                    label: option.value === 'booked' ? 'Booked (Won)' : option.label,
-                  })),
-                ]}
-              />
-              <PortalSelect
-                value={campaignFilter}
-                onChange={setCampaignFilter}
-                options={[
-                  { value: 'all', label: 'All Sources' },
-                  { value: 'grand_opening', label: 'Grand Opening RSVPs' },
-                  { value: 'standard', label: 'Standard Leads' },
-                ]}
-              />
+                  <PortalSelect
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: 'all', label: 'All Statuses' },
+                      ...INQUIRY_STATUS_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.value === 'booked' ? 'Booked (Won)' : option.label,
+                      })),
+                    ]}
+                  />
+                  <PortalSelect
+                    value={campaignFilter}
+                    onChange={setCampaignFilter}
+                    options={[
+                      { value: 'all', label: 'All Sources' },
+                      { value: 'grand_opening', label: 'Grand Opening RSVPs' },
+                      { value: 'standard', label: 'Standard Leads' },
+                    ]}
+                  />
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -298,7 +307,46 @@ export default function LeadsPage() {
         }
       />
 
-      {viewMode === 'list' ? (
+      {/* Sub-tab navigation */}
+      <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
+        {[
+          { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
+          { id: 'pipeline', label: 'Pipeline Board', icon: <Users size={15} /> },
+          { id: 'tours', label: 'Tours', icon: <Calendar size={15} /> },
+          { id: 'proposals', label: 'Proposals & Contracts', icon: <FileCheck size={15} /> },
+          { id: 'clients', label: 'Booked Clients', icon: <UserCheck size={15} /> },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+              activeTab === tab.id
+                ? 'bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#f1d27a]'
+                : 'border border-transparent text-zinc-500 hover:text-zinc-350 hover:bg-zinc-950/40'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+        <Link
+          href="/portal/communications"
+          className="flex items-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-350 hover:bg-zinc-950/40 transition-all"
+        >
+          <Mail size={15} />
+          Communication History
+        </Link>
+      </div>
+
+      <div className="flex-1 min-h-0 mt-4">
+        {activeTab === 'dashboard' && <LeadsDashboard leads={leads} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMoveStatus={handleMoveStatus} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMoveStatus={handleMoveStatus} />}
+        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMoveStatus={handleMoveStatus} />}
+
+        {activeTab === 'pipeline' && (
+          {viewMode === 'list' ? (
         <PortalTableCard
           controls={
             <div className="flex flex-col items-center justify-between gap-4 md:flex-row">

@@ -511,17 +511,18 @@ export default function LeadDetailPage({
     createdAt: normalizeTimelineDate(email.receivedAt),
     email,
   }))
-  const activityEntries = [...noteEntries, ...emailEntries]
-    .filter((entry) => {
-      if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
-      if (activeFeedTab === 'comms') {
-        return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
-      }
-      if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
-      return true
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  const latestActivityEntry = activityEntries[0] ?? null
+  const allActivityEntries = [...noteEntries, ...emailEntries].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+  const activityEntries = allActivityEntries.filter((entry) => {
+    if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
+    if (activeFeedTab === 'comms') {
+      return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+    }
+    if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
+    return true
+  })
+  const latestActivityEntry = allActivityEntries[0] ?? null
   const contactSummary = getContactSummary(lead)
   const leadAgeLabel = formatLeadAge(lead.created_at)
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)

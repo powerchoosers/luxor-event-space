@@ -13,7 +13,9 @@ import {
   Search,
   Settings,
   Moon,
-  Users
+  Users,
+  Sparkles,
+  DollarSign
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -26,10 +28,12 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
+  { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
+  { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
+  { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
+  { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations' },
   { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing' },
-  { href: '/portal/invoices', icon: <FileText size={18} />, label: 'Invoices' },
-  { href: '/portal/communications', icon: <MessageSquare size={18} />, label: 'Communications' },
-  { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Event Calendar' },
+  { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
 
 export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
