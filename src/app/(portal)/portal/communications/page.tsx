@@ -387,14 +387,15 @@ export default function CommunicationsPage() {
                       <Mail size={15} className="text-[#f1d27a]" />
                       <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Send Zoho Email</span>
                     </div>
-                    <select
+                    <PortalSelect
                       value={sendFrom}
-                      onChange={(event) => setSendFrom(event.target.value)}
-                      className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-300 outline-none focus:border-[#caa24c]"
-                    >
-                      <option value="hello@luxoratlaspalmas.com">hello@luxoratlaspalmas.com</option>
-                      <option value="booking@luxoratlaspalmas.com">booking@luxoratlaspalmas.com</option>
-                    </select>
+                      onChange={setSendFrom}
+                      className="ml-auto w-[260px]"
+                      options={[
+                        { value: 'hello@luxoratlaspalmas.com', label: 'hello@luxoratlaspalmas.com' },
+                        { value: 'booking@luxoratlaspalmas.com', label: 'booking@luxoratlaspalmas.com' },
+                      ]}
+                    />
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">

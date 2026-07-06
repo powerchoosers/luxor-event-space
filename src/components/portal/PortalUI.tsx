@@ -1,4 +1,7 @@
+'use client'
+
 import React from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export function PortalPageFrame({
   children,
@@ -262,44 +265,83 @@ export function PortalSelect({
   const [isOpen, setIsOpen] = React.useState(false)
   const selectedOption = options.find((opt) => opt.value === value)
 
+  React.useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen])
+
   return (
     <div className={`relative min-w-[140px] select-none ${className}`}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[color:var(--portal-border)] focus:outline-none disabled:opacity-40 disabled:hover:text-[color:var(--portal-text)]"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_12px_30px_-18px_rgba(0,0,0,0.75)] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-[color:var(--portal-text,#f7efe3)]"
       >
         <span>{selectedOption ? selectedOption.label : placeholder}</span>
-        <span className="text-[10px] text-[color:var(--portal-muted)]">▼</span>
+        <span className={`text-[10px] text-[color:var(--portal-muted,#d7c29a)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl space-y-0.5">
-            {options.map((opt) => {
-              const isSelected = opt.value === value
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.value)
-                    setIsOpen(false)
-                  }}
-                  className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-md transition-colors ${
-                    isSelected
-                      ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                      : 'text-[color:var(--portal-muted)] hover:bg-black/5 hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
+      <AnimatePresence>
+        {isOpen ? (
+          <>
+            <motion.div
+              aria-hidden="true"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="fixed inset-0 z-40 cursor-default"
+              onClick={() => setIsOpen(false)}
+            />
+            <motion.div
+              role="listbox"
+              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.985 }}
+              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-card,rgba(8,7,6,0.98))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+            >
+              <div className="space-y-0.5">
+                {options.map((opt) => {
+                  const isSelected = opt.value === value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        onChange(opt.value)
+                        setIsOpen(false)
+                      }}
+                      className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                        isSelected
+                          ? 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
+                          : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? 'text-[#f1d27a]' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
+                        ●
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }
@@ -381,22 +423,40 @@ export function PortalDatePicker({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[color:var(--portal-border)] focus:outline-none"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30"
       >
         <span>{formattedDisplay}</span>
         <span className="text-[10px] text-[color:var(--portal-muted)]">📅</span>
       </button>
       
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-45" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-xs shadow-2xl">
+      <AnimatePresence>
+        {isOpen ? (
+          <>
+            <motion.div
+              aria-hidden="true"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="fixed inset-0 z-[45] cursor-default"
+              onClick={() => setIsOpen(false)}
+            />
+            <motion.div
+              role="dialog"
+              initial={{ opacity: 0, y: -8, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.985 }}
+              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-card,rgba(8,7,6,0.98))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+            >
             {/* Header navigation */}
             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                className="rounded p-1 text-[color:var(--portal-muted)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text)]"
+                className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
               >
                 ◀
               </button>
@@ -406,7 +466,7 @@ export function PortalDatePicker({
               <button
                 type="button"
                 onClick={handleNextMonth}
-                className="rounded p-1 text-[color:var(--portal-muted)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text)]"
+                className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
               >
                 ▶
               </button>
@@ -432,12 +492,12 @@ export function PortalDatePicker({
                     key={day.getTime()}
                     type="button"
                     onClick={() => handleSelectDay(day)}
-                    className={`h-7 w-7 rounded-md font-mono flex items-center justify-center transition-all ${
+                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all ${
                       isSelected
                         ? 'border border-[#caa24c]/40 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                         : isToday
-                        ? 'border border-blue-500/30 text-blue-500 font-bold hover:bg-black/5'
-                        : 'text-[color:var(--portal-text)] hover:bg-black/5 hover:text-[color:var(--portal-text)]'
+                        ? 'border border-blue-500/30 font-bold text-blue-500 hover:bg-black/5'
+                        : 'text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
                     }`}
                   >
                     {day.getDate()}
@@ -445,9 +505,10 @@ export function PortalDatePicker({
                 )
               })}
             </div>
-          </div>
-        </>
-      )}
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

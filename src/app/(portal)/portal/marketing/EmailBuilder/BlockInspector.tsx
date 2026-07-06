@@ -2,6 +2,7 @@
 
 import React from 'react'
 import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
+import { PortalSelect } from '@/components/portal/PortalUI'
 
 interface InspectorProps {
   block: EmailBlock
@@ -10,8 +11,21 @@ interface InspectorProps {
 
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-1.5'
 const inputCls = 'w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors'
-const selectCls = `${inputCls} cursor-pointer`
 const fieldCls = 'space-y-1.5'
+const textAlignOptions = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
+]
+const imagePositionOptions = [
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+]
+const dividerStyleOptions = [
+  { value: 'solid', label: 'Solid' },
+  { value: 'dashed', label: 'Dashed' },
+  { value: 'dotted', label: 'Dotted' },
+]
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -43,11 +57,12 @@ function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: He
           <span className="text-[10px] text-zinc-500 font-mono">{Math.round(block.overlayOpacity * 100)}%</span>
         </Field>
         <Field label="Text Align">
-          <select className={selectCls} value={block.textAlign} onChange={(e) => u({ textAlign: e.target.value as HeroBlock['textAlign'] })}>
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </select>
+          <PortalSelect
+            value={block.textAlign}
+            onChange={(value) => u({ textAlign: value as HeroBlock['textAlign'] })}
+            options={textAlignOptions}
+            className="w-full"
+          />
         </Field>
       </RowFields>
       <div className="border-t border-zinc-800/60 pt-4 space-y-3">
@@ -83,11 +98,12 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
           <input type="number" className={inputCls} min={10} max={60} value={block.fontSize} onChange={(e) => u({ fontSize: Number(e.target.value) })} />
         </Field>
         <Field label="Text Align">
-          <select className={selectCls} value={block.textAlign} onChange={(e) => u({ textAlign: e.target.value as TextBlock['textAlign'] })}>
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </select>
+          <PortalSelect
+            value={block.textAlign}
+            onChange={(value) => u({ textAlign: value as TextBlock['textAlign'] })}
+            options={textAlignOptions}
+            className="w-full"
+          />
         </Field>
       </RowFields>
       <Field label="Color">
@@ -116,10 +132,12 @@ function ImageTextInspector({ block, onChange }: { block: ImageTextBlock; onChan
           <input className={inputCls} value={block.imageAlt} onChange={(e) => u({ imageAlt: e.target.value })} />
         </Field>
         <Field label="Image Position">
-          <select className={selectCls} value={block.imagePosition} onChange={(e) => u({ imagePosition: e.target.value as 'left' | 'right' })}>
-            <option value="left">Left</option>
-            <option value="right">Right</option>
-          </select>
+          <PortalSelect
+            value={block.imagePosition}
+            onChange={(value) => u({ imagePosition: value as 'left' | 'right' })}
+            options={imagePositionOptions}
+            className="w-full"
+          />
         </Field>
       </RowFields>
       <Field label="CTA URL">
@@ -141,11 +159,12 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
         <input className={inputCls} placeholder="https://..." value={block.url} onChange={(e) => u({ url: e.target.value })} />
       </Field>
       <Field label="Alignment">
-        <select className={selectCls} value={block.align} onChange={(e) => u({ align: e.target.value as ButtonBlock['align'] })}>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-        </select>
+        <PortalSelect
+          value={block.align}
+          onChange={(value) => u({ align: value as ButtonBlock['align'] })}
+          options={textAlignOptions}
+          className="w-full"
+        />
       </Field>
       <RowFields>
         <Field label="Background Color">
@@ -196,11 +215,12 @@ function DividerInspector({ block, onChange }: { block: DividerBlock; onChange: 
         </Field>
       </RowFields>
       <Field label="Style">
-        <select className={selectCls} value={block.style} onChange={(e) => u({ style: e.target.value as DividerBlock['style'] })}>
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
-        </select>
+        <PortalSelect
+          value={block.style}
+          onChange={(value) => u({ style: value as DividerBlock['style'] })}
+          options={dividerStyleOptions}
+          className="w-full"
+        />
       </Field>
     </div>
   )

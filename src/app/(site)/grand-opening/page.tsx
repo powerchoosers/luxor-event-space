@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowRight, Check, Gift, Loader2, Mail, Music2, Sparkles, Utensils } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
+import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 
 const showcaseDetails = [
@@ -167,16 +168,13 @@ export default function GrandOpeningPage() {
                     <TextField name="attendeeCount" label="How many attending?" inputMode="numeric" placeholder="1, 2, 3..." />
                     <label className="block">
                       <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Event interest</span>
-                      <select
+                      <PortalSelect
                         value={eventInterest}
-                        onChange={(event) => setEventInterest(event.target.value)}
-                        className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70"
-                      >
-                        <option value="">Select one</option>
-                        {eventInterests.map((interest) => (
-                          <option key={interest} value={interest}>{interest}</option>
-                        ))}
-                      </select>
+                        onChange={setEventInterest}
+                        className="mt-2 w-full"
+                        placeholder="Select one"
+                        options={eventInterests.map((interest) => ({ value: interest, label: interest }))}
+                      />
                     </label>
                   </div>
 

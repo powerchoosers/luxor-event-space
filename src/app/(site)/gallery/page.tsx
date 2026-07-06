@@ -1,5 +1,6 @@
 'use client'
 
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -97,11 +98,27 @@ export default function GalleryPage() {
   const selectedItem = selectedIndex === null ? null : filteredGallery[selectedIndex]
 
   useEffect(() => {
-    document.body.style.overflow = selectedItem ? 'hidden' : ''
+    if (!selectedItem) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
 
     return () => {
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousOverflow
     }
+  }, [selectedItem])
+
+  useEffect(() => {
+    if (!selectedItem) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSelectedIndex(null)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [selectedItem])
 
   function showPrevious() {
@@ -212,75 +229,85 @@ export default function GalleryPage() {
         </div>
       </section>
 
-      <AnimatePresence>
-        {selectedItem ? (
-          <motion.div
-            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/88 p-4 backdrop-blur-xl"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selectedItem.title} image preview`}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedIndex(null)}
-              className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/60 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505]"
-              aria-label="Close image preview"
-            >
-              <X className="h-5 w-5" />
-            </button>
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <AnimatePresence>
+              {selectedItem ? (
+                <motion.div
+                  className="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto bg-black/88 p-4 backdrop-blur-xl sm:p-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`${selectedItem.title} image preview`}
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                      setSelectedIndex(null)
+                    }
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIndex(null)}
+                    className="absolute right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/70 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505]"
+                    aria-label="Close image preview"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
 
-            <button
-              type="button"
-              onClick={showPrevious}
-              className="absolute left-4 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/60 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505] sm:flex"
-              aria-label="Previous image"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
+                  <button
+                    type="button"
+                    onClick={showPrevious}
+                    className="absolute left-4 top-1/2 z-30 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/70 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505] sm:flex"
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
 
-            <button
-              type="button"
-              onClick={showNext}
-              className="absolute right-4 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/60 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505] sm:flex"
-              aria-label="Next image"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
+                  <button
+                    type="button"
+                    onClick={showNext}
+                    className="absolute right-4 top-1/2 z-30 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/70 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505] sm:flex"
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className="grid w-full max-w-6xl overflow-hidden rounded-md border border-[#caa24c]/24 bg-[#080706] shadow-[0_40px_120px_-40px_rgba(0,0,0,1)] lg:grid-cols-[1fr_22rem]"
-            >
-              <div className="relative aspect-[4/3] bg-black lg:min-h-[70vh]">
-                <Image
-                  src={selectedItem.src}
-                  alt={selectedItem.title}
-                  fill
-                  sizes="(min-width: 1024px) 900px, 100vw"
-                  className="object-cover"
-                />
-              </div>
-              <aside className="border-t border-[#caa24c]/18 p-6 lg:border-l lg:border-t-0 lg:p-8">
-                <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">
-                  <Grid3X3 className="h-4 w-4" />
-                  {selectedItem.category}
-                </div>
-                <h2 className="mt-5 font-serif text-4xl leading-none text-[#f7efe3]">{selectedItem.title}</h2>
-                <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72">{selectedItem.caption}</p>
-                <div className="mt-8 border-t border-[#caa24c]/18 pt-5 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d7c29a]/42">
-                  Image {(selectedIndex ?? 0) + 1} of {filteredGallery.length}
-                </div>
-              </aside>
-            </motion.div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                    transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                    className="grid w-full max-w-6xl overflow-hidden rounded-md border border-[#caa24c]/24 bg-[#080706] shadow-[0_40px_120px_-40px_rgba(0,0,0,1)] max-h-[calc(100dvh-2rem)] lg:grid-cols-[minmax(0,1fr)_22rem]"
+                  >
+                    <div className="relative min-h-[18rem] bg-black sm:min-h-[24rem] lg:min-h-[min(70vh,48rem)]">
+                      <Image
+                        src={selectedItem.src}
+                        alt={selectedItem.title}
+                        fill
+                        sizes="(min-width: 1024px) 900px, 100vw"
+                        className="object-contain p-3 sm:p-4"
+                      />
+                    </div>
+                    <aside className="border-t border-[#caa24c]/18 p-6 lg:border-l lg:border-t-0 lg:p-8">
+                      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.28em] text-[#caa24c]">
+                        <Grid3X3 className="h-4 w-4" />
+                        {selectedItem.category}
+                      </div>
+                      <h2 className="mt-5 font-serif text-4xl leading-none text-[#f7efe3]">{selectedItem.title}</h2>
+                      <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72">{selectedItem.caption}</p>
+                      <div className="mt-8 border-t border-[#caa24c]/18 pt-5 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d7c29a]/42">
+                        Image {(selectedIndex ?? 0) + 1} of {filteredGallery.length}
+                      </div>
+                    </aside>
+                  </motion.div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
 
       <section className="border-t border-[#caa24c]/16 bg-[#120d0c] py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">

@@ -14,7 +14,8 @@ import {
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
-  PortalStatusBadge
+  PortalStatusBadge,
+  PortalSelect
 } from '@/components/portal/PortalUI'
 
 export default function InvoicesPage() {
@@ -199,17 +200,18 @@ export default function InvoicesPage() {
                     <PortalStatusBadge status={inv.status} />
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <select
+                    <PortalSelect
                       value={inv.status}
-                      onChange={(e) => handleUpdateStatus(inv.id, e.target.value)}
-                      className="bg-zinc-950 border border-zinc-900 text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-2 py-1 rounded focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                      onChange={(value) => handleUpdateStatus(inv.id, value)}
+                      className="ml-auto w-40"
+                      options={[
+                        { value: 'draft', label: 'Draft' },
+                        { value: 'sent', label: 'Sent' },
+                        { value: 'paid', label: 'Paid' },
+                        { value: 'overdue', label: 'Overdue' },
+                        { value: 'cancelled', label: 'Cancelled' },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))

@@ -142,30 +142,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
                 </>
               )}
             </Link>
-            {!sidebarCollapsed ? (
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(true)}
-                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-                aria-label="Collapse sidebar"
-                aria-expanded="true"
-              >
-                <PanelLeftClose size={17} />
-              </button>
-            ) : null}
           </div>
-
-          {sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className="mb-4 inline-flex h-10 w-10 items-center justify-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-              aria-label="Expand sidebar"
-              aria-expanded="false"
-            >
-              <PanelLeftOpen size={18} />
-            </button>
-          ) : null}
 
           <div className={`mb-6 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-[inset_0_1px_0_rgba(241,210,122,0.08)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-h-0 border-transparent p-0 opacity-0' : 'max-h-44 p-4 opacity-100'}`}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#caa24c]">Website Signal</p>
@@ -209,9 +186,19 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
                 markClassName="!h-10 !w-10"
               />
             </Link>
-            
+
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((current) => !current)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!sidebarCollapsed}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+
             {/* Header Search Command Bar */}
-            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group" style={{ borderColor: 'var(--portal-border)' }}>
+            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group">
               <Search size={14} className="shrink-0 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
