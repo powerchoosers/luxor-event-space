@@ -26,26 +26,26 @@
 
 html {
   scroll-behavior: smooth;
-  scrollbar-color: rgba(202, 162, 76, 0.62) rgba(5, 5, 5, 0.76);
+  scrollbar-color: rgba(160, 160, 170, 0.56) rgba(5, 5, 5, 0.76);
   scrollbar-width: thin;
 }
 
 body {
   font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
   background:
-    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.16), transparent 30rem),
+    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.06), transparent 30rem),
     linear-gradient(180deg, #050505 0%, #0a0707 46%, #050505 100%);
   color: var(--foreground);
 }
 
 body[data-portal-theme='dark'] {
   --portal-bg: #080706;
-  --portal-card: rgba(0, 0, 0, 0.4);
-  --portal-soft: rgba(9, 9, 11, 0.78);
-  --portal-text: rgba(255, 255, 255, 0.92);
-  --portal-muted: #a1a1aa;
-  --portal-faint: #52525b;
-  --portal-border: rgba(202, 162, 76, 0.12);
+  --portal-card: rgba(0, 0, 0, 0.36);
+  --portal-soft: rgba(9, 9, 11, 0.7);
+  --portal-text: rgba(255, 255, 255, 0.9);
+  --portal-muted: #9696a1;
+  --portal-faint: #50505c;
+  --portal-border: rgba(202, 162, 76, 0.08);
 }
 
 body[data-portal-theme='light'] {
@@ -182,9 +182,9 @@ body[data-portal-theme='light'] .text-zinc-900 {
 @layer utilities {
   .luxor-noise {
     background-image:
-      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.07), transparent 18%),
-      radial-gradient(circle at 80% 15%, rgba(202, 162, 76, 0.12), transparent 16%),
-      radial-gradient(circle at 50% 100%, rgba(189, 101, 117, 0.08), transparent 24%);
+      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.03), transparent 18%),
+      radial-gradient(circle at 80% 15%, rgba(202, 162, 76, 0.06), transparent 16%),
+      radial-gradient(circle at 50% 100%, rgba(189, 101, 117, 0.04), transparent 24%);
     background-size: 24rem 24rem, 28rem 28rem, 32rem 32rem;
   }
 
@@ -196,19 +196,19 @@ body[data-portal-theme='light'] .text-zinc-900 {
 
   .luxor-gold-text {
     color: #caa24c;
-    background: linear-gradient(90deg, #9b6d24 0%, #f1d27a 44%, #b98024 100%);
+    background: linear-gradient(90deg, #8c6628 0%, #e7cb7a 44%, #a97a2b 100%);
     -webkit-background-clip: text;
     background-clip: text;
-    text-shadow: 0 0 28px rgba(202, 162, 76, 0.18);
+    text-shadow: none;
   }
 
   .luxor-panel {
-    border: 1px solid rgba(202, 162, 76, 0.22);
+    border: 1px solid rgba(202, 162, 76, 0.12);
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
       #080706;
     box-shadow:
-      0 34px 90px -58px rgba(0, 0, 0, 0.95),
+      0 28px 78px -56px rgba(0, 0, 0, 0.9),
       inset 0 0 0 1px rgba(255, 255, 255, 0.025);
   }
 
@@ -248,10 +248,10 @@ body[data-portal-theme='light'] .text-zinc-900 {
     font-weight: 500;
     letter-spacing: 0.115em;
     color: #caa24c;
-    background: linear-gradient(90deg, #8f641f 0%, #f4d982 35%, #b47a23 67%, #e2bc62 100%);
+    background: linear-gradient(90deg, #92713a 0%, #ecd68d 35%, #b98a3e 67%, #d9bf77 100%);
     -webkit-background-clip: text;
     background-clip: text;
-    text-shadow: 0 0 24px rgba(202, 162, 76, 0.18);
+    text-shadow: none;
   }
 
   .luxor-subline {
@@ -473,7 +473,7 @@ body[data-portal-theme='light'] .text-zinc-900 {
     right: 0;
     width: 140px;
     height: 140px;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -489,7 +489,7 @@ body[data-portal-theme='light'] .text-zinc-900 {
     right: 0;
     width: 140px;
     height: 140px;
-    background: radial-gradient(circle, rgba(202, 162, 76, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(202, 162, 76, 0.03) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -505,23 +505,23 @@ body[data-portal-theme='light'] .text-zinc-900 {
     right: 0;
     width: 140px;
     height: 140px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.03) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
 
   .luxor-glass-card {
     position: relative;
-    border: 1px solid rgba(202, 162, 76, 0.12);
-    background: linear-gradient(185deg, rgba(16, 12, 11, 0.75) 0%, rgba(5, 5, 5, 0.85) 100%);
-    box-shadow: 0 20px 50px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(202, 162, 76, 0.08);
+    background: linear-gradient(185deg, rgba(13, 11, 10, 0.72) 0%, rgba(5, 5, 5, 0.88) 100%);
+    box-shadow: 0 20px 46px -34px rgba(0, 0, 0, 0.92), inset 0 1px 0 rgba(255, 255, 255, 0.02);
     backdrop-filter: blur(24px);
     transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .luxor-glass-card:hover {
-    border-color: rgba(202, 162, 76, 0.24);
-    box-shadow: 0 30px 60px -25px rgba(202, 162, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    border-color: rgba(202, 162, 76, 0.14);
+    box-shadow: 0 26px 56px -28px rgba(202, 162, 76, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transform: translateY(-4px);
   }
 }

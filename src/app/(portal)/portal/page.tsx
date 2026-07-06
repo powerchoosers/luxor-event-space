@@ -210,7 +210,7 @@ export default async function PortalOverview() {
         {/* Action Center & Recent Notes */}
         <div className="space-y-6">
           {/* Quick Actions */}
-          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 luxor-glow-gold shadow-2xl">
+          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-semibold text-white/90 mb-6 flex items-center gap-3">
               <TrendingUp size={18} className="text-[#caa24c]" />
               Quick Actions
@@ -244,7 +244,7 @@ export default async function PortalOverview() {
           </div>
 
           {/* Activity feed / telemetry hybrid */}
-          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 luxor-glow-gold shadow-2xl overflow-hidden relative">
+          <div className="luxor-glass-card hover:translate-y-0 rounded-2xl p-6 shadow-2xl overflow-hidden relative">
             <h3 className="font-semibold text-white/90 mb-5 flex items-center gap-3">
               <Activity size={18} className="text-[#caa24c]" />
               Recent Workspace Updates
@@ -285,10 +285,10 @@ function OpsCard({
   tone?: 'blue' | 'gold' | 'green' | 'rose'
 }) {
   const tones = {
-    blue: 'border-blue-500/15 bg-blue-500/5 text-blue-300',
-    gold: 'border-[#caa24c]/20 bg-[#caa24c]/8 text-[#f1d27a]',
-    green: 'border-emerald-500/15 bg-emerald-500/5 text-emerald-300',
-    rose: 'border-rose-500/20 bg-rose-500/8 text-rose-300',
+    blue: 'border-white/8 bg-white/[0.03] text-sky-200',
+    gold: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#e1c778]',
+    green: 'border-white/8 bg-white/[0.03] text-emerald-200',
+    rose: 'border-white/8 bg-white/[0.03] text-rose-200',
   }
 
   return (
@@ -314,17 +314,17 @@ function MetricCard({ label, value, change, trend, icon, color }: {
   color: 'blue' | 'green' | 'orange' | 'purple';
 }) {
   const colorMap = {
-    blue: 'text-blue-400 bg-blue-500/5 border-blue-500/10 shadow-blue-500/5',
-    green: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/10 shadow-emerald-500/5',
-    orange: 'text-amber-500 bg-amber-500/5 border-amber-500/10 shadow-amber-500/5',
-    purple: 'text-purple-400 bg-purple-500/5 border-purple-500/10 shadow-purple-500/5'
+    blue: 'text-sky-300 bg-white/[0.03] border-white/8 shadow-black/5',
+    green: 'text-emerald-300 bg-white/[0.03] border-white/8 shadow-black/5',
+    orange: 'text-amber-300 bg-white/[0.03] border-white/8 shadow-black/5',
+    purple: 'text-violet-300 bg-white/[0.03] border-white/8 shadow-black/5'
   };
 
   const glowMap = {
-    blue: 'luxor-glow-blue',
-    green: 'luxor-glow-green',
-    orange: 'luxor-glow-gold',
-    purple: 'luxor-glow-gold'
+    blue: '',
+    green: '',
+    orange: '',
+    purple: ''
   };
 
   return (
