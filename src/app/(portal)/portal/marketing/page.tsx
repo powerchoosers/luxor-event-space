@@ -152,7 +152,7 @@ export default function MarketingPage() {
   ]
 
   return (
-    <PortalPageFrame className={activeTab === 'builder' ? '!h-[calc(100vh-11rem)] sm:!h-[calc(100vh-12rem)] lg:!h-[calc(100vh-13.5rem)] !min-h-0 overflow-hidden' : ''}>
+    <PortalPageFrame className={activeTab === 'builder' ? '!h-full !min-h-0 overflow-hidden' : ''}>
       <PortalPageHeader
         icon={<Mail size={18} />}
         title="Marketing Command"
