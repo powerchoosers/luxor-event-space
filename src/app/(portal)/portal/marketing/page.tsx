@@ -152,50 +152,51 @@ export default function MarketingPage() {
   ]
 
   return (
-    <PortalPageFrame>
+    <PortalPageFrame className={activeTab === 'builder' ? '!h-[calc(100vh-11rem)] sm:!h-[calc(100vh-12rem)] lg:!h-[calc(100vh-13.5rem)] !min-h-0 overflow-hidden' : ''}>
       <PortalPageHeader
         icon={<Mail size={18} />}
         title="Marketing Command"
         description="Build, schedule, send, and track Luxor email campaigns from one simple control room."
         actions={
-          activeTab === 'overview' ? (
-            <>
-              <button
-                onClick={loadCampaigns}
-                disabled={loading}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
-              >
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Refresh
-              </button>
-              <button
-                onClick={() => setActiveTab('builder')}
-                className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
-              >
-                <Plus size={16} /> New Campaign
-              </button>
-            </>
-          ) : null
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Navigation Tabs */}
+            <div className="flex items-center gap-1 p-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-[#caa24c] text-black shadow-md shadow-[#caa24c]/20'
+                      : 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'overview' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadCampaigns}
+                  disabled={loading}
+                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+                </button>
+                <button
+                  onClick={() => setActiveTab('builder')}
+                  className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
+                >
+                  <Plus size={14} /> New Campaign
+                </button>
+              </div>
+            )}
+          </div>
         }
       />
-
-      <div className="flex-shrink-0">
-        <div className="flex w-fit items-center gap-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.15em] transition-all ${
-                activeTab === tab.id
-                  ? 'bg-[#caa24c] text-black shadow-md shadow-[#caa24c]/20'
-                  : 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {activeTab === 'overview' && (
         <>
