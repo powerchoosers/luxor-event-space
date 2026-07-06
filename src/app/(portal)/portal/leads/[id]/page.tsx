@@ -457,7 +457,9 @@ export default function LeadDetailPage({
       setBookingNotes('')
       setBookingStatus('tentative')
 
-      await handleStatusChange('booked')
+      if (lead.status !== 'booked') {
+        await handleStatusChange('booked')
+      }
     } catch (err) {
       console.error(err)
       alert(err instanceof Error ? err.message : 'Failed to create booking.')
@@ -1642,6 +1644,29 @@ function ClientDossierLoading() {
       <div className="shrink-0 flex items-center justify-between">
         <div className="h-4 w-32 luxor-skeleton rounded" />
         <div className="h-8 w-44 luxor-skeleton rounded-lg" />
+      </div>
+
+      <div className="sticky top-0 z-20 rounded-2xl border border-zinc-900/80 bg-black/55 px-3 py-3 shadow-xl shadow-black/20 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="h-7 w-24 luxor-skeleton rounded-full" />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-zinc-900 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
+            <div className="flex items-center justify-between gap-4">
+              <div className="h-3 w-16 luxor-skeleton rounded" />
+              <div className="h-4 w-10 luxor-skeleton rounded-full" />
+            </div>
+            <div className="mt-2 flex items-end justify-between gap-3">
+              <div className="h-6 w-28 luxor-skeleton rounded" />
+              <div className="h-4 w-20 luxor-skeleton rounded" />
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="shrink-0 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
