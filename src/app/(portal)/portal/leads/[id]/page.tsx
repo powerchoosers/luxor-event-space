@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, use, startTransition } from 'react'
+import React, { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -27,7 +27,7 @@ import {
   ReceiptText,
   Sparkles,
 } from 'lucide-react'
-import { LuxorBooking, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
+import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
 type ZohoEmailMessage = {
@@ -86,6 +86,18 @@ export default function LeadDetailPage({
   const [invoiceNotes, setInvoiceNotes] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
 
+  // Booking creation state
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+  const [bookingEventDate, setBookingEventDate] = useState('')
+  const [bookingStartTime, setBookingStartTime] = useState('')
+  const [bookingEndTime, setBookingEndTime] = useState('')
+  const [bookingPackageName, setBookingPackageName] = useState('')
+  const [bookingContractTotal, setBookingContractTotal] = useState('')
+  const [bookingDepositRequired, setBookingDepositRequired] = useState('')
+  const [bookingNotes, setBookingNotes] = useState('')
+  const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
+  const [submittingBooking, setSubmittingBooking] = useState(false)
+
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
@@ -96,40 +108,33 @@ export default function LeadDetailPage({
     try {
       setLoading(true)
       setError(null)
-      
-      // Fetch lead
+
       const leadRes = await fetch(`/api/inquiries?id=${id}`)
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
-      await fetchClientEmailThread(leadData.email || '')
 
-      // Fetch notes
-      const notesRes = await fetch(`/api/notes?inquiryId=${id}`)
-      if (notesRes.ok) {
-        const notesData = await notesRes.json()
-        setNotes(notesData)
-      }
+      void fetchClientEmailThread(leadData.email || '')
 
-      // Fetch tasks
-      const tasksRes = await fetch(`/api/tasks?inquiryId=${id}`)
-      if (tasksRes.ok) {
-        const tasksData = await tasksRes.json()
-        setTasks(tasksData)
-      }
+      const [notesData, tasksData, invoicesData, bookingsData] = await Promise.all([
+        fetch(`/api/notes?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+        fetch(`/api/tasks?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+        fetch(`/api/invoices?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+        fetch(`/api/bookings?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+      ])
 
-      // Fetch invoices
-      const invoicesRes = await fetch(`/api/invoices?inquiryId=${id}`)
-      if (invoicesRes.ok) {
-        const invoicesData = await invoicesRes.json()
-        setInvoices(invoicesData)
-      }
-
-      const bookingsRes = await fetch(`/api/bookings?inquiryId=${id}`)
-      if (bookingsRes.ok) {
-        const bookingsData = await bookingsRes.json()
-        setBookings(bookingsData)
-      }
+      setNotes(notesData)
+      setTasks(tasksData)
+      setInvoices(invoicesData)
+      setBookings(bookingsData)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
@@ -389,13 +394,33 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleCreateBookingFromLead = async () => {
+  const openBookingModal = () => {
+    const suggestedContractTotal = invoices[0]?.total ? Number(invoices[0].total) : 0
+    const targetDate = lead?.target_date && /^\d{4}-\d{2}-\d{2}$/.test(lead.target_date) ? lead.target_date : ''
+
+    setBookingEventDate(targetDate)
+    setBookingStartTime('')
+    setBookingEndTime('')
+    setBookingPackageName(lead?.package_interest || '')
+    setBookingContractTotal(suggestedContractTotal > 0 ? String(suggestedContractTotal) : '')
+    setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.25)) : '')
+    setBookingNotes(lead?.message || '')
+    setBookingStatus('tentative')
+    setIsBookingModalOpen(true)
+  }
+
+  const handleCreateBooking = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!lead) return
 
-    const eventDate = window.prompt('Event date for the booking? Use YYYY-MM-DD format.')
-    if (!eventDate) return
+    const parsedContractTotal = Number.parseFloat(bookingContractTotal)
+    const contractTotal = Number.isFinite(parsedContractTotal) ? parsedContractTotal : 0
+    const parsedDeposit = Number.parseFloat(bookingDepositRequired)
+    const depositRequired = Number.isFinite(parsedDeposit) ? parsedDeposit : Math.round(contractTotal * 0.25)
 
     try {
+      setSubmittingBooking(true)
+
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -405,21 +430,39 @@ export default function LeadDetailPage({
           email: lead.email,
           phone: lead.phone,
           event_type: lead.event_type,
-          event_date: eventDate,
+          event_date: bookingEventDate || null,
+          start_time: bookingStartTime || null,
+          end_time: bookingEndTime || null,
+          package_name: bookingPackageName || null,
           guest_count: lead.guest_count,
-          status: 'tentative',
-          contract_total: getInvoiceTotal(),
-          deposit_required: Math.round(getInvoiceTotal() * 0.25),
-          notes: lead.message,
+          status: bookingStatus,
+          contract_total: contractTotal,
+          deposit_required: depositRequired,
+          notes: bookingNotes.trim() || lead.message,
         }),
       })
-      const data = await res.json()
+
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to create booking.')
+
+      const booking = data as LuxorBooking
+      setBookings((prev) => [booking, ...prev])
+      setIsBookingModalOpen(false)
+      setBookingEventDate('')
+      setBookingStartTime('')
+      setBookingEndTime('')
+      setBookingPackageName('')
+      setBookingContractTotal('')
+      setBookingDepositRequired('')
+      setBookingNotes('')
+      setBookingStatus('tentative')
+
       await handleStatusChange('booked')
-      await fetchAllData()
     } catch (err) {
       console.error(err)
       alert(err instanceof Error ? err.message : 'Failed to create booking.')
+    } finally {
+      setSubmittingBooking(false)
     }
   }
 
@@ -443,6 +486,232 @@ export default function LeadDetailPage({
   // Parse chat logs if available in metadata
   const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
   const isGrandOpeningLead = isGrandOpeningRsvp(lead)
+  const latestBooking = getMostRecentBooking(bookings)
+  const latestInvoice = invoices[0] ?? null
+  const noteEntries: ActivityEntry[] = notes.map((note) => ({
+    kind: 'note',
+    id: `note-${note.id}`,
+    createdAt: note.created_at,
+    note,
+  }))
+  const emailEntries: ActivityEntry[] = emailMessages.map((email) => ({
+    kind: 'email',
+    id: `email-${email.id || email.direction || email.subject}-${email.receivedAt || email.from}`,
+    createdAt: normalizeTimelineDate(email.receivedAt),
+    email,
+  }))
+  const activityEntries = [...noteEntries, ...emailEntries]
+    .filter((entry) => {
+      if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
+      if (activeFeedTab === 'comms') {
+        return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+      }
+      if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
+      return true
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const latestActivityEntry = activityEntries[0] ?? null
+  const contactSummary = getContactSummary(lead)
+  const leadAgeLabel = formatLeadAge(lead.created_at)
+  const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
+  const summaryCards = [
+    {
+      label: 'Lead age',
+      value: leadAgeLabel,
+      detail: `Created ${new Date(lead.created_at).toLocaleDateString()}`,
+      tone: 'blue' as const,
+    },
+    {
+      label: 'Next best move',
+      value: nextBestMove.title,
+      detail: nextBestMove.detail,
+      tone: 'gold' as const,
+    },
+    {
+      label: 'Latest activity',
+      value: latestActivityEntry ? describeActivityEntry(latestActivityEntry) : 'No activity yet',
+      detail: latestActivityEntry ? formatTimelineDate(latestActivityEntry.createdAt) : 'Nothing logged yet',
+      tone: 'green' as const,
+    },
+    {
+      label: 'Contact',
+      value: contactSummary.label,
+      detail: contactSummary.detail,
+      tone: 'slate' as const,
+    },
+  ]
+  const primaryDetails = [
+    { label: 'Event Type', value: lead.event_type || 'Quinceañera', subtext: 'Spanish ñ spelling active' },
+    { label: 'Guest Count', value: lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified' },
+    { label: 'Target Date', value: lead.target_date || 'TBD' },
+    { label: 'Package Interest', value: lead.package_interest || 'Not selected' },
+    { label: 'Preferred Tour Date', value: lead.preferred_tour_date || 'No tour requested' },
+    { label: 'Preferred Tour Time', value: lead.preferred_tour_time || 'N/A' },
+    { label: 'Email', value: lead.email || 'None' },
+    { label: 'Phone', value: lead.phone || 'None' },
+  ]
+  const internalDetails = [
+    { label: 'Created', value: new Date(lead.created_at).toLocaleString(), isMono: true },
+    { label: 'Updated', value: new Date(lead.updated_at).toLocaleString(), isMono: true },
+    { label: 'Flow Type', value: lead.flow.replaceAll('_', ' '), isMono: true },
+    { label: 'Source Node', value: formatSourceLabel(lead), isMono: true },
+    { label: 'Campaign Key', value: lead.campaign_key || 'None', isMono: true },
+    { label: 'Page Path', value: lead.page_path || 'None', isMono: true },
+    { label: 'Referrer', value: lead.referrer || 'None', isMono: true },
+    { label: 'Marketing Opt In', value: lead.marketing_opt_in ? 'Yes' : 'No' },
+    { label: 'User Agent', value: lead.user_agent || 'Not captured', isMono: true },
+  ]
+  const activityCounts = {
+    all: noteEntries.length + emailEntries.length,
+    notes: notes.filter((note) => note.note_type === 'note').length,
+    comms: emailEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
+    system: notes.filter((note) => note.note_type === 'status_change').length,
+  }
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const rank = (task: LuxorTask) => {
+      if (task.status === 'pending' && task.priority === 'urgent') return 0
+      if (task.status === 'pending' && task.priority === 'high') return 1
+      if (task.status === 'pending') return 2
+      if (task.status === 'completed') return 3
+      return 4
+    }
+
+    const rankDiff = rank(a) - rank(b)
+    if (rankDiff !== 0) return rankDiff
+
+    const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY
+    const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
+    return aDue - bDue
+  })
+  const sortedBookings = [...bookings].sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at).getTime()
+    const bTime = new Date(b.updated_at || b.created_at).getTime()
+    return bTime - aTime
+  })
+  const sortedInvoices = [...invoices].sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at).getTime()
+    const bTime = new Date(b.updated_at || b.created_at).getTime()
+    return bTime - aTime
+  })
+  const recommendedActions: Array<{
+    icon: React.ReactNode
+    label: string
+    detail: string
+    onClick: () => void
+    disabled?: boolean
+  }> = []
+  const pushRecommendedAction = (action: (typeof recommendedActions)[number]) => {
+    recommendedActions.push(action)
+  }
+
+  if (lead.status === 'closed_lost') {
+    pushRecommendedAction({
+      icon: <ArrowLeft size={15} />,
+      label: 'Re-open lead',
+      detail: 'Bring this inquiry back into the pipeline',
+      onClick: () => handleStatusChange('new'),
+      disabled: updatingStatus,
+    })
+  } else if (lead.status === 'new') {
+    pushRecommendedAction({
+      icon: <Phone size={15} />,
+      label: 'Mark contacted',
+      detail: 'Log the first outreach touch',
+      onClick: () => handleStatusChange('contacted'),
+      disabled: updatingStatus,
+    })
+  } else if (lead.status === 'contacted' || lead.status === 'tour_requested') {
+    pushRecommendedAction({
+      icon: <Calendar size={15} />,
+      label: 'Confirm tour scheduled',
+      detail: 'Move lifecycle to tour confirmed',
+      onClick: () => handleStatusChange('tour_confirmed'),
+      disabled: updatingStatus || lead.status === 'tour_confirmed',
+    })
+  } else if (lead.status === 'tour_confirmed') {
+    pushRecommendedAction({
+      icon: <FileSignature size={15} />,
+      label: 'Mark proposal sent',
+      detail: 'Use after sending pricing',
+      onClick: () => handleStatusChange('proposal_sent'),
+      disabled: updatingStatus || lead.status === 'proposal_sent',
+    })
+  } else if (lead.status === 'proposal_sent') {
+    pushRecommendedAction({
+      icon: <MessageSquare size={15} />,
+      label: 'Follow up on proposal',
+      detail: 'Nudge for a decision or objections',
+      onClick: () => {
+        setNoteType('call_log')
+        scrollToSection('lead-activity')
+      },
+    })
+  } else if (lead.status === 'booked') {
+    pushRecommendedAction({
+      icon: <FileSignature size={15} />,
+      label: latestBooking?.contract_status === 'signed' ? 'Review booking' : 'Send contract',
+      detail:
+        latestBooking?.contract_status === 'signed'
+          ? 'Contract is already signed'
+          : latestBooking
+            ? 'Send the contract to keep momentum moving'
+            : 'Create the booking record first',
+      onClick: latestBooking ? () => handleSendContract(latestBooking.id) : openBookingModal,
+      disabled: latestBooking?.contract_status === 'signed',
+    })
+  }
+
+  pushRecommendedAction({
+    icon: <NotebookPen size={15} />,
+    label: 'Log a quick call note',
+    detail: 'Jump to the activity feed',
+    onClick: () => {
+      setNoteType('call_log')
+      scrollToSection('lead-activity')
+    },
+  })
+
+  pushRecommendedAction({
+    icon: <ReceiptText size={15} />,
+    label: 'Draft booking invoice',
+    detail: 'Create deposit or event invoice',
+    onClick: () => setIsInvoiceModalOpen(true),
+  })
+
+  if (lead.status !== 'booked' && lead.status !== 'closed_lost') {
+    pushRecommendedAction({
+      icon: <FileSignature size={15} />,
+      label: 'Create booking record',
+      detail: 'Add the event date and contract details',
+      onClick: openBookingModal,
+    })
+  }
+
+  const scrollToSection = (sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  const quickNoteTemplates = [
+    { label: 'Call recap', value: 'Call recap:\n- \nNext step:\n', type: 'call_log' as const },
+    { label: 'Follow-up sent', value: 'Follow-up email sent:\n\n', type: 'email_log' as const },
+    { label: 'Tour confirmed', value: 'Tour confirmed:\n\n', type: 'note' as const },
+    { label: 'Proposal sent', value: 'Proposal sent:\n\n', type: 'email_log' as const },
+  ]
+  const activityEmptyTitle =
+    activeFeedTab === 'notes'
+      ? 'No note entries match this filter yet.'
+      : activeFeedTab === 'comms'
+        ? 'No calls or emails match this filter yet.'
+        : activeFeedTab === 'system'
+          ? 'No status updates match this filter yet.'
+          : 'No activity has been logged yet.'
+  const activityEmptyCopy =
+    activeFeedTab === 'notes'
+      ? 'Use the note box above to capture the first written follow-up or summary.'
+      : activeFeedTab === 'comms'
+        ? 'Add a call log, email note, or sync Zoho history to populate this view.'
+        : activeFeedTab === 'system'
+          ? 'Status changes will appear here automatically when the lead moves.'
+          : 'Use the note box above to add the first update or wait for email history to sync.'
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -495,6 +764,33 @@ export default function LeadDetailPage({
         }
       />
 
+      <div className="sticky top-0 z-20 rounded-2xl border border-zinc-900/80 bg-black/55 px-3 py-3 shadow-xl shadow-black/20 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'lead-overview', label: 'Overview' },
+            { id: 'lead-activity', label: 'Activity' },
+            { id: 'lead-tasks', label: 'Tasks' },
+            { id: 'lead-booking', label: 'Booking' },
+            { id: 'lead-billing', label: 'Billing' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id)}
+              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-all hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <LeadStatCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone} />
+        ))}
+      </div>
+
       <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
         {/* Main Details and Activity Column */}
         <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3" data-client-scroll-column="main">
@@ -519,29 +815,45 @@ export default function LeadDetailPage({
             </div>
           ) : null}
 
-          {/* Detail Cards Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 luxor-soft-enter">
-            <DetailItem label="Event Type" value={lead.event_type || 'Quinceañera'} subtext="Spanish ñ spelling active" />
-            <DetailItem label="Guest Count" value={lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified'} />
-            {isGrandOpeningLead ? (
-              <>
-                <DetailItem label="RSVP Campaign" value="Grand Opening Showcase" subtext={lead.campaign_key || 'grand opening'} />
-                <DetailItem label="Attending Count" value={`${lead.attendee_count || lead.guest_count || 1} attending`} />
-                <DetailItem label="News Signup" value={lead.marketing_opt_in ? 'Yes' : 'No'} />
-              </>
-            ) : null}
-            <DetailItem label="Target Date" value={lead.target_date || 'TBD'} />
-            <DetailItem label="Preferred Tour Date" value={lead.preferred_tour_date || 'No tour requested'} />
-            <DetailItem label="Preferred Tour Time" value={lead.preferred_tour_time || 'N/A'} />
-            <DetailItem label="Email" value={lead.email || 'None'} />
-            <DetailItem label="Phone" value={lead.phone || 'None'} />
-            <DetailItem label="Flow Type" value={lead.flow.replaceAll('_', ' ')} isMono />
-            <DetailItem label="Source Node" value={formatSourceLabel(lead)} isMono />
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-zinc-900 bg-black/25 p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Lead Details</p>
+                  <p className="mt-1 text-xs text-zinc-600">Contact and planning details that belong near the top.</p>
+                </div>
+                <span className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                  Customer facing
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {primaryDetails.map((item) => (
+                  <DetailItem key={item.label} label={item.label} value={item.value} subtext={item.subtext} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-900 bg-black/25 p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal Signals</p>
+                  <p className="mt-1 text-xs text-zinc-600">Useful for tracing where the lead came from and how it moved.</p>
+                </div>
+                <span className="rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#f1d27a]">
+                  Internal only
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {internalDetails.map((item) => (
+                  <DetailItem key={item.label} label={item.label} value={item.value} isMono={item.isMono} subtext={item.subtext} />
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* User Message */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 luxor-soft-enter">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-3">
+          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 luxor-soft-enter" id="lead-message">
+            <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
               {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
             </h4>
             <p className="text-sm leading-relaxed text-zinc-300 font-medium italic">
@@ -578,90 +890,111 @@ export default function LeadDetailPage({
             </div>
           )}
 
-          {/* Activity Logs & Notes Section */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl luxor-soft-enter">
-            <div id="client-activity-log" className="scroll-mt-4" />
-            <div className="flex flex-col gap-4 mb-6 border-b border-zinc-900 pb-3 md:flex-row md:items-center md:justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-white/90 flex items-center gap-2">
-                <MessageSquare size={16} className="text-[#caa24c]" />
-                Activity Feed & Timeline
-              </h3>
-              
-              <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[9px] tracking-widest uppercase">
-                {(['all', 'notes', 'comms', 'system'] as const).map((tab) => {
-                  const labelMap = {
-                    all: 'All',
-                    notes: 'Notes',
-                    comms: 'Calls & Emails',
-                    system: 'Status Logs',
-                  }
-                  const isActive = activeFeedTab === tab
-                  return (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setActiveFeedTab(tab)}
-                      className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                          : 'text-zinc-500 hover:text-zinc-350'
-                      }`}
-                    >
-                      {labelMap[tab]}
-                    </button>
-                  )
-                })}
+          <div id="lead-activity" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl luxor-soft-enter scroll-mt-24">
+            <div className="mb-6 border-b border-zinc-900 pb-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/90">
+                  <MessageSquare size={16} className="text-[#caa24c]" />
+                  Activity Feed & Timeline
+                </h3>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { tab: 'all', label: 'All', count: activityCounts.all },
+                    { tab: 'notes', label: 'Notes', count: activityCounts.notes },
+                    { tab: 'comms', label: 'Calls & Emails', count: activityCounts.comms },
+                    { tab: 'system', label: 'Status Logs', count: activityCounts.system },
+                  ].map((item) => {
+                    const isActive = activeFeedTab === item.tab
+                    return (
+                      <button
+                        key={item.tab}
+                        type="button"
+                        onClick={() => setActiveFeedTab(item.tab as typeof activeFeedTab)}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] transition-all ${
+                          isActive
+                            ? 'border-[#caa24c]/20 bg-[#caa24c]/10 text-[#f1d27a]'
+                            : 'border-zinc-800 bg-zinc-950/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        <span className="rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] font-black tracking-[0.12em]">
+                          {item.count}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-600">Newest activity first. Notes, calls, emails, and status updates are split into separate filters.</p>
             </div>
 
-            <div className="mb-8 bg-zinc-950/40 p-4 border border-zinc-900 rounded-xl">
+            <div className="mb-6 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4">
               <form onSubmit={handlePostNote} className="space-y-4">
                 <textarea
                   value={noteContent}
                   onChange={(e) => setNoteContent(e.target.value)}
-                  placeholder="Record call summary, email response details, or general client notes..."
+                  placeholder="Write the recap, then choose how to tag it."
                   className="w-full h-24 bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed font-sans"
                 />
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {quickNoteTemplates.map((template) => (
+                    <button
+                      key={template.label}
+                      type="button"
+                      onClick={() => {
+                        setNoteType(template.type)
+                        setNoteContent(template.value)
+                      }}
+                      className="rounded-full border border-zinc-800 bg-zinc-950/80 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-all hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                    >
+                      {template.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setNoteType('note')}
-                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      aria-pressed={noteType === 'note'}
+                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'note'
-                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                          ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
                       }`}
                     >
-                      General Note
+                      Note
                     </button>
                     <button
                       type="button"
                       onClick={() => setNoteType('call_log')}
-                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      aria-pressed={noteType === 'call_log'}
+                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'call_log'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
                       }`}
                     >
-                      Call Log
+                      Call
                     </button>
                     <button
                       type="button"
                       onClick={() => setNoteType('email_log')}
-                      className={`px-3 py-1.5 rounded-md text-[9px] uppercase font-bold tracking-widest border transition-all ${
+                      aria-pressed={noteType === 'email_log'}
+                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'email_log'
-                          ? 'bg-purple-500/10 text-[#bd6575] border-[#bd6575]/20'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                          ? 'border-[#bd6575]/20 bg-purple-500/10 text-[#bd6575]'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
                       }`}
                     >
-                      Email Thread
+                      Email
                     </button>
                   </div>
                   <button
                     type="submit"
                     disabled={submittingNote || !noteContent.trim()}
-                    className="inline-flex items-center gap-1.5 bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/30 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-[#caa24c]/20 disabled:opacity-40 transition-all active:scale-95 hover:scale-105"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-40 active:scale-95"
                   >
                     Post Log <Send size={10} />
                   </button>
@@ -669,141 +1002,114 @@ export default function LeadDetailPage({
               </form>
             </div>
 
-            {(() => {
-              const noteEntries: ActivityEntry[] = notes.map((note) => ({
-                kind: 'note',
-                id: `note-${note.id}`,
-                createdAt: note.created_at,
-                note,
-              }))
-              const emailEntries: ActivityEntry[] = emailMessages.map((email) => ({
-                kind: 'email',
-                id: `email-${email.id || email.direction || email.subject}-${email.receivedAt || email.from}`,
-                createdAt: normalizeTimelineDate(email.receivedAt),
-                email,
-              }))
-              const entries = [...noteEntries, ...emailEntries]
-                .filter((entry) => {
-                  if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
-                  if (activeFeedTab === 'comms') {
-                    return entry.kind === 'email' || (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log')
-                  }
-                  if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
-                  return true
-                })
-                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            {lead.email ? (
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Zoho Email History</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    {loadingEmailMessages
+                      ? `Loading messages for ${lead.email}...`
+                      : emailThreadError
+                        ? emailThreadError
+                        : `${emailMessages.length} sent/received message${emailMessages.length === 1 ? '' : 's'} found for ${lead.email}`}
+                  </p>
+                </div>
+                {zohoReconnectRequired ? (
+                  <a
+                    href="/api/auth/zoho/login?setup=1"
+                    className="rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
+                  >
+                    Reconnect Zoho Search
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fetchClientEmailThread(lead.email || '')}
+                    disabled={loadingEmailMessages}
+                    className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
+                  >
+                    {loadingEmailMessages ? 'Syncing...' : 'Refresh Email'}
+                  </button>
+                )}
+              </div>
+            ) : null}
 
-              return (
-                <>
-                  {lead.email ? (
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Zoho Email History</p>
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                          {loadingEmailMessages
-                            ? `Loading messages for ${lead.email}...`
-                            : emailThreadError
-                            ? emailThreadError
-                            : `${emailMessages.length} sent/received message${emailMessages.length === 1 ? '' : 's'} found for ${lead.email}`}
-                        </p>
-                      </div>
-                      {zohoReconnectRequired ? (
-                        <a
-                          href="/api/auth/zoho/login?setup=1"
-                          className="rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
-                        >
-                          Reconnect Zoho Search
-                        </a>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => fetchClientEmailThread(lead.email || '')}
-                          disabled={loadingEmailMessages}
-                          className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
-                        >
-                          {loadingEmailMessages ? 'Syncing...' : 'Refresh Email'}
-                        </button>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {entries.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-zinc-650 italic">
-                      No workspace or Zoho email entries match the active filter.
-                    </div>
-                  ) : (
-                    <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
-                      {entries.map((entry) => {
-                        if (entry.kind === 'email') {
-                          const email = entry.email
-                          const isOutgoing = email.direction === 'outgoing'
-                          return (
-                            <div key={entry.id} className="relative group">
-                              <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-[#caa24c] transition-all" />
-                              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                                  {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
-                                </span>
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${
-                                    isOutgoing
-                                      ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
-                                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                                  }`}>
-                                    {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
-                                  </span>
-                                  <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
-                                </div>
-                              </div>
-                              <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
-                              <p className="mt-1 text-[10px] text-zinc-600">
-                                From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
-                              </p>
-                              {email.summary ? (
-                                <p className="mt-2 text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{email.summary}</p>
-                              ) : null}
-                            </div>
-                          )
-                        }
-
-                        const note = entry.note
-                    let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-800/50'
-                    let typeLabel = 'System Log'
-                    if (note.note_type === 'note') {
-                      badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                      typeLabel = 'Note'
-                    } else if (note.note_type === 'call_log') {
-                      badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      typeLabel = 'Call Log'
-                    } else if (note.note_type === 'email_log') {
-                      badgeColor = 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                      typeLabel = 'Email'
-                    } else if (note.note_type === 'status_change') {
-                      badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      typeLabel = 'Status'
-                    }
+            {activityEntries.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-6 text-sm text-zinc-500">
+                <p className="font-semibold text-zinc-300">{activityEmptyTitle}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-600">{activityEmptyCopy}</p>
+              </div>
+            ) : (
+              <div className="relative ml-3 space-y-6 border-l border-zinc-900 pl-6">
+                {activityEntries.map((entry) => {
+                  if (entry.kind === 'email') {
+                    const email = entry.email
+                    const isOutgoing = email.direction === 'outgoing'
 
                     return (
-                      <div key={note.id} className="relative group">
-                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-[#caa24c] transition-all animate-pulse" />
-                        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{note.author}</span>
+                      <div key={entry.id} className="relative group">
+                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 transition-all group-hover:border-[#caa24c]" />
+                        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                            {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
+                          </span>
                           <div className="flex items-center gap-3">
-                            <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${badgeColor}`}>
-                              {typeLabel}
+                            <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
+                              isOutgoing
+                                ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                            }`}>
+                              {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
                             </span>
-                            <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
+                            <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                        <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
+                        <p className="mt-1 text-[10px] text-zinc-600">
+                          From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
+                        </p>
+                        {email.summary ? (
+                          <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{email.summary}</p>
+                        ) : null}
                       </div>
                     )
-                      })}
+                  }
+
+                  const note = entry.note
+                  let badgeColor = 'border-zinc-800/50 bg-zinc-800 text-zinc-400'
+                  let typeLabel = 'System Log'
+                  if (note.note_type === 'note') {
+                    badgeColor = 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                    typeLabel = 'Note'
+                  } else if (note.note_type === 'call_log') {
+                    badgeColor = 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                    typeLabel = 'Call Log'
+                  } else if (note.note_type === 'email_log') {
+                    badgeColor = 'border-purple-500/20 bg-purple-500/10 text-purple-400'
+                    typeLabel = 'Email'
+                  } else if (note.note_type === 'status_change') {
+                    badgeColor = 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                    typeLabel = 'Status'
+                  }
+
+                  return (
+                    <div key={note.id} className="relative group">
+                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 animate-pulse transition-all group-hover:border-[#caa24c]" />
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${badgeColor}`}>
+                            {typeLabel}
+                          </span>
+                          <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{note.content}</p>
                     </div>
-                  )}
-                </>
-              )
-            })()}
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
 
