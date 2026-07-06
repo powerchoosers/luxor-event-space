@@ -476,9 +476,18 @@ export default function LeadDetailPage({
         <AlertCircle className="h-10 w-10 text-red-500/80" />
         <h3 className="text-lg font-bold text-white">Dossier Unavailable</h3>
         <p className="max-w-md text-sm text-zinc-500 leading-relaxed">{error || 'The requested client inquiry could not be found.'}</p>
-        <Link href="/portal/leads" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-300 transition-all hover:text-white">
-          <ArrowLeft size={12} /> Back to Leads
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={fetchAllData}
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-blue-300 transition-all hover:bg-blue-500/15 hover:text-white"
+          >
+            Retry Load
+          </button>
+          <Link href="/portal/leads" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-300 transition-all hover:text-white">
+            <ArrowLeft size={12} /> Back to Leads
+          </Link>
+        </div>
       </div>
     )
   }
@@ -649,15 +658,17 @@ export default function LeadDetailPage({
   } else if (lead.status === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: latestBooking?.contract_status === 'signed' ? 'Review booking' : 'Send contract',
-      detail:
-        latestBooking?.contract_status === 'signed'
+      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : 'Send contract') : 'Create booking record',
+      detail: latestBooking
+        ? latestBooking.contract_status === 'signed'
           ? 'Contract is already signed'
-          : latestBooking
-            ? 'Send the contract to keep momentum moving'
-            : 'Create the booking record first',
-      onClick: latestBooking ? () => handleSendContract(latestBooking.id) : openBookingModal,
-      disabled: latestBooking?.contract_status === 'signed',
+          : 'Send the contract to keep momentum moving'
+        : 'Create the booking record first',
+      onClick: latestBooking
+        ? latestBooking.contract_status === 'signed'
+          ? () => scrollToSection('lead-booking')
+          : () => handleSendContract(latestBooking.id)
+        : openBookingModal,
     })
   }
 
@@ -1115,69 +1126,44 @@ export default function LeadDetailPage({
 
         {/* Sidebar Panel Column */}
         <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-2" data-client-scroll-column="actions">
-          {/* Recommended Client Actions */}
           <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <h3 className="font-semibold text-white/90 mb-5 flex items-center gap-2.5">
-              <ClipboardCheck size={16} className="text-zinc-500" />
-              Recommended Actions
-            </h3>
+            <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-3">
+              <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
+                <ClipboardCheck size={16} className="text-zinc-500" />
+                Recommended Actions
+              </h3>
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">Top priority first</span>
+            </div>
             <div className="grid gap-2.5">
-              <ClientActionButton
-                icon={<Calendar size={15} />}
-                label="Confirm tour scheduled"
-                detail="Move lifecycle to tour confirmed"
-                onClick={() => handleStatusChange('tour_confirmed')}
-                disabled={updatingStatus || lead.status === 'tour_confirmed'}
-              />
-              <ClientActionButton
-                icon={<NotebookPen size={15} />}
-                label="Log a quick call note"
-                detail="Jump to the activity feed"
-                onClick={() => {
-                  setNoteType('call_log')
-                  document.getElementById('client-activity-log')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }}
-              />
-              <ClientActionButton
-                icon={<FileSignature size={15} />}
-                label="Mark proposal sent"
-                detail="Use after sending pricing"
-                onClick={() => handleStatusChange('proposal_sent')}
-                disabled={updatingStatus || lead.status === 'proposal_sent'}
-              />
-              <ClientActionButton
-                icon={<ReceiptText size={15} />}
-                label="Draft booking invoice"
-                detail="Create deposit or event invoice"
-                onClick={() => setIsInvoiceModalOpen(true)}
-              />
-              <ClientActionButton
-                icon={<FileSignature size={15} />}
-                label="Create booking record"
-                detail="Adds this client to booked event calendar"
-                onClick={handleCreateBookingFromLead}
-              />
+              {recommendedActions.map((action, index) => (
+                <ClientActionButton
+                  key={`${action.label}-${index}`}
+                  icon={action.icon}
+                  label={action.label}
+                  detail={action.detail}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Tasks List Card */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+          <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <Briefcase size={16} className="text-zinc-500" />
                 Tasks & Checklist
               </span>
-              <span className="font-mono text-xs text-zinc-500">{tasks.filter((t) => t.status === 'pending').length} remaining</span>
+              <span className="font-mono text-xs text-zinc-500">{sortedTasks.filter((t) => t.status === 'pending').length} remaining</span>
             </h3>
 
-            {/* Quick Task Add Form */}
-            <form onSubmit={handleAddTask} className="mb-6 space-y-3 bg-zinc-950/50 border border-zinc-900 p-3 rounded-lg">
+            <form onSubmit={handleAddTask} className="mb-6 space-y-3 rounded-lg border border-zinc-900 bg-zinc-950/50 p-3">
               <input
                 type="text"
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="New follow-up task..."
-                className="w-full bg-zinc-950 border border-zinc-900 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500"
+                className="w-full rounded border border-zinc-900 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
               />
               <div className="flex gap-2">
                 <PortalDatePicker
@@ -1193,34 +1179,38 @@ export default function LeadDetailPage({
                     { value: 'low', label: 'Low' },
                     { value: 'medium', label: 'Medium' },
                     { value: 'high', label: 'High' },
-                    { value: 'urgent', label: 'Urgent' }
+                    { value: 'urgent', label: 'Urgent' },
                   ]}
                 />
               </div>
               <button
                 type="submit"
                 disabled={submittingTask || !taskTitle.trim()}
-                className="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] uppercase tracking-widest disabled:opacity-40"
+                className="w-full rounded bg-blue-600 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
               >
                 Add Task
               </button>
             </form>
 
-            {tasks.length === 0 ? (
-              <p className="text-center py-4 text-xs text-zinc-600">No follow-up tasks currently assigned.</p>
+            {sortedTasks.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-5 text-xs leading-5 text-zinc-500">
+                <p className="font-semibold text-zinc-300">No follow-up tasks yet.</p>
+                <p className="mt-1 text-zinc-600">Add a task now so the next step does not get lost in the notes.</p>
+              </div>
             ) : (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto portal-scrollbar">
-                {tasks.map((task) => {
+              <div className="space-y-3 max-h-[320px] overflow-y-auto portal-scrollbar">
+                {sortedTasks.map((task) => {
                   const isCompleted = task.status === 'completed'
-                  let prioColor = 'text-zinc-500 bg-zinc-500/5'
-                  if (task.priority === 'high') prioColor = 'text-amber-500 bg-amber-500/5 border-amber-500/10'
-                  else if (task.priority === 'urgent') prioColor = 'text-red-500 bg-red-500/5 border-red-500/10 animate-pulse'
+                  let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
+                  if (task.priority === 'high') prioColor = 'border-amber-500/10 bg-amber-500/5 text-amber-500'
+                  else if (task.priority === 'urgent') prioColor = 'border-red-500/10 bg-red-500/5 text-red-500'
 
                   return (
-                    <div key={task.id} className="flex items-start justify-between gap-3 p-3 border border-zinc-900 rounded-lg hover:border-zinc-800 transition-colors">
+                    <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-900 p-3 transition-colors hover:border-zinc-800">
                       <button
+                        type="button"
                         onClick={() => handleToggleTask(task)}
-                        className="p-0.5 rounded text-zinc-500 hover:text-blue-500 transition-colors mt-0.5"
+                        className="mt-0.5 rounded p-0.5 text-zinc-500 transition-colors hover:text-blue-500"
                       >
                         {isCompleted ? (
                           <CheckCircle2 size={16} className="text-emerald-500" />
@@ -1228,17 +1218,19 @@ export default function LeadDetailPage({
                           <Circle size={16} className="text-zinc-700" />
                         )}
                       </button>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold text-white/95 truncate leading-tight ${isCompleted ? 'line-through text-zinc-600 font-medium' : ''}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className={`truncate text-xs font-bold leading-tight text-white/95 ${isCompleted ? 'font-medium text-zinc-600 line-through' : ''}`}>
                           {task.title}
                         </p>
-                        {task.due_date && (
-                          <p className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center gap-1">
+                        {task.due_date ? (
+                          <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-zinc-500">
                             <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
                           </p>
+                        ) : (
+                          <p className="mt-1 text-[10px] text-zinc-600">No due date</p>
                         )}
                       </div>
-                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${prioColor}`}>
+                      <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${prioColor}`}>
                         {task.priority}
                       </span>
                     </div>
@@ -1248,74 +1240,122 @@ export default function LeadDetailPage({
             )}
           </div>
 
-          {/* Booking and Contract Card */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+          <div id="lead-booking" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileSignature size={16} className="text-zinc-500" />
                 Booking & Contract
               </span>
-              <span className="font-mono text-xs text-zinc-500">{bookings.length} records</span>
+              <span className="font-mono text-xs text-zinc-500">{sortedBookings.length} records</span>
             </h3>
 
-            {bookings.length === 0 ? (
+            {sortedBookings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
-                No booking record is linked yet. Once this lead becomes a reserved event, the booked event calendar and contract signing flow will use that booking.
+                <p className="font-semibold text-zinc-300">No booking record is linked yet.</p>
+                <p className="mt-1 text-zinc-600">Use a real booking form when the event date is ready, then send the contract from here.</p>
+                <button
+                  type="button"
+                  onClick={openBookingModal}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+                >
+                  Create booking record
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
-                {bookings.map((booking) => (
-                  <div key={booking.id} className="rounded-xl border border-zinc-900 p-4">
+                {sortedBookings.map((booking, index) => (
+                  <div key={booking.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold text-white">{booking.event_date || 'Event date TBD'}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                          {index === 0 ? 'Latest booking' : 'Booking record'}
+                        </p>
+                        <p className="mt-1 text-sm font-bold text-white">{booking.event_date || 'Event date TBD'}</p>
                         <p className="mt-1 text-[10px] text-zinc-500">
-                          {(booking.contract_status || 'not_sent').replaceAll('_', ' ')} • ${Number(booking.contract_total || 0).toLocaleString()}
+                          {(booking.package_name || 'No package').replaceAll('_', ' ')} • {(booking.contract_status || 'not_sent').replaceAll('_', ' ')}
                         </p>
                       </div>
                       <PortalStatusBadge status={booking.status} />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSendContract(booking.id)}
-                      disabled={booking.contract_status === 'signed'}
-                      className="mt-4 w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] hover:bg-[#caa24c]/12 disabled:opacity-45"
-                    >
-                      {booking.contract_status === 'signed' ? 'Contract Signed' : 'Send Contract'}
-                    </button>
+                    <div className="mt-3 grid gap-2 text-[10px] text-zinc-500 sm:grid-cols-3">
+                      <div>
+                        <span className="block text-zinc-600">Contract total</span>
+                        <span className="font-mono text-zinc-300">${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div>
+                        <span className="block text-zinc-600">Deposit required</span>
+                        <span className="font-mono text-zinc-300">${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div>
+                        <span className="block text-zinc-600">Contract status</span>
+                        <span className="font-mono text-zinc-300">{(booking.contract_status || 'not_sent').replaceAll('_', ' ')}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSendContract(booking.id)}
+                        disabled={booking.contract_status === 'signed'}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12 disabled:opacity-45"
+                      >
+                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' ? 'Resend Contract' : 'Send Contract'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openBookingModal}
+                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white"
+                      >
+                        Update Booking
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Invoices List Card */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <h3 className="font-semibold text-white/90 mb-6 flex items-center justify-between">
+          <div id="lead-billing" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />
                 Invoices & Revenue
               </span>
               <button
                 onClick={() => setIsInvoiceModalOpen(true)}
-                className="text-[10px] font-black uppercase text-blue-500 tracking-wider flex items-center gap-1 hover:text-blue-400"
+                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-blue-500 transition-colors hover:text-blue-400"
               >
                 <Plus size={12} /> New Invoice
               </button>
             </h3>
 
-            {invoices.length === 0 ? (
-              <p className="text-center py-4 text-xs text-zinc-600">No invoice records generated yet.</p>
+            {sortedInvoices.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
+                <p className="font-semibold text-zinc-300">No invoice records generated yet.</p>
+                <p className="mt-1 text-zinc-600">Draft the deposit or event invoice when the numbers are ready.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsInvoiceModalOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-300 transition-colors hover:bg-blue-500/15"
+                >
+                  Draft Invoice
+                </button>
+              </div>
             ) : (
               <div className="space-y-3">
-                {invoices.map((inv) => (
-                  <div key={inv.id} className="p-4 border border-zinc-900 rounded-xl hover:border-zinc-800 transition-colors flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{inv.id.slice(0, 8).toUpperCase()}</p>
-                      <p className="text-sm font-mono font-bold text-white mt-1">${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      {inv.due_date && <p className="text-[10px] text-zinc-600 mt-1">Due: {new Date(inv.due_date).toLocaleDateString()}</p>}
+                {sortedInvoices.map((inv, index) => (
+                  <div key={inv.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">{inv.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="mt-1 text-sm font-mono font-bold text-white">${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="mt-1 text-[10px] text-zinc-600">
+                          {index === 0 ? 'Latest invoice' : 'Invoice record'}
+                          {inv.due_date ? ` • Due ${new Date(inv.due_date).toLocaleDateString()}` : ''}
+                        </p>
+                      </div>
+                      <PortalStatusBadge status={inv.status} />
                     </div>
-                    <PortalStatusBadge status={inv.status} />
+                    {index === 0 && inv.description ? <p className="mt-3 text-xs leading-5 text-zinc-400">{inv.description}</p> : null}
                   </div>
                 ))}
               </div>
@@ -1463,6 +1503,135 @@ export default function LeadDetailPage({
           </div>
         </div>
       )}
+
+      {isBookingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setIsBookingModalOpen(false)} />
+          <div className="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-[#080706] shadow-2xl max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Create Booking Record</h3>
+                <p className="mt-1 text-[11px] text-zinc-500">This keeps the calendar, contract, and deposit details tied to the lead.</p>
+              </div>
+              <button onClick={() => setIsBookingModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBooking} className="flex-1 overflow-y-auto bg-[#080706] p-6 space-y-5 portal-scrollbar">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Event Date</label>
+                  <PortalDatePicker
+                    value={bookingEventDate}
+                    onChange={setBookingEventDate}
+                    className="w-full"
+                    placeholder="Select event date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Booking Status</label>
+                  <PortalSelect
+                    value={bookingStatus}
+                    onChange={(value) => setBookingStatus(value as LuxorBookingStatus)}
+                    className="w-full"
+                    options={[
+                      { value: 'tentative', label: 'Tentative' },
+                      { value: 'confirmed', label: 'Confirmed' },
+                      { value: 'draft', label: 'Draft' },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Start Time</label>
+                  <input
+                    type="time"
+                    value={bookingStartTime}
+                    onChange={(e) => setBookingStartTime(e.target.value)}
+                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">End Time</label>
+                  <input
+                    type="time"
+                    value={bookingEndTime}
+                    onChange={(e) => setBookingEndTime(e.target.value)}
+                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Package Name</label>
+                <input
+                  type="text"
+                  value={bookingPackageName}
+                  onChange={(e) => setBookingPackageName(e.target.value)}
+                  placeholder="Gold package, venue rental, etc."
+                  className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contract Total</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={bookingContractTotal}
+                    onChange={(e) => setBookingContractTotal(e.target.value)}
+                    placeholder="2500"
+                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[10px] leading-4 text-zinc-600">If there is already an invoice, this starts from that total.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Deposit Required</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={bookingDepositRequired}
+                    onChange={(e) => setBookingDepositRequired(e.target.value)}
+                    placeholder="625"
+                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[10px] leading-4 text-zinc-600">If left blank, this defaults to 25% of the contract total.</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Booking Notes</label>
+                <textarea
+                  value={bookingNotes}
+                  onChange={(e) => setBookingNotes(e.target.value)}
+                  placeholder="Include venue timing, package notes, setup details, or anything contract-related."
+                  className="w-full h-24 rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-300 outline-none focus:border-blue-500 font-sans"
+                />
+              </div>
+
+              <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-[11px] leading-5 text-zinc-500">
+                <p className="font-semibold text-zinc-300">What happens next</p>
+                <p className="mt-1">We save the booking, move the lead to booked, and keep the contract button ready in the booking section.</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingBooking || !bookingEventDate || !bookingContractTotal.trim()}
+                className="w-full rounded-lg bg-blue-600 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-xl shadow-blue-600/20 transition-colors hover:bg-blue-500 disabled:opacity-40"
+              >
+                {submittingBooking ? 'Saving Booking...' : 'Save Booking Record'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </PortalPageFrame>
   )
 }
@@ -1553,7 +1722,7 @@ function ClientActionButton({
       </span>
       <span className="min-w-0">
         <span className="block text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{label}</span>
-        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-655">{detail}</span>
+        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-500">{detail}</span>
       </span>
     </button>
   )
@@ -1572,7 +1741,7 @@ function DetailItem({
 }) {
   return (
     <div className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl shadow-lg">
-      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-550 mb-2">{label}</div>
+      <div className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
       <p className={`text-xs font-bold text-zinc-200 leading-normal ${isMono ? 'font-mono' : ''}`}>
         {value}
       </p>
