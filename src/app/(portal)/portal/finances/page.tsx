@@ -220,9 +220,9 @@ export default function FinancesPage() {
         ))}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-        {/* DASHBOARD TAB */}
-        {activeTab === 'dashboard' && (
+      {/* DASHBOARD TAB */}
+      {activeTab === 'dashboard' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
             {/* Top Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -289,7 +289,8 @@ export default function FinancesPage() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* INVOICES TAB */}
         {activeTab === 'invoices' && (
@@ -415,7 +416,7 @@ export default function FinancesPage() {
 
         {/* EXPENSES TAB */}
         {activeTab === 'expenses' && (
-          <div className="space-y-6">
+          <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Operations Expense Ledger</h3>
               <button
@@ -504,7 +505,8 @@ export default function FinancesPage() {
 
         {/* REPORTS TAB */}
         {activeTab === 'reports' && (
-          <div className="space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
+            <div className="space-y-6">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Monthly Revenue Breakdown</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
@@ -574,8 +576,8 @@ export default function FinancesPage() {
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </PortalPageFrame>
   )
 }

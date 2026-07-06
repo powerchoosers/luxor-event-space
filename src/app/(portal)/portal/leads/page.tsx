@@ -339,7 +339,7 @@ export default function LeadsPage() {
         </Link>
       </div>
 
-      <div className="flex-1 min-h-0 mt-4">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden mt-4">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMoveStatus={handleMoveStatus} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMoveStatus={handleMoveStatus} />}

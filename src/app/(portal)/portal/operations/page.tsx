@@ -135,9 +135,9 @@ function OperationsPageContent() {
       </div>
 
       {/* Tab Panels */}
-      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-        {/* DASHBOARD TAB */}
-        {activeTab === 'dashboard' && (
+      {/* DASHBOARD TAB */}
+      {activeTab === 'dashboard' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
             {/* Top row metric cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -203,11 +203,12 @@ function OperationsPageContent() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* BILLS & PAYMENTS TAB */}
-        {activeTab === 'bills' && (
-          <div className="space-y-6">
+      {/* BILLS & PAYMENTS TAB */}
+      {activeTab === 'bills' && (
+        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Operational Bills</h3>
               <span className="text-[10px] font-mono text-zinc-550 border border-zinc-900 bg-zinc-950 px-3 py-1 rounded">Next due: Rent on Jul 15</span>
@@ -248,9 +249,9 @@ function OperationsPageContent() {
           </div>
         )}
 
-        {/* MAINTENANCE LOG TAB */}
-        {activeTab === 'maintenance' && (
-          <div className="space-y-6">
+      {/* MAINTENANCE LOG TAB */}
+      {activeTab === 'maintenance' && (
+        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Maintenance Task Log</h3>
               <button
@@ -303,8 +304,9 @@ function OperationsPageContent() {
           </div>
         )}
 
-        {/* INVENTORY TAB */}
-        {activeTab === 'inventory' && (
+      {/* INVENTORY TAB */}
+      {activeTab === 'inventory' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Furniture Inventory */}
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
@@ -352,10 +354,12 @@ function OperationsPageContent() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* PREFERRED VENDORS TAB */}
-        {activeTab === 'vendors' && (
+      {/* PREFERRED VENDORS TAB */}
+      {activeTab === 'vendors' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { type: 'DJs & Music', name: 'Dallas Sound Masters', email: 'booking@dallassound.com', phone: '214-555-0102', rating: '5.0 ⭐', insured: true },
@@ -384,10 +388,12 @@ function OperationsPageContent() {
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* UTILITY SENSORS TAB */}
-        {activeTab === 'utilities' && (
+      {/* UTILITY SENSORS TAB */}
+      {activeTab === 'utilities' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
@@ -429,10 +435,12 @@ function OperationsPageContent() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* CLEANING TAB */}
-        {activeTab === 'cleaning' && (
+      {/* CLEANING TAB */}
+      {activeTab === 'cleaning' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 max-w-2xl">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Post-Event Cleaning Audit Checklist</h3>
             <div className="space-y-3">
@@ -464,10 +472,12 @@ function OperationsPageContent() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* STAFF TAB (FUTURE) */}
-        {activeTab === 'staff' && (
+      {/* STAFF TAB (FUTURE) */}
+      {activeTab === 'staff' && (
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-center max-w-lg">
             <Users size={36} className="text-[#caa24c] mx-auto mb-3" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Employee Scheduling & Rota Portal</h3>
@@ -475,8 +485,8 @@ function OperationsPageContent() {
               Staff availability management, timesheet submission approvals, and payroll ledger integration will be deployed in Version 2.0.
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </PortalPageFrame>
   )
 }
