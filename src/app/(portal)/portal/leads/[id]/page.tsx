@@ -551,7 +551,7 @@ export default function LeadDetailPage({
       tone: 'slate' as const,
     },
   ]
-  const primaryDetails = [
+  const primaryDetails: Array<{ label: string; value: string; subtext?: string; isMono?: boolean }> = [
     { label: 'Event Type', value: lead.event_type || 'Quinceañera', subtext: 'Spanish ñ spelling active' },
     { label: 'Guest Count', value: lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified' },
     { label: 'Target Date', value: lead.target_date || 'TBD' },
@@ -561,7 +561,7 @@ export default function LeadDetailPage({
     { label: 'Email', value: lead.email || 'None' },
     { label: 'Phone', value: lead.phone || 'None' },
   ]
-  const internalDetails = [
+  const internalDetails: Array<{ label: string; value: string; subtext?: string; isMono?: boolean }> = [
     { label: 'Created', value: new Date(lead.created_at).toLocaleString(), isMono: true },
     { label: 'Updated', value: new Date(lead.updated_at).toLocaleString(), isMono: true },
     { label: 'Flow Type', value: lead.flow.replaceAll('_', ' '), isMono: true },
@@ -637,7 +637,7 @@ export default function LeadDetailPage({
       label: 'Confirm tour scheduled',
       detail: 'Move lifecycle to tour confirmed',
       onClick: () => handleStatusChange('tour_confirmed'),
-      disabled: updatingStatus || lead.status === 'tour_confirmed',
+      disabled: updatingStatus,
     })
   } else if (lead.status === 'tour_confirmed') {
     pushRecommendedAction({
@@ -645,7 +645,7 @@ export default function LeadDetailPage({
       label: 'Mark proposal sent',
       detail: 'Use after sending pricing',
       onClick: () => handleStatusChange('proposal_sent'),
-      disabled: updatingStatus || lead.status === 'proposal_sent',
+      disabled: updatingStatus,
     })
   } else if (lead.status === 'proposal_sent') {
     pushRecommendedAction({
