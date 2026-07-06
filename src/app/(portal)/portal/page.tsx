@@ -9,7 +9,6 @@ import {
   Activity,
   ChevronRight,
   ExternalLink,
-  Sparkles,
   DollarSign
 } from "lucide-react";
 import Link from "next/link";
@@ -17,7 +16,7 @@ import { listLuxorBookingsWithPayments } from "@/lib/luxorBookingsServer";
 import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { LuxorInquiry, LuxorNote } from "@/lib/luxorInquiryTypes";
-import { PortalBridgeCard, PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard, PortalStatusBadge } from "@/components/portal/PortalUI";
+import { PortalPageFrame, PortalStickyTable, PortalStickyThead, PortalTableCard, PortalStatusBadge } from "@/components/portal/PortalUI";
 
 export default async function PortalOverview() {
   let leads: LuxorInquiry[] = [];
@@ -63,22 +62,6 @@ export default async function PortalOverview() {
         <h1 className="text-3xl font-bold tracking-tight text-white/90">Follow-Up Workspace</h1>
         <p className="text-zinc-500 font-medium text-sm">Live inquiry pipeline and owner follow-up queue for Luxor Event Space.</p>
       </div>
-
-      <PortalBridgeCard
-        label="Public website extension"
-        title="Every website visit should have a next step in the CRM."
-        description="The public Luxor site sets the mood, captures tour intent, and sends requests into this portal so the owner side can follow up without losing context."
-        action={
-          <div className="flex flex-wrap gap-3">
-            <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/24 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#f1d27a] transition-colors hover:bg-[#caa24c]/16">
-              View website <ExternalLink size={12} />
-            </Link>
-            <Link href="/tour" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 transition-colors hover:border-[#caa24c]/30 hover:text-white">
-              Tour flow <Sparkles size={12} />
-            </Link>
-          </div>
-        }
-      />
 
       {loadError && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400">

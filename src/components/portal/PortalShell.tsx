@@ -4,7 +4,6 @@ import {
   Bell,
   Calendar,
   FileText,
-  ExternalLink,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -104,16 +103,16 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full border-r backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
-          : 'border-[#caa24c]/10 bg-[#050505]/90'
+          : 'border-transparent bg-[linear-gradient(180deg,rgba(202,162,76,0.06)_0%,rgba(202,162,76,0.022)_14%,rgba(5,5,5,0.96)_44%,rgba(5,5,5,0.99)_100%)]'
       } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div
           className={`pointer-events-none absolute inset-x-0 top-0 h-48 ${
             portalTheme === 'light'
               ? 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.12),transparent_16rem)]'
-              : 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.14),transparent_16rem)]'
+              : 'bg-[radial-gradient(circle_at_20%_0%,rgba(202,162,76,0.06),transparent_20rem)]'
           }`}
         />
         <div className={`flex h-full flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'p-4' : 'p-6'}`}>
@@ -141,14 +140,6 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
                   </p>
                 </>
               )}
-            </Link>
-          </div>
-
-          <div className={`mb-6 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-[inset_0_1px_0_rgba(241,210,122,0.08)] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-h-0 border-transparent p-0 opacity-0' : 'max-h-44 p-4 opacity-100'}`}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#caa24c]">Website Signal</p>
-            <p className="mt-2 text-xs leading-5 text-zinc-400">Tour requests from the public site flow directly into this workspace.</p>
-            <Link href="/" className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:text-[#f1d27a]">
-              View site <ExternalLink size={12} />
             </Link>
           </div>
 
@@ -237,10 +228,6 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-5">
-              <Link href="/" className="hidden items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:text-[#f1d27a] md:inline-flex">
-                Public site <ExternalLink size={12} />
-              </Link>
-
               <button
                 type="button"
                 onClick={togglePortalTheme}
