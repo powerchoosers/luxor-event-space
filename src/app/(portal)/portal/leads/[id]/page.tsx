@@ -30,6 +30,21 @@ import {
 import { LuxorBooking, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
+type ZohoEmailMessage = {
+  id: string
+  subject: string
+  from: string
+  to: string
+  receivedAt: string | null
+  summary: string
+  hasAttachment: boolean
+  direction?: 'incoming' | 'outgoing' | 'matched'
+}
+
+type ActivityEntry =
+  | { kind: 'note'; id: string; createdAt: string; note: LuxorNote }
+  | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
+
 export default function LeadDetailPage({
   params,
 }: {
@@ -42,6 +57,10 @@ export default function LeadDetailPage({
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
+  const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
+  const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
+  const [zohoReconnectRequired, setZohoReconnectRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -83,6 +102,7 @@ export default function LeadDetailPage({
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
+      await fetchClientEmailThread(leadData.email || '')
 
       // Fetch notes
       const notesRes = await fetch(`/api/notes?inquiryId=${id}`)
@@ -121,6 +141,39 @@ export default function LeadDetailPage({
   useEffect(() => {
     fetchAllData()
   }, [id])
+
+  const fetchClientEmailThread = async (email: string) => {
+    if (!email) {
+      setEmailMessages([])
+      setEmailThreadError(null)
+      setZohoReconnectRequired(false)
+      return
+    }
+
+    try {
+      setLoadingEmailMessages(true)
+      setEmailThreadError(null)
+      setZohoReconnectRequired(false)
+      const response = await fetch(`/api/email/inbox?limit=50&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({})) as {
+        messages?: ZohoEmailMessage[]
+        error?: string
+        reconnectRequired?: boolean
+      }
+      if (!response.ok) {
+        setZohoReconnectRequired(Boolean(payload.reconnectRequired))
+        throw new Error(payload.error || 'Unable to load Zoho email history.')
+      }
+      setEmailMessages(payload.messages || [])
+    } catch (threadError) {
+      setEmailMessages([])
+      const message = threadError instanceof Error ? threadError.message : 'Unable to load Zoho email history.'
+      setEmailThreadError(message)
+      setZohoReconnectRequired((current) => current || message.includes('reconnected with email search permission'))
+    } finally {
+      setLoadingEmailMessages(false)
+    }
+  }
 
   const handleStatusChange = async (newStatus: string) => {
     if (!lead) return
@@ -617,20 +670,103 @@ export default function LeadDetailPage({
             </div>
 
             {(() => {
-              const filteredNotes = notes.filter((note) => {
-                if (activeFeedTab === 'notes') return note.note_type === 'note'
-                if (activeFeedTab === 'comms') return note.note_type === 'call_log' || note.note_type === 'email_log'
-                if (activeFeedTab === 'system') return note.note_type === 'status_change'
-                return true
-              })
+              const noteEntries: ActivityEntry[] = notes.map((note) => ({
+                kind: 'note',
+                id: `note-${note.id}`,
+                createdAt: note.created_at,
+                note,
+              }))
+              const emailEntries: ActivityEntry[] = emailMessages.map((email) => ({
+                kind: 'email',
+                id: `email-${email.id || email.direction || email.subject}-${email.receivedAt || email.from}`,
+                createdAt: normalizeTimelineDate(email.receivedAt),
+                email,
+              }))
+              const entries = [...noteEntries, ...emailEntries]
+                .filter((entry) => {
+                  if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
+                  if (activeFeedTab === 'comms') {
+                    return entry.kind === 'email' || (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log')
+                  }
+                  if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
+                  return true
+                })
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
-              return filteredNotes.length === 0 ? (
-                <div className="text-center py-6 text-xs text-zinc-650 italic">
-                  No workspace entries match the active filter.
-                </div>
-              ) : (
-                <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
-                  {filteredNotes.map((note) => {
+              return (
+                <>
+                  {lead.email ? (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Zoho Email History</p>
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          {loadingEmailMessages
+                            ? `Loading messages for ${lead.email}...`
+                            : emailThreadError
+                            ? emailThreadError
+                            : `${emailMessages.length} sent/received message${emailMessages.length === 1 ? '' : 's'} found for ${lead.email}`}
+                        </p>
+                      </div>
+                      {zohoReconnectRequired ? (
+                        <a
+                          href="/api/auth/zoho/login?setup=1"
+                          className="rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
+                        >
+                          Reconnect Zoho Search
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fetchClientEmailThread(lead.email || '')}
+                          disabled={loadingEmailMessages}
+                          className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
+                        >
+                          {loadingEmailMessages ? 'Syncing...' : 'Refresh Email'}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {entries.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-zinc-650 italic">
+                      No workspace or Zoho email entries match the active filter.
+                    </div>
+                  ) : (
+                    <div className="relative border-l border-zinc-900 pl-6 space-y-6 ml-3">
+                      {entries.map((entry) => {
+                        if (entry.kind === 'email') {
+                          const email = entry.email
+                          const isOutgoing = email.direction === 'outgoing'
+                          return (
+                            <div key={entry.id} className="relative group">
+                              <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 group-hover:border-[#caa24c] transition-all" />
+                              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                                  {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${
+                                    isOutgoing
+                                      ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                  }`}>
+                                    {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
+                                  </span>
+                                  <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
+                                </div>
+                              </div>
+                              <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
+                              <p className="mt-1 text-[10px] text-zinc-600">
+                                From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
+                              </p>
+                              {email.summary ? (
+                                <p className="mt-2 text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{email.summary}</p>
+                              ) : null}
+                            </div>
+                          )
+                        }
+
+                        const note = entry.note
                     let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-800/50'
                     let typeLabel = 'System Log'
                     if (note.note_type === 'note') {
@@ -662,8 +798,10 @@ export default function LeadDetailPage({
                         <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
                       </div>
                     )
-                  })}
-                </div>
+                      })}
+                    </div>
+                  )}
+                </>
               )
             })()}
           </div>
@@ -1139,6 +1277,19 @@ function DetailItem({
 
 function isGrandOpeningRsvp(lead: LuxorInquiry) {
   return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
+}
+
+function normalizeTimelineDate(value: string | null) {
+  if (!value) return new Date().toISOString()
+
+  const numericValue = Number(value)
+  const date = Number.isFinite(numericValue) ? new Date(numericValue) : new Date(value)
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()
+}
+
+function formatTimelineDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString()
 }
 
 function formatSourceLabel(lead: LuxorInquiry) {
