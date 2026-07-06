@@ -104,7 +104,7 @@ export interface EmailTemplate {
   id: string
   name: string
   description: string
-  category: 'promo' | 'event' | 'nurture' | 'transactional' | 'seasonal'
+  category: 'promo' | 'event' | 'nurture' | 'transactional' | 'seasonal' | 'custom'
   previewColor: string
   blocks: EmailBlock[]
 }

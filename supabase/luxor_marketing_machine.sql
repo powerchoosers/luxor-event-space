@@ -41,11 +41,35 @@ create table if not exists public.luxor_marketing_events (
   created_at timestamptz not null default timezone('utc'::text, now()),
   campaign_id uuid not null references public.luxor_marketing_campaigns(id) on delete cascade,
   recipient_id uuid not null references public.luxor_marketing_recipients(id) on delete cascade,
-  event_type text not null check (event_type in ('open', 'click')),
+  event_type text not null check (event_type in ('open', 'click', 'unsubscribe')),
   url text,
   ip_address text,
   user_agent text,
   device_type text,
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.luxor_marketing_suppressions (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  email text not null unique,
+  reason text not null default 'unsubscribe',
+  source text,
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.luxor_marketing_templates (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now()),
+  name text not null,
+  subject text not null default '',
+  description text,
+  category text not null default 'custom',
+  blocks jsonb not null default '[]'::jsonb,
+  preview_color text not null default '#caa24c',
+  created_by text,
+  last_used_at timestamptz,
   metadata jsonb not null default '{}'::jsonb
 );
 
@@ -65,6 +89,12 @@ create index if not exists luxor_marketing_events_campaign_idx
 create index if not exists luxor_marketing_events_recipient_idx
   on public.luxor_marketing_events (recipient_id, created_at desc);
 
+create index if not exists luxor_marketing_templates_updated_idx
+  on public.luxor_marketing_templates (updated_at desc);
+
+create index if not exists luxor_marketing_suppressions_email_idx
+  on public.luxor_marketing_suppressions (email);
+
 alter table public.luxor_email_jobs
   drop constraint if exists luxor_email_jobs_job_type_check;
 
@@ -82,17 +112,28 @@ create trigger luxor_marketing_recipients_set_updated_at
   before update on public.luxor_marketing_recipients
   for each row execute function public.luxor_set_updated_at();
 
+drop trigger if exists luxor_marketing_templates_set_updated_at on public.luxor_marketing_templates;
+create trigger luxor_marketing_templates_set_updated_at
+  before update on public.luxor_marketing_templates
+  for each row execute function public.luxor_set_updated_at();
+
 alter table public.luxor_marketing_campaigns enable row level security;
 alter table public.luxor_marketing_recipients enable row level security;
 alter table public.luxor_marketing_events enable row level security;
+alter table public.luxor_marketing_templates enable row level security;
+alter table public.luxor_marketing_suppressions enable row level security;
 
 revoke all on table public.luxor_marketing_campaigns from anon, authenticated;
 revoke all on table public.luxor_marketing_recipients from anon, authenticated;
 revoke all on table public.luxor_marketing_events from anon, authenticated;
+revoke all on table public.luxor_marketing_templates from anon, authenticated;
+revoke all on table public.luxor_marketing_suppressions from anon, authenticated;
 
 grant select, insert, update, delete on table public.luxor_marketing_campaigns to service_role;
 grant select, insert, update, delete on table public.luxor_marketing_recipients to service_role;
 grant select, insert, update, delete on table public.luxor_marketing_events to service_role;
+grant select, insert, update, delete on table public.luxor_marketing_templates to service_role;
+grant select, insert, update, delete on table public.luxor_marketing_suppressions to service_role;
 
 drop policy if exists "Service role can manage Luxor marketing campaigns" on public.luxor_marketing_campaigns;
 create policy "Service role can manage Luxor marketing campaigns"
@@ -113,6 +154,22 @@ create policy "Service role can manage Luxor marketing recipients"
 drop policy if exists "Service role can manage Luxor marketing events" on public.luxor_marketing_events;
 create policy "Service role can manage Luxor marketing events"
   on public.luxor_marketing_events
+  for all
+  to service_role
+  using ((select current_setting('role', true)) = 'service_role')
+  with check ((select current_setting('role', true)) = 'service_role');
+
+drop policy if exists "Service role can manage Luxor marketing templates" on public.luxor_marketing_templates;
+create policy "Service role can manage Luxor marketing templates"
+  on public.luxor_marketing_templates
+  for all
+  to service_role
+  using ((select current_setting('role', true)) = 'service_role')
+  with check ((select current_setting('role', true)) = 'service_role');
+
+drop policy if exists "Service role can manage Luxor marketing suppressions" on public.luxor_marketing_suppressions;
+create policy "Service role can manage Luxor marketing suppressions"
+  on public.luxor_marketing_suppressions
   for all
   to service_role
   using ((select current_setting('role', true)) = 'service_role')

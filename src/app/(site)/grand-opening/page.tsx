@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Check, Gift, Loader2, Mail, Music2, Sparkles, Utensils, UsersRound } from 'lucide-react'
+import { ArrowRight, Check, Gift, Loader2, Mail, Music2, Sparkles, Utensils } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
@@ -101,19 +101,16 @@ export default function GrandOpeningPage() {
         <div className="absolute inset-x-0 top-28 h-px bg-gradient-to-r from-transparent via-[#caa24c]/55 to-transparent" />
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-8rem)] max-w-7xl gap-10 px-5 pb-20 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:px-8">
-          <div className="mx-auto w-full max-w-xl text-center lg:text-left">
-            <LuxorAxisLockup className="mx-auto max-w-[330px] lg:mx-0" showDivider={false} />
-            <div className="mt-9 luxor-deco-divider text-[#8e6829]">
-              <span className="luxor-diamond" />
-            </div>
-            <h1 className="mt-8 font-serif text-6xl leading-[0.86] text-[#f7efe3] sm:text-7xl lg:text-8xl">
+          <div className="mx-auto w-full max-w-xl text-center">
+            <LuxorAxisLockup className="mx-auto w-full max-w-[360px] sm:max-w-[460px]" dividerClassName="text-[#8e6829]" />
+            <h1 className="mx-auto mt-8 max-w-[22rem] font-serif text-6xl leading-[0.86] text-[#f7efe3] sm:max-w-4xl sm:text-7xl lg:text-8xl">
               Grand Opening RSVP
             </h1>
-            <p className="mt-6 text-lg leading-8 text-[#d7c29a]/78">
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#d7c29a]/78">
               Join us for the Luxor Grand Opening Showcase on Saturday, July 25. Come see the room, meet vendors, enjoy tastings, and celebrate what is next for Luxor at Las Palmas.
             </p>
 
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-2xl">
+            <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
               {showcaseDetails.map(({ label, icon: Icon }) => (
                 <div key={label} className="rounded-md border border-[#caa24c]/20 bg-black/28 px-3 py-4 text-center">
                   <Icon className="mx-auto h-5 w-5 text-[#f1d27a]" />
@@ -124,7 +121,7 @@ export default function GrandOpeningPage() {
               ))}
             </div>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row lg:justify-start">
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <a
                 href="#rsvp-form"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-[0_22px_44px_-26px_rgba(202,162,76,0.8)]"
@@ -188,7 +185,7 @@ export default function GrandOpeningPage() {
                       <input name="willAttend" required type="checkbox" className="mt-1 h-4 w-4 accent-[#caa24c]" />
                       <span>
                         <span className="block text-sm font-bold uppercase tracking-[0.12em] text-[#f7efe3]">I will attend the Grand Opening event</span>
-                        <span className="mt-1 block text-xs leading-5 text-[#d7c29a]/62">This is the attendance confirmation staff will see in the portal.</span>
+                        <span className="mt-1 block text-xs leading-5 text-[#d7c29a]/62">We will save your spot and send Grand Opening updates to the email above.</span>
                       </span>
                     </label>
 

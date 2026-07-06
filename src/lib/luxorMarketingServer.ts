@@ -5,6 +5,8 @@ import {
   LuxorMarketingCampaign,
   LuxorMarketingEvent,
   LuxorMarketingRecipient,
+  LuxorMarketingSuppression,
+  LuxorMarketingTemplate,
 } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 import { createLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
@@ -31,6 +33,16 @@ export type MarketingCampaignSummary = LuxorMarketingCampaign & {
   unique_clicks: number
   open_rate: number
   click_rate: number
+}
+
+export type MarketingTemplateInput = {
+  name: string
+  subject?: string
+  description?: string | null
+  category?: string | null
+  blocks: Record<string, unknown>[]
+  previewColor?: string | null
+  createdBy?: string | null
 }
 
 function absoluteUrl(path: string) {
@@ -79,6 +91,10 @@ function normalizeRedirectUrl(url: string) {
 
 export function instrumentMarketingHtml(html: string, trackingToken: string) {
   const tracked = html.replace(/href=(["'])(.*?)\1/gi, (match, quote: string, rawUrl: string) => {
+    if (rawUrl.trim() === '#unsubscribe') {
+      return `href=${quote}${absoluteUrl(`/api/marketing/unsubscribe/${trackingToken}`)}${quote}`
+    }
+
     const normalized = normalizeRedirectUrl(rawUrl)
     if (!normalized) return match
 
@@ -137,6 +153,47 @@ export async function listMarketingCampaigns(limit = 25) {
   ))
 }
 
+export async function listMarketingTemplates(limit = 100) {
+  return supabaseRest<LuxorMarketingTemplate[]>(
+    `luxor_marketing_templates?select=*&order=updated_at.desc&limit=${encodeURIComponent(limit)}`,
+  )
+}
+
+export async function createMarketingTemplate(data: MarketingTemplateInput) {
+  if (!data.name.trim()) throw new Error('Please name this template.')
+  if (!Array.isArray(data.blocks) || !data.blocks.length) throw new Error('Add at least one block before saving a template.')
+
+  const [template] = await supabaseRest<LuxorMarketingTemplate[]>('luxor_marketing_templates?select=*', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      name: data.name.trim(),
+      subject: data.subject?.trim() || '',
+      description: data.description?.trim() || null,
+      category: data.category?.trim() || 'custom',
+      blocks: data.blocks,
+      preview_color: data.previewColor || '#caa24c',
+      created_by: data.createdBy || null,
+      metadata: {},
+    }),
+  })
+
+  return template
+}
+
+export async function deleteMarketingTemplate(id: string) {
+  await supabaseRest(`luxor_marketing_templates?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function markMarketingTemplateUsed(id: string) {
+  await supabaseRest(`luxor_marketing_templates?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+  })
+}
+
 export async function getMarketingCampaignDetail(id: string) {
   const [campaign] = await supabaseRest<LuxorMarketingCampaign[]>(
     `luxor_marketing_campaigns?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
@@ -174,6 +231,17 @@ export async function createMarketingCampaign(data: {
   if (!data.htmlBody.trim()) throw new Error('Please add email content.')
   if (!data.recipients.length) throw new Error('Please add at least one valid recipient.')
 
+  const sendableRecipients: MarketingRecipientInput[] = []
+  for (const recipient of data.recipients) {
+    if (!await isMarketingSuppressed(recipient.email)) {
+      sendableRecipients.push(recipient)
+    }
+  }
+
+  if (!sendableRecipients.length) {
+    throw new Error('Every recipient on this list has unsubscribed or is suppressed.')
+  }
+
   const scheduledFor = data.scheduledFor || new Date().toISOString()
   const sendTime = new Date(scheduledFor)
   if (Number.isNaN(sendTime.getTime())) throw new Error('Please choose a valid send time.')
@@ -189,14 +257,16 @@ export async function createMarketingCampaign(data: {
       audience_label: data.audienceLabel || 'Manual list',
       scheduled_for: sendTime.toISOString(),
       created_by: data.createdBy || null,
-      recipient_count: data.recipients.length,
-      metadata: {},
+      recipient_count: sendableRecipients.length,
+      metadata: {
+        skipped_suppressed_count: data.recipients.length - sendableRecipients.length,
+      },
     }),
   })
 
   if (!campaign) throw new Error('Campaign could not be created.')
 
-  for (const recipient of data.recipients) {
+  for (const recipient of sendableRecipients) {
     const trackingToken = createTrackingToken()
     const [createdRecipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
       method: 'POST',
@@ -313,6 +383,44 @@ export async function recordMarketingClick(trackingToken: string, url: string, r
   return recipient
 }
 
+export async function recordMarketingUnsubscribe(trackingToken: string, request: Request) {
+  const recipient = await getRecipientByTrackingToken(trackingToken)
+  if (!recipient) return null
+
+  const userAgent = request.headers.get('user-agent') || ''
+  const ip = maskIp(request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown')
+  const deviceType = detectDeviceType(userAgent)
+
+  await supabaseRest('luxor_marketing_events', {
+    method: 'POST',
+    body: JSON.stringify({
+      campaign_id: recipient.campaign_id,
+      recipient_id: recipient.id,
+      event_type: 'unsubscribe',
+      ip_address: ip,
+      user_agent: userAgent,
+      device_type: deviceType,
+      metadata: {},
+    }),
+  })
+
+  await supabaseRest('luxor_marketing_suppressions?on_conflict=email', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({
+      email: recipient.email.toLowerCase(),
+      reason: 'unsubscribe',
+      source: 'marketing_email',
+      metadata: {
+        campaign_id: recipient.campaign_id,
+        recipient_id: recipient.id,
+      },
+    }),
+  })
+
+  return recipient
+}
+
 export async function markMarketingJobResult(jobId: string, status: 'sent' | 'failed', error?: string) {
   const [recipient] = await supabaseRest<LuxorMarketingRecipient[]>(
     `luxor_marketing_recipients?select=*&email_job_id=eq.${encodeURIComponent(jobId)}&limit=1`,
@@ -365,6 +473,14 @@ async function getRecipientByTrackingToken(trackingToken: string) {
   )
 
   return recipient ?? null
+}
+
+async function isMarketingSuppressed(email: string) {
+  const [suppression] = await supabaseRest<LuxorMarketingSuppression[]>(
+    `luxor_marketing_suppressions?select=id&email=eq.${encodeURIComponent(email.toLowerCase())}&limit=1`,
+  )
+
+  return Boolean(suppression)
 }
 
 function detectDeviceType(userAgent: string) {

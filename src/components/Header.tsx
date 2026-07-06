@@ -87,7 +87,7 @@ export const Header = () => {
               href="/visit"
               className="hidden rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#050505] shadow-[0_18px_36px_-24px_rgba(202,162,76,0.8)] transition-all duration-300 hover:bg-[#dfbd68] sm:inline-flex sm:items-center sm:gap-2"
             >
-              <CalendarDays className="h-3.5 w-3.5 text-[#caa24c]" />
+              <CalendarDays className="h-3.5 w-3.5 text-[#050505]" />
               Request Tour
             </Link>
           </motion.div>

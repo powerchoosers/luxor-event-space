@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { nanoid } from './nanoid'
 import type { EmailBlock, BlockType, EmailTemplate } from '../emailTemplates'
 import { EMAIL_TEMPLATES } from '../emailTemplates'
@@ -8,7 +8,7 @@ import { BlockPalette } from './BlockPalette'
 import { BlockCanvas } from './BlockCanvas'
 import { BlockInspector } from './BlockInspector'
 import { EmailPreview } from './EmailPreview'
-import { Eye, Sparkles, RotateCcw, ChevronDown } from 'lucide-react'
+import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -44,9 +44,42 @@ const CATEGORY_LABELS: Record<string, string> = {
   nurture: 'Nurture',
   transactional: 'Transactional',
   seasonal: 'Seasonal',
+  custom: 'Custom',
 }
 
-function TemplatePicker({ onSelect, onClose }: { onSelect: (tpl: EmailTemplate) => void; onClose: () => void }) {
+type SavedMarketingTemplate = {
+  id: string
+  name: string
+  subject: string
+  description: string | null
+  category: string
+  blocks: EmailBlock[]
+  preview_color: string
+  updated_at: string
+  last_used_at: string | null
+}
+
+type BuilderTemplate = EmailTemplate & {
+  source: 'built-in' | 'saved'
+  savedId?: string
+  updatedAt?: string
+}
+
+function TemplatePicker({
+  savedTemplates,
+  loadingSaved,
+  onSelect,
+  onDeleteSaved,
+  onClose,
+}: {
+  savedTemplates: BuilderTemplate[]
+  loadingSaved: boolean
+  onSelect: (tpl: BuilderTemplate) => void
+  onDeleteSaved: (id: string) => void
+  onClose: () => void
+}) {
+  const builtInTemplates: BuilderTemplate[] = EMAIL_TEMPLATES.map((tpl) => ({ ...tpl, source: 'built-in' }))
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -60,8 +93,59 @@ function TemplatePicker({ onSelect, onClose }: { onSelect: (tpl: EmailTemplate) 
             Cancel
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-6 max-h-[70vh] overflow-y-auto portal-scrollbar">
-          {EMAIL_TEMPLATES.map((tpl) => (
+        <div className="portal-scrollbar max-h-[70vh] overflow-y-auto p-6">
+          <div className="mb-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">Saved Templates</h4>
+              {loadingSaved ? <Loader2 size={13} className="animate-spin text-zinc-600" /> : null}
+            </div>
+            {savedTemplates.length ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {savedTemplates.map((tpl) => (
+                  <div
+                    key={tpl.id}
+                    className="group overflow-hidden rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 text-left transition-all hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10"
+                  >
+                    <button
+                      onClick={() => { onSelect(tpl); onClose() }}
+                      className="w-full text-left"
+                    >
+                      <div className="h-2 w-full" style={{ background: tpl.previewColor }} />
+                      <div className="p-4">
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <h4 className="text-xs font-bold text-white/90 group-hover:text-white">{tpl.name}</h4>
+                          <span className="shrink-0 rounded-sm border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-[#f1d27a]">
+                            Saved
+                          </span>
+                        </div>
+                        <p className="min-h-8 text-[11px] leading-relaxed text-zinc-500">{tpl.description || tpl.subject || 'Custom saved email layout.'}</p>
+                        <p className="mt-3 font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</p>
+                      </div>
+                    </button>
+                    {tpl.savedId ? (
+                      <button
+                        onClick={() => onDeleteSaved(tpl.savedId as string)}
+                        className="mx-4 mb-4 flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-500/10"
+                      >
+                        <Trash2 size={10} />
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/20 p-5 text-xs leading-5 text-zinc-500">
+                No saved templates yet. Build an email, then use Save Template.
+              </div>
+            )}
+          </div>
+
+          <div className="mb-3">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">Starter Templates</h4>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {builtInTemplates.map((tpl) => (
             <button
               key={tpl.id}
               onClick={() => { onSelect(tpl); onClose() }}
@@ -82,6 +166,97 @@ function TemplatePicker({ onSelect, onClose }: { onSelect: (tpl: EmailTemplate) 
               </div>
             </button>
           ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SaveTemplateModal({
+  subject,
+  blocks,
+  onClose,
+  onSaved,
+}: {
+  subject: string
+  blocks: EmailBlock[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(subject || '')
+  const [description, setDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function saveTemplate() {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const response = await fetch('/api/marketing/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          subject,
+          description,
+          category: 'custom',
+          blocks,
+          previewColor: '#caa24c',
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to save template.')
+      onSaved()
+      onClose()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to save template.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-800 bg-[#0a0a0a] shadow-2xl">
+        <div className="border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Save Template</p>
+          <h3 className="mt-0.5 text-sm font-bold text-white/90">Name this reusable email</h3>
+        </div>
+        <div className="space-y-4 p-6">
+          <div className="space-y-1.5">
+            <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Template Name</label>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
+              placeholder="Example: Tour no-show reactivation"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Description</label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className="h-24 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
+              placeholder="When should you use this template?"
+            />
+          </div>
+          {message ? <p className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-300">{message}</p> : null}
+          <div className="flex items-center justify-end gap-3">
+            <button onClick={onClose} className="rounded-lg border border-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-white">
+              Cancel
+            </button>
+            <button
+              onClick={saveTemplate}
+              disabled={saving || !name.trim() || !blocks.length}
+              className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black transition-all hover:bg-[#d4b060] disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Save Template
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -96,8 +271,40 @@ export function EmailBuilderShell() {
   const [subject, setSubject] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [savedTemplates, setSavedTemplates] = useState<BuilderTemplate[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [history, setHistory] = useState<EmailBlock[][]>([[]])
   const [historyIdx, setHistoryIdx] = useState(0)
+
+  async function loadSavedTemplates() {
+    setTemplatesLoading(true)
+    try {
+      const response = await fetch('/api/marketing/templates', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to load templates.')
+      const mapped = (payload.templates || []).map((tpl: SavedMarketingTemplate) => ({
+        id: `saved-${tpl.id}`,
+        savedId: tpl.id,
+        source: 'saved' as const,
+        name: tpl.name,
+        description: tpl.description || 'Custom saved email layout.',
+        category: 'custom' as EmailTemplate['category'],
+        previewColor: tpl.preview_color || '#caa24c',
+        blocks: tpl.blocks,
+        updatedAt: tpl.updated_at,
+      }))
+      setSavedTemplates(mapped)
+    } catch {
+      setSavedTemplates([])
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSavedTemplates()
+  }, [])
 
 
   // ─── History helpers ────────────────────────────────────────────────────────
@@ -144,14 +351,27 @@ export function EmailBuilderShell() {
     // Don't push history on every keystroke — only on meaningful changes
   }, [blocks])
 
-  const handleLoadTemplate = useCallback((tpl: EmailTemplate) => {
+  const handleLoadTemplate = useCallback((tpl: BuilderTemplate) => {
     const withNewIds = tpl.blocks.map((b) => ({ ...b, id: nanoid() }))
     setBlocks(withNewIds)
     pushHistory(withNewIds)
     setSelectedId(null)
     if (!subject) setSubject(tpl.name)
+    if (tpl.savedId) {
+      fetch(`/api/marketing/templates/${tpl.savedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-used' }),
+      }).catch(() => undefined)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocks, subject, history, historyIdx])
+
+  async function handleDeleteSavedTemplate(id: string) {
+    if (!window.confirm('Delete this saved template?')) return
+    await fetch(`/api/marketing/templates/${id}`, { method: 'DELETE' })
+    await loadSavedTemplates()
+  }
 
   const selectedBlock = blocks.find((b) => b.id === selectedId) ?? null
 
@@ -179,6 +399,15 @@ export function EmailBuilderShell() {
           <Sparkles size={13} />
           Templates
           <ChevronDown size={11} />
+        </button>
+
+        <button
+          onClick={() => setShowSaveTemplate(true)}
+          disabled={blocks.length === 0}
+          className="flex flex-shrink-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400 transition-all hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Save size={13} />
+          Save Template
         </button>
 
         {/* Undo */}
@@ -260,8 +489,19 @@ export function EmailBuilderShell() {
       {/* Modals */}
       {showTemplates && (
         <TemplatePicker
+          savedTemplates={savedTemplates}
+          loadingSaved={templatesLoading}
           onSelect={handleLoadTemplate}
+          onDeleteSaved={handleDeleteSavedTemplate}
           onClose={() => setShowTemplates(false)}
+        />
+      )}
+      {showSaveTemplate && (
+        <SaveTemplateModal
+          subject={subject || 'Email from Luxor'}
+          blocks={blocks}
+          onClose={() => setShowSaveTemplate(false)}
+          onSaved={loadSavedTemplates}
         />
       )}
       {showPreview && (

@@ -242,7 +242,7 @@ export type LuxorSignatureRequest = {
 
 export type LuxorMarketingCampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'cancelled'
 export type LuxorMarketingRecipientStatus = 'queued' | 'sent' | 'failed' | 'cancelled'
-export type LuxorMarketingEventType = 'open' | 'click'
+export type LuxorMarketingEventType = 'open' | 'click' | 'unsubscribe'
 
 export type LuxorMarketingCampaign = {
   id: string
@@ -290,5 +290,29 @@ export type LuxorMarketingEvent = {
   ip_address: string | null
   user_agent: string | null
   device_type: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorMarketingTemplate = {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  subject: string
+  description: string | null
+  category: string
+  blocks: Record<string, unknown>[]
+  preview_color: string
+  created_by: string | null
+  last_used_at: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorMarketingSuppression = {
+  id: string
+  created_at: string
+  email: string
+  reason: string
+  source: string | null
   metadata: Record<string, unknown>
 }
