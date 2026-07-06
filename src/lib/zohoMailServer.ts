@@ -21,7 +21,9 @@ type ZohoMessageSummary = {
   fromAddress?: string
   sender?: string
   toAddress?: string
+  ccAddress?: string
   receivedTime?: string
+  receivedtime?: string
   sentDateInGMT?: string
   summary?: string
   hasAttachment?: boolean
@@ -202,8 +204,64 @@ export async function listLuxorZohoInbox(limit = 25) {
     subject: message.subject || '(No subject)',
     from: message.fromAddress || message.sender || 'Unknown sender',
     to: message.toAddress || '',
-    receivedAt: message.receivedTime || message.sentDateInGMT || null,
+    receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
     summary: message.summary || '',
     hasAttachment: Boolean(message.hasAttachment),
   }))
+}
+
+export async function listLuxorZohoMessagesForAddress(email: string, limit = 50) {
+  const clientEmail = normalizeEmailAddress(email)
+  if (!clientEmail) return []
+
+  const { accountId, baseUrl } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const params = new URLSearchParams({
+    searchKey: `sender:${clientEmail}::or:to:${clientEmail}`,
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+    start: '1',
+    includeto: 'true',
+  })
+
+  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  })
+
+  const resultText = await response.text()
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      cachedAccessToken = null
+    }
+
+    throw new Error(`Zoho email search failed with ${response.status}: ${resultText}`)
+  }
+
+  const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+
+  return (result.data || []).map((message) => {
+    const from = message.fromAddress || message.sender || 'Unknown sender'
+    const to = message.toAddress || ''
+    const fromEmail = normalizeEmailAddress(from)
+    const toEmails = to
+      .split(/[,;]+/)
+      .map((item) => normalizeEmailAddress(item))
+      .filter(Boolean)
+
+    return {
+      id: message.messageId || message.message_id || '',
+      subject: message.subject || '(No subject)',
+      from,
+      to,
+      cc: message.ccAddress || '',
+      receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
+      summary: message.summary || '',
+      hasAttachment: Boolean(message.hasAttachment),
+      direction: fromEmail === clientEmail ? 'incoming' : toEmails.includes(clientEmail) ? 'outgoing' : 'matched',
+    }
+  })
 }

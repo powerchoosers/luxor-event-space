@@ -10,7 +10,6 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  Phone,
   Search,
   Settings,
   Moon,
@@ -29,7 +28,7 @@ const navItems = [
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
   { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing' },
   { href: '/portal/invoices', icon: <FileText size={18} />, label: 'Invoices' },
-  { href: '/portal/communications', icon: <Phone size={18} />, label: 'Communications' },
+  { href: '/portal/communications', icon: <MessageSquare size={18} />, label: 'Communications' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Event Calendar' },
 ]
 

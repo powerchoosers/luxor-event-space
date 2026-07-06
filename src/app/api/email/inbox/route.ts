@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { listLuxorZohoInbox } from '@/lib/zohoMailServer'
+import { listLuxorZohoInbox, listLuxorZohoMessagesForAddress } from '@/lib/zohoMailServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,10 +11,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const limit = Number.parseInt(searchParams.get('limit') || '25', 10)
-    const messages = await listLuxorZohoInbox(Number.isFinite(limit) ? limit : 25)
+    const email = searchParams.get('email') || ''
+    const safeLimit = Number.isFinite(limit) ? limit : 25
+    const messages = email
+      ? await listLuxorZohoMessagesForAddress(email, safeLimit)
+      : await listLuxorZohoInbox(safeLimit)
 
     return NextResponse.json({
       mailbox: session.mailboxAddress || session.email,
+      email: email || null,
       messages,
     })
   } catch (error) {

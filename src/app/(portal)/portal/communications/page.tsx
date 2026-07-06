@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Search,
   History,
-  Phone,
+  Inbox,
   ExternalLink,
   Mail,
   Send
@@ -28,9 +28,11 @@ type ZohoInboxMessage = {
   subject: string
   from: string
   to: string
+  cc?: string
   receivedAt: string | null
   summary: string
   hasAttachment: boolean
+  direction?: 'incoming' | 'outgoing' | 'matched'
 }
 
 export default function CommunicationsPage() {
@@ -52,9 +54,11 @@ export default function CommunicationsPage() {
   const [emailContent, setEmailContent] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSendStatus, setEmailSendStatus] = useState<string | null>(null)
-  const [inboxMessages, setInboxMessages] = useState<ZohoInboxMessage[]>([])
-  const [inboxMailbox, setInboxMailbox] = useState('')
-  const [loadingInbox, setLoadingInbox] = useState(false)
+  const [emailMessages, setEmailMessages] = useState<ZohoInboxMessage[]>([])
+  const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
+  const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
+
+  const selectedInquiry = inquiries.find((i) => i.id === selectedId)
 
   const fetchInquiries = async () => {
     try {
@@ -91,39 +95,41 @@ export default function CommunicationsPage() {
     }
   }
 
+  const fetchClientEmailThread = async (email: string) => {
+    if (!email) {
+      setEmailMessages([])
+      setEmailThreadError(null)
+      return
+    }
+
+    try {
+      setLoadingEmailMessages(true)
+      setEmailThreadError(null)
+      const res = await fetch(`/api/email/inbox?limit=50&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const data = await res.json().catch(() => ({})) as { mailbox?: string; messages?: ZohoInboxMessage[]; error?: string }
+      if (!res.ok) throw new Error(data.error || 'Unable to load client email history.')
+      setEmailMessages(data.messages || [])
+    } catch (err) {
+      setEmailMessages([])
+      setEmailThreadError(err instanceof Error ? err.message : 'Unable to load client email history.')
+    } finally {
+      setLoadingEmailMessages(false)
+    }
+  }
+
   useEffect(() => {
     fetchInquiries()
   }, [])
 
   useEffect(() => {
-    let active = true
+    const email = selectedInquiry?.email || ''
+    fetchClientEmailThread(email)
 
-    const fetchInbox = async () => {
-      try {
-        setLoadingInbox(true)
-        const res = await fetch('/api/email/inbox?limit=8')
-        if (!res.ok) return
+    if (!email) return
 
-        const data = await res.json() as { mailbox?: string; messages?: ZohoInboxMessage[] }
-        if (active) {
-          setInboxMessages(data.messages || [])
-          setInboxMailbox(data.mailbox || '')
-        }
-      } catch (err) {
-        console.error('Failed to fetch Zoho inbox:', err)
-      } finally {
-        if (active) setLoadingInbox(false)
-      }
-    }
-
-    fetchInbox()
-    const interval = setInterval(fetchInbox, 60000)
-
-    return () => {
-      active = false
-      clearInterval(interval)
-    }
-  }, [])
+    const interval = setInterval(() => fetchClientEmailThread(email), 60000)
+    return () => clearInterval(interval)
+  }, [selectedInquiry?.email])
 
   useEffect(() => {
     if (selectedId) {
@@ -205,6 +211,7 @@ export default function CommunicationsPage() {
       setEmailContent('')
       setEmailSubject('')
       setEmailSendStatus(result.messageId ? `Email sent. Zoho message ID: ${result.messageId}` : 'Email sent through Zoho.')
+      await fetchClientEmailThread(selectedInquiry.email)
     } catch (err) {
       setEmailSendStatus(err instanceof Error ? err.message : 'Unable to send email.')
     } finally {
@@ -249,8 +256,6 @@ export default function CommunicationsPage() {
     }
   }
 
-  const selectedInquiry = inquiries.find((i) => i.id === selectedId)
-
   // Filter queue
   const filteredInquiries = inquiries.filter((inq) => {
     return (
@@ -265,20 +270,15 @@ export default function CommunicationsPage() {
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <PortalPageHeader
-        icon={<Phone size={18} />}
+        icon={<Inbox size={18} />}
         title="Communications"
-        description="Work current email threads, call queues, and follow-up notes without leaving the operations portal."
+        description="Review client email history, send Zoho replies, and record follow-up notes from one contained workspace."
         actions={
           <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
-            {inquiries.length} client channels monitored
+            {inquiries.length} client email channels
           </div>
         }
       />
-
-      <div className="rounded-xl border border-[#caa24c]/16 bg-[#caa24c]/6 px-4 py-3 text-xs leading-5 text-[#d7c29a]/75">
-        <span className="font-black uppercase tracking-[0.18em] text-[#f1d27a]">Zoho sending active:</span>{' '}
-        outbound email sends through the Luxor Zoho mailbox and records a follow-up log against the selected inquiry. Inbound replies still need Zoho webhooks or sync tables before this becomes a full email thread view.
-      </div>
 
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs font-medium text-red-300">
@@ -286,10 +286,10 @@ export default function CommunicationsPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-12">
         {/* Left Side: Queue */}
-        <div className="flex min-h-[26rem] flex-col gap-6 lg:col-span-4 h-[calc(100vh-14rem)]">
-          <div className="flex-1 nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 backdrop-blur-xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="flex min-h-0 flex-col gap-6 overflow-hidden lg:col-span-4">
+          <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-black/40 shadow-2xl backdrop-blur-xl">
             <div className="p-5 border-b border-zinc-900/50 flex flex-col gap-4">
               <h3 className="font-semibold text-white/90 flex items-center gap-2">
                 <History size={16} className="text-zinc-500" />
@@ -346,9 +346,9 @@ export default function CommunicationsPage() {
         </div>
 
         {/* Right Side: Conversation Frame */}
-        <div className="flex min-h-[34rem] flex-col gap-6 lg:col-span-8 h-[calc(100vh-14rem)]">
+        <div className="flex min-h-0 flex-col gap-6 overflow-hidden lg:col-span-8">
           {selectedInquiry ? (
-            <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/50 p-1 flex-1 flex flex-col shadow-2xl">
+            <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-black/50 p-1 shadow-2xl">
               {/* Header */}
               <div className="bg-[#0c0c0c] rounded-t-xl py-3.5 px-6 border-b border-zinc-900 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -441,26 +441,45 @@ export default function CommunicationsPage() {
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Mail size={15} className="text-[#f1d27a]" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Recent Zoho Inbox</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Client Email History</span>
                     </div>
-                    <span className="text-[10px] font-mono text-zinc-600">{inboxMailbox || 'Luxor mailbox'}</span>
+                    <span className="text-[10px] font-mono text-zinc-600">
+                      {selectedInquiry.email || 'No client email'}
+                    </span>
                   </div>
 
-                  {loadingInbox && inboxMessages.length === 0 ? (
-                    <p className="text-xs text-zinc-650 italic">Syncing Zoho inbox...</p>
-                  ) : inboxMessages.length === 0 ? (
-                    <p className="text-xs text-zinc-600 italic">No recent inbox messages returned from Zoho.</p>
+                  {!selectedInquiry.email ? (
+                    <p className="text-xs text-zinc-600 italic">Add a client email address to see their sent and received Zoho messages.</p>
+                  ) : loadingEmailMessages && emailMessages.length === 0 ? (
+                    <p className="text-xs text-zinc-650 italic">Loading emails for {selectedInquiry.email}...</p>
+                  ) : emailThreadError ? (
+                    <p className="text-xs leading-5 text-rose-300">{emailThreadError}</p>
+                  ) : emailMessages.length === 0 ? (
+                    <p className="text-xs text-zinc-600 italic">No Zoho messages found yet for this email address.</p>
                   ) : (
                     <div className="space-y-2">
-                      {inboxMessages.map((message) => (
+                      {emailMessages.map((message) => (
                         <div key={message.id || `${message.from}-${message.subject}`} className="rounded-lg border border-zinc-900 bg-zinc-950/70 px-3 py-2">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="truncate text-xs font-bold text-zinc-200">{message.subject}</p>
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className={`shrink-0 rounded border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${
+                                  message.direction === 'outgoing'
+                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                                    : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                }`}>
+                                  {message.direction === 'outgoing' ? 'Sent' : 'Received'}
+                                </span>
+                                <p className="truncate text-xs font-bold text-zinc-200">{message.subject}</p>
+                              </div>
+                              <p className="mt-1 truncate text-[10px] text-zinc-500">
+                                From {message.from || 'Unknown'} {message.to ? `to ${message.to}` : ''}
+                              </p>
+                            </div>
                             <span className="shrink-0 text-[9px] font-mono text-zinc-600">
-                              {message.receivedAt ? new Date(Number(message.receivedAt) || message.receivedAt).toLocaleDateString() : 'No date'}
+                              {formatZohoMessageDate(message.receivedAt)}
                             </span>
                           </div>
-                          <p className="mt-1 truncate text-[10px] text-zinc-500">{message.from}</p>
                           {message.summary ? (
                             <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-400">{message.summary}</p>
                           ) : null}
@@ -609,4 +628,18 @@ export default function CommunicationsPage() {
       </div>
     </PortalPageFrame>
   )
+}
+
+function formatZohoMessageDate(value: string | null) {
+  if (!value) return 'No date'
+
+  const numericValue = Number(value)
+  const date = Number.isFinite(numericValue) ? new Date(numericValue) : new Date(value)
+  if (Number.isNaN(date.getTime())) return 'No date'
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
