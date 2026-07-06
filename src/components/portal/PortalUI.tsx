@@ -76,7 +76,7 @@ export function PortalStickyTable({
 
 export function PortalStickyThead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="sticky top-0 z-20 border-b border-[#caa24c]/10 bg-[#0c0c0c] shadow-[0_1px_0_rgba(202,162,76,0.12)]">
+    <thead className="sticky top-0 z-20 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-[0_1px_0_rgba(124,91,36,0.08)]">
       {children}
     </thead>
   )
@@ -94,12 +94,12 @@ export function PortalBridgeCard({
   action?: React.ReactNode
 }) {
   return (
-    <section className="relative isolate overflow-hidden rounded-2xl border border-[#caa24c]/18 bg-[#120d0c]/72 p-5 shadow-2xl shadow-black/25">
+    <section className="relative isolate overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-2xl shadow-black/20">
       <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-[#caa24c]/10 blur-3xl" />
       <div className="relative">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{label}</p>
-        <h2 className="mt-2 text-xl font-bold tracking-tight text-white">{title}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">{description}</p>
+        <h2 className="mt-2 text-xl font-bold tracking-tight text-[color:var(--portal-text)]">{title}</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{description}</p>
         {action ? <div className="mt-4">{action}</div> : null}
       </div>
     </section>

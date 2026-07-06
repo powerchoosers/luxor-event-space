@@ -158,7 +158,7 @@ export default async function PortalOverview() {
         >
           <PortalStickyTable minWidth="820px">
             <PortalStickyThead>
-              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest border-b border-zinc-900/50">
+              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest border-b border-[color:var(--portal-border)]">
                 <th className="px-6 py-4">Lead Source</th>
                 <th className="px-6 py-4">Contact</th>
                 <th className="px-6 py-4">Status</th>
@@ -166,7 +166,7 @@ export default async function PortalOverview() {
                 <th className="px-6 py-4 text-right">Action</th>
               </tr>
             </PortalStickyThead>
-            <tbody className="divide-y divide-zinc-900/30">
+            <tbody className="divide-y divide-[color:var(--portal-border)]">
               {leads.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
@@ -175,10 +175,10 @@ export default async function PortalOverview() {
                 </tr>
               ) : (
                 leads.slice(0, 5).map((lead) => (
-                  <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
+                  <tr key={lead.id} className="hover:bg-[color:var(--portal-soft)] transition-colors group">
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500 group-hover:bg-zinc-800 group-hover:text-blue-500 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-xs font-bold text-zinc-500 group-hover:bg-[color:var(--portal-card)] group-hover:text-blue-500 transition-colors">
                           {lead.source[0]?.toUpperCase() || 'W'}
                         </div>
                         <div>
@@ -201,7 +201,7 @@ export default async function PortalOverview() {
                       <span className="text-zinc-500 text-[10px] mt-0.5">{lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</span>
                     </td>
                     <td className="px-6 py-5 text-right">
-                      <Link href={`/portal/leads/${lead.id}`} className="inline-flex p-2 transition-colors hover:bg-zinc-800 rounded-md text-zinc-600 hover:text-zinc-300">
+                      <Link href={`/portal/leads/${lead.id}`} className="inline-flex p-2 transition-colors hover:bg-[color:var(--portal-soft)] rounded-md text-zinc-600 hover:text-[color:var(--portal-text)]">
                         <ExternalLink size={14} />
                       </Link>
                     </td>
@@ -221,29 +221,29 @@ export default async function PortalOverview() {
               Quick Actions
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/portal/marketing" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
+              <Link href="/portal/marketing" className="flex flex-col items-center justify-center gap-3 p-4 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[color:var(--portal-border)] hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Mail size={16} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Marketing</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-[color:var(--portal-text)] transition-colors">Marketing</p>
               </Link>
-              <Link href="/portal/invoices" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
+              <Link href="/portal/invoices" className="flex flex-col items-center justify-center gap-3 p-4 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[color:var(--portal-border)] hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <DollarSign size={16} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Invoices</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-[color:var(--portal-text)] transition-colors">Invoices</p>
               </Link>
-              <Link href="/portal/leads" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
+              <Link href="/portal/leads" className="flex flex-col items-center justify-center gap-3 p-4 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[color:var(--portal-border)] hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Users size={16} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Leads</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-[color:var(--portal-text)] transition-colors">Leads</p>
               </Link>
-              <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-zinc-900 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-800 hover:scale-[1.03] transition-all shadow-lg group">
-                <div className="p-2.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
+              <Link href="/portal/calendar" className="flex flex-col items-center justify-center gap-3 p-4 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[color:var(--portal-border)] hover:scale-[1.03] transition-all shadow-lg group">
+                <div className="p-2.5 rounded-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-zinc-400 group-hover:text-[#caa24c] transition-colors shadow-inner">
                   <Calendar size={16} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">Tours Calendar</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-[color:var(--portal-text)] transition-colors">Tours Calendar</p>
               </Link>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default async function PortalOverview() {
                 <p className="text-xs text-zinc-500 italic">No notes or status log events recorded recently.</p>
               ) : (
                 recentNotes.map((note) => (
-                  <div key={note.id} className="border-b border-zinc-900/60 pb-3 last:border-b-0 last:pb-0">
+                <div key={note.id} className="border-b border-[color:var(--portal-border)] pb-3 last:border-b-0 last:pb-0">
                     <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
                       <span>{note.author}</span>
                       <span>{new Date(note.created_at).toLocaleDateString()}</span>

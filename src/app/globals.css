@@ -49,17 +49,17 @@ body[data-portal-theme='dark'] {
 }
 
 body[data-portal-theme='light'] {
-  --portal-bg: #f6f0e6;
-  --portal-card: rgba(255, 255, 255, 0.78);
-  --portal-soft: rgba(250, 246, 238, 0.9);
-  --portal-text: #18120c;
-  --portal-muted: #6f6256;
-  --portal-faint: #a79584;
-  --portal-border: rgba(124, 91, 36, 0.2);
+  --portal-bg: #fbfaf6;
+  --portal-card: #ffffff;
+  --portal-soft: #f4efe7;
+  --portal-text: #18130d;
+  --portal-muted: #6c6156;
+  --portal-faint: #a99d8e;
+  --portal-border: rgba(124, 91, 36, 0.14);
   color: var(--portal-text);
   background:
-    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.12), transparent 30rem),
-    linear-gradient(180deg, #faf6ef 0%, #f1e7d8 52%, #f7f0e7 100%);
+    radial-gradient(circle at 50% -10%, rgba(202, 162, 76, 0.06), transparent 30rem),
+    linear-gradient(180deg, #fdfbf7 0%, #f7f3ec 50%, #fbf9f5 100%);
   color-scheme: light;
 }
 
@@ -71,6 +71,9 @@ body[data-portal-theme='light'] .portal-surface {
   background: var(--portal-card) !important;
   border-color: var(--portal-border) !important;
   color: var(--portal-muted);
+  box-shadow:
+    0 18px 45px -36px rgba(48, 33, 14, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 body[data-portal-theme='light'] .bg-\[\#050505\]\/90,
@@ -127,7 +130,10 @@ body[data-portal-theme='light'] select {
 body[data-portal-theme='light'] .border-zinc-900,
 body[data-portal-theme='light'] .border-zinc-950,
 body[data-portal-theme='light'] .border-zinc-900\/50,
-body[data-portal-theme='light'] .border-zinc-900\/30 {
+body[data-portal-theme='light'] .border-zinc-900\/30,
+body[data-portal-theme='light'] .border-zinc-900\/60,
+body[data-portal-theme='light'] .border-zinc-800,
+body[data-portal-theme='light'] .border-zinc-800\/60 {
   border-color: var(--portal-border) !important;
 }
 

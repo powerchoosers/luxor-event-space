@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
@@ -36,12 +36,22 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [portalTheme, setPortalTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window === 'undefined') return 'dark'
-    const savedTheme = window.localStorage.getItem('luxor-portal-theme')
-    return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark'
-  })
-  
+  const portalTheme = useSyncExternalStore(
+    (callback) => {
+      window.addEventListener('storage', callback)
+      window.addEventListener('luxor-portal-theme', callback)
+      return () => {
+        window.removeEventListener('storage', callback)
+        window.removeEventListener('luxor-portal-theme', callback)
+      }
+    },
+    () => {
+      const savedTheme = window.localStorage.getItem('luxor-portal-theme')
+      return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark'
+    },
+    () => 'dark'
+  )
+
   // Notification State
   const [notificationCount, setNotificationCount] = useState(0)
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
@@ -51,11 +61,9 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
   const [searchFocused, setSearchFocused] = useState(false)
 
   const togglePortalTheme = () => {
-    setPortalTheme((current) => {
-      const next = current === 'dark' ? 'light' : 'dark'
-      window.localStorage.setItem('luxor-portal-theme', next)
-      return next
-    })
+    const next = portalTheme === 'dark' ? 'light' : 'dark'
+    window.localStorage.setItem('luxor-portal-theme', next)
+    window.dispatchEvent(new Event('luxor-portal-theme'))
   }
 
   // Derived Search Results
@@ -210,7 +218,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
                     <button
                       key={result.id}
                       onClick={() => selectSearchResult(result.id)}
-                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded hover:bg-zinc-900 transition-colors"
+                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded hover:bg-[color:var(--portal-soft)] transition-colors"
                     >
                       <div className="truncate pr-2">
                         <p className="text-xs font-bold text-white leading-tight">{result.full_name}</p>
@@ -238,7 +246,7 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
               </button>
             
             {/* Bell Notifications */}
-            <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Notifications">
+            <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
               <Bell size={18} className="text-zinc-400 transition-colors" />
               {notificationCount > 0 && (
                 <span className="absolute right-1.5 top-1.5 h-4 min-w-4 rounded-full border border-black bg-blue-600 text-[8px] font-black text-white flex items-center justify-center px-1 font-mono">
@@ -247,18 +255,18 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
               )}
             </Link>
 
-            <Link href="/portal/communications" className="rounded-full p-2 transition-colors hover:bg-zinc-900" aria-label="Messages">
+            <Link href="/portal/communications" className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Messages">
               <MessageSquare size={18} className="text-zinc-400" />
             </Link>
             
-            <div className="mx-1 hidden h-8 w-px bg-zinc-900 sm:block" />
+            <div className="mx-1 hidden h-8 w-px bg-[color:var(--portal-border)] sm:block" />
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="text-xs font-semibold leading-none text-white">{session.email}</p>
                 <p className="mt-1 text-[10px] font-medium uppercase leading-none tracking-tighter text-zinc-500">Zoho Authorized</p>
               </div>
-              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800 ring-2 ring-zinc-900">
-                <div className="h-full w-full bg-gradient-to-br from-blue-500 to-indigo-650 opacity-80" />
+              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ring-2 ring-[color:var(--portal-soft)]">
+                <div className="h-full w-full bg-gradient-to-br from-blue-400 to-indigo-600 opacity-80" />
               </div>
             </div>
           </div>
