@@ -131,13 +131,13 @@ create policy "Service role can manage Luxor signature events"
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
--- Replace YOUR_SITE_OR_DEPLOYMENT_URL and YOUR_CRON_SECRET before running this block.
+-- Replace YOUR_CRON_SECRET with the same CRON_SECRET value configured in Vercel.
 -- select cron.schedule(
 --   'luxor-email-jobs-every-5-minutes',
 --   '*/5 * * * *',
 --   $$
 --     select net.http_post(
---       url := 'https://YOUR_SITE_OR_DEPLOYMENT_URL/api/cron/luxor-email-jobs',
+--       url := 'https://www.luxoratlaspalmas.com/api/cron/luxor-email-jobs',
 --       headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', 'YOUR_CRON_SECRET'),
 --       body := jsonb_build_object('source', 'supabase-cron'),
 --       timeout_milliseconds := 10000

@@ -4,6 +4,7 @@ import {
   createMarketingCampaign,
   listMarketingCampaigns,
   parseMarketingRecipients,
+  sendMarketingCampaignNow,
 } from '@/lib/luxorMarketingServer'
 
 export async function GET() {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
           .filter((recipient: { email: string }) => recipient.email)
       : parseMarketingRecipients(String(body.recipientsText || ''))
 
-    const detail = await createMarketingCampaign({
+    let detail = await createMarketingCampaign({
       name: String(body.name || body.subject || 'Untitled Campaign'),
       subject: String(body.subject || ''),
       htmlBody: String(body.htmlBody || ''),
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
       audienceLabel: typeof body.audienceLabel === 'string' ? body.audienceLabel : null,
       createdBy: session.email,
     })
+
+    if (body.sendNow === true && detail?.campaign?.id) {
+      const result = await sendMarketingCampaignNow(detail.campaign.id)
+      detail = result.detail || detail
+      return NextResponse.json({ ...detail, sendNow: result })
+    }
 
     return NextResponse.json(detail)
   } catch (error) {

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processDueLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 
-export async function POST(request: NextRequest) {
+async function handleCronRequest(request: NextRequest) {
   const configuredSecret = process.env.CRON_SECRET
-  const providedSecret = request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret')
+  const authHeader = request.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
+  const providedSecret = bearerSecret || request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret')
 
   if (!configuredSecret || providedSecret !== configuredSecret) {
     return NextResponse.json({ error: 'Unauthorized cron request.' }, { status: 401 })
@@ -16,4 +18,12 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Email job processing failed.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
+}
+
+export async function GET(request: NextRequest) {
+  return handleCronRequest(request)
+}
+
+export async function POST(request: NextRequest) {
+  return handleCronRequest(request)
 }

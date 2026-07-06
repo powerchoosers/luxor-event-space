@@ -9,7 +9,12 @@ import {
   LuxorMarketingTemplate,
 } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
-import { createLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
+import {
+  createLuxorEmailJob,
+  listQueuedLuxorEmailJobsByIds,
+  processLuxorEmailJobs,
+  updateLuxorEmailJob,
+} from './luxorEmailJobsServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -533,4 +538,40 @@ export async function cancelMarketingCampaign(id: string) {
   )
 
   return campaign ?? null
+}
+
+export async function sendMarketingCampaignNow(id: string) {
+  const recipients = await supabaseRest<LuxorMarketingRecipient[]>(
+    `luxor_marketing_recipients?select=*&campaign_id=eq.${encodeURIComponent(id)}&status=eq.queued`,
+  )
+  const jobIds = recipients
+    .map((recipient) => recipient.email_job_id)
+    .filter((jobId): jobId is string => Boolean(jobId))
+
+  if (!jobIds.length) {
+    await refreshMarketingCampaignStatus(id)
+    return { processed: 0, results: [], detail: await getMarketingCampaignDetail(id) }
+  }
+
+  const now = new Date().toISOString()
+  await supabaseRest<LuxorMarketingCampaign[]>(
+    `luxor_marketing_campaigns?select=*&id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'sending', scheduled_for: now }),
+    },
+  )
+
+  await Promise.all(
+    jobIds.map((jobId) => updateLuxorEmailJob(jobId, { status: 'queued', scheduled_for: now })),
+  )
+
+  const jobs = await listQueuedLuxorEmailJobsByIds(jobIds)
+  const results = await processLuxorEmailJobs(jobs)
+
+  return {
+    processed: results.length,
+    results,
+    detail: await getMarketingCampaignDetail(id),
+  }
 }

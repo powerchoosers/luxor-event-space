@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { cancelMarketingCampaign, getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
+import { cancelMarketingCampaign, getMarketingCampaignDetail, sendMarketingCampaignNow } from '@/lib/luxorMarketingServer'
 
 export async function GET(
   _request: NextRequest,
@@ -41,6 +41,11 @@ export async function PATCH(
     if (body.action === 'cancel') {
       const campaign = await cancelMarketingCampaign(id)
       return NextResponse.json({ campaign })
+    }
+
+    if (body.action === 'send-now') {
+      const result = await sendMarketingCampaignNow(id)
+      return NextResponse.json(result)
     }
 
     return NextResponse.json({ error: 'Unsupported campaign action.' }, { status: 400 })

@@ -131,6 +131,24 @@ export default function MarketingPage() {
     }
   }
 
+  async function sendCampaignNow(id: string) {
+    setBusyId(id)
+    try {
+      const response = await fetch(`/api/marketing/campaigns/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send-now' }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to send campaign now.')
+      await loadCampaigns()
+    } catch (sendError) {
+      alert(sendError instanceof Error ? sendError.message : 'Unable to send campaign now.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function openCampaignReport(id: string) {
     setDetailLoadingId(id)
     try {
@@ -242,6 +260,7 @@ export default function MarketingPage() {
                     reportBusy={detailLoadingId === campaign.id}
                     onReport={() => openCampaignReport(campaign.id)}
                     onCancel={() => cancelCampaign(campaign.id)}
+                    onSendNow={() => sendCampaignNow(campaign.id)}
                   />
                 ))
               ) : (
@@ -360,15 +379,18 @@ function CampaignCard({
   reportBusy,
   onReport,
   onCancel,
+  onSendNow,
 }: {
   campaign: Campaign
   busy: boolean
   reportBusy: boolean
   onReport: () => void
   onCancel: () => void
+  onSendNow: () => void
 }) {
   const progress = campaign.recipient_count ? Math.round((campaign.sent_count / campaign.recipient_count) * 100) : 0
   const canCancel = campaign.status === 'scheduled' || campaign.queued_count > 0
+  const canSendNow = campaign.queued_count > 0 && campaign.status !== 'cancelled'
 
   return (
     <div className="luxor-glass-card luxor-glow-blue group overflow-hidden rounded-2xl p-6 shadow-xl">
@@ -411,6 +433,16 @@ function CampaignCard({
             <Eye size={11} />
             {reportBusy ? 'Loading...' : 'Report'}
           </button>
+          {canSendNow ? (
+            <button
+              onClick={onSendNow}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#dfbd68] transition-colors hover:bg-[#caa24c]/15 disabled:opacity-50"
+            >
+              <Send size={11} />
+              {busy ? 'Sending...' : 'Send Now'}
+            </button>
+          ) : null}
           {canCancel ? (
             <button
               onClick={onCancel}

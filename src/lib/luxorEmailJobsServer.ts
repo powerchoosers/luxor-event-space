@@ -122,6 +122,15 @@ export async function listDueLuxorEmailJobs(limit = 25) {
   )
 }
 
+export async function listQueuedLuxorEmailJobsByIds(ids: string[]) {
+  const safeIds = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+  if (!safeIds.length) return []
+
+  return supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&status=eq.queued&id=in.(${safeIds.join(',')})&order=scheduled_for.asc`,
+  )
+}
+
 export async function updateLuxorEmailJob(id: string, updates: Partial<LuxorEmailJob>) {
   const [updated] = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=*&id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -135,8 +144,7 @@ export async function updateLuxorEmailJob(id: string, updates: Partial<LuxorEmai
   return updated ?? null
 }
 
-export async function processDueLuxorEmailJobs(limit = 25) {
-  const jobs = await listDueLuxorEmailJobs(limit)
+export async function processLuxorEmailJobs(jobs: LuxorEmailJob[]) {
   const results: { id: string; status: 'sent' | 'failed'; error?: string }[] = []
 
   for (const job of jobs) {
@@ -165,6 +173,11 @@ export async function processDueLuxorEmailJobs(limit = 25) {
   }
 
   return results
+}
+
+export async function processDueLuxorEmailJobs(limit = 25) {
+  const jobs = await listDueLuxorEmailJobs(limit)
+  return processLuxorEmailJobs(jobs)
 }
 
 async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {

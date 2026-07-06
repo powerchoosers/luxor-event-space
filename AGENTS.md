@@ -8,6 +8,18 @@ These instructions apply to this entire repository.
 - Git remote: `origin`
 - Default and deployment branch: `main`
 - This is the Luxor Event Space website. Do not commit or push its files to the Nodal Point CRM repository.
+- `AGENTS.md` is the highest-priority repo guidance. `README.md` is supporting context for humans and can help Codex, but it is not the authority if it conflicts with code or this file.
+
+## Source Of Truth
+
+- `src/app/(site)/layout.tsx` for public site shell, fonts, and shared site chrome.
+- `src/app/(portal)/layout.tsx` for portal protection and redirect behavior.
+- `src/lib/luxorPortalAuth.ts` for portal session rules and allowed email addresses.
+- `src/lib/zohoMailServer.ts` for Zoho config, sender restrictions, and message delivery.
+- `src/lib/luxorEmailJobsServer.ts` for email job queue processing and marketing updates.
+- `src/lib/luxorBookingsServer.ts` and `src/lib/luxorInquiryTypes.ts` for booking and inquiry data flow.
+- `src/components/Header.tsx` and `src/components/Footer.tsx` for public navigation.
+- `src/components/Reveal.tsx` for animation policy on the public site.
 
 ## Development
 
@@ -35,6 +47,7 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 - Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
 - The gallery page uses a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves the experience beyond the current custom implementation.
 - Keep new packages conservative. Prefer existing Next.js, React, Tailwind, Framer Motion, and Lucide patterns unless a package solves a real interaction or accessibility problem.
+- If README and AGENTS disagree, follow AGENTS and the source files.
 
 ## Commit And Push
 

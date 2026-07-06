@@ -40,6 +40,7 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
 
   const html = renderEmailToHtml(subject, blocks)
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
+  const isScheduled = Boolean(scheduledFor)
 
   async function handleSend() {
     const emails = recipients
@@ -71,7 +72,8 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
           htmlBody: html,
           recipientsText: emails.join(','),
           audienceLabel,
-          scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null,
+          scheduledFor: isScheduled ? new Date(scheduledFor).toISOString() : null,
+          sendNow: !isScheduled,
         }),
       })
       const data = await res.json()
@@ -81,9 +83,9 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
 
       setSendStatus('success')
       setSendMessage(
-        scheduledFor
+        isScheduled
           ? `Campaign scheduled for ${new Date(scheduledFor).toLocaleString()} with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}.`
-          : `Campaign queued for ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. The cron sender will process it shortly.`,
+          : `Send started for ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. Refresh the overview to see sent, failed, open, and click results.`,
       )
     } catch (error) {
       setSendStatus('error')
@@ -221,7 +223,7 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
               <div className="max-w-xl mx-auto px-6 py-8 space-y-6">
                 <div>
                   <h4 className="text-sm font-bold text-white/90">Send Campaign</h4>
-                  <p className="text-xs text-zinc-500 mt-1">Send via your Zoho mail account. Separate multiple addresses with commas.</p>
+                  <p className="text-xs text-zinc-500 mt-1">Send now through Zoho, or pick a date and time to schedule it. Separate multiple addresses with commas.</p>
                 </div>
 
                 <div className="space-y-4">
@@ -288,7 +290,7 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                         placeholder="Pick a time"
                         options={scheduleTimeOptions}
                       />
-                      <p className="text-[10px] text-zinc-600">Leave both fields blank to queue it now.</p>
+                      <p className="text-[10px] text-zinc-600">Leave date and time blank to send immediately.</p>
                     </div>
                   </div>
                 </div>
@@ -311,7 +313,7 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                     </div>
                     <div>
                       <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Send Mode</p>
-                      <p className="text-sm font-bold text-white/90 font-mono">{scheduledFor ? 'Scheduled' : 'Queued'}</p>
+                      <p className="text-sm font-bold text-white/90 font-mono">{isScheduled ? 'Scheduled' : 'Send Now'}</p>
                     </div>
                   </div>
                 </div>
@@ -338,16 +340,16 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 py-3.5 text-sm font-black uppercase tracking-[0.15em] text-black shadow-lg shadow-[#caa24c]/20 transition-all hover:bg-[#d4b060] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
                 >
                   {sendStatus === 'sending' ? (
-                    <><Loader2 size={16} className="animate-spin" /> Creating...</>
-                  ) : scheduledFor ? (
+                    <><Loader2 size={16} className="animate-spin" /> {isScheduled ? 'Scheduling...' : 'Sending...'}</>
+                  ) : isScheduled ? (
                     <><CalendarClock size={16} /> Schedule Campaign</>
                   ) : (
-                    <><Send size={16} /> Queue Campaign</>
+                    <><Send size={16} /> Send Now</>
                   )}
                 </button>
 
                 <p className="text-[10px] text-zinc-700 text-center">
-                  Queued through Luxor Marketing and sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>
+                  Sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are handled by the cron sender.
                 </p>
               </div>
             </div>
