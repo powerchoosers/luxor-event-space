@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Wrench,
   DollarSign,
@@ -41,7 +42,18 @@ type SubTab =
   | 'staff'
 
 export default function OperationsPage() {
-  const [activeTab, setActiveTab] = useState<SubTab>('dashboard')
+  return (
+    <Suspense fallback={null}>
+      <OperationsPageContent />
+    </Suspense>
+  )
+}
+
+function OperationsPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab') as SubTab | null
+  const activeTab = tabParam || 'dashboard'
 
   // State for interactive features
   const [readinessTasks, setReadinessTasks] = useState([
@@ -109,7 +121,7 @@ export default function OperationsPage() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id as SubTab)}
+            onClick={() => router.push(`/portal/operations?tab=${tab.id}`)}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               activeTab === tab.id
                 ? 'bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#f1d27a]'

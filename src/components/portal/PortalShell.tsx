@@ -15,11 +15,12 @@ import {
   Moon,
   Users,
   Sparkles,
-  DollarSign
+  DollarSign,
+  ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import React, { useEffect, useState, useSyncExternalStore, Suspense } from 'react'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
@@ -31,15 +32,36 @@ const navItems = [
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
-  { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations' },
+  { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
   { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing' },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
 
+const operationsSubItems = [
+  { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: '🏠' },
+  { href: '/portal/operations?tab=bills', label: 'Bills & Payments', icon: '💰' },
+  { href: '/portal/operations?tab=maintenance', label: 'Maintenance', icon: '🛠️' },
+  { href: '/portal/operations?tab=inventory', label: 'Inventory', icon: '📦' },
+  { href: '/portal/operations?tab=vendors', label: 'Vendors', icon: '🤝' },
+  { href: '/portal/operations?tab=utilities', label: 'Utilities', icon: '🚀' },
+  { href: '/portal/operations?tab=cleaning', label: 'Cleaning', icon: '🧹' },
+  { href: '/portal/operations?tab=staff', label: 'Staff', icon: '👥' },
+]
+
 export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
+  return (
+    <Suspense fallback={null}>
+      <PortalShellContent session={session}>{children}</PortalShellContent>
+    </Suspense>
+  )
+}
+
+function PortalShellContent({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const portalTheme = useSyncExternalStore(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -148,9 +170,65 @@ export function PortalShell({ children, session }: { children: React.ReactNode; 
           </div>
 
           <nav className="flex-1 space-y-1">
-            {navItems.map((item) => (
-              <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href)} collapsed={sidebarCollapsed} />
-            ))}
+            {navItems.map((item) => {
+              if (item.isDropdown) {
+                const isCurrentGroup = pathname.startsWith(item.href)
+                return (
+                  <div key={item.href} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setOperationsExpanded(!operationsExpanded)}
+                      className={`group relative flex w-full items-center rounded-lg border text-sm font-medium transition-all cursor-pointer ${
+                        sidebarCollapsed ? 'justify-center px-0 py-3' : 'justify-between px-3 py-2.5'
+                      } ${
+                        isCurrentGroup
+                          ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
+                          : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {isCurrentGroup && !sidebarCollapsed && (
+                          <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
+                        )}
+                        <span className={`${isCurrentGroup ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
+                          {item.icon}
+                        </span>
+                        <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>{item.label}</span>
+                      </div>
+                      {!sidebarCollapsed && (
+                        <span className="text-zinc-500 mr-1">
+                          <ChevronDown size={14} className={`transform transition-transform ${operationsExpanded ? '' : '-rotate-90'}`} />
+                        </span>
+                      )}
+                    </button>
+                    
+                    {operationsExpanded && !sidebarCollapsed && (
+                      <div className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1">
+                        {operationsSubItems.map((sub) => {
+                          const tabParam = searchParams.get('tab')
+                          const isSubActive = pathname === '/portal/operations' && (
+                            (sub.href.includes('tab=dashboard') && !tabParam) ||
+                            (!!tabParam && sub.href.includes(`tab=${tabParam}`))
+                          )
+                          return (
+                            <SidebarSubLink
+                              key={sub.href}
+                              href={sub.href}
+                              label={sub.label}
+                              icon={sub.icon}
+                              active={isSubActive}
+                            />
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return (
+                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href)} collapsed={sidebarCollapsed} />
+              )
+            })}
           </nav>
 
           <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
@@ -345,4 +423,30 @@ function SidebarLink({
 function isActivePath(pathname: string, href: string) {
   if (href === '/portal') return pathname === href
   return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+function SidebarSubLink({
+  href,
+  label,
+  icon,
+  active,
+}: {
+  href: string
+  label: string
+  icon: string
+  active: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+        active
+          ? 'text-[#f1d27a] font-bold bg-[#caa24c]/5'
+          : 'text-zinc-550 hover:text-zinc-300 hover:bg-zinc-950/20'
+      }`}
+    >
+      <span className="text-xs">{icon}</span>
+      <span>{label}</span>
+    </Link>
+  )
 }
