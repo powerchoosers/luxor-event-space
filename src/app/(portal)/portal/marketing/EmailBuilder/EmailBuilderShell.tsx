@@ -62,6 +62,7 @@ type SavedMarketingTemplate = {
 type BuilderTemplate = EmailTemplate & {
   source: 'built-in' | 'saved'
   savedId?: string
+  subject?: string
   updatedAt?: string
 }
 
@@ -291,6 +292,7 @@ export function EmailBuilderShell() {
         description: tpl.description || 'Custom saved email layout.',
         category: 'custom' as EmailTemplate['category'],
         previewColor: tpl.preview_color || '#caa24c',
+        subject: tpl.subject,
         blocks: tpl.blocks,
         updatedAt: tpl.updated_at,
       }))
@@ -356,7 +358,7 @@ export function EmailBuilderShell() {
     setBlocks(withNewIds)
     pushHistory(withNewIds)
     setSelectedId(null)
-    if (!subject) setSubject(tpl.name)
+    if (!subject) setSubject(tpl.subject || tpl.name)
     if (tpl.savedId) {
       fetch(`/api/marketing/templates/${tpl.savedId}`, {
         method: 'PATCH',
