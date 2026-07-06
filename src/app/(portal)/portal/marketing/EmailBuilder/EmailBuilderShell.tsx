@@ -36,6 +36,10 @@ function createBlock(type: BlockType): EmailBlock {
   }
 }
 
+function cloneTemplateBlocks(blocks: EmailBlock[]) {
+  return blocks.map((block) => ({ ...block, id: nanoid() }))
+}
+
 // ─── Template Picker ──────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -109,7 +113,7 @@ function TemplatePicker({
                   >
                     <button
                       onClick={() => { onSelect(tpl); onClose() }}
-                      className="w-full text-left"
+                      className="w-full cursor-pointer text-left"
                     >
                       <div className="h-2 w-full" style={{ background: tpl.previewColor }} />
                       <div className="p-4">
@@ -126,7 +130,7 @@ function TemplatePicker({
                     {tpl.savedId ? (
                       <button
                         onClick={() => onDeleteSaved(tpl.savedId as string)}
-                        className="mx-4 mb-4 flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-500/10"
+                        className="mx-4 mb-4 flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-500/10"
                       >
                         <Trash2 size={10} />
                         Delete
@@ -150,7 +154,7 @@ function TemplatePicker({
             <button
               key={tpl.id}
               onClick={() => { onSelect(tpl); onClose() }}
-              className="text-left rounded-xl border border-zinc-800/60 bg-zinc-900/20 overflow-hidden hover:border-zinc-600 hover:bg-zinc-800/30 transition-all hover:scale-[1.02] group"
+              className="cursor-pointer overflow-hidden rounded-xl border border-zinc-800/60 bg-zinc-900/20 text-left transition-all hover:scale-[1.02] hover:border-zinc-600 hover:bg-zinc-800/30 group"
             >
               {/* Color band */}
               <div className="h-2 w-full" style={{ background: tpl.previewColor }} />
@@ -266,16 +270,24 @@ function SaveTemplateModal({
 
 // ─── Main Shell ───────────────────────────────────────────────────────────────
 
-export function EmailBuilderShell() {
-  const [blocks, setBlocks] = useState<EmailBlock[]>([])
+export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?: EmailTemplate | null }) {
+  const [initialBuilderState] = useState(() => {
+    const initialBlocks = initialTemplate ? cloneTemplateBlocks(initialTemplate.blocks) : []
+    return {
+      blocks: initialBlocks,
+      subject: initialTemplate?.name || '',
+      history: [initialBlocks],
+    }
+  })
+  const [blocks, setBlocks] = useState<EmailBlock[]>(initialBuilderState.blocks)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [subject, setSubject] = useState('')
+  const [subject, setSubject] = useState(initialBuilderState.subject)
   const [showPreview, setShowPreview] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
   const [savedTemplates, setSavedTemplates] = useState<BuilderTemplate[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
-  const [history, setHistory] = useState<EmailBlock[][]>([[]])
+  const [history, setHistory] = useState<EmailBlock[][]>(initialBuilderState.history)
   const [historyIdx, setHistoryIdx] = useState(0)
 
   async function loadSavedTemplates() {
@@ -354,7 +366,7 @@ export function EmailBuilderShell() {
   }, [blocks])
 
   const handleLoadTemplate = useCallback((tpl: BuilderTemplate) => {
-    const withNewIds = tpl.blocks.map((b) => ({ ...b, id: nanoid() }))
+    const withNewIds = cloneTemplateBlocks(tpl.blocks)
     setBlocks(withNewIds)
     pushHistory(withNewIds)
     setSelectedId(null)

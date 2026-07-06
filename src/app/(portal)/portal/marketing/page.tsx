@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
-import { EMAIL_TEMPLATES } from './emailTemplates'
+import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
 
 type Tab = 'overview' | 'builder' | 'templates'
 
@@ -77,6 +77,7 @@ export default function MarketingPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<CampaignDetail | null>(null)
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
+  const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
 
   async function loadCampaigns() {
     setLoading(true)
@@ -163,6 +164,16 @@ export default function MarketingPage() {
     }
   }
 
+  function openTemplateInBuilder(template: EmailTemplate) {
+    setBuilderTemplate(template)
+    setActiveTab('builder')
+  }
+
+  function openBlankBuilder() {
+    setBuilderTemplate(null)
+    setActiveTab('builder')
+  }
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 size={14} /> },
     { id: 'builder', label: 'Email Builder', icon: <PenSquare size={14} /> },
@@ -188,7 +199,7 @@ export default function MarketingPage() {
                   <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
                 </button>
                 <button
-                  onClick={() => setActiveTab('builder')}
+                  onClick={openBlankBuilder}
                   className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-black shadow-xl shadow-[#caa24c]/20 transition-all hover:bg-[#dfbd68] hover:scale-105 active:scale-95"
                 >
                   <Plus size={13} /> New Campaign
@@ -201,8 +212,8 @@ export default function MarketingPage() {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
+                  onClick={() => tab.id === 'builder' ? openBlankBuilder() : setActiveTab(tab.id)}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
                     activeTab === tab.id
                       ? 'bg-[#caa24c] text-black shadow-md shadow-[#caa24c]/20'
                       : 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
@@ -241,7 +252,7 @@ export default function MarketingPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Campaigns</h3>
                 <button
-                  onClick={() => setActiveTab('builder')}
+                  onClick={openBlankBuilder}
                   className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-colors hover:text-[#dfbd68]"
                 >
                   <PenSquare size={11} />
@@ -270,7 +281,7 @@ export default function MarketingPage() {
                   description="Build an email, add recipients, and queue or schedule it. Once it sends, opens and clicks will show here."
                   action={
                     <button
-                      onClick={() => setActiveTab('builder')}
+                      onClick={openBlankBuilder}
                       className="rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black"
                     >
                       Create Campaign
@@ -294,7 +305,7 @@ export default function MarketingPage() {
                   Re-engage tour no-shows with a short concierge note and one button back to the tour page. That is more useful than a big newsletter because it asks for one clear action.
                 </p>
                 <button
-                  onClick={() => setActiveTab('builder')}
+                  onClick={openBlankBuilder}
                   className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-transform hover:translate-x-1"
                 >
                   Build This Email <Send size={14} />
@@ -307,7 +318,7 @@ export default function MarketingPage() {
 
       {activeTab === 'builder' && (
         <div className="min-h-0 flex-1">
-          <EmailBuilderShell />
+          <EmailBuilderShell key={builderTemplate?.id || 'blank-builder'} initialTemplate={builderTemplate} />
         </div>
       )}
 
@@ -315,19 +326,21 @@ export default function MarketingPage() {
         <div className="flex-1">
           <div className="mb-6">
             <p className="text-xs text-zinc-500">
-              Choose a template to jump-start your next campaign. Templates open from the builder template button.
+              Choose a template to jump-start your next campaign. Click any card to open it in the email builder.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {EMAIL_TEMPLATES.map((tpl) => (
-              <div
+              <button
+                type="button"
                 key={tpl.id}
-                className="overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 transition-all hover:border-zinc-600 hover:bg-zinc-800/20"
+                onClick={() => openTemplateInBuilder(tpl)}
+                className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-800/20 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/35"
               >
                 <div className="h-1.5 w-full" style={{ background: tpl.previewColor }} />
                 <div className="p-5">
                   <div className="mb-2 flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-bold text-white/90">{tpl.name}</h4>
+                    <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{tpl.name}</h4>
                     <span
                       className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
                       style={{ color: tpl.previewColor, borderColor: `${tpl.previewColor}40`, background: `${tpl.previewColor}15` }}
@@ -338,17 +351,16 @@ export default function MarketingPage() {
                   <p className="mb-4 text-[11px] leading-relaxed text-zinc-500">{tpl.description}</p>
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</span>
-                    <button
-                      onClick={() => setActiveTab('builder')}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:scale-105 active:scale-95"
+                    <span
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all group-hover:scale-105"
                       style={{ background: `${tpl.previewColor}20`, color: tpl.previewColor, border: `1px solid ${tpl.previewColor}30` }}
                     >
                       <PenSquare size={10} />
                       Open Builder
-                    </button>
+                    </span>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
