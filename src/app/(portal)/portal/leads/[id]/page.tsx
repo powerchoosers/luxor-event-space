@@ -127,6 +127,8 @@ export default function LeadDetailPage({
 
   // Timeline tab filtering
   const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
+  const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
+  const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
@@ -239,6 +241,69 @@ export default function LeadDetailPage({
       return true
     })
   }, [activeFeedTab, leadDerivedData.allActivityEntries])
+
+  const activeStage = useMemo(() => {
+    if (!lead) return 'inquiry'
+    const steps = [
+      {
+        id: 'inquiry',
+        isCompleted: true,
+        isActive: false,
+      },
+      {
+        id: 'tour',
+        isCompleted: lead.status !== 'new' && lead.status !== 'contacted',
+        isActive: lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
+      },
+      {
+        id: 'proposal',
+        isCompleted: lead.status === 'proposal_sent' || lead.status === 'booked',
+        isActive: lead.status === 'proposal_sent' && !latestBooking,
+      },
+      {
+        id: 'contract',
+        isCompleted: latestBooking?.contract_status === 'signed',
+        isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking) || (lead.status === 'proposal_sent' && !!latestBooking),
+      },
+      {
+        id: 'deposit',
+        isCompleted: latestBooking?.security_deposit_status === 'collected',
+        isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
+      },
+      {
+        id: 'planning',
+        isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
+        isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
+      },
+      {
+        id: 'final_payment',
+        isCompleted: latestBooking?.status === 'completed',
+        isActive: latestBooking?.status === 'confirmed',
+      },
+      {
+        id: 'event',
+        isCompleted: latestBooking?.status === 'completed',
+        isActive: false,
+      },
+      {
+        id: 'closing',
+        isCompleted: latestBooking?.status === 'completed',
+        isActive: false,
+      },
+    ]
+
+    const activeIndex = steps.findIndex(s => s.isActive)
+    if (activeIndex !== -1) {
+      return steps[activeIndex].id
+    }
+    
+    const firstNonCompletedIdx = steps.findIndex(s => !s.isCompleted)
+    if (firstNonCompletedIdx !== -1) {
+      return steps[firstNonCompletedIdx].id
+    }
+    
+    return 'inquiry'
+  }, [lead, latestBooking])
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
@@ -1302,6 +1367,8 @@ export default function LeadDetailPage({
             latestBooking={latestBooking}
             latestInvoice={latestInvoice}
             isSaving={updatingStatus}
+            activeStageId={selectedStageOverride || activeStage}
+            onStepClick={(stageId) => setSelectedStageOverride(stageId)}
           />
         </div>
       </section>
@@ -1356,332 +1423,696 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-12 sm:pb-16">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Next Step & Client Details Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Next Step */}
-              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex items-start gap-4 luxor-soft-enter">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20">
-                  <ClipboardCheck size={20} />
-                </span>
-                <div className="flex-1 flex flex-col justify-between min-h-[160px]">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
-                    <h2 className="mt-2 text-sm font-bold text-[color:var(--portal-text)] leading-snug">{nextBestMove.title}</h2>
-                    <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
-                  </div>
-                  <div className="mt-4 flex flex-col items-start">
-                    {recommendedActions[0] ? (
-                      <button
-                        type="button"
-                        onClick={recommendedActions[0].onClick}
-                        disabled={recommendedActions[0].disabled}
-                        className="py-2 px-5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
-                      >
-                        {updatingStatus ? 'Saving...' : recommendedActions[0].label}
+            
+            {/* Stage-specific Content Router */}
+            {(() => {
+              const currentStage = selectedStageOverride || activeStage
+              
+              if (currentStage === 'inquiry') {
+                return (
+                  <>
+                    {/* Next Step & Client Details Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Next Step */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex items-start gap-4 luxor-soft-enter">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20">
+                          <ClipboardCheck size={20} />
+                        </span>
+                        <div className="flex-1 flex flex-col justify-between min-h-[160px]">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
+                            <h2 className="mt-2 text-sm font-bold text-[color:var(--portal-text)] leading-snug">{nextBestMove.title}</h2>
+                            <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
+                            
+                            {/* Next Step Stage-dependent Context Box */}
+                            <div className="mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[11px] space-y-2 text-left w-full">
+                              <div className="flex justify-between">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Source</span>
+                                <span className="font-bold text-[color:var(--portal-text)] capitalize">{formatSourceLabel(lead)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry Date</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Lead Score</span>
+                                <span className="font-bold text-emerald-400">High / Hot Lead</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-col items-start">
+                            {recommendedActions[0] ? (
+                              <button
+                                type="button"
+                                onClick={recommendedActions[0].onClick}
+                                disabled={recommendedActions[0].disabled}
+                                className="py-2 px-5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+                              >
+                                {updatingStatus ? 'Saving...' : recommendedActions[0].label}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => scrollToSection('lead-booking')}
+                              className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                            >
+                              Preview Contract &rarr;
+                            </button>
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* Client Details */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
+                          <User size={18} className="text-[#a8792f] opacity-80" />
+                        </div>
+                        <div className="grid gap-1">
+                          {clientDetails.map((item) => (
+                            <DetailItem
+                              key={item.label}
+                              icon={item.icon}
+                              label={item.label}
+                              value={item.value}
+                              editValue={item.editValue}
+                              copyValue={item.copyValue}
+                              inputType={item.inputType}
+                              placeholder={item.placeholder}
+                              isMono={item.isMono}
+                              isSaving={savingLeadField === item.field}
+                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                            />
+                          ))}
+                          
+                          {/* Editable Address */}
+                          <DetailItem
+                            icon={<MapPin size={14} />}
+                            label="Address"
+                            value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                            editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                            copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                            inputType="text"
+                            placeholder="San Antonio, TX"
+                            isSaving={savingLeadField === 'address'}
+                            onCommit={(value) => handleLeadFieldUpdate('address', value)}
+                          />
+
+                          <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
+                              <Sparkles size={14} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
+                              <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+
+                    {/* Event Details */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                        <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
+                          Edit inline
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                        <div className="space-y-1">
+                          {eventDetails.slice(0, 3).map((item) => (
+                            <DetailItem
+                              key={item.label}
+                              icon={item.icon}
+                              label={item.label}
+                              value={item.value}
+                              editValue={item.editValue}
+                              copyValue={item.copyValue}
+                              inputType={item.inputType}
+                              placeholder={item.placeholder}
+                              isMono={item.isMono}
+                              isSaving={savingLeadField === item.field}
+                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                            />
+                          ))}
+                        </div>
+                        <div className="space-y-1">
+                          {eventDetails.slice(3).map((item) => (
+                            <DetailItem
+                              key={item.label}
+                              icon={item.icon}
+                              label={item.label}
+                              value={item.value}
+                              editValue={item.editValue}
+                              copyValue={item.copyValue}
+                              inputType={item.inputType}
+                              placeholder={item.placeholder}
+                              isMono={item.isMono}
+                              isSaving={savingLeadField === item.field}
+                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Internal Metadata */}
+                      <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
+                            <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowInternalSignals((current) => !current)}
+                            className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
+                          >
+                            {showInternalSignals ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
+                        {showInternalSignals ? (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {internalDetails.map((item) => (
+                              <DetailItem
+                                key={item.label}
+                                label={item.label}
+                                value={item.value}
+                                copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                                isMono={item.isMono}
+                                subtext={item.subtext}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    {/* Recent Activity */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLeadTab('activity')}
+                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                        >
+                          View all activity &rarr;
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
+                          <>
+                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                                  <FileSignature size={13} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white leading-tight">
+                                    Contract created <span className="text-zinc-500 font-medium">by You</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
+                            </div>
+                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                                  <CheckCircle2 size={13} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white leading-tight">
+                                    Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                            </div>
+                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                                  <Send size={13} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white leading-tight">
+                                    Proposal sent <span className="text-zinc-500 font-medium">by You</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                            </div>
+                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                                  <CheckCircle2 size={13} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white leading-tight">
+                                    Tour completed <span className="text-zinc-500 font-medium">by You</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
+                            </div>
+                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
+                                  <Mail size={13} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white leading-tight">
+                                    Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
+                            </div>
+                          </>
+                        ) : allActivityEntries.length === 0 ? (
+                          <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
+                        ) : (
+                          allActivityEntries.slice(0, 5).map((entry) => {
+                            const isEmail = entry.kind === 'email'
+                            return (
+                              <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+                                    isEmail 
+                                      ? 'bg-purple-500/10 text-purple-400' 
+                                      : entry.note.note_type === 'call_log'
+                                      ? 'bg-emerald-500/10 text-emerald-400'
+                                      : entry.note.note_type === 'email_log'
+                                      ? 'bg-purple-500/10 text-purple-400'
+                                      : 'bg-zinc-500/10 text-zinc-500'
+                                  }`}>
+                                    {isEmail ? (
+                                      <Mail size={13} />
+                                    ) : entry.note.note_type === 'call_log' ? (
+                                      <Phone size={13} />
+                                    ) : (
+                                      <FileText size={13} />
+                                    )}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-white leading-tight truncate">
+                                      {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
+                                  {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </section>
+
+                    {/* RSVP / Inquiry Message */}
+                    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
+                      <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                        {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
+                      </h4>
+                      <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
+                        &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
+                      </p>
+                    </div>
+
+                    {/* Concierge AI session replay */}
+                    {chatMessages.length > 0 && (
+                      <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                          <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
+                        </div>
+                        <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
+                          {chatMessages.map((msg, index) => {
+                            const isUser = msg.role === 'user'
+                            return (
+                              <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                                  isUser
+                                    ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                                }`}>
+                                  <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                                    {isUser ? 'Client' : 'Elena AI'}
+                                  </div>
+                                  {msg.content}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              }
+              
+              if (currentStage === 'tour') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Tour</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Schedule, manage and track your venue tour.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Tour Checklist
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection('lead-booking')}
-                      className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                    >
-                      Preview Contract &rarr;
+                    </div>
+                    
+                    {/* Row 1: Tour Details & Tour Attendance */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Tour Details */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Details</p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Date</span>
+                              <span className="font-bold text-white">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Jul 6, 2026'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Time</span>
+                              <span className="font-bold text-white">{lead.preferred_tour_time || '3:00 PM'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned To</span>
+                              <span className="font-bold text-white">Arianna Patterson</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
+                              <span className="font-bold text-white">Luxor at Las Palmas Events</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
+                              <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Completed</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Reschedule</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Follow Up</button>
+                        </div>
+                      </section>
+                      
+                      {/* Tour Attendance & Notes */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Tour Attendance</p>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
+                              <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                              <span className="font-bold text-zinc-300">Miguel Martinez <span className="text-zinc-500 font-medium">(Guest)</span></span>
+                            </div>
+                            <p className="text-[10px] text-[#caa24c] hover:underline cursor-pointer font-bold">+ Add Note About Attendance</p>
+                          </div>
+                        </div>
+                        <div className="border-t border-[color:var(--portal-border)] pt-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes</p>
+                          <p className="text-xs text-zinc-400 italic leading-relaxed">
+                            &ldquo;Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.&rdquo;
+                          </p>
+                          <p className="text-[10px] text-[#caa24c] mt-2 hover:underline cursor-pointer font-bold">Edit Notes</p>
+                        </div>
+                      </section>
+                    </div>
+                    
+                    {/* Photos & Documents Shared */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Photos & Documents Shared</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
+                          <img src="/images/dining-hall/dining-hall-wedding.jpg" alt="Wedding layout" className="object-cover w-full h-full" />
+                        </div>
+                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
+                          <img src="/images/dining-hall/dining-hall-wedding-angle.jpg" alt="Dining hall angle" className="object-cover w-full h-full" />
+                        </div>
+                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
+                          <img src="/images/dining-hall/dining-hall-wedding-candid.jpg" alt="Dining hall candid" className="object-cover w-full h-full" />
+                        </div>
+                        <div className="aspect-[4/3] rounded-lg border border-dashed border-zinc-800 flex flex-col items-center justify-center text-zinc-600 hover:text-white cursor-pointer hover:border-zinc-500 transition-colors">
+                          <Plus size={16} />
+                          <span className="text-[9px] font-bold uppercase mt-1">Add Photos</span>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Pro Tip Banner */}
+                    <div className="rounded-xl border border-[#caa24c]/10 bg-[#caa24c]/5 p-3.5 text-xs text-[#caa24c]/90 flex items-start gap-3 luxor-soft-enter">
+                      <Sparkles size={16} className="text-[#caa24c] shrink-0 mt-0.5" />
+                      <p>
+                        <strong className="font-bold uppercase tracking-wider text-[10px] mr-1">Pro Tip:</strong> 
+                        Keep your tour notes detailed. It helps personalize proposals and build stronger client relationships!
+                      </p>
+                    </div>
+                  </>
+                )
+              }
+              
+              if (currentStage === 'planning') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Planning</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">All event details, preferences, and logistics in one place.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Planning Checklist
+                      </button>
+                    </div>
+
+                    {/* Sub-tabs for Planning */}
+                    <div className="flex gap-4 border-b border-[color:var(--portal-border)] text-xs overflow-x-auto pb-1 portal-scrollbar">
+                      {(['details', 'vendors', 'fb', 'decor', 'timeline', 'files'] as const).map((tab) => {
+                        const labels = {
+                          details: 'Event Details',
+                          vendors: 'Vendors',
+                          fb: 'Food & Beverage',
+                          decor: 'Décor & Design',
+                          timeline: 'Timeline',
+                          files: 'Notes & Files',
+                        }
+                        const isCurrent = planningSubTab === tab
+                        return (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setPlanningSubTab(tab)}
+                            className={`py-2 px-1 font-bold uppercase tracking-wider border-b-2 transition-colors shrink-0 cursor-pointer ${
+                              isCurrent ? 'border-[#caa24c] text-[#caa24c]' : 'border-transparent text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            {labels[tab]}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Planning sub-tab contents */}
+                    {planningSubTab === 'details' && (
+                      <div className="space-y-6 luxor-soft-enter">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Event Information */}
+                          <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
+                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Information</p>
+                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Date</span>
+                                <span className="font-bold text-white">{lead.target_date ? formatDisplayDate(lead.target_date) : 'August 30, 2026'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
+                                <span className="font-bold text-white">6:00 PM – 11:00 PM</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
+                                <span className="font-bold text-white">{lead.event_type || 'Anniversary Party'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
+                                <span className="font-bold text-white">Luxor at Las Palmas Events</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
+                                <span className="font-bold text-white">{lead.guest_count || 80} Guests (Estimated)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
+                                <span className="font-bold text-white">Black & Gold Modern Elegance</span>
+                              </div>
+                            </div>
+                          </section>
+
+                          {/* Client Preferences */}
+                          <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
+                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Preferences</p>
+                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                            </div>
+                            <div className="space-y-3 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Color Palette</span>
+                                <div className="flex gap-1.5">
+                                  <span className="h-4.5 w-4.5 rounded-full bg-black border border-zinc-800" />
+                                  <span className="h-4.5 w-4.5 rounded-full bg-[#caa24c]" />
+                                  <span className="h-4.5 w-4.5 rounded-full bg-[#f1d27a]" />
+                                  <span className="h-4.5 w-4.5 rounded-full bg-white border border-zinc-800" />
+                                </div>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Music Style</span>
+                                <span className="font-bold text-white">R&B, 90s, Top 40</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Lighting</span>
+                                <span className="font-bold text-white">Warm & Dimmed</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Special Requests</span>
+                                <span className="font-bold text-white">None at this time</span>
+                              </div>
+                            </div>
+                          </section>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Space & Layout */}
+                          <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
+                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
+                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-4">
+                              <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
+                                <Sparkles size={20} />
+                                <span className="text-[8px] font-bold uppercase mt-1 text-center">Floor Plan Layout</span>
+                              </div>
+                              <div className="col-span-3 space-y-2 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Head Table</span>
+                                  <span className="font-bold text-white">Yes</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Dance Floor</span>
+                                  <span className="font-bold text-white">Yes</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Stage</span>
+                                  <span className="font-bold text-white">No</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Other Areas</span>
+                                  <span className="font-bold text-white">Open Bar, Lounge</span>
+                                </div>
+                              </div>
+                            </div>
+                          </section>
+
+                          {/* Decor Overview */}
+                          <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
+                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Decor Overview</p>
+                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Selected Package</span>
+                                <span className="font-bold text-white">Luxury Package</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Décor Style</span>
+                                <span className="font-bold text-white">Black & Gold Modern</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Centerpieces</span>
+                                <span className="font-bold text-white">Tall Gold Stands</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Linens</span>
+                                <span className="font-bold text-white">Black</span>
+                              </div>
+                              <div className="flex justify-between items-start">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500 mt-0.5">Additional Notes</span>
+                                <span className="font-bold text-white text-right max-w-[60%]">Client loves the modern chandelier and open bar.</span>
+                              </div>
+                            </div>
+                          </section>
+                        </div>
+
+                        {/* Planning Checklist Summary */}
+                        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Planning Checklist Progress</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                            {[
+                              { label: 'Event Details', val: 'Completed', color: 'text-emerald-400' },
+                              { label: 'Vendors', val: '0/5 Completed', color: 'text-zinc-500' },
+                              { label: 'Food & Beverage', val: '0/4 Completed', color: 'text-zinc-500' },
+                              { label: 'Décor & Design', val: '0/4 Completed', color: 'text-zinc-500' },
+                              { label: 'Timeline', val: '0/3 Completed', color: 'text-zinc-500' },
+                            ].map((item, idx) => (
+                              <div key={idx} className="p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 text-center space-y-1">
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">{item.label}</p>
+                                <p className={`text-xs font-black uppercase ${item.color}`}>{item.val}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      </div>
+                    )}
+
+                    {planningSubTab !== 'details' && (
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
+                        <Sparkles size={24} className="mx-auto text-zinc-700" />
+                        <p className="text-xs uppercase font-bold tracking-widest">Section Coming Soon</p>
+                        <p className="text-xs leading-relaxed max-w-sm mx-auto">
+                          This sub-tab section is currently under development to hold your detailed vendors, design tools, and timelines.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )
+              }
+              
+              // Fallback cards for other stages
+              return (
+                <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
+                  <Sparkles size={24} className="mx-auto text-zinc-800" />
+                  <p className="text-xs uppercase font-black tracking-widest text-[#caa24c] capitalize">{currentStage} Stage Dashboard</p>
+                  <p className="text-xs leading-relaxed max-w-md mx-auto">
+                    Welcome to the <strong>{currentStage.toUpperCase()}</strong> stage. This dossier dashboard automatically adapts to show details, invoices, and documents matching this phase.
+                  </p>
+                  <div className="pt-4 flex justify-center gap-3">
+                    <button type="button" onClick={() => setSelectedStageOverride(null)} className="px-4 py-2 rounded-lg border border-zinc-800 text-[10px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">
+                      Reset Preview to Active Stage
                     </button>
                   </div>
                 </div>
-              </section>
+              )
+            })()}
 
-              {/* Client Details */}
-              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
-                  <User size={18} className="text-[#a8792f] opacity-80" />
-                </div>
-                <div className="grid gap-1">
-                  {clientDetails.map((item) => (
-                    <DetailItem
-                      key={item.label}
-                      icon={item.icon}
-                      label={item.label}
-                      value={item.value}
-                      editValue={item.editValue}
-                      copyValue={item.copyValue}
-                      inputType={item.inputType}
-                      placeholder={item.placeholder}
-                      isMono={item.isMono}
-                      isSaving={savingLeadField === item.field}
-                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                    />
-                  ))}
-                  
-                  {/* Editable Address */}
-                  <DetailItem
-                    icon={<MapPin size={14} />}
-                    label="Address"
-                    value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                    editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                    copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                    inputType="text"
-                    placeholder="San Antonio, TX"
-                    isSaving={savingLeadField === 'address'}
-                    onCommit={(value) => handleLeadFieldUpdate('address', value)}
-                  />
-
-                  <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
-                      <Sparkles size={14} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
-                      <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            {/* Event Details */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
-                <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-                  Edit inline
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                <div className="space-y-1">
-                  {eventDetails.slice(0, 3).map((item) => (
-                    <DetailItem
-                      key={item.label}
-                      icon={item.icon}
-                      label={item.label}
-                      value={item.value}
-                      editValue={item.editValue}
-                      copyValue={item.copyValue}
-                      inputType={item.inputType}
-                      placeholder={item.placeholder}
-                      isMono={item.isMono}
-                      isSaving={savingLeadField === item.field}
-                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                    />
-                  ))}
-                </div>
-                <div className="space-y-1">
-                  {eventDetails.slice(3).map((item) => (
-                    <DetailItem
-                      key={item.label}
-                      icon={item.icon}
-                      label={item.label}
-                      value={item.value}
-                      editValue={item.editValue}
-                      copyValue={item.copyValue}
-                      inputType={item.inputType}
-                      placeholder={item.placeholder}
-                      isMono={item.isMono}
-                      isSaving={savingLeadField === item.field}
-                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Internal Metadata */}
-              <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
-                    <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowInternalSignals((current) => !current)}
-                    className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
-                  >
-                    {showInternalSignals ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {showInternalSignals ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {internalDetails.map((item) => (
-                      <DetailItem
-                        key={item.label}
-                        label={item.label}
-                        value={item.value}
-                        copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
-                        isMono={item.isMono}
-                        subtext={item.subtext}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            {/* Recent Activity */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
-                <button
-                  type="button"
-                  onClick={() => setActiveLeadTab('activity')}
-                  className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                >
-                  View all activity &rarr;
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
-                  <>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <FileSignature size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Contract created <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                          <CheckCircle2 size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <Send size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Proposal sent <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <CheckCircle2 size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Tour completed <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
-                          <Mail size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
-                    </div>
-                  </>
-                ) : allActivityEntries.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
-                ) : (
-                  allActivityEntries.slice(0, 5).map((entry) => {
-                    const isEmail = entry.kind === 'email'
-                    return (
-                      <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
-                            isEmail 
-                              ? 'bg-purple-500/10 text-purple-400' 
-                              : entry.note.note_type === 'call_log'
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : entry.note.note_type === 'email_log'
-                              ? 'bg-purple-500/10 text-purple-400'
-                              : 'bg-zinc-500/10 text-zinc-500'
-                          }`}>
-                            {isEmail ? (
-                              <Mail size={13} />
-                            ) : entry.note.note_type === 'call_log' ? (
-                              <Phone size={13} />
-                            ) : (
-                              <FileText size={13} />
-                            )}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-white leading-tight truncate">
-                              {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
-                          {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </section>
-
-            {/* RSVP / Inquiry Message */}
-            <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
-              <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-                {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
-              </h4>
-              <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
-                &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
-              </p>
-            </div>
-
-            {/* Concierge AI session replay */}
-            {chatMessages.length > 0 && (
-              <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                  <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
-                </div>
-                <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
-                  {chatMessages.map((msg, index) => {
-                    const isUser = msg.role === 'user'
-                    return (
-                      <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
-                          isUser
-                            ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                            : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                        }`}>
-                          <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                            {isUser ? 'Client' : 'Elena AI'}
-                          </div>
-                          {msg.content}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column: Sticky actions & summary */}
@@ -1849,7 +2280,7 @@ export default function LeadDetailPage({
           </div>
         </div>
       ) : (
-        <div className={`mt-3 grid gap-6 ${
+        <div className={`mt-3 grid gap-6 pb-12 sm:pb-16 ${
           activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
             ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
             : 'lg:grid-cols-1'
@@ -2626,12 +3057,16 @@ function LeadLifecycleRail({
   latestBooking,
   latestInvoice,
   isSaving = false,
+  activeStageId,
+  onStepClick,
 }: {
   lead: LuxorInquiry
   bookings: LuxorBooking[]
   latestBooking: LuxorBooking | null
   latestInvoice: LuxorInvoice | null
   isSaving?: boolean
+  activeStageId?: string
+  onStepClick?: (stageId: string) => void
 }) {
   const inquiryDate = new Date(lead.created_at)
   const formattedInquiryDate = inquiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -2727,6 +3162,13 @@ function LeadLifecycleRail({
     },
   ]
 
+  const getStageIdFromStepId = (stepId: string) => {
+    if (stepId === 'proposal_sent' || stepId === 'proposal_accepted') return 'proposal'
+    if (stepId === 'event') return 'event'
+    if (stepId === 'complete') return 'closing'
+    return stepId
+  }
+
   const activeIndex = steps.findIndex(s => s.isActive)
   let finalSteps = steps.map((step, idx) => {
     let active = step.isActive
@@ -2766,10 +3208,16 @@ function LeadLifecycleRail({
         
         {finalSteps.map((step, index) => {
           const isDone = step.isCompleted
-          const isCurrent = step.isActive
+          const stepStageId = getStageIdFromStepId(step.id)
+          const isCurrent = activeStageId ? stepStageId === activeStageId : step.isActive
 
           return (
-            <div key={index} className="relative flex flex-col items-center flex-1">
+            <button
+              key={index}
+              type="button"
+              onClick={() => onStepClick?.(stepStageId)}
+              className="relative flex flex-col items-center flex-1 cursor-pointer focus:outline-none group/step"
+            >
               <div className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
                 isDone
                   ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
@@ -2791,14 +3239,14 @@ function LeadLifecycleRail({
                   ? 'text-[#a8792f]'
                   : isDone
                   ? 'text-white/95'
-                  : 'text-zinc-550'
+                  : 'text-zinc-550 group-hover/step:text-zinc-400'
               }`}>
                 {step.label}
               </span>
               <span className="mt-1 h-3 text-[9px] font-medium text-zinc-400 dark:text-zinc-600">
                 {step.subtext}
               </span>
-            </div>
+            </button>
           )
         })}
       </div>
