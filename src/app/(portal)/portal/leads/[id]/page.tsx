@@ -979,8 +979,10 @@ export default function LeadDetailPage({
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
           <LeadLifecycleRail currentStatus={pendingLifecycleStatus ?? lead.status} isSaving={updatingStatus} />
         </div>
+      </section>
 
-        <div className="portal-scrollbar overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4">
+      <div className="sticky top-0 z-30 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
+        <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
           <div className="relative flex min-w-max gap-6">
             <span
               className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
@@ -1019,7 +1021,7 @@ export default function LeadDetailPage({
             })}
           </div>
         </div>
-      </section>
+      </div>
 
       <div className={`grid gap-6 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
