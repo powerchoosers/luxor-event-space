@@ -26,6 +26,9 @@ import {
   NotebookPen,
   ReceiptText,
   Sparkles,
+  Copy,
+  Check,
+  Pencil,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
@@ -44,6 +47,18 @@ type ZohoEmailMessage = {
 type ActivityEntry =
   | { kind: 'note'; id: string; createdAt: string; note: LuxorNote }
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
+
+type EditableLeadField =
+  | 'event_type'
+  | 'guest_count'
+  | 'target_date'
+  | 'package_interest'
+  | 'preferred_tour_date'
+  | 'preferred_tour_time'
+  | 'email'
+  | 'phone'
+
+type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
 
 export default function LeadDetailPage({
   params,
@@ -105,6 +120,7 @@ export default function LeadDetailPage({
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
+  const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
 
   useEffect(() => {
     setShowInternalSignals(false)
@@ -223,6 +239,48 @@ export default function LeadDetailPage({
       alert('Error updating status.')
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const handleLeadFieldUpdate = async (field: EditableLeadField, nextValue: string) => {
+    if (!lead || savingLeadField) return false
+
+    const normalizedValue = normalizeLeadFieldValue(field, nextValue)
+    const currentValue = lead[field]
+
+    if (normalizeComparableValue(currentValue) === normalizeComparableValue(normalizedValue)) {
+      return true
+    }
+
+    const previousLead = lead
+    try {
+      setSavingLeadField(field)
+      setLead((current) => current ? { ...current, [field]: normalizedValue, updated_at: new Date().toISOString() } : current)
+
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, [field]: normalizedValue }),
+      })
+
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to update lead detail.')
+      }
+
+      const updated = payload as LuxorInquiry
+      setLead(updated)
+      if (field === 'email') {
+        void fetchClientEmailThread(updated.email || '')
+      }
+      return true
+    } catch (err) {
+      console.error(err)
+      setLead(previousLead)
+      alert(err instanceof Error ? err.message : 'Failed to update lead detail.')
+      return false
+    } finally {
+      setSavingLeadField(null)
     }
   }
 
@@ -552,15 +610,85 @@ export default function LeadDetailPage({
       tone: 'green' as const,
     },
   ]
-  const primaryDetails: Array<{ label: string; value: string; subtext?: string; isMono?: boolean }> = [
-    { label: 'Event Type', value: lead.event_type || 'Quinceañera', subtext: 'Spanish ñ spelling active' },
-    { label: 'Guest Count', value: lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified' },
-    { label: 'Target Date', value: lead.target_date || 'TBD' },
-    { label: 'Package Interest', value: lead.package_interest || 'Not selected' },
-    { label: 'Preferred Tour Date', value: lead.preferred_tour_date || 'No tour requested' },
-    { label: 'Preferred Tour Time', value: lead.preferred_tour_time || 'N/A' },
-    { label: 'Email', value: lead.email || 'None' },
-    { label: 'Phone', value: lead.phone || 'None' },
+  const primaryDetails: Array<{
+    label: string
+    value: string
+    editValue: string
+    copyValue: string
+    field: EditableLeadField
+    inputType?: LeadDetailInputType
+    placeholder?: string
+    isMono?: boolean
+  }> = [
+    {
+      label: 'Event Type',
+      value: lead.event_type || 'Quinceañera',
+      editValue: lead.event_type || '',
+      copyValue: lead.event_type || '',
+      field: 'event_type',
+      placeholder: 'Wedding, Quinceañera, birthday...',
+    },
+    {
+      label: 'Guest Count',
+      value: lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified',
+      editValue: lead.guest_count ? String(lead.guest_count) : '',
+      copyValue: lead.guest_count ? String(lead.guest_count) : '',
+      field: 'guest_count',
+      inputType: 'number',
+      placeholder: 'Guest count',
+    },
+    {
+      label: 'Target Date',
+      value: lead.target_date || 'TBD',
+      editValue: lead.target_date || '',
+      copyValue: lead.target_date || '',
+      field: 'target_date',
+      inputType: 'date',
+    },
+    {
+      label: 'Package Interest',
+      value: lead.package_interest || 'Not selected',
+      editValue: lead.package_interest || '',
+      copyValue: lead.package_interest || '',
+      field: 'package_interest',
+      placeholder: 'Package or room interest',
+    },
+    {
+      label: 'Preferred Tour Date',
+      value: lead.preferred_tour_date || 'No tour requested',
+      editValue: lead.preferred_tour_date || '',
+      copyValue: lead.preferred_tour_date || '',
+      field: 'preferred_tour_date',
+      inputType: 'date',
+    },
+    {
+      label: 'Preferred Tour Time',
+      value: lead.preferred_tour_time || 'N/A',
+      editValue: normalizeTimeInputValue(lead.preferred_tour_time),
+      copyValue: lead.preferred_tour_time || '',
+      field: 'preferred_tour_time',
+      inputType: 'time',
+    },
+    {
+      label: 'Email',
+      value: lead.email || 'None',
+      editValue: lead.email || '',
+      copyValue: lead.email || '',
+      field: 'email',
+      inputType: 'email',
+      placeholder: 'client@email.com',
+      isMono: true,
+    },
+    {
+      label: 'Phone',
+      value: lead.phone || 'None',
+      editValue: lead.phone || '',
+      copyValue: lead.phone || '',
+      field: 'phone',
+      inputType: 'tel',
+      placeholder: 'Phone number',
+      isMono: true,
+    },
   ]
   const internalDetails: Array<{ label: string; value: string; subtext?: string; isMono?: boolean }> = [
     { label: 'Created', value: new Date(lead.created_at).toLocaleString(), isMono: true },
@@ -844,9 +972,20 @@ export default function LeadDetailPage({
                   Customer facing
                 </span>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {primaryDetails.map((item) => (
-                  <DetailItem key={item.label} label={item.label} value={item.value} subtext={item.subtext} />
+                  <DetailItem
+                    key={item.label}
+                    label={item.label}
+                    value={item.value}
+                    editValue={item.editValue}
+                    copyValue={item.copyValue}
+                    inputType={item.inputType}
+                    placeholder={item.placeholder}
+                    isMono={item.isMono}
+                    isSaving={savingLeadField === item.field}
+                    onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                  />
                 ))}
               </div>
               <div className="mt-4 rounded-xl border border-zinc-900/80 bg-zinc-950/45 p-4">
@@ -864,9 +1003,16 @@ export default function LeadDetailPage({
                   </button>
                 </div>
                 {showInternalSignals ? (
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {internalDetails.map((item) => (
-                      <DetailItem key={item.label} label={item.label} value={item.value} isMono={item.isMono} subtext={item.subtext} />
+                      <DetailItem
+                        key={item.label}
+                        label={item.label}
+                        value={item.value}
+                        copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                        isMono={item.isMono}
+                        subtext={item.subtext}
+                      />
                     ))}
                   </div>
                 ) : null}
@@ -1786,21 +1932,143 @@ function ClientActionButton({
 function DetailItem({
   label,
   value,
+  editValue,
+  copyValue,
+  inputType = 'text',
+  placeholder,
   isMono = false,
   subtext,
+  isSaving = false,
+  onCommit,
 }: {
   label: string
   value: string
+  editValue?: string
+  copyValue?: string
+  inputType?: LeadDetailInputType
+  placeholder?: string
   isMono?: boolean
   subtext?: string
+  isSaving?: boolean
+  onCommit?: (value: string) => Promise<boolean>
 }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(editValue ?? value)
+  const [copied, setCopied] = useState(false)
+  const canEdit = Boolean(onCommit)
+  const canCopy = Boolean(copyValue?.trim())
+
+  const startEditing = () => {
+    if (!canEdit || isSaving) return
+    setDraft(editValue ?? value)
+    setIsEditing(true)
+  }
+
+  const commitDraft = async () => {
+    if (!onCommit || isSaving) return
+
+    const saved = await onCommit(draft)
+    if (saved) {
+      setIsEditing(false)
+    }
+  }
+
+  const copyDetail = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    if (!copyValue?.trim()) return
+
+    try {
+      await navigator.clipboard.writeText(copyValue)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch (err) {
+      console.error('Unable to copy lead detail:', err)
+    }
+  }
+
   return (
-    <div className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl shadow-lg">
-      <div className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
-      <p className={`text-xs font-bold text-zinc-200 leading-normal ${isMono ? 'font-mono' : ''}`}>
-        {value}
-      </p>
-      {subtext && <p className="text-[9px] text-[#caa24c] mt-1 font-medium italic">{subtext}</p>}
+    <div
+      role={canEdit ? 'button' : undefined}
+      tabIndex={canEdit ? 0 : undefined}
+      onClick={startEditing}
+      onKeyDown={(event) => {
+        if (!canEdit || isEditing) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          startEditing()
+        }
+      }}
+      className={`group relative min-h-[92px] rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
+        canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
+        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {canCopy ? (
+            <button
+              type="button"
+              aria-label={`Copy ${label}`}
+              onClick={copyDetail}
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all ${
+                copied
+                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                  : 'border-zinc-800 bg-black/35 text-zinc-500 hover:border-[#caa24c]/25 hover:text-[#f1d27a]'
+              }`}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          ) : null}
+          {canEdit && !isEditing ? (
+            <button
+              type="button"
+              aria-label={`Edit ${label}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                startEditing()
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
+            >
+              <Pencil size={13} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {isEditing ? (
+        <input
+          autoFocus
+          type={inputType}
+          min={inputType === 'number' ? 0 : undefined}
+          value={draft}
+          disabled={isSaving}
+          placeholder={placeholder}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            void commitDraft()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void commitDraft()
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              setDraft(editValue ?? value)
+              setIsEditing(false)
+            }
+          }}
+          className={`w-full rounded-lg border border-[#caa24c]/25 bg-black/45 px-3 py-2 text-sm font-bold text-white outline-none transition-all placeholder:text-zinc-700 focus:border-[#caa24c]/45 ${
+            isMono ? 'font-mono' : ''
+          }`}
+        />
+      ) : (
+        <p className={`break-words text-sm font-bold leading-normal text-zinc-100 transition-colors group-hover:text-white ${isMono ? 'font-mono text-xs' : ''}`}>
+          {isSaving ? 'Saving...' : value}
+        </p>
+      )}
+      {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#caa24c]">{subtext}</p>}
     </div>
   )
 }
@@ -1835,6 +2103,64 @@ function LeadStatCard({
       </div>
     </div>
   )
+}
+
+function normalizeLeadFieldValue(field: EditableLeadField, value: string): string | number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  if (field === 'guest_count') {
+    const parsed = Number.parseInt(trimmed.replace(/[^\d]/g, ''), 10)
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : null
+  }
+
+  if (field === 'email') {
+    return trimmed.toLowerCase()
+  }
+
+  if (field === 'preferred_tour_time') {
+    return formatTimeInputForStorage(trimmed)
+  }
+
+  return trimmed
+}
+
+function normalizeComparableValue(value: unknown) {
+  return value === null || value === undefined ? '' : String(value).trim()
+}
+
+function normalizeTimeInputValue(value: string | null | undefined) {
+  if (!value) return ''
+
+  const twentyFourHourMatch = value.match(/^(\d{1,2}):(\d{2})$/)
+  if (twentyFourHourMatch) {
+    return `${twentyFourHourMatch[1].padStart(2, '0')}:${twentyFourHourMatch[2]}`
+  }
+
+  const twelveHourMatch = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!twelveHourMatch) return value
+
+  let hours = Number(twelveHourMatch[1])
+  const minutes = twelveHourMatch[2]
+  const period = twelveHourMatch[3].toUpperCase()
+
+  if (period === 'PM' && hours < 12) hours += 12
+  if (period === 'AM' && hours === 12) hours = 0
+
+  return `${String(hours).padStart(2, '0')}:${minutes}`
+}
+
+function formatTimeInputForStorage(value: string) {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return value
+
+  const hours = Number(match[1])
+  const minutes = match[2]
+  if (!Number.isFinite(hours)) return value
+
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const displayHours = hours % 12 || 12
+  return `${displayHours}:${minutes} ${period}`
 }
 
 function formatLeadAge(createdAt: string) {
