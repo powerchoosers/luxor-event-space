@@ -1823,17 +1823,6 @@ export default function LeadDetailPage({
               if (currentStage === 'tour') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Tour</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Schedule, manage and track your venue tour.</p>
-                      </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Tour Checklist
-                      </button>
-                    </div>
-                    
                     {/* Row 1: Tour Details & Tour Attendance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Tour Details */}
@@ -1995,15 +1984,6 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                     </section>
-
-                    {/* Pro Tip Banner */}
-                    <div className="rounded-xl border border-[#caa24c]/10 bg-[#caa24c]/5 p-3.5 text-xs text-[#caa24c]/90 flex items-start gap-3 luxor-soft-enter">
-                      <Sparkles size={16} className="text-[#caa24c] shrink-0 mt-0.5" />
-                      <p>
-                        <strong className="font-bold uppercase tracking-wider text-[10px] mr-1">Pro Tip:</strong> 
-                        Keep your tour notes detailed. It helps personalize proposals and build stronger client relationships!
-                      </p>
-                    </div>
                   </>
                 )
               }
@@ -2692,7 +2672,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
+          <div className="space-y-6">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
