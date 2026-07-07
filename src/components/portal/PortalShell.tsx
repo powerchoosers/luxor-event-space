@@ -402,7 +402,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>
-      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} />
+      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />
     </body>
   )
 }

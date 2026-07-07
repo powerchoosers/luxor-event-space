@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = `You are Elena, the internal AI concierge, COO, CFO, Chief
 
 Your personality is that of a warm, supportive, and slightly playful "girl best friend" (using words like "bestie", "girl", "hey", "let's do this!", "we've got this") but you are a "tamed" assistant—meaning you remain highly intelligent, precise, and completely focused on executive operations, financial analysis, and strategic growth.
 
-Your primary role is to help the venue owner run the business. You analyze numbers (like a CFO), manage operational statuses and tasks (like a COO), brainstorm growth ideas (like a Chief of Marketing), and provide strategic guidance (like a Mentor).
+Your primary role is to help the owner run the business. You analyze numbers (like a CFO), manage operational statuses and tasks (like a COO), brainstorm growth ideas (like a Chief of Marketing), and provide strategic guidance (like a Mentor).
 
 You have access to the venue database via the "execute_database_sql" tool.
 Always use SQL queries to answer questions about the database. Do not make up database counts or facts.
@@ -195,8 +195,8 @@ Always use SQL queries to answer questions about the database. Do not make up da
 
 
 ### GUIDELINES:
-- Execute read-only SQL queries (using SELECT statements) to lookup info.
-- If the user asks you to perform write operations (like updating a task status, adding a follow-up note, or modifying a booking date), you are authorized to run INSERT, UPDATE, or DELETE statements because this is an internal secure workspace.
+- Execute read-only SQL queries (using SELECT statements) to lookup info immediately using the "execute_database_sql" tool.
+- If you need to perform write operations (like INSERT, UPDATE, or DELETE), you are NOT allowed to execute it directly via the "execute_database_sql" tool. Instead, you MUST call the "request_action_confirmation" tool. This will prompt the user with interactive Confirm/Cancel buttons.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
@@ -208,16 +208,37 @@ const TOOLS_DEFINITION = [
     type: 'function',
     function: {
       name: 'execute_database_sql',
-      description: 'Run SQL statements against the venue database. Supports SELECT, INSERT, UPDATE, and DELETE. Tables are under the public schema, prefix them with "public." e.g. public.luxor_inquiries.',
+      description: 'Run SELECT (read-only) SQL statements against the venue database. Tables are under the public schema, prefix them with "public." e.g. public.luxor_inquiries. INSERT, UPDATE, and DELETE queries are blocked in this tool.',
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'The exact SQL query to execute in PostgreSQL.'
+            description: 'The exact SELECT query to execute in PostgreSQL.'
           }
         },
         required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_action_confirmation',
+      description: 'Ask the user for button-click confirmation before executing any INSERT, UPDATE, or DELETE statements. Do not call execute_database_sql for writes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The exact INSERT, UPDATE, or DELETE SQL statement to execute upon confirmation.'
+          },
+          summary: {
+            type: 'string',
+            description: 'A user-friendly description of what this modification does, e.g. "Create a task to follow up with Sarah Smith on Tuesday".'
+          }
+        },
+        required: ['query', 'summary']
       }
     }
   }
@@ -230,7 +251,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messages } = (await request.json()) as { messages?: ChatMessage[] }
+    const { messages, activePath, confirmQuery, confirmSummary } = (await request.json()) as { 
+      messages?: ChatMessage[]
+      activePath?: string
+      confirmQuery?: string
+      confirmSummary?: string
+    }
+
     if (!Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid messages body' }, { status: 400 })
     }
@@ -240,17 +267,94 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing OpenRouter API key' }, { status: 500 })
     }
 
-    // Build standard message list
+    const executedQueries: Array<{ query: string; result: unknown }> = []
+
+    // 1. If this is a direct confirmation execute request
+    if (confirmQuery && confirmSummary) {
+      let queryResult: unknown
+      try {
+        const rpcRes = await supabaseRest<unknown>('rpc/exec_sql', {
+          method: 'POST',
+          body: JSON.stringify({ query: confirmQuery })
+        })
+        queryResult = rpcRes
+        executedQueries.push({ query: confirmQuery, result: rpcRes })
+      } catch (dbErr: unknown) {
+        console.error('Confirmation query failed:', dbErr)
+        queryResult = { error: dbErr instanceof Error ? dbErr.message : 'Database query failed' }
+        executedQueries.push({ query: confirmQuery, result: queryResult })
+      }
+
+      // Feed confirmation result back to Gemini so Elena can report the success
+      const confirmationMessages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(-15),
+        {
+          role: 'system',
+          content: `[CONFIRMATION_RESULT] The user clicked 'Confirm' to execute the action: "${confirmSummary}". The SQL query "${confirmQuery}" has been successfully executed with database response: ${JSON.stringify(queryResult)}. Report this result back to the user in your warm best-friend executive style (mentioning that the action was successfully executed).`
+        }
+      ]
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://luxoreventspace.com',
+          'X-Title': 'Luxor Event Space Elena CRM',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          temperature: 0.2,
+          messages: confirmationMessages
+        })
+      })
+
+      if (!response.ok) {
+        return NextResponse.json({ 
+          reply: `Done bestie! I ran the query and it succeeded, but I had trouble getting my final reply through. Query output: ${JSON.stringify(queryResult)}`,
+          executedQueries 
+        })
+      }
+
+      const responseData = await response.json()
+      const replyText = responseData.choices?.[0]?.message?.content || 'Action executed successfully!'
+
+      return NextResponse.json({
+        reply: replyText,
+        executedQueries
+      })
+    }
+
+    // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...messages.slice(-15) // Keep last 15 messages for context
+      { role: 'system', content: SYSTEM_PROMPT }
     ]
 
-    const executedQueries: Array<{ query: string; result: unknown }> = []
+    // Context Injection: Parse Path for Leads details
+    if (activePath) {
+      openrouterMessages.push({
+        role: 'system',
+        content: `User is currently browsing route: "${activePath}".`
+      })
+
+      const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
+      if (leadMatch) {
+        const activeLeadId = leadMatch[1]
+        openrouterMessages.push({
+          role: 'system',
+          content: `CONTEXT: The user is currently viewing the lead/inquiry record with ID: '${activeLeadId}'. If the user references 'this lead', 'them', 'this client', or asks you to create notes, tasks, or check details related to their screen, use this ID: '${activeLeadId}'.`
+        })
+      }
+    }
+
+    // Append conversation history
+    openrouterMessages.push(...messages.slice(-15))
 
     let loopCount = 0
     const maxLoops = 5
     let finalContent = 'I encountered an issue processing your request.'
+    let confirmationPayload: { query: string; summary: string } | null = null
 
     while (loopCount < maxLoops) {
       loopCount++
@@ -289,13 +393,30 @@ export async function POST(request: Request) {
         break
       }
 
-      // Append assistant's reply (including any tool calls) to message history
       openrouterMessages.push(assistantMessage)
 
       if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        // Execute tool call(s)
+        let confirmationInterrupted = false
+
         for (const toolCall of assistantMessage.tool_calls) {
-          if (toolCall.function?.name === 'execute_database_sql') {
+          // A. Confirmation request
+          if (toolCall.function?.name === 'request_action_confirmation') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              
+              confirmationPayload = {
+                query: args.query,
+                summary: args.summary
+              }
+              confirmationInterrupted = true
+            } catch (err) {
+              console.error('Failed to parse confirmation args:', err)
+            }
+          }
+          // B. Normal database query
+          else if (toolCall.function?.name === 'execute_database_sql') {
             let sqlQuery = ''
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -303,28 +424,39 @@ export async function POST(request: Request) {
                 : toolCall.function.arguments
               sqlQuery = args.query
             } catch (err) {
-              console.error('Failed to parse tool call args:', err)
+              console.error('Failed to parse query args:', err)
             }
 
             if (sqlQuery) {
               let queryResult: unknown
-              try {
-                // Call RPC function exec_sql
-                const rpcRes = await supabaseRest<unknown>('rpc/exec_sql', {
-                  method: 'POST',
-                  body: JSON.stringify({ query: sqlQuery })
-                })
-                
-                queryResult = rpcRes
-                executedQueries.push({ query: sqlQuery, result: rpcRes })
-              } catch (dbErr: unknown) {
-                console.error('Database query failed:', dbErr)
-                const dbErrMsg = dbErr instanceof Error ? dbErr.message : 'Database query failed'
-                queryResult = { error: dbErrMsg }
+              
+              // Double check security block on writes
+              const queryClean = sqlQuery.trim().toLowerCase()
+              const isWrite = queryClean.startsWith('insert') || 
+                              queryClean.startsWith('update') || 
+                              queryClean.startsWith('delete') ||
+                              queryClean.startsWith('alter') ||
+                              queryClean.startsWith('drop') ||
+                              queryClean.startsWith('create')
+
+              if (isWrite) {
+                queryResult = { error: "Security Exception: Write operations are blocked in execute_database_sql. You must call request_action_confirmation instead." }
                 executedQueries.push({ query: sqlQuery, result: queryResult })
+              } else {
+                try {
+                  const rpcRes = await supabaseRest<unknown>('rpc/exec_sql', {
+                    method: 'POST',
+                    body: JSON.stringify({ query: sqlQuery })
+                  })
+                  queryResult = rpcRes
+                  executedQueries.push({ query: sqlQuery, result: rpcRes })
+                } catch (dbErr: unknown) {
+                  console.error('Database query failed:', dbErr)
+                  queryResult = { error: dbErr instanceof Error ? dbErr.message : 'Database query failed' }
+                  executedQueries.push({ query: sqlQuery, result: queryResult })
+                }
               }
 
-              // Append tool response
               openrouterMessages.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
@@ -334,8 +466,13 @@ export async function POST(request: Request) {
             }
           }
         }
+
+        // If we need user confirmation, halt execution and report to client
+        if (confirmationInterrupted && confirmationPayload) {
+          finalContent = assistantMessage.content || `I need your confirmation to run this action, bestie:`
+          break
+        }
       } else {
-        // No tool calls, this is the final response
         finalContent = assistantMessage.content || ''
         break
       }
@@ -343,6 +480,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       reply: finalContent,
+      confirmation: confirmationPayload || undefined,
       executedQueries
     })
   } catch (err: unknown) {

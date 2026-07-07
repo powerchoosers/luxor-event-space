@@ -19,22 +19,77 @@ type Message = {
   role: 'user' | 'assistant'
   content: string
   executedQueries?: ExecutedQuery[]
+  confirmation?: {
+    query: string
+    summary: string
+  }
+  isConfirmed?: boolean
+  isCancelled?: boolean
 }
 
 interface PortalElenaChatProps {
   isOpen: boolean
   onClose: () => void
+  activePath: string
 }
 
-const suggestions = [
-  'Show all booked events for this year',
-  'List details of the last 3 inquiries',
-  'Show any inventory items that are Low or Out of Stock',
-  'What is our total revenue from invoices?',
-  'List pending tasks sorted by due date'
-]
+function getSuggestionsForPath(path: string) {
+  if (path.startsWith('/portal/leads')) {
+    return [
+      'List details of the last 3 inquiries',
+      'Show recent follow-up notes',
+      'Check active leads pipeline stage'
+    ]
+  }
+  if (path.startsWith('/portal/calendar') || path.startsWith('/portal/events')) {
+    return [
+      'Show upcoming bookings for this month',
+      'Are there any tours scheduled this week?',
+      'Show completed events this year'
+    ]
+  }
+  if (path.startsWith('/portal/finances') || path.startsWith('/portal/invoices')) {
+    return [
+      'What is our total revenue from invoices?',
+      'Find all unpaid or overdue bills',
+      'List recent bookings and expenses'
+    ]
+  }
+  if (path.startsWith('/portal/marketing')) {
+    return [
+      'List our marketing campaigns',
+      'Show open rates of email campaigns',
+      'Check marketing list subscriber count'
+    ]
+  }
+  if (path.startsWith('/portal/operations')) {
+    return [
+      'Show inventory items that are Low or Out of Stock',
+      'Check active cleaning logs',
+      'List pending operations tasks'
+    ]
+  }
+  return [
+    'Show upcoming bookings',
+    'Check active venue inquiries',
+    'List tasks due this week'
+  ]
+}
 
-export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
+function getQueryIndicatorText(sql: string) {
+  const clean = sql.trim().toLowerCase()
+  let action = 'Queried'
+  if (clean.startsWith('insert')) action = 'Added to'
+  if (clean.startsWith('update')) action = 'Updated'
+  if (clean.startsWith('delete')) action = 'Removed from'
+
+  const match = sql.match(/public\.luxor_([a-zA-Z0-9_]+)/i)
+  const tableName = match ? match[1].replace(/_/g, ' ') : 'database'
+
+  return `${action} ${tableName}`
+}
+
+export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -61,13 +116,11 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
     const userMessage = textToSend.trim()
     setInput('')
     
-    // Add user message
     const updatedMessages: Message[] = [...messages, { role: 'user', content: userMessage }]
     setMessages(updatedMessages)
     setIsLoading(true)
 
     try {
-      // Map frontend messages to backend format
       const apiMessages = updatedMessages.map(msg => ({
         role: msg.role,
         content: msg.content
@@ -78,7 +131,10 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ 
+          messages: apiMessages,
+          activePath
+        }),
       })
 
       if (!response.ok) {
@@ -92,7 +148,8 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
         {
           role: 'assistant',
           content: data.reply,
-          executedQueries: data.executedQueries
+          executedQueries: data.executedQueries,
+          confirmation: data.confirmation
         }
       ])
     } catch (err) {
@@ -108,6 +165,70 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
       setIsLoading(false)
     }
   }
+
+  const handleConfirmAction = async (msgIndex: number, confirmation: { query: string; summary: string }) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
+    setIsLoading(true)
+
+    try {
+      const apiMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+
+      const response = await fetch('/api/portal/elena-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: apiMessages,
+          activePath,
+          confirmQuery: confirmation.query,
+          confirmSummary: confirmation.summary
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to execute confirm query')
+      }
+
+      const data = await response.json()
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: data.reply,
+          executedQueries: data.executedQueries
+        }
+      ])
+    } catch (err) {
+      console.error(err)
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'I ran into an issue executing the action bestie! Please double-check lead/booking locks or database logs.'
+        }
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCancelAction = (msgIndex: number) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: 'No worries bestie! 💁‍♀️ I cancelled the action. Nothing was modified!'
+      }
+    ])
+  }
+
+  const pathSuggestions = getSuggestionsForPath(activePath)
 
   return (
     <motion.aside 
@@ -174,6 +295,66 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
                   {renderFormattedContent(msg.content)}
                 </div>
               </motion.div>
+
+              {/* Render SQL execution indicators */}
+              {msg.executedQueries && msg.executedQueries.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2 pl-8">
+                  {msg.executedQueries.map((eq, qIdx) => (
+                    <span 
+                      key={qIdx} 
+                      className="inline-flex items-center gap-1 rounded bg-[#caa24c]/5 border border-[#caa24c]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#f1d27a] font-sans"
+                    >
+                      <span className="h-1 w-1 rounded-full bg-[#caa24c]" />
+                      {getQueryIndicatorText(eq.query)}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Render Direct Action Confirmation Cards */}
+              {msg.confirmation && !msg.isConfirmed && !msg.isCancelled && (
+                <div className="w-[88%] mt-3 pl-8">
+                  <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3.5 space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <Info size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-[#f7efe3]">Action Confirmation Required</p>
+                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{msg.confirmation.summary}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmAction(index, msg.confirmation!)}
+                        className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        Confirm Action
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelAction(index)}
+                        className="rounded border border-zinc-850 hover:bg-zinc-900 text-zinc-450 hover:text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {msg.confirmation && msg.isConfirmed && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  Action Confirmed & Executed
+                </div>
+              )}
+
+              {msg.confirmation && msg.isCancelled && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-550 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                  Action Cancelled
+                </div>
+              )}
             </motion.div>
           ))}
 
@@ -193,7 +374,7 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
               </div>
               <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
                 <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
-                <span>Querying venue database...</span>
+                <span>Querying database...</span>
               </div>
             </motion.div>
           )}
@@ -206,11 +387,11 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
         <div className="border-t border-[#caa24c]/5 p-3 space-y-1.5 bg-[#050505]">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 px-1">Suggested Requests</p>
           <div className="flex flex-wrap gap-1.5">
-            {suggestions.map((s, i) => (
+            {pathSuggestions.map((s, i) => (
               <button
                 key={i}
                 onClick={() => handleSend(s)}
-                className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-left text-xs text-zinc-450 hover:border-[#caa24c]/20 hover:bg-[#caa24c]/2 hover:text-[#f1d27a]"
+                className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-left text-xs text-zinc-450 hover:border-[#caa24c]/20 hover:bg-[#caa24c]/2 hover:text-[#f1d27a] transition-all cursor-pointer"
               >
                 {s}
               </button>
@@ -253,11 +434,8 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
   )
 }
 
-/* Collapsible SQL Query Renderer */
-
 /* Local formatting helper function */
 function renderFormattedContent(content: string) {
-  // Check if content contains markdown table pattern
   if (content.includes('|') && content.includes('\n|')) {
     const lines = content.split('\n')
     const tableHtml: React.ReactNode[] = []
@@ -272,7 +450,6 @@ function renderFormattedContent(content: string) {
           tableRows = []
         }
         const cols = line.split('|').map(c => c.trim()).slice(1, -1)
-        // Skip separator line: e.g. |---|---|
         if (cols.every(c => /^:-*|-*:-*|-*:$/.test(c))) {
           continue
         }
@@ -293,7 +470,6 @@ function renderFormattedContent(content: string) {
     return <div>{tableHtml}</div>
   }
 
-  // normal parsing
   return content.split('\n').map((line, idx) => {
     if (!line.trim()) return <div key={idx} className="h-2" />
     return <p key={idx} className="mb-2 text-sm leading-relaxed">{renderBoldAndLinks(line)}</p>
