@@ -117,6 +117,7 @@ export default function LeadDetailPage({
 
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [pendingLifecycleStatus, setPendingLifecycleStatus] = useState<LuxorInquiry['status'] | null>(null)
 
   // Timeline tab filtering
   const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
@@ -206,10 +207,11 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
     if (!lead) return
     try {
       setUpdatingStatus(true)
+      setPendingLifecycleStatus(newStatus)
       const res = await fetch(`/api/inquiries`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -242,6 +244,7 @@ export default function LeadDetailPage({
       alert('Error updating status.')
     } finally {
       setUpdatingStatus(false)
+      setPendingLifecycleStatus(null)
     }
   }
 
@@ -590,35 +593,14 @@ export default function LeadDetailPage({
     if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
     return true
   })
-  const latestActivityEntry = allActivityEntries[0] ?? null
-  const leadAgeLabel = formatLeadAge(lead.created_at)
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
-  const summaryCards = [
-    {
-      label: 'Lead age',
-      value: leadAgeLabel,
-      detail: `Created ${new Date(lead.created_at).toLocaleDateString()}`,
-      tone: 'blue' as const,
-    },
-    {
-      label: 'Next best move',
-      value: nextBestMove.title,
-      detail: nextBestMove.detail,
-      tone: 'gold' as const,
-    },
-    {
-      label: 'Latest activity',
-      value: latestActivityEntry ? describeActivityEntry(latestActivityEntry) : 'No activity yet',
-      detail: latestActivityEntry ? formatTimelineDate(latestActivityEntry.createdAt) : 'Nothing logged yet',
-      tone: 'green' as const,
-    },
-  ]
-  const primaryDetails: Array<{
+  const eventDetails: Array<{
     label: string
     value: string
     editValue: string
     copyValue: string
     field: EditableLeadField
+    icon: React.ReactNode
     inputType?: LeadDetailInputType
     placeholder?: string
     isMono?: boolean
@@ -629,6 +611,7 @@ export default function LeadDetailPage({
       editValue: lead.event_type || '',
       copyValue: lead.event_type || '',
       field: 'event_type',
+      icon: <Sparkles size={14} />,
       placeholder: 'Wedding, Quinceañera, birthday...',
     },
     {
@@ -637,6 +620,7 @@ export default function LeadDetailPage({
       editValue: lead.guest_count ? String(lead.guest_count) : '',
       copyValue: lead.guest_count ? String(lead.guest_count) : '',
       field: 'guest_count',
+      icon: <Users size={14} />,
       inputType: 'number',
       placeholder: 'Guest count',
     },
@@ -646,6 +630,7 @@ export default function LeadDetailPage({
       editValue: lead.target_date || '',
       copyValue: lead.target_date || '',
       field: 'target_date',
+      icon: <Calendar size={14} />,
       inputType: 'date',
     },
     {
@@ -654,6 +639,7 @@ export default function LeadDetailPage({
       editValue: lead.package_interest || '',
       copyValue: lead.package_interest || '',
       field: 'package_interest',
+      icon: <Briefcase size={14} />,
       placeholder: 'Package or room interest',
     },
     {
@@ -662,6 +648,7 @@ export default function LeadDetailPage({
       editValue: lead.preferred_tour_date || '',
       copyValue: lead.preferred_tour_date || '',
       field: 'preferred_tour_date',
+      icon: <Calendar size={14} />,
       inputType: 'date',
     },
     {
@@ -670,14 +657,28 @@ export default function LeadDetailPage({
       editValue: normalizeTimeInputValue(lead.preferred_tour_time),
       copyValue: lead.preferred_tour_time || '',
       field: 'preferred_tour_time',
+      icon: <Clock size={14} />,
       inputType: 'time',
     },
+  ]
+  const clientDetails: Array<{
+    label: string
+    value: string
+    editValue: string
+    copyValue: string
+    field: EditableLeadField
+    icon: React.ReactNode
+    inputType?: LeadDetailInputType
+    placeholder?: string
+    isMono?: boolean
+  }> = [
     {
       label: 'Email',
       value: lead.email || 'None',
       editValue: lead.email || '',
       copyValue: lead.email || '',
       field: 'email',
+      icon: <Mail size={14} />,
       inputType: 'email',
       placeholder: 'client@email.com',
       isMono: true,
@@ -688,6 +689,7 @@ export default function LeadDetailPage({
       editValue: lead.phone || '',
       copyValue: lead.phone || '',
       field: 'phone',
+      icon: <Phone size={14} />,
       inputType: 'tel',
       placeholder: 'Phone number',
       isMono: true,
@@ -743,6 +745,7 @@ export default function LeadDetailPage({
     detail: string
     onClick: () => void
     disabled?: boolean
+    loading?: boolean
   }> = []
   const pushRecommendedAction = (action: (typeof recommendedActions)[number]) => {
     recommendedActions.push(action)
@@ -755,6 +758,7 @@ export default function LeadDetailPage({
       detail: 'Bring this inquiry back into the pipeline',
       onClick: () => handleStatusChange('new'),
       disabled: updatingStatus,
+      loading: updatingStatus,
     })
   } else if (lead.status === 'new') {
     pushRecommendedAction({
@@ -763,6 +767,7 @@ export default function LeadDetailPage({
       detail: 'Log the first outreach touch',
       onClick: () => handleStatusChange('contacted'),
       disabled: updatingStatus,
+      loading: updatingStatus,
     })
   } else if (lead.status === 'contacted' || lead.status === 'tour_requested') {
     pushRecommendedAction({
@@ -771,6 +776,7 @@ export default function LeadDetailPage({
       detail: 'Move lifecycle to tour confirmed',
       onClick: () => handleStatusChange('tour_confirmed'),
       disabled: updatingStatus,
+      loading: updatingStatus,
     })
   } else if (lead.status === 'tour_confirmed') {
     pushRecommendedAction({
@@ -779,6 +785,7 @@ export default function LeadDetailPage({
       detail: 'Use after sending pricing',
       onClick: () => handleStatusChange('proposal_sent'),
       disabled: updatingStatus,
+      loading: updatingStatus,
     })
   } else if (lead.status === 'proposal_sent') {
     pushRecommendedAction({
@@ -952,7 +959,7 @@ export default function LeadDetailPage({
         </div>
 
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
-          <LeadLifecycleRail currentStatus={lead.status} />
+          <LeadLifecycleRail currentStatus={pendingLifecycleStatus ?? lead.status} isSaving={updatingStatus} />
         </div>
 
         <div className="portal-scrollbar flex gap-1 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2">
@@ -987,14 +994,6 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      {activeLeadTab === 'overview' ? (
-        <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-3">
-          {summaryCards.map((card) => (
-            <LeadStatCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone} />
-          ))}
-        </div>
-      ) : null}
-
       <div className={`grid gap-6 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
@@ -1004,6 +1003,72 @@ export default function LeadDetailPage({
         <div className="space-y-6">
           {activeLeadTab === 'overview' ? (
             <>
+          <div id="lead-overview" className="grid gap-4 scroll-mt-24 md:grid-cols-2">
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="flex items-start gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#a8792f]">
+                  <ClipboardCheck size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
+                  <h2 className="mt-2 text-base font-bold text-[color:var(--portal-text)]">{nextBestMove.title}</h2>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
+                  {recommendedActions[0] ? (
+                    <button
+                      type="button"
+                      onClick={recommendedActions[0].onClick}
+                      disabled={recommendedActions[0].disabled}
+                      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-[#b98a3e]/20 transition-all hover:bg-[#a8792f] disabled:opacity-50"
+                    >
+                      {updatingStatus ? (
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      ) : (
+                        recommendedActions[0].icon
+                      )}
+                      {updatingStatus ? 'Saving...' : recommendedActions[0].label}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Client Details</p>
+                  <h2 className="mt-2 text-base font-bold text-[color:var(--portal-text)]">{lead.full_name}</h2>
+                </div>
+                <User size={18} className="text-[#a8792f]" />
+              </div>
+              <div className="grid gap-1">
+                {clientDetails.map((item) => (
+                  <DetailItem
+                    key={item.label}
+                    icon={item.icon}
+                    label={item.label}
+                    value={item.value}
+                    editValue={item.editValue}
+                    copyValue={item.copyValue}
+                    inputType={item.inputType}
+                    placeholder={item.placeholder}
+                    isMono={item.isMono}
+                    isSaving={savingLeadField === item.field}
+                    onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                  />
+                ))}
+                <div className="flex items-center gap-3 border-b border-[color:var(--portal-border)] py-3 last:border-b-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
+                    <MapPin size={14} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
+                    <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
           {isGrandOpeningLead ? (
             <div className="rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/8 p-5 shadow-xl shadow-black/20 luxor-soft-enter">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1029,17 +1094,18 @@ export default function LeadDetailPage({
             <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Lead Details</p>
-                  <p className="mt-1 text-xs text-zinc-600">Contact and planning details that belong near the top.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                  <p className="mt-1 text-xs text-zinc-600">Planning fields for the actual event.</p>
                 </div>
                 <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-                  Customer facing
+                  Edit inline
                 </span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {primaryDetails.map((item) => (
+              <div className="grid gap-x-8 sm:grid-cols-2">
+                {eventDetails.map((item) => (
                   <DetailItem
                     key={item.label}
+                    icon={item.icon}
                     label={item.label}
                     value={item.value}
                     editValue={item.editValue}
@@ -1374,6 +1440,7 @@ export default function LeadDetailPage({
                   detail={action.detail}
                   onClick={action.onClick}
                   disabled={action.disabled}
+                  loading={action.loading}
                 />
               ))}
             </div>
@@ -1978,7 +2045,13 @@ function ClientDossierLoading() {
   )
 }
 
-function LeadLifecycleRail({ currentStatus }: { currentStatus: LuxorInquiry['status'] }) {
+function LeadLifecycleRail({
+  currentStatus,
+  isSaving = false,
+}: {
+  currentStatus: LuxorInquiry['status']
+  isSaving?: boolean
+}) {
   const steps: Array<{ status: LuxorInquiry['status']; label: string; dateLabel: string }> = [
     { status: 'new', label: 'Inquiry', dateLabel: 'Intake' },
     { status: 'contacted', label: 'Contacted', dateLabel: 'Outreach' },
@@ -1997,21 +2070,38 @@ function LeadLifecycleRail({ currentStatus }: { currentStatus: LuxorInquiry['sta
         {steps.map((step, index) => {
           const isDone = currentIndex >= index && currentIndex !== -1
           const isCurrent = currentIndex === index
+          const segmentFilled = currentIndex > index && currentIndex !== -1
           return (
             <div key={step.status} className="relative min-w-0">
               {index < steps.length - 1 ? (
-                <span className={`absolute left-[calc(50%+1.2rem)] right-[calc(-50%+1.2rem)] top-4 hidden h-px xl:block ${isDone ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`} />
+                <span className="absolute left-[calc(50%+1.2rem)] right-[calc(-50%+1.2rem)] top-4 hidden h-px overflow-hidden bg-[color:var(--portal-border)] xl:block">
+                  <span
+                    className={`block h-full bg-[#caa24c] transition-[width] duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${segmentFilled ? 'w-full' : 'w-0'}`}
+                    style={{ transitionDelay: segmentFilled ? '120ms' : '0ms' }}
+                  />
+                </span>
               ) : null}
               <div className="relative flex flex-col items-center text-center">
-                <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-black ${
+                <span className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border text-[10px] font-black transition-colors duration-300 ${
                   isDone
-                    ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
+                    ? 'border-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
                     : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                 }`}>
-                  {isDone ? <Check size={13} /> : index + 1}
+                  <span
+                    className={`absolute inset-x-0 bottom-0 bg-[#caa24c] transition-[height] duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isDone ? 'h-full' : 'h-0'}`}
+                    style={{ transitionDelay: isDone ? `${Math.max(0, index - 1) * 90 + 220}ms` : '0ms' }}
+                  />
+                  <span className={`relative z-10 transition-opacity duration-200 ${isDone ? 'opacity-0' : 'opacity-100'}`}>
+                    {index + 1}
+                  </span>
+                  <Check
+                    size={13}
+                    className={`absolute z-10 transition-all duration-200 ${isDone ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
+                    style={{ transitionDelay: isDone ? `${Math.max(0, index - 1) * 90 + 620}ms` : '0ms' }}
+                  />
                 </span>
-                <span className={`mt-2 truncate text-[10px] font-black uppercase tracking-[0.12em] ${isCurrent ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                  {step.label}
+                <span className={`mt-2 truncate text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${isCurrent ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                  {step.label}{isCurrent && isSaving ? '...' : ''}
                 </span>
                 <span className="mt-0.5 text-[9px] font-semibold text-[color:var(--portal-faint)]">{step.dateLabel}</span>
               </div>
@@ -2034,32 +2124,46 @@ function ClientActionButton({
   detail,
   onClick,
   disabled = false,
+  loading = false,
 }: {
   icon: React.ReactNode
   label: string
   detail: string
   onClick: () => void
   disabled?: boolean
+  loading?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[color:var(--portal-border)] disabled:hover:bg-[color:var(--portal-soft)]"
+      aria-busy={loading}
+      className={`group flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:hover:border-[color:var(--portal-border)] disabled:hover:bg-[color:var(--portal-soft)] ${
+        loading ? 'opacity-100 ring-1 ring-[#caa24c]/25' : 'disabled:opacity-45'
+      }`}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors group-hover:text-[#a8792f]">
-        {icon}
+        {loading ? (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#caa24c]/25 border-t-[#caa24c]" />
+        ) : (
+          icon
+        )}
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold text-[color:var(--portal-text)] transition-colors">{label}</span>
-        <span className="mt-1 block text-[9px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</span>
+        <span className="block text-xs font-bold text-[color:var(--portal-text)] transition-colors">
+          {loading ? 'Saving next step...' : label}
+        </span>
+        <span className="mt-1 block text-[9px] font-medium leading-4 text-[color:var(--portal-muted)]">
+          {loading ? 'Updating the lead record now' : detail}
+        </span>
       </span>
     </button>
   )
 }
 
 function DetailItem({
+  icon,
   label,
   value,
   editValue,
@@ -2071,6 +2175,7 @@ function DetailItem({
   isSaving = false,
   onCommit,
 }: {
+  icon?: React.ReactNode
   label: string
   value: string
   editValue?: string
@@ -2129,10 +2234,16 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group/card relative min-h-[92px] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
+      className={`group/card relative flex min-h-[72px] items-start gap-3 border-b border-[color:var(--portal-border)] px-0 py-3.5 transition-all hover:bg-[#caa24c]/[0.025] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
+      {icon ? (
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
+          {icon}
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1">
       <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div>
 
       {isEditing ? (
@@ -2206,6 +2317,7 @@ function DetailItem({
         </div>
       )}
       {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#a8792f]">{subtext}</p>}
+      </div>
     </div>
   )
 }
