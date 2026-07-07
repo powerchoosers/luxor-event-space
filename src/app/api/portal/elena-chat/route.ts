@@ -133,6 +133,67 @@ Always use SQL queries to answer questions about the database. Do not make up da
     - incurred_on (date)
     - status (text: 'planned', 'incurred', 'paid', 'cancelled')
 
+13. public.luxor_email_jobs
+    - id (uuid)
+    - created_at, updated_at (timestamptz)
+    - inquiry_id (uuid -> public.luxor_inquiries.id)
+    - booking_id (uuid -> public.luxor_bookings.id)
+    - signature_request_id (uuid -> public.luxor_signature_requests.id)
+    - job_type (text: 'tour_confirmation', 'tour_reminder', 'tour_no_show_reschedule', 'contract_signature', 'marketing_campaign')
+    - status (text: 'queued', 'sending', 'sent', 'failed', 'cancelled')
+    - recipient_email (text)
+    - subject, body (text)
+    - scheduled_for, sent_at (timestamptz)
+    - last_error (text)
+    - attempts (integer)
+
+14. public.luxor_marketing_campaigns
+    - id (uuid)
+    - created_at, updated_at (timestamptz)
+    - name, subject, html_body (text)
+    - status (text: 'draft', 'scheduled', 'sending', 'sent', 'failed', 'cancelled')
+    - audience_label (text)
+    - scheduled_for, sent_at (timestamptz)
+    - recipient_count (integer)
+
+15. public.luxor_marketing_recipients
+    - id (uuid)
+    - created_at, updated_at (timestamptz)
+    - campaign_id (uuid -> public.luxor_marketing_campaigns.id)
+    - email_job_id (uuid -> public.luxor_email_jobs.id)
+    - email, name (text)
+    - status (text: 'queued', 'sent', 'failed', 'cancelled')
+    - tracking_token (text)
+    - sent_at (timestamptz)
+    - open_count (integer), click_count (integer)
+    - first_opened_at, last_opened_at, last_clicked_at (timestamptz)
+
+16. public.luxor_marketing_events
+    - id (uuid)
+    - created_at (timestamptz)
+    - campaign_id (uuid -> public.luxor_marketing_campaigns.id)
+    - recipient_id (uuid -> public.luxor_marketing_recipients.id)
+    - event_type (text: 'open', 'click', 'unsubscribe')
+    - url, ip_address, user_agent, device_type (text)
+
+17. public.luxor_marketing_list
+    - id (uuid)
+    - created_at (timestamptz)
+    - email (text, unique)
+    - full_name, source (text)
+
+18. public.luxor_signature_requests
+    - id (uuid)
+    - created_at, updated_at (timestamptz)
+    - booking_id (uuid -> public.luxor_bookings.id)
+    - inquiry_id (uuid -> public.luxor_inquiries.id)
+    - client_name, client_email (text)
+    - token (text)
+    - status (text: 'draft', 'sent', 'viewed', 'signed', 'void')
+    - contract_title, contract_body (text)
+    - signed_name (text), signed_at (timestamptz)
+
+
 ### GUIDELINES:
 - Execute read-only SQL queries (using SELECT statements) to lookup info.
 - If the user asks you to perform write operations (like updating a task status, adding a follow-up note, or modifying a booking date), you are authorized to run INSERT, UPDATE, or DELETE statements because this is an internal secure workspace.
