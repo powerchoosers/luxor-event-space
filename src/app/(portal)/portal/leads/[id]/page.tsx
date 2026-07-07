@@ -1162,22 +1162,22 @@ export default function LeadDetailPage({
 
           {/* Chat transcript replay widget if it exists */}
           {chatMessages.length > 0 && (
-            <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/30 overflow-hidden shadow-2xl luxor-soft-enter">
-              <div className="bg-zinc-950/90 border-b border-zinc-900 px-6 py-4 flex items-center justify-between">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400">Concierge AI Chat Session Replay</h4>
-                <span className="text-[9px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded uppercase">Elena Concierge</span>
+            <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10 luxor-soft-enter">
+              <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena Concierge</span>
               </div>
-              <div className="p-6 space-y-4 portal-scrollbar bg-black/40">
+              <div className="space-y-5 bg-[color:var(--portal-card)] p-6 portal-scrollbar">
                 {chatMessages.map((msg, index) => {
                   const isUser = msg.role === 'user'
                   return (
                     <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-xs font-medium leading-relaxed ${
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs font-medium leading-relaxed shadow-sm ${
                         isUser
-                          ? 'bg-[#caa24c]/10 text-white border border-[#caa24c]/20'
-                          : 'bg-zinc-900 text-zinc-300 border border-zinc-800/50'
+                          ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                          : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
                       }`}>
-                        <div className="text-[8px] font-bold uppercase tracking-widest text-zinc-500 mb-1">
+                        <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
                           {isUser ? 'Client' : 'Elena AI'}
                         </div>
                         {msg.content}
