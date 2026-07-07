@@ -23,6 +23,7 @@ const eventInterests = [
   'Corporate event',
   'Private celebration',
   'Vendor partnership',
+  'Other',
 ]
 
 export default function GrandOpeningPage() {
@@ -108,7 +109,7 @@ export default function GrandOpeningPage() {
               Grand Opening RSVP
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#d7c29a]/78">
-              Join us for the Luxor Grand Opening Showcase on Saturday, July 25. Come see the room, meet vendors, enjoy tastings, and celebrate what is next for Luxor at Las Palmas.
+              Join us for the Luxor Grand Opening Showcase on Saturday, July 25. Come tour the venue, meet vendors, enjoy tastings, and celebrate what is next for Luxor at Las Palmas.
             </p>
 
             <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
