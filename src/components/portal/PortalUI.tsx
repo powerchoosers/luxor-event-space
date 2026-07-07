@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export function PortalPageFrame({
@@ -206,27 +207,78 @@ export function PortalModal({
   onClose,
   title,
   children,
+  maxWidth = 'max-w-lg',
 }: {
   isOpen: boolean
   onClose: () => void
-  title: string
+  title?: string
   children: React.ReactNode
+  maxWidth?: string
 }) {
-  if (!isOpen) return null
+  const [mounted, setMounted] = React.useState(false)
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
-          <h3 className="text-sm font-bold text-white/90 uppercase tracking-widest">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-[color:var(--portal-muted)] transition-all hover:bg-black/5 hover:text-[color:var(--portal-text)]">
-            <span className="text-xs font-bold">Close</span>
-          </button>
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+
+  React.useEffect(() => {
+    if (!isOpen) return
+
+    const originalOverflow = document.body.style.overflow
+    const originalPaddingRight = document.body.style.paddingRight
+
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPaddingRight
+    }
+  }, [isOpen])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="absolute inset-0 bg-black/75 backdrop-blur-md cursor-default"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+            className={`relative z-10 w-full ${maxWidth} flex flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl max-h-[90vh]`}
+          >
+            {title ? (
+              <>
+                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
+                  <h3 className="text-sm font-bold text-white/90 uppercase tracking-widest">{title}</h3>
+                  <button onClick={onClose} className="rounded-lg p-1 text-[color:var(--portal-muted)] transition-all hover:bg-black/5 hover:text-[color:var(--portal-text)]">
+                    <span className="text-xs font-bold">Close</span>
+                  </button>
+                </div>
+                <div className="p-6 overflow-y-auto portal-scrollbar">{children}</div>
+              </>
+            ) : (
+              children
+            )}
+          </motion.div>
         </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>,
+    document.body
   )
 }
 
@@ -515,3 +567,5 @@ export function PortalDatePicker({
     </div>
   )
 }
+
+

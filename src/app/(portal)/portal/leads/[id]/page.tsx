@@ -32,7 +32,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 
 type ZohoEmailMessage = {
   id: string
@@ -1728,11 +1728,8 @@ export default function LeadDetailPage({
       </div>
 
       {/* Invoice drafting modal */}
-      {isInvoiceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsInvoiceModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-xl rounded-2xl border border-zinc-900 bg-[#080706] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+      <PortalModal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
+        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Draft Event Invoice</h3>
               <button onClick={() => setIsInvoiceModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
                 Close
@@ -1863,15 +1860,11 @@ export default function LeadDetailPage({
                 Create Invoice
               </button>
             </form>
-          </div>
-        </div>
-      )}
+      </PortalModal>
 
-      {isBookingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setIsBookingModalOpen(false)} />
-          <div className="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-[#080706] shadow-2xl max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+      {/* Booking creation modal */}
+      <PortalModal isOpen={isBookingModalOpen} onClose={() => setIsBookingModalOpen(false)} maxWidth="max-w-2xl">
+        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Create Booking Record</h3>
                 <p className="mt-1 text-[11px] text-zinc-500">This keeps the calendar, contract, and deposit details tied to the lead.</p>
@@ -1992,9 +1985,7 @@ export default function LeadDetailPage({
                 {submittingBooking ? 'Saving Booking...' : 'Save Booking Record'}
               </button>
             </form>
-          </div>
-        </div>
-      )}
+      </PortalModal>
     </PortalPageFrame>
   )
 }

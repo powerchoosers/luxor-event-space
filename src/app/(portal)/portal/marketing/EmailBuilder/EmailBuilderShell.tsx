@@ -9,6 +9,7 @@ import { BlockCanvas } from './BlockCanvas'
 import { BlockInspector } from './BlockInspector'
 import { EmailPreview } from './EmailPreview'
 import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
+import { PortalModal } from '@/components/portal/PortalUI'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -71,12 +72,14 @@ type BuilderTemplate = EmailTemplate & {
 }
 
 function TemplatePicker({
+  isOpen,
   savedTemplates,
   loadingSaved,
   onSelect,
   onDeleteSaved,
   onClose,
 }: {
+  isOpen: boolean
   savedTemplates: BuilderTemplate[]
   loadingSaved: boolean
   onSelect: (tpl: BuilderTemplate) => void
@@ -86,9 +89,7 @@ function TemplatePicker({
   const builtInTemplates: BuilderTemplate[] = EMAIL_TEMPLATES.map((tpl) => ({ ...tpl, source: 'built-in' }))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-zinc-800 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+    <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl">
         <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Template Library</p>
@@ -173,17 +174,18 @@ function TemplatePicker({
           ))}
           </div>
         </div>
-      </div>
-    </div>
+      </PortalModal>
   )
 }
 
 function SaveTemplateModal({
+  isOpen,
   subject,
   blocks,
   onClose,
   onSaved,
 }: {
+  isOpen: boolean
   subject: string
   blocks: EmailBlock[]
   onClose: () => void
@@ -222,9 +224,7 @@ function SaveTemplateModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-800 bg-[#0a0a0a] shadow-2xl">
+    <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-lg">
         <div className="border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Save Template</p>
           <h3 className="mt-0.5 text-sm font-bold text-white/90">Name this reusable email</h3>
@@ -263,8 +263,7 @@ function SaveTemplateModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </PortalModal>
   )
 }
 
@@ -501,30 +500,27 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
       </div>
 
       {/* Modals */}
-      {showTemplates && (
-        <TemplatePicker
-          savedTemplates={savedTemplates}
-          loadingSaved={templatesLoading}
-          onSelect={handleLoadTemplate}
-          onDeleteSaved={handleDeleteSavedTemplate}
-          onClose={() => setShowTemplates(false)}
-        />
-      )}
-      {showSaveTemplate && (
-        <SaveTemplateModal
-          subject={subject || 'Email from Luxor'}
-          blocks={blocks}
-          onClose={() => setShowSaveTemplate(false)}
-          onSaved={loadSavedTemplates}
-        />
-      )}
-      {showPreview && (
-        <EmailPreview
-          blocks={blocks}
-          subject={subject || 'Email from Luxor'}
-          onClose={() => setShowPreview(false)}
-        />
-      )}
+      <TemplatePicker
+        isOpen={showTemplates}
+        savedTemplates={savedTemplates}
+        loadingSaved={templatesLoading}
+        onSelect={handleLoadTemplate}
+        onDeleteSaved={handleDeleteSavedTemplate}
+        onClose={() => setShowTemplates(false)}
+      />
+      <SaveTemplateModal
+        isOpen={showSaveTemplate}
+        subject={subject || 'Email from Luxor'}
+        blocks={blocks}
+        onClose={() => setShowSaveTemplate(false)}
+        onSaved={loadSavedTemplates}
+      />
+      <EmailPreview
+        isOpen={showPreview}
+        blocks={blocks}
+        subject={subject || 'Email from Luxor'}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   )
 }

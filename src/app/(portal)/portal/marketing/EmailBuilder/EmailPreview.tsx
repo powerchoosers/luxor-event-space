@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalModal } from '@/components/portal/PortalUI'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -19,6 +19,7 @@ const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
 })
 
 interface EmailPreviewProps {
+  isOpen: boolean
   blocks: EmailBlock[]
   subject: string
   onClose: () => void
@@ -26,7 +27,7 @@ interface EmailPreviewProps {
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 
-export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
+export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [recipients, setRecipients] = useState('')
   const [sendSubject, setSendSubject] = useState(subject)
@@ -117,12 +118,7 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="relative z-10 flex flex-col w-full max-w-4xl h-[90vh] rounded-2xl border border-zinc-800 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+    <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-4xl">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-6 py-4 flex-shrink-0">
@@ -355,7 +351,6 @@ export function EmailPreview({ blocks, subject, onClose }: EmailPreviewProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PortalModal>
   )
 }

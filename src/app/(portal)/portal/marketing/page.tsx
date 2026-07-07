@@ -15,7 +15,7 @@ import {
   Send,
   X,
 } from 'lucide-react'
-import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal } from '@/components/portal/PortalUI'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
 
@@ -371,9 +371,7 @@ export default function MarketingPage() {
         </div>
       )}
 
-      {selectedDetail ? (
-        <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
-      ) : null}
+      <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </PortalPageFrame>
   )
 }
@@ -475,14 +473,21 @@ function CampaignCard({
   )
 }
 
-function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail; onClose: () => void }) {
-  const { campaign, recipients, events } = detail
+function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | null; onClose: () => void }) {
+  const [activeDetail, setActiveDetail] = useState<CampaignDetail | null>(null)
+
+  if (detail && detail !== activeDetail) {
+    setActiveDetail(detail)
+  }
+
+  const showDetail = detail || activeDetail
+  if (!showDetail) return null
+
+  const { campaign, recipients, events } = showDetail
   const engaged = recipients.filter((recipient) => recipient.open_count > 0 || recipient.click_count > 0).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-[#0a0a0a] shadow-2xl">
+    <PortalModal isOpen={!!detail} onClose={onClose} maxWidth="max-w-5xl">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Campaign Report</p>
@@ -561,8 +566,7 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail; onCl
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </PortalModal>
   )
 }
 
