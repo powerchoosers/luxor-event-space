@@ -1984,6 +1984,84 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                     </section>
+
+                    {/* Row 2: Chat Replay & Emails */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                      {/* Concierge AI session replay */}
+                      {chatMessages.length > 0 ? (
+                        <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                            <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
+                          </div>
+                          <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar">
+                            {chatMessages.map((msg, index) => {
+                              const isUser = msg.role === 'user'
+                              return (
+                                <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                                    isUser
+                                      ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                                      : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                                  }`}>
+                                    <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                                      {isUser ? 'Client' : 'Elena AI'}
+                                    </div>
+                                    {msg.content}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl text-center text-zinc-500 space-y-2 flex flex-col justify-center items-center min-h-[200px]">
+                          <MessageSquare size={20} className="text-zinc-700" />
+                          <p className="text-xs uppercase font-bold tracking-wider text-zinc-400">No Concierge Chat</p>
+                          <p className="text-[10px] max-w-xs mx-auto leading-relaxed">This lead was not created via the conversational AI concierge widget.</p>
+                        </div>
+                      )}
+
+                      {/* Zoho Emails */}
+                      <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Zoho Email History</h4>
+                          <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-300">Inbound / Outbound</span>
+                        </div>
+                        <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar text-left">
+                          {emailMessages.length === 0 ? (
+                            <p className="text-xs text-zinc-500 italic py-8 text-center">No Zoho emails logged for this address.</p>
+                          ) : (
+                            emailMessages.map((email) => {
+                              const isOutgoing = email.direction === 'outgoing'
+                              return (
+                                <div key={email.id} className="p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 space-y-1">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <span className={`rounded border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-widest ${
+                                      isOutgoing
+                                        ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                                        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                    }`}>
+                                      {isOutgoing ? 'Sent' : 'Received'}
+                                    </span>
+                                    <span className="text-[9px] font-mono text-zinc-500">
+                                      {formatTimelineDate(email.receivedAt || '')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-bold text-zinc-200">{email.subject || '(No Subject)'}</p>
+                                  <p className="text-[9px] text-zinc-500 truncate">
+                                    {isOutgoing ? `To: ${email.to}` : `From: ${email.from}`}
+                                  </p>
+                                  {email.summary && (
+                                    <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{email.summary}</p>
+                                  )}
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </>
                 )
               }
@@ -3815,18 +3893,15 @@ function LeadLifecycleRail({
       isActive: lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
     },
     {
-      id: 'proposal_sent',
+      id: 'proposal',
       label: 'Proposal',
-      subtext: formattedProposalSentDate || 'Jul 9',
+      subtext: lead.status === 'booked' 
+        ? 'Accepted' 
+        : lead.status === 'proposal_sent' 
+        ? (formattedProposalSentDate || 'Jul 9') 
+        : '',
       isCompleted: lead.status === 'proposal_sent' || lead.status === 'booked',
       isActive: lead.status === 'proposal_sent' && !latestBooking,
-    },
-    {
-      id: 'proposal_accepted',
-      label: 'Proposal',
-      subtext: lead.status === 'booked' ? 'Jul 9' : '',
-      isCompleted: lead.status === 'booked',
-      isActive: lead.status === 'proposal_sent' && !!latestBooking,
     },
     {
       id: 'contract',
@@ -3881,7 +3956,7 @@ function LeadLifecycleRail({
   ]
 
   const getStageIdFromStepId = (stepId: string) => {
-    if (stepId === 'proposal_sent' || stepId === 'proposal_accepted') return 'proposal'
+    if (stepId === 'proposal_sent' || stepId === 'proposal_accepted' || stepId === 'proposal') return 'proposal'
     if (stepId === 'event') return 'event'
     if (stepId === 'complete') return 'closing'
     return stepId
