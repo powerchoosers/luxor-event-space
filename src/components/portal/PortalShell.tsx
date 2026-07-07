@@ -25,6 +25,8 @@ import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
+import Image from 'next/image'
+import { PortalElenaChat } from '@/components/portal/PortalElenaChat'
 
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
@@ -62,6 +64,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const searchParams = useSearchParams()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
+  const [elenaOpen, setElenaOpen] = useState(false)
   const portalTheme = useSyncExternalStore(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -245,7 +248,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         </div>
       </aside>
 
-      <main className={`flex h-screen flex-col transition-[padding-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+      <main className={`flex h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'} ${elenaOpen ? 'lg:pr-[420px]' : 'lg:pr-0'}`}>
         <header className={`z-40 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -336,6 +339,24 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               <MessageSquare size={18} className="text-zinc-400" />
             </Link>
             
+            <button
+              type="button"
+              onClick={() => setElenaOpen(!elenaOpen)}
+              className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${
+                elenaOpen 
+                  ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
+                  : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/30'
+              }`}
+              aria-label="Toggle Elena AI Concierge"
+            >
+              <Image 
+                src="/luxor-concierge.png" 
+                alt="Elena AI Assistant" 
+                fill 
+                className="object-cover"
+              />
+            </button>
+            
             <div className="mx-1 hidden h-8 w-px bg-[color:var(--portal-border)] sm:block" />
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
@@ -381,6 +402,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>
+      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} />
     </body>
   )
 }
