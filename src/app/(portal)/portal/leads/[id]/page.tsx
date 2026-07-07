@@ -150,6 +150,12 @@ export default function LeadDetailPage({
   const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('11:00 PM – 12:30 AM')
   const [savingSummary, setSavingSummary] = useState(false)
 
+  // Tour Attendance states
+  const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
+  const [tourGuests, setTourGuests] = useState('Miguel Martinez')
+  const [tourNotes, setTourNotes] = useState('Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.')
+  const [savingTourAttendance, setSavingTourAttendance] = useState(false)
+
   const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
 
   const leadDerivedData = useMemo(() => {
@@ -314,6 +320,8 @@ export default function LeadDetailPage({
       setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || '23:00'))
       setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || '3:00 PM'))
       setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || '11:00 PM – 12:30 AM'))
+      setTourGuests(String(metadata.tourGuests || 'Miguel Martinez'))
+      setTourNotes(String(metadata.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
     }
   }, [lead, latestBooking])
 
@@ -364,6 +372,41 @@ export default function LeadDetailPage({
       alert(err instanceof Error ? err.message : 'Failed to save event summary.')
     } finally {
       setSavingSummary(false)
+    }
+  }
+
+  const handleSaveTourAttendance = async () => {
+    if (!lead) return
+    try {
+      setSavingTourAttendance(true)
+      const updatedMetadata = {
+        ...lead.metadata,
+        tourGuests,
+        tourNotes,
+      }
+
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          metadata: updatedMetadata,
+        }),
+      })
+
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to update tour attendance.')
+      }
+
+      const updated = payload as LuxorInquiry
+      setLead(updated)
+      setIsEditingTourAttendance(false)
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to update tour attendance.')
+    } finally {
+      setSavingTourAttendance(false)
     }
   }
 
@@ -1831,27 +1874,105 @@ export default function LeadDetailPage({
                       
                       {/* Tour Attendance & Notes */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Tour Attendance</p>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
-                              <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
+                        {isEditingTourAttendance ? (
+                          <div className="space-y-4 text-left">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c] mb-3">Edit Tour Attendance</p>
+                              
+                              <div className="space-y-3.5">
+                                <div>
+                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Primary Attendee</label>
+                                  <input
+                                    type="text"
+                                    disabled
+                                    value={lead.full_name}
+                                    className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-zinc-500 cursor-not-allowed outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Guests / Additional Attendees</label>
+                                  <input
+                                    type="text"
+                                    value={tourGuests}
+                                    onChange={(e) => setTourGuests(e.target.value)}
+                                    placeholder="e.g. Miguel Martinez"
+                                    className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Tour Notes / Feedback</label>
+                                  <textarea
+                                    value={tourNotes}
+                                    onChange={(e) => setTourNotes(e.target.value)}
+                                    rows={4}
+                                    placeholder="Add any feedback or discussion notes from the tour..."
+                                    className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none resize-none"
+                                  />
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                              <span className="font-bold text-zinc-300">Miguel Martinez <span className="text-zinc-500 font-medium">(Guest)</span></span>
+
+                            <div className="flex gap-2 justify-end pt-2 border-t border-[color:var(--portal-border)]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsEditingTourAttendance(false)
+                                  setTourGuests(String(lead.metadata?.tourGuests || 'Miguel Martinez'))
+                                  setTourNotes(String(lead.metadata?.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
+                                }}
+                                className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveTourAttendance}
+                                disabled={savingTourAttendance}
+                                className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                              >
+                                {savingTourAttendance ? 'Saving...' : 'Save'}
+                              </button>
                             </div>
-                            <p className="text-[10px] text-[#caa24c] hover:underline cursor-pointer font-bold">+ Add Note About Attendance</p>
                           </div>
-                        </div>
-                        <div className="border-t border-[color:var(--portal-border)] pt-3">
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes</p>
-                          <p className="text-xs text-zinc-400 italic leading-relaxed">
-                            &ldquo;Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.&rdquo;
-                          </p>
-                          <p className="text-[10px] text-[#caa24c] mt-2 hover:underline cursor-pointer font-bold">Edit Notes</p>
-                        </div>
+                        ) : (
+                          <>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Tour Attendance</p>
+                              <div className="space-y-2 text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
+                                  <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
+                                </div>
+                                {tourGuests ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                                    <span className="font-bold text-zinc-300">{tourGuests} <span className="text-zinc-500 font-medium">(Guest)</span></span>
+                                  </div>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingTourAttendance(true)}
+                                  className="text-[10px] text-[#caa24c] hover:underline cursor-pointer font-bold text-left block"
+                                >
+                                  + Edit Attendance
+                                </button>
+                              </div>
+                            </div>
+                            <div className="border-t border-[color:var(--portal-border)] pt-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes</p>
+                              <p className="text-xs text-zinc-400 italic leading-relaxed">
+                                &ldquo;{tourNotes}&rdquo;
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingTourAttendance(true)}
+                                className="text-[10px] text-[#caa24c] mt-2 hover:underline cursor-pointer font-bold text-left block"
+                              >
+                                Edit Notes
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </section>
                     </div>
                     
@@ -2568,8 +2689,9 @@ export default function LeadDetailPage({
                 </div>
               )
             })()}
+          </div>
 
-             {/* Right Column: Sticky actions & summary */}
+          {/* Right Column: Sticky actions & summary */}
           <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
@@ -2893,7 +3015,6 @@ export default function LeadDetailPage({
                 </>
               )
             })()}
-          </div>
           </div>
         </div>
       ) : (
