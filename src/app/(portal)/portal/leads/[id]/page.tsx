@@ -943,11 +943,11 @@ export default function LeadDetailPage({
                 <h1 className="truncate font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
                 {isGrandOpeningLead ? <Sparkles size={16} className="shrink-0 text-[#caa24c]" /> : null}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-[color:var(--portal-muted)]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[color:var(--portal-muted)]">
                 <span>{lead.event_type || 'Quinceañera'}</span>
-                <span className="text-[color:var(--portal-border)] select-none">•</span>
+                <span className="luxor-diamond shrink-0 text-[#caa24c] opacity-60" />
                 <span>{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count open'}</span>
-                <span className="text-[color:var(--portal-border)] select-none">•</span>
+                <span className="luxor-diamond shrink-0 text-[#caa24c] opacity-60" />
                 <span>{lead.target_date ? formatDisplayDate(lead.target_date) : 'Date TBD'}</span>
               </div>
               <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
@@ -1387,7 +1387,7 @@ export default function LeadDetailPage({
 
                     return (
                       <div key={entry.id} className="relative group">
-                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full border-2 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] transition-all group-hover:border-[#caa24c]" />
+                        <div className="absolute -left-[29px] top-[7px] h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] transition-all group-hover:border-[#caa24c] group-hover:bg-[#caa24c]/20" />
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                             {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
@@ -1433,7 +1433,7 @@ export default function LeadDetailPage({
 
                   return (
                     <div key={note.id} className="relative group">
-                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full border-2 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] animate-pulse transition-all group-hover:border-[#caa24c]" />
+                      <div className="absolute -left-[29px] top-[7px] h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[#caa24c]/20" />
                       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
                         <div className="flex items-center gap-3">
