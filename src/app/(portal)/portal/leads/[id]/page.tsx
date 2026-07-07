@@ -1009,19 +1009,23 @@ export default function LeadDetailPage({
                     <button
                       onClick={handleToggleMarketing}
                       disabled={togglingMarketing}
-                      className="group relative flex h-5 w-5 shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50"
+                      className="group relative flex h-[18px] w-[18px] shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50"
                       title={isSubscribed ? "Remove from marketing list" : "Add to marketing list"}
                     >
-                      <div className="relative h-5 w-5 shrink-0">
+                      <div className="relative h-[18px] w-[18px] shrink-0">
                         {/* Background outline star */}
-                        <Star size={18} className="text-zinc-650 transition-colors group-hover:text-zinc-400" />
+                        <Star size={18} className="absolute inset-0 text-zinc-650 transition-colors group-hover:text-zinc-400" />
                         
                         {/* Animated liquid fill mask star */}
                         <div 
-                          className="absolute bottom-0 left-0 right-0 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" 
-                          style={{ height: isSubscribed ? '100%' : '0%' }}
+                          className="absolute bottom-0 left-0 right-0 overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" 
+                          style={{ height: isSubscribed ? '18px' : '0px' }}
                         >
-                          <Star size={18} className="text-[#caa24c] fill-[#caa24c] absolute bottom-0 left-0" />
+                          <Star 
+                            size={18} 
+                            className="absolute bottom-0 left-0 text-[#caa24c] fill-[#caa24c]" 
+                            style={{ width: '18px', height: '18px' }} 
+                          />
                         </div>
                       </div>
                     </button>
@@ -1487,7 +1491,7 @@ export default function LeadDetailPage({
 
                     return (
                       <div key={entry.id} className="relative group">
-                        <div className="absolute -left-[29px] top-[7px] h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] transition-all group-hover:border-[#caa24c] group-hover:bg-[#caa24c]/20" />
+                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                             {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
@@ -1533,7 +1537,7 @@ export default function LeadDetailPage({
 
                   return (
                     <div key={note.id} className="relative group">
-                      <div className="absolute -left-[29px] top-[7px] h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[#caa24c]/20" />
+                      <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
                         <div className="flex items-center gap-3">
