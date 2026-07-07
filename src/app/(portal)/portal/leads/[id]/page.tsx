@@ -1990,6 +1990,7 @@ function DetailItem({
     <div
       role={canEdit ? 'button' : undefined}
       tabIndex={canEdit ? 0 : undefined}
+      aria-label={canEdit ? `Edit ${label}` : undefined}
       onClick={startEditing}
       onKeyDown={(event) => {
         if (!canEdit || isEditing) return
