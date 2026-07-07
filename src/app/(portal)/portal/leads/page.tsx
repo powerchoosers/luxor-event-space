@@ -25,6 +25,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
@@ -330,7 +331,7 @@ export default function LeadsPage() {
         </Link>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden mt-4">
+      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-hidden mt-4">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMoveStatus={handleMoveStatus} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMoveStatus={handleMoveStatus} />}
@@ -685,7 +686,7 @@ export default function LeadsPage() {
         </div>
       )
         )}
-      </div>
+      </PortalTabTransition>
 
       {/* Manual Lead Addition Modal */}
       {isModalOpen && (

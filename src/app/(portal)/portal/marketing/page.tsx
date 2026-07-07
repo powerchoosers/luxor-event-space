@@ -15,7 +15,7 @@ import {
   Send,
   X,
 } from 'lucide-react'
-import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal, PortalAnimatedTabs } from '@/components/portal/PortalUI'
+import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal, PortalAnimatedTabs, PortalTabTransition } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
@@ -325,147 +325,149 @@ export default function MarketingPage() {
         }
       />
 
-      {activeTab === 'sources' && (
-        <MarketingSourcesDashboard />
-      )}
+      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
+        {activeTab === 'sources' && (
+          <MarketingSourcesDashboard />
+        )}
 
-      {activeTab === 'overview' && (
-        <>
-          <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:gap-6">
-            <StatsPanel label="Campaigns" value={String(stats.campaigns)} detail={`${stats.scheduled} scheduled/queued`} />
-            <StatsPanel label="Recipients" value={stats.recipients.toLocaleString()} detail={`${campaigns.length} lists`} />
-            <StatsPanel label="Open Rate" value={`${stats.openRate}%`} detail="unique opens" />
-            <StatsPanel label="Click Rate" value={`${stats.clickRate}%`} detail="unique clicks" />
-          </div>
-
-          {error ? (
-            <div className="flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 text-sm text-rose-300">
-              <AlertCircle size={18} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="font-bold">Marketing data could not load.</p>
-                <p className="mt-1 text-xs text-rose-300/80">{error}</p>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-            <div className="space-y-4 lg:col-span-2 lg:space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Campaigns</h3>
-                <button
-                  onClick={openBlankBuilder}
-                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-colors hover:text-[#dfbd68]"
-                >
-                  <PenSquare size={11} />
-                  Build Email
-                </button>
-              </div>
-
-              {loading ? (
-                <div className="rounded-2xl border border-zinc-900 bg-black/30 p-8 text-sm text-zinc-500">Loading campaigns...</div>
-              ) : campaigns.length ? (
-                campaigns.map((campaign) => (
-                  <CampaignCard
-                    key={campaign.id}
-                    campaign={campaign}
-                    busy={busyId === campaign.id}
-                    reportBusy={detailLoadingId === campaign.id}
-                    onReport={() => openCampaignReport(campaign.id)}
-                    onCancel={() => cancelCampaign(campaign.id)}
-                    onSendNow={() => sendCampaignNow(campaign.id)}
-                  />
-                ))
-              ) : (
-                <PortalEmptyState
-                  icon={<Mail size={34} />}
-                  title="No campaigns yet"
-                  description="Build an email, add recipients, and queue or schedule it. Once it sends, opens and clicks will show here."
-                  action={
-                    <button
-                      onClick={openBlankBuilder}
-                      className="rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black"
-                    >
-                      Create Campaign
-                    </button>
-                  }
-                />
-              )}
+        {activeTab === 'overview' && (
+          <>
+            <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:gap-6">
+              <StatsPanel label="Campaigns" value={String(stats.campaigns)} detail={`${stats.scheduled} scheduled/queued`} />
+              <StatsPanel label="Recipients" value={stats.recipients.toLocaleString()} detail={`${campaigns.length} lists`} />
+              <StatsPanel label="Open Rate" value={`${stats.openRate}%`} detail="unique opens" />
+              <StatsPanel label="Click Rate" value={`${stats.clickRate}%`} detail="unique clicks" />
             </div>
 
-            <div className="space-y-6">
-              <h3 className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">How To Use It</h3>
-              <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 p-6 shadow-2xl backdrop-blur-xl">
-                <MachineStep icon={<PenSquare size={14} />} title="Build" text="Use the email builder or a template. Keep one clear call-to-action per campaign." />
-                <MachineStep icon={<CalendarClock size={14} />} title="Schedule" text="Paste a recipient list, pick a time, and the site creates cron-ready email jobs." />
-                <MachineStep icon={<BarChart3 size={14} />} title="Measure" text="Every recipient gets a tracking pixel and wrapped links, so opens and clicks return here." />
-              </div>
-
-              <div className="nodal-void-card rounded-2xl border border-[#caa24c]/10 bg-zinc-900/10 p-6 shadow-2xl">
-                <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-white">Good Next Campaign</h4>
-                <p className="mb-4 text-[11px] font-medium leading-relaxed text-zinc-400">
-                  Re-engage tour no-shows with a short concierge note and one button back to the tour page. That is more useful than a big newsletter because it asks for one clear action.
-                </p>
-                <button
-                  onClick={openBlankBuilder}
-                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-transform hover:translate-x-1"
-                >
-                  Build This Email <Send size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {activeTab === 'builder' && (
-        <div className="min-h-0 flex-1">
-          <EmailBuilderShell key={builderTemplate?.id || 'blank-builder'} initialTemplate={builderTemplate} />
-        </div>
-      )}
-
-      {activeTab === 'templates' && (
-        <div className="flex-1">
-          <div className="mb-6">
-            <p className="text-xs text-zinc-500">
-              Choose a template to jump-start your next campaign. Click any card to open it in the email builder.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {EMAIL_TEMPLATES.map((tpl) => (
-              <button
-                type="button"
-                key={tpl.id}
-                onClick={() => openTemplateInBuilder(tpl)}
-                className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-800/20 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/35"
-              >
-                <div className="h-1.5 w-full" style={{ background: tpl.previewColor }} />
-                <div className="p-5">
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{tpl.name}</h4>
-                    <span
-                      className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
-                      style={{ color: tpl.previewColor, borderColor: `${tpl.previewColor}40`, background: `${tpl.previewColor}15` }}
-                    >
-                      {tpl.category}
-                    </span>
-                  </div>
-                  <p className="mb-4 text-[11px] leading-relaxed text-zinc-500">{tpl.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</span>
-                    <span
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all group-hover:scale-105"
-                      style={{ background: `${tpl.previewColor}20`, color: tpl.previewColor, border: `1px solid ${tpl.previewColor}30` }}
-                    >
-                      <PenSquare size={10} />
-                      Open Builder
-                    </span>
-                  </div>
+            {error ? (
+              <div className="flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 text-sm text-rose-300">
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-bold">Marketing data could not load.</p>
+                  <p className="mt-1 text-xs text-rose-300/80">{error}</p>
                 </div>
-              </button>
-            ))}
+              </div>
+            ) : null}
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+              <div className="space-y-4 lg:col-span-2 lg:space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">Campaigns</h3>
+                  <button
+                    onClick={openBlankBuilder}
+                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-colors hover:text-[#dfbd68]"
+                  >
+                    <PenSquare size={11} />
+                    Build Email
+                  </button>
+                </div>
+
+                {loading ? (
+                  <div className="rounded-2xl border border-zinc-900 bg-black/30 p-8 text-sm text-zinc-500">Loading campaigns...</div>
+                ) : campaigns.length ? (
+                  campaigns.map((campaign) => (
+                    <CampaignCard
+                      key={campaign.id}
+                      campaign={campaign}
+                      busy={busyId === campaign.id}
+                      reportBusy={detailLoadingId === campaign.id}
+                      onReport={() => openCampaignReport(campaign.id)}
+                      onCancel={() => cancelCampaign(campaign.id)}
+                      onSendNow={() => sendCampaignNow(campaign.id)}
+                    />
+                  ))
+                ) : (
+                  <PortalEmptyState
+                    icon={<Mail size={34} />}
+                    title="No campaigns yet"
+                    description="Build an email, add recipients, and queue or schedule it. Once it sends, opens and clicks will show here."
+                    action={
+                      <button
+                        onClick={openBlankBuilder}
+                        className="rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black"
+                      >
+                        Create Campaign
+                      </button>
+                    }
+                  />
+                )}
+              </div>
+
+              <div className="space-y-6">
+                <h3 className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">How To Use It</h3>
+                <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 p-6 shadow-2xl backdrop-blur-xl">
+                  <MachineStep icon={<PenSquare size={14} />} title="Build" text="Use the email builder or a template. Keep one clear call-to-action per campaign." />
+                  <MachineStep icon={<CalendarClock size={14} />} title="Schedule" text="Paste a recipient list, pick a time, and the site creates cron-ready email jobs." />
+                  <MachineStep icon={<BarChart3 size={14} />} title="Measure" text="Every recipient gets a tracking pixel and wrapped links, so opens and clicks return here." />
+                </div>
+
+                <div className="nodal-void-card rounded-2xl border border-[#caa24c]/10 bg-zinc-900/10 p-6 shadow-2xl">
+                  <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-white">Good Next Campaign</h4>
+                  <p className="mb-4 text-[11px] font-medium leading-relaxed text-zinc-400">
+                    Re-engage tour no-shows with a short concierge note and one button back to the tour page. That is more useful than a big newsletter because it asks for one clear action.
+                  </p>
+                  <button
+                    onClick={openBlankBuilder}
+                    className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#caa24c] transition-transform hover:translate-x-1"
+                  >
+                    Build This Email <Send size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'builder' && (
+          <div className="min-h-0 flex-1">
+            <EmailBuilderShell key={builderTemplate?.id || 'blank-builder'} initialTemplate={builderTemplate} />
           </div>
-        </div>
-      )}
+        )}
+
+        {activeTab === 'templates' && (
+          <div className="flex-1">
+            <div className="mb-6">
+              <p className="text-xs text-zinc-500">
+                Choose a template to jump-start your next campaign. Click any card to open it in the email builder.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {EMAIL_TEMPLATES.map((tpl) => (
+                <button
+                  type="button"
+                  key={tpl.id}
+                  onClick={() => openTemplateInBuilder(tpl)}
+                  className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-800/20 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/35"
+                >
+                  <div className="h-1.5 w-full" style={{ background: tpl.previewColor }} />
+                  <div className="p-5">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{tpl.name}</h4>
+                      <span
+                        className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest"
+                        style={{ color: tpl.previewColor, borderColor: `${tpl.previewColor}40`, background: `${tpl.previewColor}15` }}
+                      >
+                        {tpl.category}
+                      </span>
+                    </div>
+                    <p className="mb-4 text-[11px] leading-relaxed text-zinc-500">{tpl.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</span>
+                      <span
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all group-hover:scale-105"
+                        style={{ background: `${tpl.previewColor}20`, color: tpl.previewColor, border: `1px solid ${tpl.previewColor}30` }}
+                      >
+                        <PenSquare size={10} />
+                        Open Builder
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </PortalTabTransition>
 
       <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </PortalPageFrame>

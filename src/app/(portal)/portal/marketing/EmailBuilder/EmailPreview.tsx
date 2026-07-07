@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
-import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition } from '@/components/portal/PortalUI'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -147,7 +147,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
           
           {/* Preview tab */}
           {activeTab === 'preview' && (
@@ -342,7 +342,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
               </div>
             </div>
           )}
-        </div>
+        </PortalTabTransition>
       </PortalModal>
   )
 }

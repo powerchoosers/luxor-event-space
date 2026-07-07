@@ -124,7 +124,7 @@ export function PortalAnimatedTabs<T extends string>({
   }, [activeTab, tabsSignature])
 
   return (
-    <div ref={containerRef} role="tablist" aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-end gap-5 ${className}`}>
+    <nav ref={containerRef} aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-end gap-5 ${className}`}>
       <span
         className="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{
@@ -142,8 +142,6 @@ export function PortalAnimatedTabs<T extends string>({
               buttonRefs.current[tab.id] = node
             }}
             type="button"
-            role="tab"
-            aria-selected={isActive}
             onClick={() => onTabChange(tab.id)}
             className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
               isActive
@@ -165,7 +163,32 @@ export function PortalAnimatedTabs<T extends string>({
           </button>
         )
       })}
-    </div>
+    </nav>
+  )
+}
+
+export function PortalTabTransition({
+  activeKey,
+  children,
+  className = '',
+}: {
+  activeKey: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={activeKey}
+        initial={{ opacity: 0, y: 12, scale: 0.99 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.99 }}
+        transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+        className={className}
+      >
+        {children}
+      </motion.div>
+    </AnimatePresence>
   )
 }
 

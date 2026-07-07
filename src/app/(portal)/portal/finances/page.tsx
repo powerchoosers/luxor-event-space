@@ -18,6 +18,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
@@ -236,6 +237,7 @@ type LuxorBookingExpense = {
         />
       </div>
 
+      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
@@ -596,10 +598,11 @@ type LuxorBookingExpense = {
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </PortalTabTransition>
     </PortalPageFrame>
   )
 }

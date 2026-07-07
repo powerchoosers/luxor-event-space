@@ -19,6 +19,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalTableCard,
   PortalSelect
 } from '@/components/portal/PortalUI'
@@ -71,6 +72,7 @@ export default function SettingsPage() {
       {/* Settings Forms */}
       <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
         <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
+          <PortalTabTransition activeKey={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
           {activeTab === 'business' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
@@ -227,6 +229,8 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          </PortalTabTransition>
 
           {/* Submit button */}
           <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">

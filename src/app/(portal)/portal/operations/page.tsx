@@ -27,6 +27,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalTableCard,
   PortalStickyTable,
   PortalStickyThead,
@@ -398,6 +399,7 @@ function OperationsPageContent() {
         />
       </div>
 
+      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {/* Tab Panels */}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (
@@ -1513,6 +1515,7 @@ function OperationsPageContent() {
           </div>
         </PortalModal>
       )}
+      </PortalTabTransition>
     </PortalPageFrame>
   )
 }

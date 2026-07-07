@@ -28,6 +28,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalStatusBadge,
   PortalTableCard,
   PortalStickyTable,
@@ -219,7 +220,7 @@ export default function EventsPage() {
               </div>
 
               {/* Tab Contents */}
-              <div className="flex-1 overflow-y-auto portal-scrollbar p-6 space-y-6">
+              <PortalTabTransition activeKey={activeDetailTab} className="flex-1 overflow-y-auto portal-scrollbar p-6 space-y-6">
                 {/* Timeline */}
                 {activeDetailTab === 'timeline' && (
                   <div className="space-y-4">
@@ -411,7 +412,7 @@ export default function EventsPage() {
                     </div>
                   </div>
                 )}
-              </div>
+              </PortalTabTransition>
             </div>
           ) : (
             <div className="flex-1 border border-dashed border-zinc-900 rounded-2xl flex flex-col items-center justify-center text-center p-10 bg-zinc-950/5">
