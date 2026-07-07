@@ -154,6 +154,8 @@ export default function LeadDetailPage({
   const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
   const [tourGuests, setTourGuests] = useState('Miguel Martinez')
   const [tourNotes, setTourNotes] = useState('Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.')
+  const [tourBudget, setTourBudget] = useState('$5,000')
+  const [cateringPreferences, setCateringPreferences] = useState('Outside catering, open bar setup.')
   const [savingTourAttendance, setSavingTourAttendance] = useState(false)
 
   const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
@@ -322,6 +324,8 @@ export default function LeadDetailPage({
       setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || '11:00 PM – 12:30 AM'))
       setTourGuests(String(metadata.tourGuests || 'Miguel Martinez'))
       setTourNotes(String(metadata.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
+      setTourBudget(String(metadata.estimatedBudget || '$5,000'))
+      setCateringPreferences(String(metadata.cateringPreferences || 'Outside catering, open bar setup.'))
     }
   }, [lead, latestBooking])
 
@@ -383,6 +387,8 @@ export default function LeadDetailPage({
         ...lead.metadata,
         tourGuests,
         tourNotes,
+        estimatedBudget: tourBudget,
+        cateringPreferences,
       }
 
       const res = await fetch('/api/inquiries', {
@@ -1655,6 +1661,119 @@ export default function LeadDetailPage({
                       </div>
                     </section>
 
+                    {/* Tour & Proposal Prep Intake */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Tour & Proposal Prep Intake</p>
+                          <p className="text-[9px] text-zinc-555 mt-0.5">Collect during intake call to prepare for the tour & proposal</p>
+                        </div>
+                        {!isEditingTourAttendance && (
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingTourAttendance(true)}
+                            className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer"
+                          >
+                            Edit Intake
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditingTourAttendance ? (
+                        <div className="space-y-4 text-left">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Estimated Budget</label>
+                              <input
+                                type="text"
+                                value={tourBudget}
+                                onChange={(e) => setTourBudget(e.target.value)}
+                                placeholder="e.g. $5,000"
+                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Guests Attending Tour</label>
+                              <input
+                                type="text"
+                                value={tourGuests}
+                                onChange={(e) => setTourGuests(e.target.value)}
+                                placeholder="e.g. Miguel Martinez"
+                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Catering & Bar Preferences</label>
+                            <input
+                              type="text"
+                              value={cateringPreferences}
+                              onChange={(e) => setCateringPreferences(e.target.value)}
+                              placeholder="e.g. Outside catering, open bar setup"
+                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Intake Notes / Key Requirements</label>
+                            <textarea
+                              value={tourNotes}
+                              onChange={(e) => setTourNotes(e.target.value)}
+                              rows={3}
+                              placeholder="e.g. Looking for black and gold decor theme, needs coordinator help..."
+                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none resize-none"
+                            />
+                          </div>
+
+                          <div className="flex gap-2 justify-end pt-2 border-t border-[color:var(--portal-border)]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingTourAttendance(false)
+                                setTourGuests(String(lead.metadata?.tourGuests || 'Miguel Martinez'))
+                                setTourNotes(String(lead.metadata?.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
+                                setTourBudget(String(lead.metadata?.estimatedBudget || '$5,000'))
+                                setCateringPreferences(String(lead.metadata?.cateringPreferences || 'Outside catering, open bar setup.'))
+                              }}
+                              className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveTourAttendance}
+                              disabled={savingTourAttendance}
+                              className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                            >
+                              {savingTourAttendance ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-left">
+                          <div className="space-y-3.5">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
+                                <p className="font-semibold text-white mt-0.5">{tourBudget}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] uppercase font-bold text-zinc-500">Guests on Tour</p>
+                                <p className="font-semibold text-zinc-300 mt-0.5">{tourGuests || 'None specified'}</p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[9px] uppercase font-bold text-zinc-500">Catering Preferences</p>
+                              <p className="font-semibold text-zinc-300 mt-0.5">{cateringPreferences}</p>
+                            </div>
+                          </div>
+                          <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3.5 sm:pt-0 sm:pl-4 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Intake / Specific Requirements</p>
+                            <p className="text-zinc-400 italic leading-relaxed mt-0.5">&ldquo;{tourNotes}&rdquo;</p>
+                          </div>
+                        </div>
+                      )}
+                    </section>
+
                     {/* Recent Activity */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
@@ -1866,27 +1985,51 @@ export default function LeadDetailPage({
                         {isEditingTourAttendance ? (
                           <div className="space-y-4 text-left">
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c] mb-3">Edit Tour Attendance</p>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c] mb-3">Edit Tour & Prep Details</p>
                               
                               <div className="space-y-3.5">
-                                <div>
-                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Primary Attendee</label>
-                                  <input
-                                    type="text"
-                                    disabled
-                                    value={lead.full_name}
-                                    className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-zinc-500 cursor-not-allowed outline-none"
-                                  />
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Primary Attendee</label>
+                                    <input
+                                      type="text"
+                                      disabled
+                                      value={lead.full_name}
+                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-zinc-500 cursor-not-allowed outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Guests / Additional Attendees</label>
+                                    <input
+                                      type="text"
+                                      value={tourGuests}
+                                      onChange={(e) => setTourGuests(e.target.value)}
+                                      placeholder="e.g. Miguel Martinez"
+                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                    />
+                                  </div>
                                 </div>
-                                <div>
-                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Guests / Additional Attendees</label>
-                                  <input
-                                    type="text"
-                                    value={tourGuests}
-                                    onChange={(e) => setTourGuests(e.target.value)}
-                                    placeholder="e.g. Miguel Martinez"
-                                    className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                                  />
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Estimated Budget</label>
+                                    <input
+                                      type="text"
+                                      value={tourBudget}
+                                      onChange={(e) => setTourBudget(e.target.value)}
+                                      placeholder="e.g. $5,000"
+                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Catering & Bar Preferences</label>
+                                    <input
+                                      type="text"
+                                      value={cateringPreferences}
+                                      onChange={(e) => setCateringPreferences(e.target.value)}
+                                      placeholder="Outside catering, open bar"
+                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                    />
+                                  </div>
                                 </div>
                                 <div>
                                   <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Tour Notes / Feedback</label>
@@ -1908,6 +2051,8 @@ export default function LeadDetailPage({
                                   setIsEditingTourAttendance(false)
                                   setTourGuests(String(lead.metadata?.tourGuests || 'Miguel Martinez'))
                                   setTourNotes(String(lead.metadata?.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
+                                  setTourBudget(String(lead.metadata?.estimatedBudget || '$5,000'))
+                                  setCateringPreferences(String(lead.metadata?.cateringPreferences || 'Outside catering, open bar setup.'))
                                 }}
                                 className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
                               >
@@ -1925,40 +2070,47 @@ export default function LeadDetailPage({
                           </div>
                         ) : (
                           <>
-                            <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Tour Attendance</p>
-                              <div className="space-y-2 text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
-                                  <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
-                                </div>
-                                {tourGuests ? (
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                                    <span className="font-bold text-zinc-300">{tourGuests} <span className="text-zinc-500 font-medium">(Guest)</span></span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Attendance</p>
+                                  <div className="space-y-1.5 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
+                                      <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
+                                    </div>
+                                    {tourGuests ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                                        <span className="font-bold text-zinc-300">{tourGuests} <span className="text-zinc-500 font-medium">(Guest)</span></span>
+                                      </div>
+                                    ) : null}
                                   </div>
-                                ) : null}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
+                                    <p className="text-xs font-semibold text-white mt-0.5">{tourBudget}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Catering / Bar</p>
+                                    <p className="text-xs font-semibold text-zinc-300 mt-0.5 truncate">{cateringPreferences}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3 sm:pt-0 sm:pl-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes & Prep</p>
+                                <p className="text-xs text-zinc-400 italic leading-relaxed">
+                                  &ldquo;{tourNotes}&rdquo;
+                                </p>
                                 <button
                                   type="button"
                                   onClick={() => setIsEditingTourAttendance(true)}
-                                  className="text-[10px] text-[#caa24c] hover:underline cursor-pointer font-bold text-left block"
+                                  className="text-[10px] text-[#caa24c] mt-2.5 hover:underline cursor-pointer font-bold text-left block"
                                 >
-                                  + Edit Attendance
+                                  Edit Prep Notes
                                 </button>
                               </div>
-                            </div>
-                            <div className="border-t border-[color:var(--portal-border)] pt-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes</p>
-                              <p className="text-xs text-zinc-400 italic leading-relaxed">
-                                &ldquo;{tourNotes}&rdquo;
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setIsEditingTourAttendance(true)}
-                                className="text-[10px] text-[#caa24c] mt-2 hover:underline cursor-pointer font-bold text-left block"
-                              >
-                                Edit Notes
-                              </button>
                             </div>
                           </>
                         )}
