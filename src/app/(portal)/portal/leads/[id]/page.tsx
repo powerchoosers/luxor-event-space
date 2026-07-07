@@ -1023,7 +1023,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`mt-0 grid gap-6 ${
+      <div className={`mt-3 grid gap-6 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
