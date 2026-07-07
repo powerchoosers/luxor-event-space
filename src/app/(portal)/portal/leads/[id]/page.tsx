@@ -2034,7 +2034,7 @@ function DetailItem({
           }`}
         />
       ) : (
-        <div className="group/value relative mt-2 inline-flex max-w-full items-center">
+        <div className={`group/value mt-2 inline-flex max-w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
           <p
             className={`min-w-0 break-words text-sm font-bold leading-normal text-zinc-100 transition-colors group-hover/value:text-white ${
               isMono ? 'font-mono text-xs' : ''
@@ -2043,13 +2043,13 @@ function DetailItem({
             {isSaving ? 'Saving...' : value}
           </p>
           {canCopy || (canEdit && !isEditing) ? (
-            <div className="pointer-events-none absolute left-full top-1/2 ml-2 inline-flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover/value:pointer-events-auto group-hover/value:opacity-100 group-focus-within/value:pointer-events-auto group-focus-within/value:opacity-100">
+            <div className="pointer-events-none ml-2 inline-flex shrink-0 items-center gap-1 opacity-0 transition-all duration-150 group-hover/value:pointer-events-auto group-hover/value:opacity-100 group-hover/value:translate-x-0 group-focus-within/value:pointer-events-auto group-focus-within/value:opacity-100 group-focus-within/value:translate-x-0">
               {canCopy ? (
                 <button
                   type="button"
                   aria-label={`Copy ${label}`}
                   onClick={copyDetail}
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all ${
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-all ${
                     copied
                       ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
                       : 'border-zinc-800 bg-black/35 text-zinc-500 hover:border-[#caa24c]/25 hover:text-[#f1d27a]'
@@ -2066,7 +2066,7 @@ function DetailItem({
                     event.stopPropagation()
                     startEditing()
                   }}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
                 >
                   <Pencil size={13} />
                 </button>
