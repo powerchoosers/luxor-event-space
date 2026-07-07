@@ -2000,82 +2000,146 @@ export default function LeadDetailPage({
 
 function ClientDossierLoading() {
   return (
-    <PortalPageFrame className="">
-      <div className="shrink-0 flex items-center justify-between">
-        <div className="h-4 w-32 luxor-skeleton rounded" />
-        <div className="h-8 w-44 luxor-skeleton rounded-lg" />
+    <PortalPageFrame className="max-w-[1560px] !gap-0">
+      {/* 1. Header Back & Status */}
+      <div className="mb-4 flex shrink-0 items-center justify-between">
+        <div className="h-4 w-40 luxor-skeleton rounded" />
+        <div className="h-6 w-20 luxor-skeleton rounded-full animate-pulse" />
       </div>
 
-      <div className="sticky top-0 z-20 rounded-2xl border border-zinc-900/80 bg-black/55 px-3 py-3 shadow-xl shadow-black/20 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-7 w-24 luxor-skeleton rounded-full" />
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="rounded-xl border border-zinc-900 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
-            <div className="flex items-center justify-between gap-4">
-              <div className="h-3 w-16 luxor-skeleton rounded" />
-              <div className="h-4 w-10 luxor-skeleton rounded-full" />
-            </div>
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <div className="h-6 w-28 luxor-skeleton rounded" />
-              <div className="h-4 w-20 luxor-skeleton rounded" />
+      {/* 2. Top Header Card */}
+      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 lg:p-6 shadow-2xl shadow-black/10">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="flex min-w-0 gap-4">
+            <div className="h-20 w-20 shrink-0 rounded-full luxor-skeleton animate-pulse" />
+            <div className="min-w-0 pt-1 flex-1 space-y-3">
+              <div className="h-8 w-64 max-w-full luxor-skeleton rounded animate-pulse" />
+              <div className="flex flex-wrap gap-4 mt-2">
+                <div className="h-4 w-20 luxor-skeleton rounded" />
+                <div className="h-4 w-24 luxor-skeleton rounded" />
+                <div className="h-4 w-20 luxor-skeleton rounded" />
+              </div>
+              <div className="h-3.5 w-44 luxor-skeleton rounded mt-2" />
             </div>
           </div>
-        ))}
-      </div>
-
-      <div className="shrink-0 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-3">
-          <div className="h-10 w-56 luxor-skeleton rounded-lg" />
-          <div className="h-4 w-80 max-w-full luxor-skeleton rounded" />
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <div className="h-9 w-28 luxor-skeleton rounded-lg" />
+            <div className="h-9 w-28 luxor-skeleton rounded-lg" />
+            <div className="h-9 w-32 luxor-skeleton rounded-lg animate-pulse" />
+          </div>
         </div>
-        <div className="flex gap-3">
-          <div className="h-9 w-32 luxor-skeleton rounded-lg" />
-          <div className="h-9 w-32 luxor-skeleton rounded-lg" />
-          <div className="h-9 w-36 luxor-skeleton rounded-lg" />
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {Array.from({ length: 9 }).map((_, index) => (
-              <div key={index} className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4">
-                <div className="h-3 w-24 luxor-skeleton rounded" />
-                <div className="mt-4 h-4 w-28 luxor-skeleton rounded" />
+        <div className="border-t border-[color:var(--portal-border)] mt-5 pt-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="flex flex-col items-center text-center space-y-2">
+                <div className="h-8 w-8 rounded-full luxor-skeleton animate-pulse" />
+                <div className="h-3.5 w-16 luxor-skeleton rounded" />
+                <div className="h-3 w-10 luxor-skeleton rounded" />
               </div>
             ))}
           </div>
-          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-6">
-            <div className="h-3 w-48 luxor-skeleton rounded" />
-            <div className="mt-5 h-5 w-3/4 luxor-skeleton rounded" />
+        </div>
+      </section>
+
+      {/* 3. Sticky Tab Bar */}
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-8">
+        <div className="flex min-w-max gap-5">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="h-6 w-16 luxor-skeleton rounded-full" />
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Split Column Layout */}
+      <div className="mt-3 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Next Step Skeleton */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 shrink-0 rounded-full luxor-skeleton animate-pulse" />
+                <div className="min-w-0 flex-1 space-y-2.5">
+                  <div className="h-3 w-16 luxor-skeleton rounded" />
+                  <div className="h-5 w-36 luxor-skeleton rounded" />
+                  <div className="h-4 w-48 luxor-skeleton rounded" />
+                  <div className="h-8 w-32 luxor-skeleton rounded-lg mt-1" />
+                </div>
+              </div>
+            </section>
+
+            {/* Client Details Skeleton */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="space-y-2">
+                  <div className="h-3 w-20 luxor-skeleton rounded" />
+                  <div className="h-5 w-32 luxor-skeleton rounded" />
+                </div>
+                <div className="h-5 w-5 luxor-skeleton rounded" />
+              </div>
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg luxor-skeleton" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-12 luxor-skeleton rounded" />
+                      <div className="h-4 w-40 luxor-skeleton rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
-          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-6">
-            <div className="h-4 w-56 luxor-skeleton rounded" />
-            <div className="mt-6 grid gap-3">
-              <div className="h-16 luxor-skeleton rounded-xl" />
-              <div className="h-16 w-5/6 luxor-skeleton rounded-xl" />
-              <div className="h-16 w-4/5 luxor-skeleton rounded-xl" />
+
+          {/* Event Details Skeleton */}
+          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+              <div className="space-y-2">
+                <div className="h-3 w-20 luxor-skeleton rounded" />
+                <div className="h-4 w-48 luxor-skeleton rounded" />
+              </div>
+            </div>
+            <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="flex items-center gap-3 min-h-[72px]">
+                  <div className="h-8 w-8 rounded-lg luxor-skeleton" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-16 luxor-skeleton rounded" />
+                    <div className="h-4 w-32 luxor-skeleton rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Message Payload Skeleton */}
+          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+            <div className="h-3 w-32 luxor-skeleton rounded mb-3" />
+            <div className="space-y-2">
+              <div className="h-4 w-full luxor-skeleton rounded" />
+              <div className="h-4 w-5/6 luxor-skeleton rounded" />
             </div>
           </div>
         </div>
 
-        <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="rounded-2xl border border-zinc-900 bg-black/40 p-6">
-              <div className="h-5 w-44 luxor-skeleton rounded" />
-              <div className="mt-6 grid gap-3">
-                <div className="h-14 luxor-skeleton rounded-xl" />
-                <div className="h-14 luxor-skeleton rounded-xl" />
-                <div className="h-14 w-5/6 luxor-skeleton rounded-xl" />
-              </div>
+        {/* Sidebar Recommended Actions Column Skeleton */}
+        <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
+          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+              <div className="h-5 w-40 luxor-skeleton rounded" />
+              <div className="h-3 w-20 luxor-skeleton rounded" />
             </div>
-          ))}
+            <div className="grid gap-2.5">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] p-3">
+                  <div className="h-8 w-8 rounded-lg luxor-skeleton shrink-0" />
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <div className="h-4 w-32 luxor-skeleton rounded" />
+                    <div className="h-3 w-40 luxor-skeleton rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </PortalPageFrame>
