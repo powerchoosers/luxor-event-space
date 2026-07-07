@@ -330,7 +330,7 @@ export default function LeadDetailPage({
       window.removeEventListener('resize', scheduleIndicatorUpdate)
       cancelAnimationFrame(frame)
     }
-  }, [activeLeadTab])
+  }, [activeLeadTab, lead?.id])
 
   useEffect(() => {
     setShowInternalSignals(false)
