@@ -375,10 +375,10 @@ export function PortalSelect({
             <motion.div
               ref={dropdownRef}
               role="listbox"
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.985 }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
               className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
               style={{ 
                 backgroundColor: 'color-mix(in srgb, var(--portal-bg) 82%, transparent)',
@@ -531,10 +531,10 @@ export function PortalDatePicker({
             <motion.div
               ref={dropdownRef}
               role="dialog"
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.985 }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
               className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
               style={{ 
                 backgroundColor: 'color-mix(in srgb, var(--portal-bg) 82%, transparent)',
