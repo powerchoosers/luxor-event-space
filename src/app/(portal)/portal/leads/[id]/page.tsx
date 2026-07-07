@@ -29,9 +29,10 @@ import {
   Copy,
   Check,
   Pencil,
+  MapPin,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 
 type ZohoEmailMessage = {
   id: string
@@ -59,6 +60,7 @@ type EditableLeadField =
   | 'phone'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
+type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'booking' | 'billing' | 'documents' | 'messages' | 'notes'
 
 export default function LeadDetailPage({
   params,
@@ -117,6 +119,7 @@ export default function LeadDetailPage({
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   // Timeline tab filtering
+  const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
@@ -831,10 +834,30 @@ export default function LeadDetailPage({
   }
 
   const scrollToSection = (sectionId: string) => {
-    if (sectionId === 'lead-tasks') {
+    const tabMap: Record<string, LeadDetailTab> = {
+      'lead-overview': 'overview',
+      'lead-activity': 'activity',
+      'lead-tasks': 'tasks',
+      'lead-booking': 'booking',
+      'lead-billing': 'billing',
+      'lead-documents': 'documents',
+      'lead-messages': 'messages',
+      'lead-notes': 'notes',
+    }
+    const nextTab = tabMap[sectionId] ?? 'overview'
+    setActiveLeadTab(nextTab)
+    if (nextTab === 'messages') {
+      setActiveFeedTab('comms')
+    }
+    if (nextTab === 'notes') {
+      setActiveFeedTab('notes')
+    }
+    if (nextTab === 'activity') {
+      setActiveFeedTab('all')
+    }
+    if (nextTab === 'tasks') {
       setShowTaskTools(true)
     }
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const quickNoteTemplates = [
     { label: 'Call recap', value: 'Call recap:\n- \nNext step:\n', type: 'call_log' as const },
@@ -859,87 +882,128 @@ export default function LeadDetailPage({
           ? 'Status changes will appear here automatically when the lead moves.'
           : 'Use the note box above to add the first update or wait for email history to sync.'
 
+  const tabItems: Array<{ id: LeadDetailTab; label: string; count?: number }> = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'activity', label: 'Activity', count: activityCounts.all },
+    { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
+    { id: 'booking', label: 'Booking', count: sortedBookings.length },
+    { id: 'billing', label: 'Billing', count: sortedInvoices.length },
+    { id: 'documents', label: 'Documents', count: sortedBookings.length + sortedInvoices.length },
+    { id: 'messages', label: 'Messages', count: activityCounts.comms },
+    { id: 'notes', label: 'Notes', count: activityCounts.notes },
+  ]
+
   return (
-    <PortalPageFrame className="">
-      <div className="shrink-0 flex items-center justify-between">
-        <Link href="/portal/leads" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 transition-colors hover:text-white">
-          <ArrowLeft size={14} /> Back to Leads
+    <PortalPageFrame className="max-w-[1560px] gap-4">
+      <div className="flex shrink-0 items-center justify-between">
+        <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
+          <ArrowLeft size={13} /> Back to Leads & Clients
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Lead Lifecycle:</span>
-          <PortalSelect
-            value={lead.status}
-            disabled={updatingStatus}
-            onChange={handleStatusChange}
-            options={[
-              { value: 'new', label: 'New Inquiry' },
-              { value: 'contacted', label: 'Contacted' },
-              { value: 'tour_requested', label: 'Tour Requested' },
-              { value: 'tour_confirmed', label: 'Tour Confirmed' },
-              { value: 'proposal_sent', label: 'Proposal Sent' },
-              { value: 'booked', label: 'Booked (Won)' },
-              { value: 'closed_lost', label: 'Closed Lost' }
-            ]}
-          />
-        </div>
+        <PortalStatusBadge status={lead.status} />
       </div>
 
-      <PortalPageHeader
-        icon={<User size={18} />}
-        title={lead.full_name}
-        description={`Event Profile: ${lead.event_type || 'Quinceañera'} • Captured via ${formatSourceLabel(lead)} on ${new Date(lead.created_at).toLocaleDateString()}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
+      <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
+        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
+          <div className="flex min-w-0 gap-4">
+            <div className="relative shrink-0">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
+                {getInitials(lead.full_name)}
+              </div>
+              <span className="absolute bottom-0 right-1 flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c]">
+                <User size={12} />
+              </span>
+            </div>
+            <div className="min-w-0 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+                {isGrandOpeningLead ? <Sparkles size={16} className="shrink-0 text-[#caa24c]" /> : null}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-[color:var(--portal-muted)]">
+                <span>{lead.event_type || 'Quinceañera'}</span>
+                <span>{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count open'}</span>
+                <span>{lead.target_date || 'Date TBD'}</span>
+                <span className="inline-flex items-center gap-1"><MapPin size={12} /> {formatSourceLabel(lead)}</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
+                Captured on {new Date(lead.created_at).toLocaleDateString()}.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {lead.email && (
-              <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800 transition-all">
-                <Mail size={14} /> Email client
+              <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35">
+                <Mail size={13} /> Email client
               </a>
             )}
             {lead.phone && (
-              <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-zinc-300 hover:bg-zinc-800 transition-all">
-                <Phone size={14} /> Call client
+              <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35">
+                <Phone size={13} /> Call client
               </a>
             )}
             <button
+              type="button"
               onClick={() => setIsInvoiceModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-lg hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-[#b98a3e]/20 transition-all hover:bg-[#a8792f] active:scale-95"
             >
-              <DollarSign size={14} /> Draft Invoice
+              <DollarSign size={13} /> Create invoice
             </button>
           </div>
-        }
-      />
+        </div>
 
-      <div className="sticky top-0 z-20 rounded-2xl border border-zinc-900/80 bg-black/55 px-3 py-3 shadow-xl shadow-black/20 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            { id: 'lead-overview', label: 'Overview' },
-            { id: 'lead-activity', label: 'Activity' },
-            { id: 'lead-tasks', label: 'Tasks' },
-            { id: 'lead-booking', label: 'Booking' },
-            { id: 'lead-billing', label: 'Billing' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => scrollToSection(item.id)}
-              className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-all hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
-            >
-              {item.label}
-            </button>
+        <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
+          <LeadLifecycleRail currentStatus={lead.status} />
+        </div>
+
+        <div className="portal-scrollbar flex gap-1 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2">
+          {tabItems.map((item) => {
+            const isActive = activeLeadTab === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setActiveLeadTab(item.id)
+                  if (item.id === 'messages') setActiveFeedTab('comms')
+                  if (item.id === 'notes') setActiveFeedTab('notes')
+                  if (item.id === 'activity') setActiveFeedTab('all')
+                  if (item.id === 'tasks') setShowTaskTools(true)
+                }}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                  isActive
+                    ? 'bg-[color:var(--portal-card)] text-[#a8792f] shadow-sm ring-1 ring-[#caa24c]/18'
+                    : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]'
+                }`}
+              >
+                {item.label}
+                {typeof item.count === 'number' ? (
+                  <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>
+                    {item.count}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {activeLeadTab === 'overview' ? (
+        <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-3">
+          {summaryCards.map((card) => (
+            <LeadStatCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone} />
           ))}
         </div>
-      </div>
+      ) : null}
 
-      <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-3">
-        {summaryCards.map((card) => (
-          <LeadStatCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone} />
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
+      <div className={`grid gap-6 ${
+        activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
+          ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
+          : 'lg:grid-cols-1'
+      }`}>
         {/* Main Details and Activity Column */}
         <div className="space-y-6">
+          {activeLeadTab === 'overview' ? (
+            <>
           {isGrandOpeningLead ? (
             <div className="rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/8 p-5 shadow-xl shadow-black/20 luxor-soft-enter">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -962,13 +1026,13 @@ export default function LeadDetailPage({
           ) : null}
 
           <div className="space-y-4">
-            <div className="rounded-2xl border border-zinc-900 bg-black/25 p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+            <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Lead Details</p>
                   <p className="mt-1 text-xs text-zinc-600">Contact and planning details that belong near the top.</p>
                 </div>
-                <span className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
                   Customer facing
                 </span>
               </div>
@@ -988,7 +1052,7 @@ export default function LeadDetailPage({
                   />
                 ))}
               </div>
-              <div className="mt-4 rounded-xl border border-zinc-900/80 bg-zinc-950/45 p-4">
+              <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
@@ -997,7 +1061,7 @@ export default function LeadDetailPage({
                   <button
                     type="button"
                     onClick={() => setShowInternalSignals((current) => !current)}
-                    className="inline-flex items-center justify-center rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                    className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f]"
                   >
                     {showInternalSignals ? 'Hide details' : 'Show details'}
                   </button>
@@ -1021,7 +1085,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* User Message */}
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 luxor-soft-enter" id="lead-message">
+          <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 luxor-soft-enter" id="lead-message">
             <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
               {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
             </h4>
@@ -1058,9 +1122,12 @@ export default function LeadDetailPage({
               </div>
             </div>
           )}
+            </>
+          ) : null}
 
-          <div id="lead-activity" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/20 shadow-xl luxor-soft-enter scroll-mt-24">
-            <div className="mb-6 border-b border-zinc-900 pb-4">
+          {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
+          <div id="lead-activity" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl luxor-soft-enter scroll-mt-24">
+            <div className="mb-6 border-b border-[color:var(--portal-border)] pb-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/90">
                   <MessageSquare size={16} className="text-[#caa24c]" />
@@ -1280,12 +1347,18 @@ export default function LeadDetailPage({
               </div>
             )}
           </div>
+          ) : null}
         </div>
 
         {/* Sidebar Panel Column */}
-        <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-          <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-3">
+        <div className={`space-y-6 ${
+          activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
+            ? 'lg:sticky lg:top-4 lg:self-start'
+            : ''
+        }`}>
+          {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
+          <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter">
+            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
               <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
                 <ClipboardCheck size={16} className="text-zinc-500" />
                 Recommended Actions
@@ -1305,9 +1378,11 @@ export default function LeadDetailPage({
               ))}
             </div>
           </div>
+          ) : null}
 
-          <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            <div className="mb-4 flex items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+          {activeLeadTab === 'tasks' ? (
+          <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
               <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
                 <Briefcase size={16} className="text-zinc-500" />
                 Tasks & Checklist
@@ -1417,8 +1492,10 @@ export default function LeadDetailPage({
               </>
             )}
           </div>
+          ) : null}
 
-          <div id="lead-booking" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          {activeLeadTab === 'booking' || activeLeadTab === 'documents' ? (
+          <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileSignature size={16} className="text-zinc-500" />
@@ -1491,8 +1568,10 @@ export default function LeadDetailPage({
               </div>
             )}
           </div>
+          ) : null}
 
-          <div id="lead-billing" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          {activeLeadTab === 'billing' || activeLeadTab === 'documents' ? (
+          <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />
@@ -1539,6 +1618,7 @@ export default function LeadDetailPage({
               </div>
             )}
           </div>
+          ) : null}
         </div>
       </div>
 
@@ -1898,6 +1978,56 @@ function ClientDossierLoading() {
   )
 }
 
+function LeadLifecycleRail({ currentStatus }: { currentStatus: LuxorInquiry['status'] }) {
+  const steps: Array<{ status: LuxorInquiry['status']; label: string; dateLabel: string }> = [
+    { status: 'new', label: 'Inquiry', dateLabel: 'Intake' },
+    { status: 'contacted', label: 'Contacted', dateLabel: 'Outreach' },
+    { status: 'tour_requested', label: 'Tour', dateLabel: 'Schedule' },
+    { status: 'tour_confirmed', label: 'Tour Confirmed', dateLabel: 'Confirmed' },
+    { status: 'proposal_sent', label: 'Proposal', dateLabel: 'Sent' },
+    { status: 'booked', label: 'Booked', dateLabel: 'Deposit' },
+  ]
+  const currentIndex = currentStatus === 'closed_lost'
+    ? -1
+    : Math.max(0, steps.findIndex((step) => step.status === currentStatus))
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {steps.map((step, index) => {
+          const isDone = currentIndex >= index && currentIndex !== -1
+          const isCurrent = currentIndex === index
+          return (
+            <div key={step.status} className="relative min-w-0">
+              {index < steps.length - 1 ? (
+                <span className={`absolute left-[calc(50%+1.2rem)] right-[calc(-50%+1.2rem)] top-4 hidden h-px xl:block ${isDone ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`} />
+              ) : null}
+              <div className="relative flex flex-col items-center text-center">
+                <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-black ${
+                  isDone
+                    ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
+                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                }`}>
+                  {isDone ? <Check size={13} /> : index + 1}
+                </span>
+                <span className={`mt-2 truncate text-[10px] font-black uppercase tracking-[0.12em] ${isCurrent ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                  {step.label}
+                </span>
+                <span className="mt-0.5 text-[9px] font-semibold text-[color:var(--portal-faint)]">{step.dateLabel}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {currentStatus === 'closed_lost' ? (
+        <p className="mt-3 rounded-lg border border-zinc-500/15 bg-zinc-500/5 px-3 py-2 text-xs font-semibold text-[color:var(--portal-muted)]">
+          This lead is currently marked closed lost. Re-open it if the client comes back.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function ClientActionButton({
   icon,
   label,
@@ -1916,14 +2046,14 @@ function ClientActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3 py-2.5 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
+      className="group flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[color:var(--portal-border)] disabled:hover:bg-[color:var(--portal-soft)]"
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-[#f1d27a]">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors group-hover:text-[#a8792f]">
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{label}</span>
-        <span className="mt-1 block text-[9px] font-medium leading-4 text-zinc-500">{detail}</span>
+        <span className="block text-xs font-bold text-[color:var(--portal-text)] transition-colors">{label}</span>
+        <span className="mt-1 block text-[9px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</span>
       </span>
     </button>
   )
@@ -1999,11 +2129,11 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group/card relative min-h-[92px] rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
+      className={`group/card relative min-h-[92px] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
-      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div>
 
       {isEditing ? (
         <input
@@ -2029,14 +2159,14 @@ function DetailItem({
               setIsEditing(false)
             }
           }}
-          className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-black/45 px-3 py-2 text-sm font-bold text-white outline-none transition-all placeholder:text-zinc-700 focus:border-[#caa24c]/45 ${
+          className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 py-2 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
             isMono ? 'font-mono' : ''
           }`}
         />
       ) : (
         <div className={`group/value relative mt-2 flex w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
           <p
-            className={`min-w-0 flex-1 truncate text-sm font-bold leading-normal text-zinc-100 transition-all duration-150 group-hover/value:pr-[5.5rem] group-hover/value:text-white ${
+            className={`min-w-0 flex-1 truncate text-sm font-bold leading-normal text-[color:var(--portal-text)] transition-all duration-150 group-hover/value:pr-[5.5rem] ${
               isMono ? 'font-mono text-xs' : ''
             }`}
           >
@@ -2052,7 +2182,7 @@ function DetailItem({
                   className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border transition-all ${
                     copied
                       ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
-                      : 'border-zinc-800 bg-black/35 text-zinc-500 hover:border-[#caa24c]/25 hover:text-[#f1d27a]'
+                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[#a8792f]'
                   }`}
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -2066,7 +2196,7 @@ function DetailItem({
                     event.stopPropagation()
                     startEditing()
                   }}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#a8792f]"
                 >
                   <Pencil size={13} />
                 </button>
@@ -2075,7 +2205,7 @@ function DetailItem({
           ) : null}
         </div>
       )}
-      {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#caa24c]">{subtext}</p>}
+      {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#a8792f]">{subtext}</p>}
     </div>
   )
 }
@@ -2099,17 +2229,27 @@ function LeadStatCard({
   }
 
   return (
-    <div className="rounded-xl border border-zinc-900 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 shadow-xl shadow-black/10">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</p>
         <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${toneClasses[tone]}`}>Live</span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="max-w-[70%] font-mono text-lg font-bold text-white leading-tight">{value}</p>
-        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[#d7c29a]/60">{detail}</p>
+        <p className="max-w-[70%] font-mono text-lg font-bold leading-tight text-[color:var(--portal-text)]">{value}</p>
+        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</p>
       </div>
     </div>
   )
+}
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
 }
 
 function normalizeLeadFieldValue(field: EditableLeadField, value: string): string | number | null {
