@@ -575,3 +575,54 @@ export async function sendMarketingCampaignNow(id: string) {
     detail: await getMarketingCampaignDetail(id),
   }
 }
+
+export type MarketingListMember = {
+  id: string
+  created_at: string
+  email: string
+  full_name: string | null
+  source: string | null
+  metadata: Record<string, unknown>
+}
+
+export async function addMarketingMember(
+  email: string,
+  fullName?: string | null,
+  source?: string | null,
+): Promise<MarketingListMember | null> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) throw new Error('Email is required.')
+
+  const result = await supabaseRest<MarketingListMember[]>('luxor_marketing_list', {
+    method: 'POST',
+    headers: {
+      'Prefer': 'resolution=merge-duplicates, return=representation',
+    },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      full_name: fullName || null,
+      source: source || null,
+    }),
+  })
+  return result?.[0] ?? null
+}
+
+export async function removeMarketingMember(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return false
+
+  await supabaseRest('luxor_marketing_list?email=eq.' + encodeURIComponent(normalizedEmail), {
+    method: 'DELETE',
+  })
+  return true
+}
+
+export async function isMarketingMember(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return false
+
+  const results = await supabaseRest<MarketingListMember[]>('luxor_marketing_list?email=eq.' + encodeURIComponent(normalizedEmail), {
+    method: 'GET',
+  })
+  return Array.isArray(results) && results.length > 0
+}

@@ -3,6 +3,7 @@ import { createLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus
 import { createNote } from '@/lib/luxorNotesServer'
 import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { addMarketingMember } from '@/lib/luxorMarketingServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -46,6 +47,14 @@ export async function POST(request: NextRequest) {
   try {
     const payload = (await request.json()) as LuxorInquiryInput
     const inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined)
+
+    if (inquiry && inquiry.email) {
+      try {
+        await addMarketingMember(inquiry.email, inquiry.full_name, inquiry.source)
+      } catch (mktError) {
+        console.error('Inquiry created but failed to auto-add to marketing list:', mktError)
+      }
+    }
 
     return NextResponse.json({ inquiry }, { status: 201 })
   } catch (error) {

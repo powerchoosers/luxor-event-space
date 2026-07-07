@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useLayoutEffect, useRef, useState, use } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -30,6 +31,7 @@ import {
   Check,
   Pencil,
   MapPin,
+  Star,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
@@ -128,6 +130,11 @@ export default function LeadDetailPage({
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
 
+  // Marketing subscription states
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [togglingMarketing, setTogglingMarketing] = useState(false)
+  const [marketingMessage, setMarketingMessage] = useState<'added' | 'removed' | null>(null)
+
   useLayoutEffect(() => {
     const updateIndicator = () => {
       const activeButton = tabButtonRefs.current[activeLeadTab]
@@ -148,6 +155,61 @@ export default function LeadDetailPage({
     setShowInternalSignals(false)
     setShowTaskTools(false)
   }, [id])
+
+  useEffect(() => {
+    const email = lead?.email
+    if (!email) return
+    let active = true
+
+    const checkSubscription = async () => {
+      try {
+        const res = await fetch(`/api/marketing/members?email=${encodeURIComponent(email)}`)
+        if (res.ok && active) {
+          const data = await res.json()
+          setIsSubscribed(data.subscribed)
+        }
+      } catch (err) {
+        console.error('Failed to query subscriber status:', err)
+      }
+    }
+
+    checkSubscription()
+    return () => { active = false }
+  }, [lead?.email])
+
+  const handleToggleMarketing = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!lead?.email || togglingMarketing) return
+
+    setTogglingMarketing(true)
+    const newStatus = !isSubscribed
+
+    try {
+      const res = await fetch('/api/marketing/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: lead.email,
+          fullName: lead.full_name,
+          source: lead.source,
+          action: newStatus ? 'subscribe' : 'unsubscribe',
+        }),
+      })
+
+      if (res.ok) {
+        setIsSubscribed(newStatus)
+        setMarketingMessage(newStatus ? 'added' : 'removed')
+        window.setTimeout(() => setMarketingMessage(null), 2500)
+      } else {
+        throw new Error('Failed to update marketing list subscription.')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Unable to update marketing subscription status.')
+    } finally {
+      setTogglingMarketing(false)
+    }
+  }
 
   const fetchAllData = async () => {
     try {
@@ -939,9 +1001,47 @@ export default function LeadDetailPage({
               </span>
             </div>
             <div className="min-w-0 pt-1">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="truncate font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
                 {isGrandOpeningLead ? <Sparkles size={16} className="shrink-0 text-[#caa24c]" /> : null}
+                {lead.email && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleToggleMarketing}
+                      disabled={togglingMarketing}
+                      className="group relative flex h-5 w-5 shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50"
+                      title={isSubscribed ? "Remove from marketing list" : "Add to marketing list"}
+                    >
+                      <div className="relative h-5 w-5 shrink-0">
+                        {/* Background outline star */}
+                        <Star size={18} className="text-zinc-650 transition-colors group-hover:text-zinc-400" />
+                        
+                        {/* Animated liquid fill mask star */}
+                        <div 
+                          className="absolute bottom-0 left-0 right-0 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" 
+                          style={{ height: isSubscribed ? '100%' : '0%' }}
+                        >
+                          <Star size={18} className="text-[#caa24c] fill-[#caa24c] absolute bottom-0 left-0" />
+                        </div>
+                      </div>
+                    </button>
+                    <AnimatePresence>
+                      {marketingMessage && (
+                        <motion.span
+                          initial={{ opacity: 0, x: -4 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 4 }}
+                          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                          className={`text-[9px] font-black uppercase tracking-[0.18em] ${
+                            marketingMessage === 'added' ? 'text-emerald-450' : 'text-zinc-550'
+                          }`}
+                        >
+                          {marketingMessage === 'added' ? 'Added to marketing' : 'Removed from marketing'}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[color:var(--portal-muted)]">
                 <span>{lead.event_type || 'Quinceañera'}</span>
