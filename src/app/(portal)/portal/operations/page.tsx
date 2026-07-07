@@ -46,6 +46,28 @@ type SubTab =
   | 'cleaning'
   | 'staff'
 
+type EditFormData = {
+  id?: string
+  service?: string
+  provider?: string
+  amount?: number | string
+  frequency?: string
+  due_date?: string | null
+  status?: string
+  title?: string
+  description?: string | null
+  priority?: string
+  category?: 'furniture' | 'supplies' | 'decor' | 'other'
+  name?: string
+  count?: number
+  unit?: string
+  vendor_type?: string
+  email?: string | null
+  phone?: string | null
+  rating?: string
+  coi_active?: boolean
+}
+
 export default function OperationsPage() {
   return (
     <Suspense fallback={null}>
@@ -75,6 +97,24 @@ function OperationsPageContent() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false)
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+
+  // Edit / Delete states
+  const [editingItem, setEditingItem] = useState<{
+    type: 'bill' | 'task' | 'inventory' | 'vendor'
+    data: LuxorBill | LuxorTask | LuxorInventoryItem | LuxorVendor
+  } | null>(null)
+  const [editFormData, setEditFormData] = useState<EditFormData | null>(null)
+  const [deletingItem, setDeletingItem] = useState<{ type: 'bill' | 'task' | 'inventory' | 'vendor'; id: string; name: string } | null>(null)
+  const [submittingEdit, setSubmittingEdit] = useState(false)
+  const [submittingDelete, setSubmittingDelete] = useState(false)
+
+  useEffect(() => {
+    if (editingItem) {
+      setEditFormData({ ...editingItem.data })
+    } else {
+      setEditFormData(null)
+    }
+  }, [editingItem])
 
   // Forms state
   const [billService, setBillService] = useState('')
@@ -257,6 +297,72 @@ function OperationsPageContent() {
     }
   }
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingItem || !editFormData) return
+    setSubmittingEdit(true)
+    try {
+      const payload = {
+        type: editingItem.type,
+        id: editingItem.data.id,
+        ...editFormData
+      }
+      
+      const res = await fetch('/api/operations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) throw new Error('Failed to update operations entry.')
+      const updated = await res.json()
+      
+      if (editingItem.type === 'bill') {
+        setBills(prev => prev.map(b => b.id === updated.id ? updated : b))
+      } else if (editingItem.type === 'task') {
+        setMaintenanceTasks(prev => prev.map(t => t.id === updated.id ? updated : t))
+      } else if (editingItem.type === 'inventory') {
+        setInventory(prev => prev.map(i => i.id === updated.id ? updated : i))
+      } else if (editingItem.type === 'vendor') {
+        setVendors(prev => prev.map(v => v.id === updated.id ? updated : v))
+      }
+      
+      setEditingItem(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update entry.')
+    } finally {
+      setSubmittingEdit(false)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingItem) return
+    setSubmittingDelete(true)
+    try {
+      const { type, id } = deletingItem
+      const res = await fetch(`/api/operations?type=${type}&id=${id}`, {
+        method: 'DELETE'
+      })
+      if (!res.ok) throw new Error('Failed to delete operations entry.')
+      
+      if (type === 'bill') {
+        setBills(prev => prev.filter(b => b.id !== id))
+      } else if (type === 'task') {
+        setMaintenanceTasks(prev => prev.filter(t => t.id !== id))
+      } else if (type === 'inventory') {
+        setInventory(prev => prev.filter(i => i.id !== id))
+      } else if (type === 'vendor') {
+        setVendors(prev => prev.filter(v => v.id !== id))
+      }
+      
+      setDeletingItem(null)
+      setEditingItem(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete entry.')
+    } finally {
+      setSubmittingDelete(false)
+    }
+  }
+
   // Derive counts
   const furnitureCounts = inventory.filter((item: LuxorInventoryItem) => item.category === 'furniture')
   const suppliesCounts = inventory.filter((item: LuxorInventoryItem) => item.category === 'supplies')
@@ -408,7 +514,7 @@ function OperationsPageContent() {
                       </tr>
                     ) : (
                       bills.map((bill, idx) => (
-                        <tr key={bill.id || idx} className="hover:bg-zinc-955/20 transition-colors">
+                        <tr key={bill.id || idx} className="hover:bg-zinc-900/40 transition-colors cursor-pointer" onClick={() => setEditingItem({ type: 'bill', data: bill })}>
                           <td className="px-8 py-5 font-bold text-white">{bill.service}</td>
                           <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
                           <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
@@ -457,7 +563,7 @@ function OperationsPageContent() {
                       </tr>
                     ) : (
                       maintenanceTasks.map((task) => (
-                        <tr key={task.id} className="hover:bg-zinc-955/20 transition-colors">
+                        <tr key={task.id} className="hover:bg-zinc-900/40 transition-colors cursor-pointer" onClick={() => setEditingItem({ type: 'task', data: task })}>
                           <td className="px-8 py-5">
                             <p className="text-xs font-bold text-white leading-none">{task.title}</p>
                             <p className="text-[9px] text-zinc-550 mt-1.5">Ticket ID: #{task.id.slice(0, 8)}</p>
@@ -475,7 +581,8 @@ function OperationsPageContent() {
                           <td className="px-8 py-5 text-right">
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 const nextStatus = task.status === 'completed' ? 'pending' : 'completed'
                                 fetch('/api/operations', {
                                   method: 'PATCH',
@@ -536,7 +643,7 @@ function OperationsPageContent() {
                     <p className="text-xs text-zinc-555 italic">No furniture items audited.</p>
                   ) : (
                     furnitureCounts.map((item, idx) => (
-                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
+                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded" onClick={() => setEditingItem({ type: 'inventory', data: item })}>
                         <div>
                           <p className="text-xs font-bold text-white">{item.name}</p>
                           <p className="text-[10px] text-zinc-550 mt-0.5">Asset verification logged</p>
@@ -565,7 +672,7 @@ function OperationsPageContent() {
                     <p className="text-xs text-zinc-555 italic">No supplies items audited.</p>
                   ) : (
                     suppliesCounts.map((item, idx) => (
-                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
+                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded" onClick={() => setEditingItem({ type: 'inventory', data: item })}>
                         <div>
                           <p className="text-xs font-bold text-white">{item.name}</p>
                           <p className="text-[10px] text-zinc-550 mt-0.5">Audit: weekly auto-replenish</p>
@@ -606,7 +713,7 @@ function OperationsPageContent() {
                 <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
               ) : (
                 vendors.map((v, idx) => (
-                  <div key={v.id || idx} className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3">
+                  <div key={v.id || idx} className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3 cursor-pointer hover:border-[#caa24c]/40 transition-all" onClick={() => setEditingItem({ type: 'vendor', data: v })}>
                     <div className="flex justify-between items-start">
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
@@ -1068,6 +1175,353 @@ function OperationsPageContent() {
           </div>
         </form>
       </PortalModal>
+
+      {/* 5. Edit Modals */}
+      {editingItem && editFormData && (
+        <PortalModal
+          isOpen={!!editingItem}
+          onClose={() => setEditingItem(null)}
+          title={`Edit ${
+            editingItem.type === 'bill'
+              ? 'Operational Bill'
+              : editingItem.type === 'task'
+              ? 'Maintenance Ticket'
+              : editingItem.type === 'inventory'
+              ? 'Inventory Item'
+              : 'Preferred Vendor'
+          }`}
+        >
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            {editingItem.type === 'bill' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Service Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.service || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, service: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Provider / Account</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.provider || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, provider: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Amount (USD)</label>
+                    <input
+                      type="number"
+                      required
+                      value={editFormData.amount !== undefined ? editFormData.amount : ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Frequency</label>
+                    <PortalSelect
+                      value={editFormData.frequency || 'Monthly'}
+                      onChange={(val) => setEditFormData({ ...editFormData, frequency: val })}
+                      options={[
+                        { value: 'Monthly', label: 'Monthly' },
+                        { value: 'Quarterly', label: 'Quarterly' },
+                        { value: 'Annually', label: 'Annually' }
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Due Date</label>
+                  <PortalDatePicker
+                    value={editFormData.due_date ? editFormData.due_date.slice(0, 10) : ''}
+                    onChange={(val) => setEditFormData({ ...editFormData, due_date: val })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Payment Status</label>
+                  <PortalSelect
+                    value={editFormData.status || 'unpaid'}
+                    onChange={(val) => setEditFormData({ ...editFormData, status: val })}
+                    options={[
+                      { value: 'unpaid', label: 'Unpaid' },
+                      { value: 'paid', label: 'Paid' }
+                    ]}
+                  />
+                </div>
+              </>
+            )}
+
+            {editingItem.type === 'task' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Ticket Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.title || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Description</label>
+                  <textarea
+                    value={editFormData.description || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none h-20 resize-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-555">Priority</label>
+                    <PortalSelect
+                      value={editFormData.priority || 'medium'}
+                      onChange={(val) => setEditFormData({ ...editFormData, priority: val })}
+                      options={[
+                        { value: 'low', label: 'Low' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'high', label: 'High' }
+                      ]}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-555">Due Date</label>
+                    <PortalDatePicker
+                      value={editFormData.due_date ? editFormData.due_date.slice(0, 10) : ''}
+                      onChange={(val) => setEditFormData({ ...editFormData, due_date: val })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Lifecycle Status</label>
+                  <PortalSelect
+                    value={editFormData.status || 'pending'}
+                    onChange={(val) => setEditFormData({ ...editFormData, status: val })}
+                    options={[
+                      { value: 'pending', label: 'Pending / Active' },
+                      { value: 'completed', label: 'Completed' }
+                    ]}
+                  />
+                </div>
+              </>
+            )}
+
+            {editingItem.type === 'inventory' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Category</label>
+                  <PortalSelect
+                    value={editFormData.category || 'furniture'}
+                    onChange={(val) => setEditFormData({ ...editFormData, category: val as LuxorInventoryItem['category'] })}
+                    options={[
+                      { value: 'furniture', label: 'Furniture Assets' },
+                      { value: 'supplies', label: 'Hospitality Supplies' },
+                      { value: 'decor', label: 'Decor Inventory' },
+                      { value: 'other', label: 'Other Items' }
+                    ]}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Item Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.name || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Quantity In Stock</label>
+                    <input
+                      type="number"
+                      required
+                      value={editFormData.count !== undefined ? editFormData.count : ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, count: Number(e.target.value) })}
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Unit</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.unit || 'pcs'}
+                      onChange={(e) => setEditFormData({ ...editFormData, unit: e.target.value })}
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Status Level</label>
+                  <PortalSelect
+                    value={editFormData.status || 'Good'}
+                    onChange={(val) => setEditFormData({ ...editFormData, status: val as LuxorInventoryItem['status'] })}
+                    options={[
+                      { value: 'Good', label: 'Good (Adequate stock)' },
+                      { value: 'Low', label: 'Low (Needs replenish)' },
+                      { value: 'Out of Stock', label: 'Out of Stock (Replenish Urgent)' }
+                    ]}
+                  />
+                </div>
+              </>
+            )}
+
+            {editingItem.type === 'vendor' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Vendor Type</label>
+                  <PortalSelect
+                    value={editFormData.vendor_type || 'DJs & Music'}
+                    onChange={(val) => setEditFormData({ ...editFormData, vendor_type: val })}
+                    options={[
+                      { value: 'DJs & Music', label: 'DJs & Music' },
+                      { value: 'Fine Caterers', label: 'Fine Caterers' },
+                      { value: 'Security Crew', label: 'Security Crew' },
+                      { value: 'Florist Services', label: 'Florist Services' },
+                      { value: 'Rentals & Decor', label: 'Rentals & Decor' },
+                      { value: 'Valet Service', label: 'Valet Service' },
+                      { value: 'Bartenders', label: 'Bartenders' },
+                      { value: 'Photographers', label: 'Photographers' }
+                    ]}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-zinc-550">Business Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.name || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Email</label>
+                    <input
+                      type="email"
+                      value={editFormData.email || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value || null })}
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Phone</label>
+                    <input
+                      type="text"
+                      value={editFormData.phone || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value || null })}
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Rating</label>
+                    <PortalSelect
+                      value={editFormData.rating || '5.0 ⭐'}
+                      onChange={(val) => setEditFormData({ ...editFormData, rating: val })}
+                      options={[
+                        { value: '5.0 ⭐', label: '5.0 ⭐' },
+                        { value: '4.9 ⭐', label: '4.9 ⭐' },
+                        { value: '4.8 ⭐', label: '4.8 ⭐' },
+                        { value: '4.7 ⭐', label: '4.7 ⭐' },
+                        { value: '4.5 ⭐', label: '4.5 ⭐' }
+                      ]}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Active COI Insurance</label>
+                    <PortalSelect
+                      value={editFormData.coi_active !== undefined ? String(editFormData.coi_active) : 'true'}
+                      onChange={(val) => setEditFormData({ ...editFormData, coi_active: val === 'true' })}
+                      options={[
+                        { value: 'true', label: 'Yes - Active COI' },
+                        { value: 'false', label: 'No - Pending COI' }
+                      ]}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-2 justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingItem({
+                    type: editingItem.type,
+                    id: editingItem.data.id,
+                    name: (editingItem.type === 'bill' ? editFormData.service : editingItem.type === 'task' ? editFormData.title : editFormData.name) || ''
+                  })
+                }}
+                className="px-4 py-2 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+              >
+                Delete
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-500 hover:text-zinc-350 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all disabled:opacity-50"
+                >
+                  {submittingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </PortalModal>
+      )}
+
+      {/* 6. Delete Confirmation Modal */}
+      {deletingItem && (
+        <PortalModal
+          isOpen={!!deletingItem}
+          onClose={() => setDeletingItem(null)}
+          title="Confirm Deletion"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-white">&ldquo;{deletingItem.name}&rdquo;</span>? 
+              This action cannot be undone and will permanently remove the record from the venue operations database.
+            </p>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingItem(null)}
+                className="px-4 py-2 border border-transparent text-xs font-bold text-zinc-550 hover:text-zinc-350 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={submittingDelete}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all disabled:opacity-50"
+              >
+                {submittingDelete ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </PortalModal>
+      )}
     </PortalPageFrame>
   )
 }

@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { LuxorTask } from '@/lib/luxorInquiryTypes'
-
-export type LuxorBill = {
-  id: string
-  created_at: string
-  updated_at: string
-  service: string
-  frequency: string
-  provider: string
-  amount: number
-  status: 'paid' | 'unpaid' | 'overdue'
-  due_date: string | null
-}
+import { LuxorTask, LuxorBill } from '@/lib/luxorInquiryTypes'
+export type { LuxorBill }
 
 export type LuxorInventoryItem = {
   id: string
@@ -210,6 +199,43 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(updated)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update operation entry.'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type')
+    const id = searchParams.get('id')
+
+    if (!type || !id) {
+      return NextResponse.json({ error: 'Type and ID parameters are required.' }, { status: 400 })
+    }
+
+    let table = ''
+    if (type === 'bill') table = 'luxor_bills'
+    else if (type === 'inventory') table = 'luxor_inventory'
+    else if (type === 'vendor') table = 'luxor_vendors'
+    else if (type === 'cleaning') table = 'luxor_cleaning_logs'
+    else if (type === 'utility') table = 'luxor_utility_readings'
+    else if (type === 'task') table = 'luxor_tasks'
+    else {
+      return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
+    }
+
+    await supabaseRest(`${table}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete operation entry.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
