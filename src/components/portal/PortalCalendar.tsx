@@ -76,19 +76,22 @@ export function PortalCalendar({
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null)
   const [selectedItem, setSelectedItem] = React.useState<PortalCalendarItem | null>(null)
-  const visibleDays = getVisibleDays(anchor, view)
-  const itemsByDate = items.reduce<Record<string, PortalCalendarItem[]>>((groups, item) => {
-    groups[item.date] ??= []
-    groups[item.date].push(item)
-    return groups
-  }, {})
+  const visibleDays = React.useMemo(() => getVisibleDays(anchor, view), [anchor, view])
+  const itemsByDate = React.useMemo(() => {
+    return items.reduce<Record<string, PortalCalendarItem[]>>((groups, item) => {
+      groups[item.date] ??= []
+      groups[item.date].push(item)
+      return groups
+    }, {})
+  }, [items])
+  const formattedRange = React.useMemo(() => formatRange(anchor, view), [anchor, view])
 
   return (
     <section className="portal-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
       <div className="flex flex-col gap-4 border-b border-[color:var(--portal-border)] p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">{title}</p>
-          <h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">{formatRange(anchor, view)}</h2>
+          <h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">{formattedRange}</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">

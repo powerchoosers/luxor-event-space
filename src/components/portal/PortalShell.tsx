@@ -26,15 +26,25 @@ import {
   Brush
 } from 'lucide-react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState, useSyncExternalStore, Suspense } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
-import { PortalElenaChat } from '@/components/portal/PortalElenaChat'
+
+const PortalElenaChat = dynamic(
+  () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
+  {
+    ssr: false,
+    loading: () => (
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]" />
+    ),
+  }
+)
 
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
@@ -96,27 +106,35 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   // Header Global Search State
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
-  const togglePortalTheme = () => {
+  const togglePortalTheme = useCallback(() => {
     const next = portalTheme === 'dark' ? 'light' : 'dark'
     window.localStorage.setItem('luxor-portal-theme', next)
     window.dispatchEvent(new Event('luxor-portal-theme'))
-  }
+  }, [portalTheme])
 
   // Derived Search Results
-  const searchResults = searchQuery.trim().length >= 2
-    ? inquiries.filter((inq) =>
-        inq.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inq.email && inq.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (inq.event_type && inq.event_type.toLowerCase().includes(searchQuery.toLowerCase()))
-      ).slice(0, 5)
-    : []
+  const searchResults = useMemo(() => {
+    const query = deferredSearchQuery.trim().toLowerCase()
+    if (query.length < 2) return []
+
+    return inquiries.filter((inq) =>
+      inq.full_name.toLowerCase().includes(query) ||
+      (inq.email && inq.email.toLowerCase().includes(query)) ||
+      (inq.event_type && inq.event_type.toLowerCase().includes(query))
+    ).slice(0, 5)
+  }, [deferredSearchQuery, inquiries])
 
   useEffect(() => {
     let active = true
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
     const loadData = async () => {
       try {
-        const res = await fetch('/api/inquiries')
+        const res = await fetch('/api/inquiries', {
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        })
         if (res.ok && active) {
           const data = await res.json()
           setInquiries(data)
@@ -127,23 +145,25 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         }
       } catch (err) {
         console.error('Failed to sync notification counter:', err)
+      } finally {
+        if (active) {
+          timeoutId = setTimeout(loadData, 60000)
+        }
       }
     }
 
     loadData()
-    // Poll notifications status every 30 seconds
-    const interval = setInterval(loadData, 30000)
     return () => {
       active = false
-      clearInterval(interval)
+      if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [pathname])
+  }, [])
 
-  const selectSearchResult = (id: string) => {
+  const selectSearchResult = useCallback((id: string) => {
     setSearchQuery('')
     setSearchFocused(false)
     router.push(`/portal/leads/${id}`)
-  }
+  }, [router])
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
@@ -218,14 +238,15 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                     <AnimatePresence initial={false}>
                       {operationsExpanded && !sidebarCollapsed && (
                         <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                          initial={{ opacity: 0, scaleY: 0.96 }}
+                          animate={{ opacity: 1, scaleY: 1 }}
+                          exit={{ opacity: 0, scaleY: 0.96 }}
+                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                          style={{ originY: 0 }}
                           className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1 overflow-hidden"
                         >
                           {operationsSubItems.map((sub) => {
-                            const tabParam = searchParams.get('tab')
+                            const tabParam = searchParams?.get('tab')
                             const isSubActive = pathname === '/portal/operations' && (
                               (sub.href.includes('tab=dashboard') && !tabParam) ||
                               (!!tabParam && sub.href.includes(`tab=${tabParam}`))
@@ -342,7 +363,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               </button>
             
             {/* Bell Notifications */}
-            <Link href="/portal/leads" className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
+            <Link href="/portal/leads" prefetch className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
               <Bell size={18} className="text-zinc-400 transition-colors" />
               {notificationCount > 0 && (
                 <span className="absolute right-1.5 top-1.5 h-4 min-w-4 rounded-full border border-black bg-blue-600 text-[8px] font-black text-white flex items-center justify-center px-1 font-mono">
@@ -351,13 +372,13 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               )}
             </Link>
 
-            <Link href="/portal/communications" className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Messages">
+            <Link href="/portal/communications" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Messages">
               <MessageSquare size={18} className="text-zinc-400" />
             </Link>
             
             <button
               type="button"
-              onClick={() => setElenaOpen(!elenaOpen)}
+              onClick={() => setElenaOpen((current) => !current)}
               className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${
                 elenaOpen 
                   ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
@@ -418,7 +439,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           <RouteTransition surface="portal">{children}</RouteTransition>
         </div>
       </main>
-      <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />
+      {elenaOpen ? <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} /> : null}
     </body>
   )
 }
@@ -439,6 +460,7 @@ function SidebarLink({
   return (
     <Link
       href={href}
+      prefetch
       title={collapsed ? label : undefined}
       aria-label={label}
       className={`group relative flex items-center rounded-lg border text-sm font-medium transition-all ${
@@ -479,6 +501,7 @@ function SidebarSubLink({
   return (
     <Link
       href={href}
+      prefetch
       className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
         active
           ? 'text-[#f1d27a] font-bold bg-[#caa24c]/5'

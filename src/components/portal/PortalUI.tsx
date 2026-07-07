@@ -55,7 +55,7 @@ export function PortalTableCard({
   className?: string
 }) {
   return (
-    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
+    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
       {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-6">{controls}</div> : null}
       <div className="portal-scrollbar min-h-[22rem] flex-1 overflow-auto" data-portal-table-scroller>
         {children}
@@ -99,7 +99,7 @@ export function PortalBridgeCard({
   action?: React.ReactNode
 }) {
   return (
-    <section className="relative isolate overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-2xl shadow-black/20">
+    <section className="portal-render-surface relative isolate overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-2xl shadow-black/20">
       <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-[#caa24c]/10 blur-3xl" />
       <div className="relative">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{label}</p>
@@ -123,7 +123,7 @@ export function PortalEmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center">
+    <div className="portal-render-surface flex flex-col items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center">
       {icon ? <div className="mb-4 text-zinc-700">{icon}</div> : null}
       <h3 className="text-base font-bold text-white/90">{title}</h3>
       <p className="mt-2 max-w-md text-xs leading-5 text-zinc-500">{description}</p>
@@ -263,7 +263,7 @@ export function PortalModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 w-full ${maxWidth} flex flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl max-h-[90vh]`}
+            className={`relative z-10 w-full ${maxWidth} flex max-h-[90vh] transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl`}
           >
             {title ? (
               <>
@@ -296,7 +296,7 @@ export function PortalDetailSection({
   action?: React.ReactNode
 }) {
   return (
-    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] backdrop-blur-xl p-6 shadow-xl">
+    <div className="nodal-void-card portal-render-surface rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">{title}</h3>
         {action}
@@ -323,16 +323,45 @@ export function PortalSelect({
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const selectedOption = options.find((opt) => opt.value === value)
+  const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 })
+
+  const updateCoords = React.useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const nextCoords = {
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        width: rect.width,
+      }
+      setCoords((current) => {
+        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width) {
+          return current
+        }
+        return nextCoords
+      })
+    }
+  }, [])
 
   React.useEffect(() => {
     if (isOpen) {
-      const handle = requestAnimationFrame(() => {
-        dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      })
-      return () => cancelAnimationFrame(handle)
+      updateCoords()
+      let frame = 0
+      const scheduleCoords = () => {
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(updateCoords)
+      }
+      window.addEventListener('resize', scheduleCoords)
+      window.addEventListener('scroll', scheduleCoords, true)
+
+      return () => {
+        window.removeEventListener('resize', scheduleCoords)
+        window.removeEventListener('scroll', scheduleCoords, true)
+        cancelAnimationFrame(frame)
+      }
     }
-  }, [isOpen])
+  }, [isOpen, updateCoords])
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -350,9 +379,14 @@ export function PortalSelect({
   return (
     <div className={`relative min-w-[140px] select-none ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (disabled) return
+          updateCoords()
+          setIsOpen((current) => !current)
+        }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_12px_30px_-18px_rgba(0,0,0,0.75)] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-[color:var(--portal-text,#f7efe3)]"
@@ -363,57 +397,65 @@ export function PortalSelect({
       <AnimatePresence>
         {isOpen ? (
           <>
-            <motion.div
-              aria-hidden="true"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.12 }}
-              className="fixed inset-0 z-40 cursor-default"
-              onClick={() => setIsOpen(false)}
-            />
-            <motion.div
-              ref={dropdownRef}
-              role="listbox"
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.985 }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
-              style={{ 
-                backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                backdropFilter: 'blur(24px)', 
-                WebkitBackdropFilter: 'blur(24px)' 
-              }}
-            >
-              <div className="space-y-0.5">
-                {options.map((opt) => {
-                  const isSelected = opt.value === value
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      onClick={() => {
-                        onChange(opt.value)
-                        setIsOpen(false)
-                      }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        isSelected
-                          ? 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
-                          : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
-                      }`}
-                    >
-                      <span>{opt.label}</span>
-                      <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? 'text-[#f1d27a]' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
-                        ●
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </motion.div>
+            {createPortal(
+              <>
+                <motion.div
+                  aria-hidden="true"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="fixed inset-0 z-[9990] cursor-default"
+                  onClick={() => setIsOpen(false)}
+                />
+                <motion.div
+                  ref={dropdownRef}
+                  role="listbox"
+                  initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                  transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                  className="portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                  style={{ 
+                    top: `${coords.top}px`,
+                    left: `${coords.left}px`,
+                    width: `${coords.width}px`,
+                    backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                    backdropFilter: 'blur(24px)', 
+                    WebkitBackdropFilter: 'blur(24px)' 
+                  }}
+                >
+                  <div className="space-y-0.5">
+                    {options.map((opt) => {
+                      const isSelected = opt.value === value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            onChange(opt.value)
+                            setIsOpen(false)
+                          }}
+                          className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                            isSelected
+                              ? 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
+                              : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? 'text-[#f1d27a]' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
+                            ●
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              </>,
+              document.body
+            )}
           </>
         ) : null}
       </AnimatePresence>
@@ -434,15 +476,43 @@ export function PortalDatePicker({
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const buttonRef = React.useRef<HTMLButtonElement>(null)
+  const [coords, setCoords] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+  const updateCoords = React.useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const nextCoords = {
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - 256, window.innerWidth - 264)),
+      }
+      setCoords((current) => {
+        if (current.top === nextCoords.top && current.left === nextCoords.left) {
+          return current
+        }
+        return nextCoords
+      })
+    }
+  }, [])
 
   React.useEffect(() => {
     if (isOpen) {
-      const handle = requestAnimationFrame(() => {
-        dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      })
-      return () => cancelAnimationFrame(handle)
+      updateCoords()
+      let frame = 0
+      const scheduleCoords = () => {
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(updateCoords)
+      }
+      window.addEventListener('resize', scheduleCoords)
+      window.addEventListener('scroll', scheduleCoords, true)
+
+      return () => {
+        window.removeEventListener('resize', scheduleCoords)
+        window.removeEventListener('scroll', scheduleCoords, true)
+        cancelAnimationFrame(frame)
+      }
     }
-  }, [isOpen])
+  }, [isOpen, updateCoords])
   
   // Current navigation view month and year
   const [viewDate, setViewDate] = React.useState(() => {
@@ -474,13 +544,16 @@ export function PortalDatePicker({
   const totalDays = new Date(year, month + 1, 0).getDate()
 
   // Create the day grid array (including padding for empty cells)
-  const dayCells: (Date | null)[] = []
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    dayCells.push(null)
-  }
-  for (let d = 1; d <= totalDays; d++) {
-    dayCells.push(new Date(year, month, d))
-  }
+  const dayCells = React.useMemo(() => {
+    const cells: (Date | null)[] = []
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      cells.push(null)
+    }
+    for (let d = 1; d <= totalDays; d++) {
+      cells.push(new Date(year, month, d))
+    }
+    return cells
+  }, [month, startingDayOfWeek, totalDays, year])
 
   const handlePrevMonth = () => {
     setViewDate(new Date(year, month - 1, 1))
@@ -506,8 +579,12 @@ export function PortalDatePicker({
   return (
     <div className={`relative min-w-[140px] select-none ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          updateCoords()
+          setIsOpen((current) => !current)
+        }}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30"
@@ -519,89 +596,95 @@ export function PortalDatePicker({
       <AnimatePresence>
         {isOpen ? (
           <>
-            <motion.div
-              aria-hidden="true"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.12 }}
-              className="fixed inset-0 z-[45] cursor-default"
-              onClick={() => setIsOpen(false)}
-            />
-            <motion.div
-              ref={dropdownRef}
-              role="dialog"
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.985 }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
-              style={{ 
-                backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                backdropFilter: 'blur(24px)', 
-                WebkitBackdropFilter: 'blur(24px)' 
-              }}
-            >
-            {/* Header navigation */}
-            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
-              <button
-                type="button"
-                onClick={handlePrevMonth}
-                className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
-              >
-                ◀
-              </button>
-              <span className="font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
-                {monthNames[month]} {year}
-              </span>
-              <button
-                type="button"
-                onClick={handleNextMonth}
-                className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
-              >
-                ▶
-              </button>
-            </div>
+            {createPortal(
+              <>
+                <motion.div
+                  aria-hidden="true"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="fixed inset-0 z-[9990] cursor-default"
+                  onClick={() => setIsOpen(false)}
+                />
+                <motion.div
+                  ref={dropdownRef}
+                  role="dialog"
+                  initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                  transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                  className="portal-scrollbar fixed z-[9999] w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                  style={{ 
+                    top: `${coords.top}px`,
+                    left: `${coords.left}px`,
+                    width: '256px',
+                    backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                    backdropFilter: 'blur(24px)', 
+                    WebkitBackdropFilter: 'blur(24px)' 
+                  }}
+                >
+                  {/* Header navigation */}
+                  <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
+                    <button
+                      type="button"
+                      onClick={handlePrevMonth}
+                      className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
+                    >
+                      ◀
+                    </button>
+                    <span className="font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
+                      {monthNames[month]} {year}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleNextMonth}
+                      className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
+                    >
+                      ▶
+                    </button>
+                  </div>
 
-            {/* Weekday Labels */}
-            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                <span key={day}>{day}</span>
-              ))}
-            </div>
+                  {/* Weekday Labels */}
+                  <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                      <span key={day}>{day}</span>
+                    ))}
+                  </div>
 
-            {/* Day Grid */}
-            <div className="grid grid-cols-7 gap-1">
-              {dayCells.map((day, idx) => {
-                if (!day) return <span key={`empty-${idx}`} />
+                  {/* Day Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {dayCells.map((day, idx) => {
+                      if (!day) return <span key={`empty-${idx}`} />
 
-                const isSelected = value && formatYYYYMMDD(day) === value
-                const isToday = formatYYYYMMDD(day) === formatYYYYMMDD(new Date())
-                
-                return (
-                  <button
-                    key={day.getTime()}
-                    type="button"
-                    onClick={() => handleSelectDay(day)}
-                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all ${
-                      isSelected
-                        ? 'border border-[#caa24c]/40 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
-                        : isToday
-                        ? 'border border-blue-500/30 font-bold text-blue-500 hover:bg-black/5'
-                        : 'text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
-                    }`}
-                  >
-                    {day.getDate()}
-                  </button>
-                )
-              })}
-            </div>
-            </motion.div>
+                      const isSelected = value && formatYYYYMMDD(day) === value
+                      const isToday = formatYYYYMMDD(day) === formatYYYYMMDD(new Date())
+                      
+                      return (
+                        <button
+                          key={day.getTime()}
+                          type="button"
+                          onClick={() => handleSelectDay(day)}
+                          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all ${
+                            isSelected
+                              ? 'border border-[#caa24c]/40 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
+                              : isToday
+                              ? 'border border-blue-500/30 font-bold text-blue-500 hover:bg-black/5'
+                              : 'text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                          }`}
+                        >
+                          {day.getDate()}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              </>,
+              document.body
+            )}
           </>
         ) : null}
       </AnimatePresence>
     </div>
   )
 }
-
-

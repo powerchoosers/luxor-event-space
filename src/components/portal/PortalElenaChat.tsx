@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { 
   X, 
   Send, 
@@ -8,7 +8,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import Image from 'next/image'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 type ExecutedQuery = {
   query: string
@@ -90,6 +90,7 @@ function getQueryIndicatorText(sql: string) {
 }
 
 export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
+  const reduceMotion = useReducedMotion()
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -100,17 +101,18 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
+  }, [reduceMotion])
+
   useEffect(() => {
     if (isOpen) {
-      scrollToBottom()
+      const frame = requestAnimationFrame(scrollToBottom)
+      return () => cancelAnimationFrame(frame)
     }
-  }, [messages, isOpen])
+  }, [messages, isOpen, scrollToBottom])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const handleSend = async (textToSend: string) => {
+  const handleSend = useCallback(async (textToSend: string) => {
     if (!textToSend.trim() || isLoading) return
 
     const userMessage = textToSend.trim()
@@ -164,9 +166,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [activePath, isLoading, messages])
 
-  const handleConfirmAction = async (msgIndex: number, confirmation: { query: string; summary: string }) => {
+  const handleConfirmAction = useCallback(async (msgIndex: number, confirmation: { query: string; summary: string }) => {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
     setIsLoading(true)
 
@@ -215,9 +217,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [activePath, messages])
 
-  const handleCancelAction = (msgIndex: number) => {
+  const handleCancelAction = useCallback((msgIndex: number) => {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
     setMessages(prev => [
       ...prev,
@@ -226,16 +228,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         content: 'No worries bestie! 💁‍♀️ I cancelled the action. Nothing was modified!'
       }
     ])
-  }
+  }, [])
 
-  const pathSuggestions = getSuggestionsForPath(activePath)
+  const pathSuggestions = useMemo(() => getSuggestionsForPath(activePath), [activePath])
 
   return (
     <motion.aside 
-      initial={{ x: '100%' }}
+      initial={{ x: reduceMotion ? 0 : '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
-      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+      transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+      className="fixed right-0 top-0 z-50 flex h-full w-full transform-gpu flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#caa24c]/10 px-4">
@@ -269,15 +271,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
         <AnimatePresence initial={false}>
           {messages.map((msg, index) => (
-            <motion.div 
-              layout
+            <motion.div
               key={index} 
               className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.88, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 12, scale: 0.98, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
               >
                 {msg.role === 'assistant' && (
@@ -361,12 +362,11 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           {/* Typing indicator */}
           {isLoading && (
             <motion.div
-              layout
               key="thinking-indicator"
-              initial={{ opacity: 0, y: 20, scale: 0.9, originX: 0, originY: 1 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.96, originX: 0, originY: 1 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8, y: 10 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18 }}
               className="flex items-start gap-2 max-w-[80%]"
             >
               <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">

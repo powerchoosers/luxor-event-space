@@ -439,6 +439,16 @@ body[data-portal-theme='light'] .text-zinc-900 {
     background: linear-gradient(180deg, rgba(147, 197, 253, 1), rgba(37, 99, 235, 0.95));
   }
 
+  .portal-render-surface {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 28rem;
+  }
+
+  .portal-motion-surface {
+    will-change: transform;
+    transform: translateZ(0);
+  }
+
   .luxor-skeleton {
     position: relative;
     overflow: hidden;
@@ -590,6 +600,15 @@ body[data-portal-theme='light'] .text-zinc-900 {
   .luxor-soft-enter,
   .luxor-skeleton::after {
     animation: none !important;
+  }
+
+  body[data-portal-theme] *,
+  body[data-portal-theme] *::before,
+  body[data-portal-theme] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 

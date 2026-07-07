@@ -23,6 +23,7 @@ interface ThisWeekCalendarProps {
 
 export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   useEffect(() => {
     // Scroll today's card into view on mount
@@ -38,13 +39,13 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -220, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: -220, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 220, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: 220, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     }
   };
 
@@ -74,7 +75,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
         {/* Horizontal Scroll Container */}
         <div
           ref={scrollContainerRef}
-          className="flex gap-3 overflow-x-auto pb-5 pt-3 px-3 scroll-smooth scrollbar-thin scrollbar-thumb-amber-500/20 scrollbar-track-transparent snap-x"
+          className="flex gap-3 overflow-x-auto pb-5 pt-3 px-3 scrollbar-thin scrollbar-thumb-amber-500/20 scrollbar-track-transparent snap-x"
           style={{ scrollbarWidth: 'thin' }}
         >
           {days.map((day) => {
