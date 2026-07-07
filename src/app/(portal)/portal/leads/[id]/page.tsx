@@ -981,7 +981,10 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/30 shadow-lg shadow-black/10 backdrop-blur-3xl backdrop-saturate-150 sm:-top-6 lg:-top-8">
+      <div
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 backdrop-blur-3xl backdrop-saturate-150 sm:-top-6 lg:-top-8"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--portal-bg) 90%, transparent)' }}
+      >
         <div className="portal-scrollbar overflow-x-auto bg-transparent px-4">
           <div className="relative flex min-w-max gap-5">
             <span
@@ -2263,7 +2266,7 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group/card relative flex min-h-[72px] items-start gap-3 border-b border-[color:var(--portal-border)] px-0 py-3.5 transition-all hover:bg-[#caa24c]/[0.025] ${
+      className={`group/card relative flex min-h-[72px] items-start gap-3 border-b border-[color:var(--portal-border)] px-3 -mx-3 py-3.5 rounded-xl transition-all hover:bg-[#caa24c]/[0.025] hover:border-transparent ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
