@@ -599,7 +599,7 @@ thead.sticky th,
   position: sticky !important;
   top: 0 !important;
   z-index: 20 !important;
-  background-color: color-mix(in srgb, var(--portal-bg) 75%, transparent) !important;
+  background-color: color-mix(in srgb, var(--portal-bg) 82%, transparent) !important;
   backdrop-filter: blur(24px) !important;
   -webkit-backdrop-filter: blur(24px) !important;
 }
