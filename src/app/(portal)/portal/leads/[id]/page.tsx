@@ -2096,6 +2096,462 @@ export default function LeadDetailPage({
                 )
               }
               
+              if (currentStage === 'proposal') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Proposal</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Create, customize, and track your custom proposals.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Proposal Builder
+                      </button>
+                    </div>
+
+                    {/* Proposal Details & Proposal Items Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Proposal Details */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Proposal Summary</p>
+                            <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit Details</span>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Package Option</span>
+                              <span className="font-bold text-white">{lead.package_interest || 'Luxury Package'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Est. Total Amount</span>
+                              <span className="font-bold text-[#caa24c]">$12,500</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
+                              <span className="font-bold text-white">July 9, 2026</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Expiration Date</span>
+                              <span className="font-bold text-white">July 23, 2026</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Viewed by Client</span>
+                              <span className="font-bold text-emerald-400">Yes (July 10, 2026)</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Awaiting Signature</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Edit Proposal</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Duplicate</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Convert to Contract</button>
+                        </div>
+                      </section>
+
+                      {/* Proposal Items & Packages */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Line Items Breakdown</p>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                              <span className="text-zinc-400">Venue Rental Fee</span>
+                              <span className="font-mono font-bold text-white">$2,500</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                              <span className="text-zinc-400">Catering & Dinner Service</span>
+                              <span className="font-mono font-bold text-white">$6,000</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                              <span className="text-zinc-400">Bar Package (Open Bar)</span>
+                              <span className="font-mono font-bold text-white">$2,500</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                              <span className="text-zinc-400">Coordination & Design Fee</span>
+                              <span className="font-mono font-bold text-white">$1,500</span>
+                            </div>
+                            <div className="flex justify-between py-1.5 pt-2">
+                              <span className="font-bold text-white">Estimated Total</span>
+                              <span className="font-mono font-bold text-[#caa24c] text-sm">$12,500</span>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
+              if (currentStage === 'contract') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Contract</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Generate, sign, and manage legal agreements.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Contract Template
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Contract Status */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Agreement Status</p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Document Type</span>
+                              <span className="font-bold text-white">Venue Rental Contract</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Waiting for signature</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
+                              <span className="font-bold text-white">July 9, 2026</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Signed Date</span>
+                              <span className="font-bold text-zinc-500">Pending Client Signature</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Signers</span>
+                              <span className="font-bold text-white">Sophia Martinez, Venue Manager</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Contract</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Remind Client</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Download PDF</button>
+                        </div>
+                      </section>
+
+                      {/* Signature History */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Signature Timeline</p>
+                          <div className="space-y-3 text-xs">
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
+                              <div>
+                                <p className="font-bold text-white">Draft created by Venue Manager</p>
+                                <p className="text-[9px] text-zinc-500">July 9, 2026 at 10:45 AM</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
+                              <div>
+                                <p className="font-bold text-white">Contract sent to Sophia Martinez</p>
+                                <p className="text-[9px] text-zinc-500">July 9, 2026 at 10:48 AM</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 animate-pulse"><Circle size={4} className="fill-current" /></span>
+                              <div>
+                                <p className="font-bold text-white">Awaiting client signature</p>
+                                <p className="text-[9px] text-zinc-500">Emailed to sophia.m@example.com</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
+              if (currentStage === 'deposit') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Deposit</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Track initial deposit invoices and payment schedules.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        View Invoice
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Deposit Summary */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Deposit Invoice</p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Number</span>
+                              <span className="font-bold text-white">INV-2026-001</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Due Date</span>
+                              <span className="font-bold text-white">July 16, 2026</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Amount</span>
+                              <span className="font-bold text-[#caa24c] font-mono">$1,000</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Paid Status</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Pending</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
+                              <span className="font-bold text-white font-mono">$11,500</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Invoice</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Record Payment</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Refund</button>
+                        </div>
+                      </section>
+
+                      {/* Payment Schedule */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Payment Schedule</p>
+                          <div className="space-y-3 text-xs">
+                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                              <div>
+                                <p className="font-bold text-white">1. Initial Security Deposit</p>
+                                <p className="text-[9px] text-zinc-500">Due July 16, 2026</p>
+                              </div>
+                              <span className="font-mono font-bold text-[#caa24c]">$1,000</span>
+                            </div>
+                            <div className="flex justify-between py-1">
+                              <div>
+                                <p className="font-bold text-zinc-400">2. Event Rental Balance</p>
+                                <p className="text-[9px] text-zinc-500">Due July 31, 2026</p>
+                              </div>
+                              <span className="font-mono font-bold text-zinc-400">$11,500</span>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
+              if (currentStage === 'final_payment') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Final Payment</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Track event balances and final payment settlements.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        View Balance
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Final Payment Status */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Payment Summary</p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
+                              <span className="font-bold text-[#caa24c] font-mono">$11,500</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
+                              <span className="font-bold text-white">July 31, 2026</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Late Status</span>
+                              <span className="font-bold text-emerald-400">On Time</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
+                              <span className="font-bold text-white">INV-2026-001</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Pending</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Collect Final Payment</button>
+                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Reminder</button>
+                        </div>
+                      </section>
+
+                      {/* Payment History */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Transaction History</p>
+                          <div className="space-y-3 text-xs">
+                            <div className="flex justify-between items-center py-1.5 border-b border-zinc-850">
+                              <div>
+                                <p className="font-bold text-white">Initial Security Deposit</p>
+                                <p className="text-[9px] text-zinc-500">Paid July 12, 2026</p>
+                              </div>
+                              <span className="font-mono font-bold text-emerald-400">+$1,000 Paid</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1.5">
+                              <div>
+                                <p className="font-bold text-zinc-400">Event Rental Balance</p>
+                                <p className="text-[9px] text-zinc-500">Due July 31, 2026</p>
+                              </div>
+                              <span className="font-mono font-bold text-zinc-400">$11,500 Pending</span>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
+              if (currentStage === 'event') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Event Day</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Checklists, access details, and operations for event execution.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Run of Show
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Coordinator & Contacts */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                        <div>
+                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">On-Site operations</p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Head Contact</span>
+                              <span className="font-bold text-white">{lead.full_name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned Coordinator</span>
+                              <span className="font-bold text-white">Arianna Patterson</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Gate Access Code</span>
+                              <span className="font-mono font-bold text-[#caa24c]">*4920#</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Backdoor Code</span>
+                              <span className="font-mono font-bold text-white">1204</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Emergency Line</span>
+                              <span className="font-bold text-white">(210) 555-0199</span>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* Event Day Checklist */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Operation Milestones</p>
+                        <div className="space-y-2 text-xs">
+                          {[
+                            { label: 'Coordinator on-site briefing (2:00 PM)', done: true },
+                            { label: 'Caterer & DJ setup inspection (3:30 PM)', done: true },
+                            { label: 'Room decoration & table setup sign-off (4:30 PM)', done: false },
+                            { label: 'Main doors & gate open to guests (5:30 PM)', done: false },
+                            { label: 'Reception & dinner service starts (7:00 PM)', done: false },
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-3 py-0.5">
+                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-850 text-zinc-700'
+                              }`}>
+                                {item.done && <Check size={8} className="stroke-[3]" />}
+                              </span>
+                              <span className={item.done ? 'text-zinc-500 line-through' : 'text-white'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
+              if (currentStage === 'closing') {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-wider text-white">Closing</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Post-event wrap-ups, reviews, and security deposits.</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Complete Lead
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Post-Event Checklist */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Wrap-Up Checklist</p>
+                        <div className="space-y-2 text-xs">
+                          {[
+                            { label: 'Thank-you email sent', done: true },
+                            { label: 'Review request sent (Google, WeddingWire)', done: true },
+                            { label: 'Photo/video assets requested', done: false },
+                            { label: 'Security deposit return authorized', done: false },
+                            { label: 'Damage report & final inspection cleared', done: false },
+                            { label: 'Anniversary reminder automation active', done: true },
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-3 py-0.5">
+                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-850 text-zinc-700'
+                              }`}>
+                                {item.done && <Check size={8} className="stroke-[3]" />}
+                              </span>
+                              <span className={item.done ? 'text-zinc-500 line-through' : 'text-white'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* Feedback & Referrals */}
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Anniversary Reminder</p>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            Anniversary reminder is set for <strong>August 30, 2027</strong>. A marketing flow will trigger automatically 14 days prior.
+                          </p>
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )
+              }
+
               // Fallback cards for other stages
               return (
                 <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
@@ -2113,170 +2569,331 @@ export default function LeadDetailPage({
               )
             })()}
 
-          </div>
-
-          {/* Right Column: Sticky actions & summary */}
+             {/* Right Column: Sticky actions & summary */}
           <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
-            {/* Recommended Actions */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recommended Actions</p>
-                  <p className="mt-1 text-[10px] text-zinc-650 font-medium">Top priority first</p>
-                </div>
-              </div>
+            {(() => {
+              const currentStage = selectedStageOverride || activeStage
               
-              <div className="space-y-3">
-                {recommendedActions.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic py-4">No recommended actions at this stage.</p>
-                ) : (
-                  recommendedActions.map((action, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={action.onClick}
-                      disabled={action.disabled}
-                      className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/5 hover:border-[#caa24c]/20 transition-all duration-200 group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-[#caa24c] border border-zinc-800">
-                          {action.icon}
-                        </span>
+              if (currentStage === 'inquiry') {
+                return (
+                  <>
+                    {/* Recommended Actions */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <div>
-                          <p className="text-xs font-bold text-white group-hover:text-[#caa24c] transition-colors">{action.label}</p>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">{action.detail}</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recommended Actions</p>
+                          <p className="mt-1 text-[10px] text-zinc-650 font-medium">Top priority first</p>
                         </div>
                       </div>
-                      <span className="text-zinc-500 group-hover:text-white transition-colors">
-                        <ChevronRight size={14} />
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
+                      
+                      <div className="space-y-3">
+                        {recommendedActions.length === 0 ? (
+                          <p className="text-xs text-zinc-500 italic py-4">No recommended actions at this stage.</p>
+                        ) : (
+                          recommendedActions.map((action, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={action.onClick}
+                              disabled={action.disabled}
+                              className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/5 hover:border-[#caa24c]/20 transition-all duration-200 group cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-[#caa24c] border border-zinc-800">
+                                  {action.icon}
+                                </span>
+                                <div>
+                                  <p className="text-xs font-bold text-white group-hover:text-[#caa24c] transition-colors">{action.label}</p>
+                                  <p className="text-[10px] text-zinc-500 mt-0.5">{action.detail}</p>
+                                </div>
+                              </div>
+                              <span className="text-zinc-500 group-hover:text-white transition-colors">
+                                <ChevronRight size={14} />
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      
+                      <div className="mt-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLeadTab('tasks')}
+                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                        >
+                          View all tasks &rarr;
+                        </button>
+                      </div>
+                    </section>
+
+                    {/* Event Summary */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Summary</p>
+                        {!isEditingSummary ? (
+                          <button 
+                            type="button"
+                            onClick={() => setIsEditingSummary(true)}
+                            className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
+                          >
+                            <Pencil size={11} /> Edit
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {isEditingSummary ? (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Venue</label>
+                            <select
+                              value={summaryVenue}
+                              onChange={(e) => setSummaryVenue(e.target.value)}
+                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                            >
+                              <option value="Luxor Main Hall">Luxor Main Hall</option>
+                              <option value="Luxor Grand Pavilion">Luxor Grand Pavilion</option>
+                              <option value="Elena Garden Plaza">Elena Garden Pavilion</option>
+                              <option value="Palmas Terrace Suite">Palmas Terrace Suite</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Start Time</label>
+                              <input
+                                type="time"
+                                value={summaryStartTime}
+                                onChange={(e) => setSummaryStartTime(e.target.value)}
+                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">End Time</label>
+                              <input
+                                type="time"
+                                value={summaryEndTime}
+                                onChange={(e) => setSummaryEndTime(e.target.value)}
+                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Setup Time</label>
+                            <input
+                              type="text"
+                              value={summarySetupTime}
+                              onChange={(e) => setSummarySetupTime(e.target.value)}
+                              placeholder="e.g. 3:00 PM"
+                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Breakdown Time</label>
+                            <input
+                              type="text"
+                              value={summaryBreakdownTime}
+                              onChange={(e) => setSummaryBreakdownTime(e.target.value)}
+                              placeholder="e.g. 11:00 PM – 12:30 AM"
+                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingSummary(false)}
+                              className="px-3 py-1.5 rounded border border-zinc-850 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveSummary}
+                              disabled={savingSummary}
+                              className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                            >
+                              {savingSummary ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5">
+                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">Venue</span>
+                            <span className="text-xs font-bold text-white">{summaryVenue}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">Time</span>
+                            <span className="text-xs font-bold text-white">
+                              {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
+                            <span className="text-xs font-bold text-white">{summarySetupTime}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">Breakdown Time</span>
+                            <span className="text-xs font-bold text-white">{summaryBreakdownTime}</span>
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )
+              }
               
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => setActiveLeadTab('tasks')}
-                  className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                >
-                  View all tasks &rarr;
-                </button>
-              </div>
-            </section>
+              // For all stages other than inquiry, render the layout from the sister's mockup
+              const clientSummaryEmail = lead.email || 'sophia.m@example.com'
+              const clientSummaryPhone = lead.phone || '214-555-4321'
+              const clientSummaryAddress = lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'
+              const clientSummaryGuests = lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : '80 Guests (Estimated)'
+              const clientSummaryEventType = lead.event_type || 'Anniversary Party'
+              
+              let nextStepTitle = 'Send Proposal'
+              let nextStepDetail = 'Create and send custom proposal'
+              let nextStepButton = 'Create Proposal'
+              
+              if (currentStage === 'proposal') {
+                nextStepTitle = 'Convert to Contract'
+                nextStepDetail = 'Draft and send legal agreement'
+                nextStepButton = 'Create Contract'
+              } else if (currentStage === 'contract') {
+                nextStepTitle = 'Collect Deposit'
+                nextStepDetail = 'Send deposit invoice to client'
+                nextStepButton = 'Collect Deposit'
+              } else if (currentStage === 'deposit') {
+                nextStepTitle = 'Start Planning'
+                nextStepDetail = 'Open event planning checklist'
+                nextStepButton = 'Start Planning'
+              } else if (currentStage === 'planning') {
+                nextStepTitle = 'Final Payment Reminder'
+                nextStepDetail = 'Request final rental balance'
+                nextStepButton = 'Send Reminder'
+              } else if (currentStage === 'final_payment') {
+                nextStepTitle = 'Run Event Day'
+                nextStepDetail = 'Access checklist & operations'
+                nextStepButton = 'Start Event Day'
+              } else if (currentStage === 'event') {
+                nextStepTitle = 'Close Out & Review'
+                nextStepDetail = 'Send post-event feedback request'
+                nextStepButton = 'Close Out Event'
+              } else if (currentStage === 'closing') {
+                nextStepTitle = 'Complete Lead'
+                nextStepDetail = 'Archive lead as successful'
+                nextStepButton = 'Complete Lead'
+              }
 
-            {/* Event Summary */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Summary</p>
-                {!isEditingSummary ? (
-                  <button 
-                    type="button"
-                    onClick={() => setIsEditingSummary(true)}
-                    className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
-                  >
-                    <Pencil size={11} /> Edit
-                  </button>
-                ) : null}
-              </div>
+              return (
+                <>
+                  {/* CLIENT SUMMARY */}
+                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
+                    </div>
+                    <div className="space-y-3.5 text-xs text-left">
+                      <a href={`mailto:${clientSummaryEmail}`} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                        <Mail size={14} className="text-[#a8792f]" />
+                        <span>{clientSummaryEmail}</span>
+                      </a>
+                      <a href={`tel:${clientSummaryPhone}`} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                        <Phone size={14} className="text-[#a8792f]" />
+                        <span>{clientSummaryPhone}</span>
+                      </a>
+                      <div className="flex items-center gap-3 py-1 text-zinc-300">
+                        <MapPin size={14} className="text-[#a8792f]" />
+                        <span>{clientSummaryAddress}</span>
+                      </div>
+                      <div className="flex items-center gap-3 py-1 text-zinc-300">
+                        <Users size={14} className="text-[#a8792f]" />
+                        <span>{clientSummaryGuests}</span>
+                      </div>
+                      <div className="flex items-center gap-3 py-1 text-zinc-300">
+                        <Star size={14} className="text-[#a8792f]" />
+                        <span>{clientSummaryEventType}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                      <button
+                        type="button"
+                        onClick={() => scrollToSection('lead-message')}
+                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                      >
+                        View Full Details &rarr;
+                      </button>
+                    </div>
+                  </section>
 
-              {isEditingSummary ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Venue</label>
-                    <select
-                      value={summaryVenue}
-                      onChange={(e) => setSummaryVenue(e.target.value)}
-                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                    >
-                      <option value="Luxor Main Hall">Luxor Main Hall</option>
-                      <option value="Luxor Grand Pavilion">Luxor Grand Pavilion</option>
-                      <option value="Elena Garden Plaza">Elena Garden Plaza</option>
-                      <option value="Palmas Terrace Suite">Palmas Terrace Suite</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Start Time</label>
-                      <input
-                        type="time"
-                        value={summaryStartTime}
-                        onChange={(e) => setSummaryStartTime(e.target.value)}
-                        className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                      />
+                  {/* NEXT STEP */}
+                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Next Step</p>
                     </div>
-                    <div>
-                      <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">End Time</label>
-                      <input
-                        type="time"
-                        value={summaryEndTime}
-                        onChange={(e) => setSummaryEndTime(e.target.value)}
-                        className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                      />
+                    <div className="flex items-start gap-4 text-left">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20">
+                        <Calendar size={18} />
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-bold text-white leading-tight">{nextStepTitle}</h4>
+                        <p className="mt-1 text-[10px] text-zinc-500 leading-relaxed">{nextStepDetail}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Setup Time</label>
-                    <input
-                      type="text"
-                      value={summarySetupTime}
-                      onChange={(e) => setSummarySetupTime(e.target.value)}
-                      placeholder="e.g. 3:00 PM"
-                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Breakdown Time</label>
-                    <input
-                      type="text"
-                      value={summaryBreakdownTime}
-                      onChange={(e) => setSummaryBreakdownTime(e.target.value)}
-                      placeholder="e.g. 11:00 PM – 12:30 AM"
-                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                    />
-                  </div>
-                  <div className="flex gap-2 justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingSummary(false)}
-                      className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveSummary}
-                      disabled={savingSummary}
-                      className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
-                    >
-                      {savingSummary ? 'Saving...' : 'Save'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3.5">
-                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Venue</span>
-                    <span className="text-xs font-bold text-white">{summaryVenue}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Time</span>
-                    <span className="text-xs font-bold text-white">
-                      {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
-                    <span className="text-xs font-bold text-white">{summarySetupTime}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500">Breakdown Time</span>
-                    <span className="text-xs font-bold text-white">{summaryBreakdownTime}</span>
-                  </div>
-                </div>
-              )}
-            </section>
+                    <div className="mt-5">
+                      <button
+                        type="button"
+                        className="w-full py-2.5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95"
+                      >
+                        {nextStepButton}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* RECENT ACTIVITY */}
+                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                    </div>
+                    <div className="space-y-4 text-left">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                          <Check size={11} className="stroke-[3]" />
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-white leading-tight">Tour marked completed</p>
+                          <p className="text-[9px] text-zinc-500 mt-0.5">July 6, 2026 at 4:15 PM</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
+                          <Mail size={11} />
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-white leading-tight">Tour confirmation email sent</p>
+                          <p className="text-[9px] text-zinc-500 mt-0.5">July 5, 2026 at 9:21 AM</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+                          <Calendar size={11} />
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-white leading-tight">Tour scheduled</p>
+                          <p className="text-[9px] text-zinc-500 mt-0.5">July 5, 2026 at 9:10 AM</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setActiveLeadTab('activity')}
+                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                      >
+                        View All Activity &rarr;
+                      </button>
+                    </div>
+                  </section>
+                </>
+              )
+            })()}
+          </div>
           </div>
         </div>
       ) : (
