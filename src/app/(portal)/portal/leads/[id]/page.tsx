@@ -103,6 +103,13 @@ export default function LeadDetailPage({
 
   // Timeline tab filtering
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
+  const [showInternalSignals, setShowInternalSignals] = useState(false)
+  const [showTaskTools, setShowTaskTools] = useState(false)
+
+  useEffect(() => {
+    setShowInternalSignals(false)
+    setShowTaskTools(false)
+  }, [id])
 
   const fetchAllData = async () => {
     try {
@@ -523,7 +530,6 @@ export default function LeadDetailPage({
     return true
   })
   const latestActivityEntry = allActivityEntries[0] ?? null
-  const contactSummary = getContactSummary(lead)
   const leadAgeLabel = formatLeadAge(lead.created_at)
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
   const summaryCards = [
@@ -544,12 +550,6 @@ export default function LeadDetailPage({
       value: latestActivityEntry ? describeActivityEntry(latestActivityEntry) : 'No activity yet',
       detail: latestActivityEntry ? formatTimelineDate(latestActivityEntry.createdAt) : 'Nothing logged yet',
       tone: 'green' as const,
-    },
-    {
-      label: 'Contact',
-      value: contactSummary.label,
-      detail: contactSummary.detail,
-      tone: 'slate' as const,
     },
   ]
   const primaryDetails: Array<{ label: string; value: string; subtext?: string; isMono?: boolean }> = [
@@ -595,6 +595,7 @@ export default function LeadDetailPage({
     const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
     return aDue - bDue
   })
+  const pendingTaskCount = sortedTasks.filter((task) => task.status === 'pending').length
   const sortedBookings = [...bookings].sort((a, b) => {
     const aTime = new Date(a.updated_at || a.created_at).getTime()
     const bTime = new Date(b.updated_at || b.created_at).getTime()
@@ -702,6 +703,9 @@ export default function LeadDetailPage({
   }
 
   const scrollToSection = (sectionId: string) => {
+    if (sectionId === 'lead-tasks') {
+      setShowTaskTools(true)
+    }
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const quickNoteTemplates = [
@@ -799,7 +803,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-4">
+      <div id="lead-overview" className="grid gap-3 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-3">
         {summaryCards.map((card) => (
           <LeadStatCard key={card.label} label={card.label} value={card.value} detail={card.detail} tone={card.tone} />
         ))}
@@ -845,22 +849,27 @@ export default function LeadDetailPage({
                   <DetailItem key={item.label} label={item.label} value={item.value} subtext={item.subtext} />
                 ))}
               </div>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-900 bg-black/25 p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900 pb-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal Signals</p>
-                  <p className="mt-1 text-xs text-zinc-600">Useful for tracing where the lead came from and how it moved.</p>
+              <div className="mt-4 rounded-xl border border-zinc-900/80 bg-zinc-950/45 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
+                    <p className="mt-1 text-xs text-zinc-600">Source, referrer, and capture fields stay tucked away until you need them.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInternalSignals((current) => !current)}
+                    className="inline-flex items-center justify-center rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                  >
+                    {showInternalSignals ? 'Hide details' : 'Show details'}
+                  </button>
                 </div>
-                <span className="rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#f1d27a]">
-                  Internal only
-                </span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {internalDetails.map((item) => (
-                  <DetailItem key={item.label} label={item.label} value={item.value} isMono={item.isMono} subtext={item.subtext} />
-                ))}
+                {showInternalSignals ? (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {internalDetails.map((item) => (
+                      <DetailItem key={item.label} label={item.label} value={item.value} isMono={item.isMono} subtext={item.subtext} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1152,94 +1161,114 @@ export default function LeadDetailPage({
           </div>
 
           <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
-              <span className="flex items-center gap-2.5">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+              <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
                 <Briefcase size={16} className="text-zinc-500" />
                 Tasks & Checklist
-              </span>
-              <span className="font-mono text-xs text-zinc-500">{sortedTasks.filter((t) => t.status === 'pending').length} remaining</span>
-            </h3>
-
-            <form onSubmit={handleAddTask} className="mb-6 space-y-3 rounded-lg border border-zinc-900 bg-zinc-950/50 p-3">
-              <input
-                type="text"
-                value={taskTitle}
-                onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="New follow-up task..."
-                className="w-full rounded border border-zinc-900 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
-              />
-              <div className="flex gap-2">
-                <PortalDatePicker
-                  value={taskDueDate}
-                  onChange={setTaskDueDate}
-                  className="flex-1"
-                  placeholder="Due Date"
-                />
-                <PortalSelect
-                  value={taskPriority}
-                  onChange={(val) => setTaskPriority(val as LuxorTask['priority'])}
-                  options={[
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' },
-                    { value: 'urgent', label: 'Urgent' },
-                  ]}
-                />
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-xs text-zinc-500">{pendingTaskCount} remaining</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTaskTools((current) => !current)}
+                  className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                >
+                  {showTaskTools ? 'Hide' : 'Open'}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={submittingTask || !taskTitle.trim()}
-                className="w-full rounded bg-blue-600 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
-              >
-                Add Task
-              </button>
-            </form>
+            </div>
 
-            {sortedTasks.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-5 text-xs leading-5 text-zinc-500">
-                <p className="font-semibold text-zinc-300">No follow-up tasks yet.</p>
-                <p className="mt-1 text-zinc-600">Add a task now so the next step does not get lost in the notes.</p>
+            {!showTaskTools ? (
+              <div className="rounded-xl border border-dashed border-zinc-900/80 bg-zinc-950/35 px-4 py-4 text-xs leading-5 text-zinc-500">
+                <p className="font-semibold text-zinc-300">
+                  {pendingTaskCount === 0 ? 'No follow-up tasks right now.' : `${pendingTaskCount} pending task${pendingTaskCount === 1 ? '' : 's'} ready to review.`}
+                </p>
+                <p className="mt-1 text-zinc-600">Open the checklist when you need to add a follow-up, due date, or priority.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {sortedTasks.map((task) => {
-                  const isCompleted = task.status === 'completed'
-                  let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
-                  if (task.priority === 'high') prioColor = 'border-amber-500/10 bg-amber-500/5 text-amber-500'
-                  else if (task.priority === 'urgent') prioColor = 'border-red-500/10 bg-red-500/5 text-red-500'
+              <>
+                <form onSubmit={handleAddTask} className="mb-6 space-y-3 rounded-lg border border-zinc-900 bg-zinc-950/50 p-3">
+                  <input
+                    type="text"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    placeholder="New follow-up task..."
+                    className="w-full rounded border border-zinc-900 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  />
+                  <div className="flex gap-2">
+                    <PortalDatePicker
+                      value={taskDueDate}
+                      onChange={setTaskDueDate}
+                      className="flex-1"
+                      placeholder="Due Date"
+                    />
+                    <PortalSelect
+                      value={taskPriority}
+                      onChange={(val) => setTaskPriority(val as LuxorTask['priority'])}
+                      options={[
+                        { value: 'low', label: 'Low' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'high', label: 'High' },
+                        { value: 'urgent', label: 'Urgent' },
+                      ]}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submittingTask || !taskTitle.trim()}
+                    className="w-full rounded bg-blue-600 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+                  >
+                    Add Task
+                  </button>
+                </form>
 
-                  return (
-                    <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-900 p-3 transition-colors hover:border-zinc-800">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTask(task)}
-                        className="mt-0.5 rounded p-0.5 text-zinc-500 transition-colors hover:text-blue-500"
-                      >
-                        {isCompleted ? (
-                          <CheckCircle2 size={16} className="text-emerald-500" />
-                        ) : (
-                          <Circle size={16} className="text-zinc-700" />
-                        )}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <p className={`truncate text-xs font-bold leading-tight text-white/95 ${isCompleted ? 'font-medium text-zinc-600 line-through' : ''}`}>
-                          {task.title}
-                        </p>
-                        {task.due_date ? (
-                          <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-zinc-500">
-                            <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-[10px] text-zinc-600">No due date</p>
-                        )}
-                      </div>
-                      <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${prioColor}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+                {sortedTasks.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-5 text-xs leading-5 text-zinc-500">
+                    <p className="font-semibold text-zinc-300">No follow-up tasks yet.</p>
+                    <p className="mt-1 text-zinc-600">Add a task now so the next step does not get lost in the notes.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {sortedTasks.map((task) => {
+                      const isCompleted = task.status === 'completed'
+                      let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
+                      if (task.priority === 'high') prioColor = 'border-amber-500/10 bg-amber-500/5 text-amber-500'
+                      else if (task.priority === 'urgent') prioColor = 'border-red-500/10 bg-red-500/5 text-red-500'
+
+                      return (
+                        <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-900 p-3 transition-colors hover:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTask(task)}
+                            className="mt-0.5 rounded p-0.5 text-zinc-500 transition-colors hover:text-blue-500"
+                          >
+                            {isCompleted ? (
+                              <CheckCircle2 size={16} className="text-emerald-500" />
+                            ) : (
+                              <Circle size={16} className="text-zinc-700" />
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate text-xs font-bold leading-tight text-white/95 ${isCompleted ? 'font-medium text-zinc-600 line-through' : ''}`}>
+                              {task.title}
+                            </p>
+                            {task.due_date ? (
+                              <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-zinc-500">
+                                <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-[10px] text-zinc-600">No due date</p>
+                            )}
+                          </div>
+                          <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${prioColor}`}>
+                            {task.priority}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1741,14 +1770,14 @@ function ClientActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3.5 py-3 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
+      className="group flex w-full items-center gap-3 rounded-xl border border-zinc-900 bg-zinc-950/55 px-3 py-2.5 text-left transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-zinc-900 disabled:hover:bg-zinc-950/55"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-[#f1d27a]">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-black/50 text-zinc-500 transition-colors group-hover:text-[#f1d27a]">
         {icon}
       </span>
       <span className="min-w-0">
         <span className="block text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{label}</span>
-        <span className="mt-1 block text-[10px] font-medium leading-4 text-zinc-500">{detail}</span>
+        <span className="mt-1 block text-[9px] font-medium leading-4 text-zinc-500">{detail}</span>
       </span>
     </button>
   )
@@ -1816,19 +1845,6 @@ function formatLeadAge(createdAt: string) {
   if (daysOld === 0) return 'Today'
   if (daysOld === 1) return '1 day old'
   return `${daysOld} days old`
-}
-
-function getContactSummary(lead: LuxorInquiry) {
-  if (lead.email && lead.phone) {
-    return { label: 'Email + phone', detail: 'Ready for outreach' }
-  }
-  if (lead.email) {
-    return { label: 'Email only', detail: 'Add a phone if you get one' }
-  }
-  if (lead.phone) {
-    return { label: 'Phone only', detail: 'Email still missing' }
-  }
-  return { label: 'No contact info', detail: 'Needs a phone or email' }
 }
 
 function describeActivityEntry(entry: ActivityEntry) {
