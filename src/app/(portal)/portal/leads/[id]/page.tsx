@@ -644,7 +644,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Target Date',
-      value: lead.target_date || 'TBD',
+      value: lead.target_date ? formatDisplayDate(lead.target_date) : 'TBD',
       editValue: lead.target_date || '',
       copyValue: lead.target_date || '',
       field: 'target_date',
@@ -662,7 +662,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Preferred Tour Date',
-      value: lead.preferred_tour_date || 'No tour requested',
+      value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour requested',
       editValue: lead.preferred_tour_date || '',
       copyValue: lead.preferred_tour_date || '',
       field: 'preferred_tour_date',
@@ -948,7 +948,7 @@ export default function LeadDetailPage({
                 <span className="text-[color:var(--portal-border)] select-none">•</span>
                 <span>{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count open'}</span>
                 <span className="text-[color:var(--portal-border)] select-none">•</span>
-                <span>{lead.target_date || 'Date TBD'}</span>
+                <span>{lead.target_date ? formatDisplayDate(lead.target_date) : 'Date TBD'}</span>
               </div>
               <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
                 Captured on {new Date(lead.created_at).toLocaleDateString()}.
@@ -2294,6 +2294,20 @@ function DetailItem({
   const [copied, setCopied] = useState(false)
   const canEdit = Boolean(onCommit)
   const canCopy = Boolean(copyValue?.trim())
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isEditing || inputType !== 'date') return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsEditing(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isEditing, inputType])
 
   const startEditing = () => {
     if (!canEdit || isSaving) return
@@ -2325,6 +2339,7 @@ function DetailItem({
 
   return (
     <div
+      ref={containerRef}
       role={canEdit ? 'button' : undefined}
       tabIndex={canEdit ? 0 : undefined}
       aria-label={canEdit ? `Edit ${label}` : undefined}
@@ -2349,33 +2364,50 @@ function DetailItem({
       <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div>
 
       {isEditing ? (
-        <input
-          autoFocus
-          type={inputType}
-          min={inputType === 'number' ? 0 : undefined}
-          value={draft}
-          disabled={isSaving}
-          placeholder={placeholder}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={() => {
-            void commitDraft()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
+        inputType === 'date' ? (
+          <div className="mt-2 w-full" onClick={(event) => event.stopPropagation()}>
+            <PortalDatePicker
+              value={draft}
+              onChange={async (val) => {
+                setDraft(val)
+                if (onCommit) {
+                  const saved = await onCommit(val)
+                  if (saved) {
+                    setIsEditing(false)
+                  }
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <input
+            autoFocus
+            type={inputType}
+            min={inputType === 'number' ? 0 : undefined}
+            value={draft}
+            disabled={isSaving}
+            placeholder={placeholder}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
               void commitDraft()
-            }
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              setDraft(editValue ?? value)
-              setIsEditing(false)
-            }
-          }}
-          className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 py-2 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
-            isMono ? 'font-mono' : ''
-          }`}
-        />
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void commitDraft()
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setDraft(editValue ?? value)
+                setIsEditing(false)
+              }
+            }}
+            className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 py-2 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
+              isMono ? 'font-mono' : ''
+            }`}
+          />
+        )
       ) : (
         <div className={`group/value relative mt-2 flex w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
           <p
@@ -2644,4 +2676,31 @@ function formatTimelineDate(value: string) {
 
 function formatSourceLabel(lead: LuxorInquiry) {
   return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
+}
+
+function formatDisplayDate(value: string | null | undefined): string {
+  if (!value) return ''
+
+  // If the format is YYYY-MM-DD, parse it with noon local time to avoid timezone offset shifts
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (match) {
+    const year = Number(match[1])
+    const month = Number(match[2]) - 1
+    const day = Number(match[3])
+    const date = new Date(year, month, day, 12, 0, 0)
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
