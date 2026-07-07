@@ -1088,7 +1088,7 @@ export default function LeadDetailPage({
                     onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
                   />
                 ))}
-                <div className="flex items-center gap-3 border-b border-[color:var(--portal-border)] py-3 last:border-b-0">
+                <div className="flex items-center gap-3 py-3">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
                     <MapPin size={14} />
                   </span>
@@ -2267,7 +2267,7 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group/card relative flex min-h-[72px] items-start gap-3 border-b border-[color:var(--portal-border)] px-3 -mx-3 py-3.5 rounded-xl transition-all hover:bg-[#caa24c]/[0.025] hover:border-transparent ${
+      className={`group/card relative flex min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5 rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
