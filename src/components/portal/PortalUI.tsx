@@ -323,6 +323,16 @@ export function PortalSelect({
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const selectedOption = options.find((opt) => opt.value === value)
+  const dropdownRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (isOpen) {
+      const handle = requestAnimationFrame(() => {
+        dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+      return () => cancelAnimationFrame(handle)
+    }
+  }, [isOpen])
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -363,6 +373,7 @@ export function PortalSelect({
               onClick={() => setIsOpen(false)}
             />
             <motion.div
+              ref={dropdownRef}
               role="listbox"
               initial={{ opacity: 0, y: -8, scale: 0.985 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -422,6 +433,16 @@ export function PortalDatePicker({
   placeholder?: string
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
+  const dropdownRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (isOpen) {
+      const handle = requestAnimationFrame(() => {
+        dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+      return () => cancelAnimationFrame(handle)
+    }
+  }, [isOpen])
   
   // Current navigation view month and year
   const [viewDate, setViewDate] = React.useState(() => {
@@ -508,6 +529,7 @@ export function PortalDatePicker({
               onClick={() => setIsOpen(false)}
             />
             <motion.div
+              ref={dropdownRef}
               role="dialog"
               initial={{ opacity: 0, y: -8, scale: 0.985 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}

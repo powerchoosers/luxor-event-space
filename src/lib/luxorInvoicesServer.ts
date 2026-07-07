@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus } from './luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill } from './luxorInquiryTypes'
 
 type SupabaseError = {
   message?: string
@@ -100,4 +100,8 @@ export async function updateInvoice(
   })
 
   return updated ?? null
+}
+
+export async function listAllBills() {
+  return supabaseRest<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc')
 }

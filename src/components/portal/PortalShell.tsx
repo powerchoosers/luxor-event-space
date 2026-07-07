@@ -16,11 +16,19 @@ import {
   Users,
   Sparkles,
   DollarSign,
-  ChevronDown
+  ChevronDown,
+  Gauge,
+  Receipt,
+  Wrench,
+  Package,
+  Handshake,
+  Zap,
+  Brush
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState, useSyncExternalStore, Suspense } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
@@ -40,14 +48,14 @@ const navItems = [
 ]
 
 const operationsSubItems = [
-  { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/portal/operations?tab=bills', label: 'Bills & Payments', icon: '💰' },
-  { href: '/portal/operations?tab=maintenance', label: 'Maintenance', icon: '🛠️' },
-  { href: '/portal/operations?tab=inventory', label: 'Inventory', icon: '📦' },
-  { href: '/portal/operations?tab=vendors', label: 'Vendors', icon: '🤝' },
-  { href: '/portal/operations?tab=utilities', label: 'Utilities', icon: '🚀' },
-  { href: '/portal/operations?tab=cleaning', label: 'Cleaning', icon: '🧹' },
-  { href: '/portal/operations?tab=staff', label: 'Staff', icon: '👥' },
+  { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: Gauge },
+  { href: '/portal/operations?tab=bills', label: 'Bills & Payments', icon: Receipt },
+  { href: '/portal/operations?tab=maintenance', label: 'Maintenance', icon: Wrench },
+  { href: '/portal/operations?tab=inventory', label: 'Inventory', icon: Package },
+  { href: '/portal/operations?tab=vendors', label: 'Vendors', icon: Handshake },
+  { href: '/portal/operations?tab=utilities', label: 'Utilities', icon: Zap },
+  { href: '/portal/operations?tab=cleaning', label: 'Cleaning', icon: Brush },
+  { href: '/portal/operations?tab=staff', label: 'Staff', icon: Users },
 ]
 
 export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
@@ -139,13 +147,13 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block ${
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto portal-scrollbar ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
-      } ${sidebarCollapsed ? 'w-20 overflow-y-auto portal-scrollbar' : 'w-64 overflow-hidden'}`}>
-        <div className={`flex flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-          sidebarCollapsed ? 'p-4 min-h-full' : 'p-6 h-full'
+      } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div className={`flex flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] min-h-full ${
+          sidebarCollapsed ? 'p-4' : 'p-6'
         }`}>
           <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
             <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
@@ -207,26 +215,34 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                       )}
                     </button>
                     
-                    {operationsExpanded && !sidebarCollapsed && (
-                      <div className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1">
-                        {operationsSubItems.map((sub) => {
-                          const tabParam = searchParams.get('tab')
-                          const isSubActive = pathname === '/portal/operations' && (
-                            (sub.href.includes('tab=dashboard') && !tabParam) ||
-                            (!!tabParam && sub.href.includes(`tab=${tabParam}`))
-                          )
-                          return (
-                            <SidebarSubLink
-                              key={sub.href}
-                              href={sub.href}
-                              label={sub.label}
-                              icon={sub.icon}
-                              active={isSubActive}
-                            />
-                          )
-                        })}
-                      </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                      {operationsExpanded && !sidebarCollapsed && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                          className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1 overflow-hidden"
+                        >
+                          {operationsSubItems.map((sub) => {
+                            const tabParam = searchParams.get('tab')
+                            const isSubActive = pathname === '/portal/operations' && (
+                              (sub.href.includes('tab=dashboard') && !tabParam) ||
+                              (!!tabParam && sub.href.includes(`tab=${tabParam}`))
+                            )
+                            return (
+                              <SidebarSubLink
+                                key={sub.href}
+                                href={sub.href}
+                                label={sub.label}
+                                icon={sub.icon}
+                                active={isSubActive}
+                              />
+                            )
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )
               }
@@ -452,12 +468,12 @@ function isActivePath(pathname: string, href: string) {
 function SidebarSubLink({
   href,
   label,
-  icon,
+  icon: Icon,
   active,
 }: {
   href: string
   label: string
-  icon: string
+  icon: React.ComponentType<{ size?: number; className?: string }>
   active: boolean
 }) {
   return (
@@ -469,7 +485,9 @@ function SidebarSubLink({
           : 'text-zinc-550 hover:text-zinc-300 hover:bg-zinc-950/20'
       }`}
     >
-      <span className="text-xs">{icon}</span>
+      <span className={active ? 'text-[#caa24c]' : 'text-zinc-650'}>
+        <Icon size={14} />
+      </span>
       <span>{label}</span>
     </Link>
   )

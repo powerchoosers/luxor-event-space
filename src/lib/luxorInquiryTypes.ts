@@ -118,6 +118,20 @@ export type LuxorInvoice = {
   notes: string | null
 }
 
+export type LuxorBillStatus = 'paid' | 'unpaid' | 'overdue'
+
+export type LuxorBill = {
+  id: string
+  created_at: string
+  updated_at: string
+  service: string
+  frequency: string
+  provider: string
+  amount: number
+  status: LuxorBillStatus
+  due_date: string | null
+}
+
 // --- Note Types ---
 export type LuxorNoteType = 'note' | 'call_log' | 'email_log' | 'status_change'
 
@@ -192,6 +206,23 @@ export type LuxorPayment = {
   paid_at: string | null
   processor: string | null
   processor_reference: string | null
+  notes: string | null
+  metadata: Record<string, unknown>
+}
+
+export type LuxorBookingExpenseStatus = 'planned' | 'incurred' | 'paid' | 'cancelled'
+
+export type LuxorBookingExpense = {
+  id: string
+  created_at: string
+  updated_at: string
+  booking_id: string | null
+  category: string
+  description: string | null
+  vendor_name: string | null
+  amount: number
+  incurred_on: string | null
+  status: LuxorBookingExpenseStatus
   notes: string | null
   metadata: Record<string, unknown>
 }

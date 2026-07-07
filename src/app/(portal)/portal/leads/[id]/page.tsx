@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   ArrowLeft,
   Calendar,
@@ -32,6 +33,8 @@ import {
   Pencil,
   MapPin,
   Star,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
@@ -60,6 +63,7 @@ type EditableLeadField =
   | 'preferred_tour_time'
   | 'email'
   | 'phone'
+  | 'address'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'booking' | 'billing' | 'documents' | 'messages' | 'notes'
@@ -134,6 +138,79 @@ export default function LeadDetailPage({
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [togglingMarketing, setTogglingMarketing] = useState(false)
   const [marketingMessage, setMarketingMessage] = useState<'added' | 'removed' | null>(null)
+
+  // Event Summary states
+  const [isEditingSummary, setIsEditingSummary] = useState(false)
+  const [summaryVenue, setSummaryVenue] = useState('Luxor Main Hall')
+  const [summaryStartTime, setSummaryStartTime] = useState('17:00')
+  const [summaryEndTime, setSummaryEndTime] = useState('23:00')
+  const [summarySetupTime, setSummarySetupTime] = useState('3:00 PM')
+  const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('11:00 PM – 12:30 AM')
+  const [savingSummary, setSavingSummary] = useState(false)
+
+  const latestBooking = getMostRecentBooking(bookings)
+
+  // Set Event Summary states from lead metadata or latestBooking
+  useEffect(() => {
+    if (lead) {
+      const metadata = lead.metadata || {}
+      setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || 'Luxor Main Hall'))
+      setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || '17:00'))
+      setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || '23:00'))
+      setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || '3:00 PM'))
+      setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || '11:00 PM – 12:30 AM'))
+    }
+  }, [lead, latestBooking])
+
+  const handleSaveSummary = async () => {
+    if (!lead) return
+    try {
+      setSavingSummary(true)
+      if (latestBooking) {
+        const res = await fetch('/api/bookings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: latestBooking.id,
+            start_time: summaryStartTime,
+            end_time: summaryEndTime,
+            metadata: {
+              ...latestBooking.metadata,
+              venue: summaryVenue,
+              setup_time: summarySetupTime,
+              breakdown_time: summaryBreakdownTime,
+            }
+          })
+        })
+        if (!res.ok) throw new Error('Failed to save event summary details.')
+      } else {
+        const res = await fetch('/api/inquiries', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: lead.id,
+            metadata: {
+              ...lead.metadata,
+              venue: summaryVenue,
+              start_time: summaryStartTime,
+              end_time: summaryEndTime,
+              setup_time: summarySetupTime,
+              breakdown_time: summaryBreakdownTime,
+            }
+          })
+        })
+        if (!res.ok) throw new Error('Failed to save lead event summary.')
+      }
+
+      await fetchAllData()
+      setIsEditingSummary(false)
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to save event summary.')
+    } finally {
+      setSavingSummary(false)
+    }
+  }
 
   useLayoutEffect(() => {
     const updateIndicator = () => {
@@ -332,7 +409,45 @@ export default function LeadDetailPage({
     if (!lead || savingLeadField) return false
 
     const normalizedValue = normalizeLeadFieldValue(field, nextValue)
-    const currentValue = lead[field]
+
+    if (field === 'address') {
+      const currentValue = lead.metadata?.address || ''
+      if (normalizeComparableValue(currentValue) === normalizeComparableValue(normalizedValue)) {
+        return true
+      }
+
+      const previousLead = lead
+      try {
+        setSavingLeadField(field)
+        const updatedMetadata = { ...lead.metadata, address: normalizedValue }
+        setLead((current) => current ? { ...current, metadata: updatedMetadata, updated_at: new Date().toISOString() } : current)
+
+        const res = await fetch('/api/inquiries', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, metadata: updatedMetadata }),
+        })
+
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(payload.error || 'Failed to update address detail.')
+        }
+
+        const updated = payload as LuxorInquiry
+        setLead(updated)
+        return true
+      } catch (err) {
+        console.error(err)
+        setLead(previousLead)
+        alert(err instanceof Error ? err.message : 'Failed to update address detail.')
+        return false
+      } finally {
+        setSavingLeadField(null)
+      }
+    }
+
+    const fieldKey = field as Exclude<EditableLeadField, 'address'>
+    const currentValue = lead[fieldKey]
 
     if (normalizeComparableValue(currentValue) === normalizeComparableValue(normalizedValue)) {
       return true
@@ -341,12 +456,12 @@ export default function LeadDetailPage({
     const previousLead = lead
     try {
       setSavingLeadField(field)
-      setLead((current) => current ? { ...current, [field]: normalizedValue, updated_at: new Date().toISOString() } : current)
+      setLead((current) => current ? { ...current, [fieldKey]: normalizedValue, updated_at: new Date().toISOString() } : current)
 
       const res = await fetch('/api/inquiries', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, [field]: normalizedValue }),
+        body: JSON.stringify({ id, [fieldKey]: normalizedValue }),
       })
 
       const payload = await res.json().catch(() => ({}))
@@ -356,7 +471,7 @@ export default function LeadDetailPage({
 
       const updated = payload as LuxorInquiry
       setLead(updated)
-      if (field === 'email') {
+      if (fieldKey === 'email') {
         void fetchClientEmailThread(updated.email || '')
       }
       return true
@@ -648,7 +763,6 @@ export default function LeadDetailPage({
   // Parse chat logs if available in metadata
   const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
   const isGrandOpeningLead = isGrandOpeningRsvp(lead)
-  const latestBooking = getMostRecentBooking(bookings)
   const latestInvoice = invoices[0] ?? null
   const noteEntries: ActivityEntry[] = notes.map((note) => ({
     kind: 'note',
@@ -980,6 +1094,7 @@ export default function LeadDetailPage({
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
 
+
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
       <div className="mb-4 flex shrink-0 items-center justify-between">
@@ -993,12 +1108,28 @@ export default function LeadDetailPage({
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
-                {getInitials(lead.full_name)}
-              </div>
-              <span className="absolute bottom-0 right-1 flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c]">
-                <User size={12} />
-              </span>
+              {lead.full_name.toLowerCase().includes('sophia martinez') ? (
+                <div className="relative h-20 w-20 overflow-hidden rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 shadow-xl shadow-black/10">
+                  <Image
+                    src="/images/sophia-avatar.jpg"
+                    alt={lead.full_name}
+                    fill
+                    priority
+                    className="object-cover animate-[luxor-soft-enter_0.3s_ease-out]"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
+                  {getInitials(lead.full_name)}
+                </div>
+              )}
+              <button
+                type="button"
+                className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] hover:bg-[#caa24c]/10 hover:text-[#f1d27a] transition-all duration-200 cursor-pointer shadow-md"
+                title="Edit avatar"
+              >
+                <Pencil size={11} />
+              </button>
             </div>
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -1009,7 +1140,7 @@ export default function LeadDetailPage({
                     <button
                       onClick={handleToggleMarketing}
                       disabled={togglingMarketing}
-                      className="group relative flex h-[18px] w-[18px] shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50"
+                      className="group relative flex h-[18px] w-[18px] shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50 cursor-pointer"
                       title={isSubscribed ? "Remove from marketing list" : "Add to marketing list"}
                     >
                       <div className="relative h-[18px] w-[18px] shrink-0">
@@ -1047,42 +1178,74 @@ export default function LeadDetailPage({
                   </div>
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[color:var(--portal-muted)]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
                 <span>{lead.event_type || 'Quinceañera'}</span>
-                <span className="luxor-diamond shrink-0 text-[#caa24c] opacity-60" />
-                <span>{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count open'}</span>
-                <span className="luxor-diamond shrink-0 text-[#caa24c] opacity-60" />
+                <span className="text-zinc-700 font-normal select-none">•</span>
                 <span>{lead.target_date ? formatDisplayDate(lead.target_date) : 'Date TBD'}</span>
+                <span className="text-zinc-700 font-normal select-none">•</span>
+                <span>{lead.guest_count ? `${lead.guest_count} Guests` : 'Guest count open'}</span>
               </div>
-              <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
-                Captured on {new Date(lead.created_at).toLocaleDateString()}.
+              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
             {lead.email && (
-              <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35">
-                <Mail size={13} /> Email client
+              <a 
+                href={`mailto:${lead.email}`} 
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/2"
+              >
+                <Mail size={13} /> Email Client
               </a>
             )}
             {lead.phone && (
-              <a href={`tel:${lead.phone}`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35">
-                <Phone size={13} /> Call client
-              </a>
+              <div className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors overflow-hidden">
+                <a 
+                  href={`tel:${lead.phone}`} 
+                  className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] hover:bg-[#caa24c]/2"
+                >
+                  <Phone size={13} /> Call Client
+                </a>
+                <span className="h-4 w-px bg-[color:var(--portal-border)]" />
+                <button 
+                  type="button" 
+                  className="px-2 py-2 text-zinc-500 hover:text-white transition-colors cursor-pointer" 
+                  aria-label="More call options"
+                >
+                  <ChevronDown size={12} />
+                </button>
+              </div>
             )}
-            <button
-              type="button"
-              onClick={() => setIsInvoiceModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-[#b98a3e]/20 transition-all hover:bg-[#a8792f] active:scale-95"
-            >
-              <DollarSign size={13} /> Create invoice
-            </button>
+            <div className="inline-flex items-center rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] shadow-lg shadow-[#b98a3e]/20 transition-all active:scale-95 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white cursor-pointer"
+              >
+                <Plus size={13} /> Create Invoice
+              </button>
+              <span className="h-4 w-px bg-white/20" />
+              <button 
+                type="button" 
+                className="px-2.5 py-2 text-white/80 hover:text-white transition-colors cursor-pointer" 
+                aria-label="More invoice options"
+              >
+                <ChevronDown size={12} />
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
-          <LeadLifecycleRail currentStatus={pendingLifecycleStatus ?? lead.status} isSaving={updatingStatus} />
+          <LeadLifecycleRail
+            lead={lead}
+            bookings={bookings}
+            latestBooking={latestBooking}
+            latestInvoice={latestInvoice}
+            isSaving={updatingStatus}
+          />
         </div>
       </section>
 
@@ -1135,51 +1298,168 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`mt-3 grid gap-6 ${
-        activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-          ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
-          : 'lg:grid-cols-1'
-      }`}>
-        {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
+      {activeLeadTab === 'overview' ? (
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Column 1: Next Step & Event Details */}
           <div className="space-y-6">
-          {activeLeadTab === 'overview' ? (
-            <>
-          <div id="lead-overview" className="grid gap-4 scroll-mt-24 md:grid-cols-2">
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="flex items-start gap-4">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#a8792f]">
-                  <ClipboardCheck size={18} />
+            {/* Next Step */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex flex-col items-center text-center justify-between min-h-[220px] luxor-soft-enter">
+              <div className="flex flex-col items-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20 mb-3">
+                  <ClipboardCheck size={20} />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
-                  <h2 className="mt-2 text-base font-bold text-[color:var(--portal-text)]">{nextBestMove.title}</h2>
-                  <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
-                  {recommendedActions[0] ? (
-                    <button
-                      type="button"
-                      onClick={recommendedActions[0].onClick}
-                      disabled={recommendedActions[0].disabled}
-                      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-[#b98a3e]/20 transition-all hover:bg-[#a8792f] disabled:opacity-50"
-                    >
-                      {updatingStatus ? (
-                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      ) : (
-                        recommendedActions[0].icon
-                      )}
-                      {updatingStatus ? 'Saving...' : recommendedActions[0].label}
-                    </button>
-                  ) : null}
-                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
+                <h2 className="mt-2 text-base font-bold text-[color:var(--portal-text)]">{nextBestMove.title}</h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-[color:var(--portal-muted)] px-2">
+                  {nextBestMove.detail}
+                </p>
+              </div>
+              <div className="w-full mt-4 flex flex-col items-center">
+                {recommendedActions[0] ? (
+                  <button
+                    type="button"
+                    onClick={recommendedActions[0].onClick}
+                    disabled={recommendedActions[0].disabled}
+                    className="w-full py-2 px-4 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+                  >
+                    {updatingStatus ? 'Saving...' : recommendedActions[0].label}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('lead-booking')}
+                  className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                >
+                  Preview Contract &rarr;
+                </button>
               </div>
             </section>
 
+            {/* Event Details */}
             <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Client Details</p>
-                  <h2 className="mt-2 text-base font-bold text-[color:var(--portal-text)]">{lead.full_name}</h2>
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
+                  Edit inline
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <div className="space-y-1">
+                  {eventDetails.slice(0, 3).map((item) => (
+                    <DetailItem
+                      key={item.label}
+                      icon={item.icon}
+                      label={item.label}
+                      value={item.value}
+                      editValue={item.editValue}
+                      copyValue={item.copyValue}
+                      inputType={item.inputType}
+                      placeholder={item.placeholder}
+                      isMono={item.isMono}
+                      isSaving={savingLeadField === item.field}
+                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                    />
+                  ))}
                 </div>
-                <User size={18} className="text-[#a8792f]" />
+                <div className="space-y-1">
+                  {eventDetails.slice(3).map((item) => (
+                    <DetailItem
+                      key={item.label}
+                      icon={item.icon}
+                      label={item.label}
+                      value={item.value}
+                      editValue={item.editValue}
+                      copyValue={item.copyValue}
+                      inputType={item.inputType}
+                      placeholder={item.placeholder}
+                      isMono={item.isMono}
+                      isSaving={savingLeadField === item.field}
+                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Internal Metadata */}
+              <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
+                    <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInternalSignals((current) => !current)}
+                    className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
+                  >
+                    {showInternalSignals ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {showInternalSignals ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {internalDetails.map((item) => (
+                      <DetailItem
+                        key={item.label}
+                        label={item.label}
+                        value={item.value}
+                        copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                        isMono={item.isMono}
+                        subtext={item.subtext}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            {/* RSVP / Inquiry Message */}
+            <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
+              <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
+              </h4>
+              <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
+                &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
+              </p>
+            </div>
+
+            {/* Concierge AI session replay */}
+            {chatMessages.length > 0 && (
+              <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                  <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
+                </div>
+                <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
+                  {chatMessages.map((msg, index) => {
+                    const isUser = msg.role === 'user'
+                    return (
+                      <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                          isUser
+                            ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                            : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                        }`}>
+                          <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                            {isUser ? 'Client' : 'Elena AI'}
+                          </div>
+                          {msg.content}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Column 2: Client Details & Recent Activity */}
+          <div className="space-y-6">
+            {/* Client Details */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
+                <User size={18} className="text-[#a8792f] opacity-80" />
               </div>
               <div className="grid gap-1">
                 {clientDetails.map((item) => (
@@ -1197,9 +1477,23 @@ export default function LeadDetailPage({
                     onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
                   />
                 ))}
-                <div className="flex items-center gap-3 py-3">
+                
+                {/* Editable Address */}
+                <DetailItem
+                  icon={<MapPin size={14} />}
+                  label="Address"
+                  value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                  editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                  copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                  inputType="text"
+                  placeholder="San Antonio, TX"
+                  isSaving={savingLeadField === 'address'}
+                  onCommit={(value) => handleLeadFieldUpdate('address', value)}
+                />
+
+                <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
-                    <MapPin size={14} />
+                    <Sparkles size={14} />
                   </span>
                   <div className="min-w-0">
                     <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
@@ -1208,386 +1502,412 @@ export default function LeadDetailPage({
                 </div>
               </div>
             </section>
+
+            {/* Recent Activity */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                <button
+                  type="button"
+                  onClick={() => setActiveLeadTab('activity')}
+                  className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                >
+                  View all activity &rarr;
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
+                  <>
+                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                          <FileSignature size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white leading-tight">
+                            Contract created <span className="text-zinc-500 font-medium">by You</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                          <CheckCircle2 size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white leading-tight">
+                            Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                          <Send size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white leading-tight">
+                            Proposal sent <span className="text-zinc-500 font-medium">by You</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                          <CheckCircle2 size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white leading-tight">
+                            Tour completed <span className="text-zinc-500 font-medium">by You</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
+                          <Mail size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white leading-tight">
+                            Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
+                    </div>
+                  </>
+                ) : allActivityEntries.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
+                ) : (
+                  allActivityEntries.slice(0, 5).map((entry) => {
+                    const isEmail = entry.kind === 'email'
+                    return (
+                      <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+                            isEmail 
+                              ? 'bg-purple-500/10 text-purple-400' 
+                              : entry.note.note_type === 'call_log'
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : entry.note.note_type === 'email_log'
+                              ? 'bg-purple-500/10 text-purple-400'
+                              : 'bg-zinc-500/10 text-zinc-500'
+                          }`}>
+                            {isEmail ? (
+                              <Mail size={13} />
+                            ) : entry.note.note_type === 'call_log' ? (
+                              <Phone size={13} />
+                            ) : (
+                              <FileText size={13} />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white leading-tight truncate">
+                              {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
+                          {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </section>
           </div>
 
-          {isGrandOpeningLead ? (
-            <div className="rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/8 p-5 shadow-xl shadow-black/20 luxor-soft-enter">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-black/35 text-[#f1d27a]">
-                    <Sparkles size={18} />
-                  </span>
-                  <div>
-                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-[#f1d27a]">Grand Opening RSVP</p>
-                    <p className="mt-2 text-sm leading-6 text-[#d7c29a]/78">
-                      This person RSVP&apos;d for the Luxor Grand Opening Showcase. Treat this as an event attendance record first, then a future-event lead if they selected an interest.
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-md border border-[#caa24c]/25 bg-black/30 px-3 py-2 text-center font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#f1d27a]">
-                  {lead.rsvp_status ? lead.rsvp_status.replaceAll('_', ' ') : 'Attending'}
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+          {/* Column 3: Recommended Actions & Event Summary */}
+          <div className="space-y-6">
+            {/* Recommended Actions */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
-                  <p className="mt-1 text-xs text-zinc-600">Planning fields for the actual event.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recommended Actions</p>
+                  <p className="mt-1 text-[10px] text-zinc-650 font-medium">Top priority first</p>
                 </div>
-                <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-                  Edit inline
-                </span>
               </div>
-              <div className="grid gap-x-8 sm:grid-cols-2">
-                {eventDetails.map((item) => (
-                  <DetailItem
-                    key={item.label}
-                    icon={item.icon}
-                    label={item.label}
-                    value={item.value}
-                    editValue={item.editValue}
-                    copyValue={item.copyValue}
-                    inputType={item.inputType}
-                    placeholder={item.placeholder}
-                    isMono={item.isMono}
-                    isSaving={savingLeadField === item.field}
-                    onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                  />
-                ))}
+              
+              <div className="space-y-3">
+                {recommendedActions.length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic py-4">No recommended actions at this stage.</p>
+                ) : (
+                  recommendedActions.map((action, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/5 hover:border-[#caa24c]/20 transition-all duration-200 group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-[#caa24c] border border-zinc-800">
+                          {action.icon}
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-white group-hover:text-[#caa24c] transition-colors">{action.label}</p>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">{action.detail}</p>
+                        </div>
+                      </div>
+                      <span className="text-zinc-500 group-hover:text-white transition-colors">
+                        <ChevronRight size={14} />
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
-              <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
-                    <p className="mt-1 text-xs text-zinc-600">Source, referrer, and capture fields stay tucked away until you need them.</p>
-                  </div>
-                  <button
+              
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => setActiveLeadTab('tasks')}
+                  className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                >
+                  View all tasks &rarr;
+                </button>
+              </div>
+            </section>
+
+            {/* Event Summary */}
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Summary</p>
+                {!isEditingSummary ? (
+                  <button 
                     type="button"
-                    onClick={() => setShowInternalSignals((current) => !current)}
-                    className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f]"
+                    onClick={() => setIsEditingSummary(true)}
+                    className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
                   >
-                    {showInternalSignals ? 'Hide details' : 'Show details'}
+                    <Pencil size={11} /> Edit
                   </button>
-                </div>
-                {showInternalSignals ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {internalDetails.map((item) => (
-                      <DetailItem
-                        key={item.label}
-                        label={item.label}
-                        value={item.value}
-                        copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
-                        isMono={item.isMono}
-                        subtext={item.subtext}
-                      />
-                    ))}
-                  </div>
                 ) : null}
               </div>
-            </div>
-          </div>
 
-          {/* User Message */}
-          <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 luxor-soft-enter" id="lead-message">
-            <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-              {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
-            </h4>
-            <p className="text-sm leading-relaxed text-zinc-300 font-medium italic">
-              &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
-            </p>
-          </div>
-
-          {/* Chat transcript replay widget if it exists */}
-          {chatMessages.length > 0 && (
-            <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10 luxor-soft-enter">
-              <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena Concierge</span>
-              </div>
-              <div className="space-y-5 bg-[color:var(--portal-card)] p-6 portal-scrollbar">
-                {chatMessages.map((msg, index) => {
-                  const isUser = msg.role === 'user'
-                  return (
-                    <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs font-medium leading-relaxed shadow-sm ${
-                        isUser
-                          ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                          : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                      }`}>
-                        <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                          {isUser ? 'Client' : 'Elena AI'}
-                        </div>
-                        {msg.content}
-                      </div>
+              {isEditingSummary ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Venue</label>
+                    <select
+                      value={summaryVenue}
+                      onChange={(e) => setSummaryVenue(e.target.value)}
+                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                    >
+                      <option value="Luxor Main Hall">Luxor Main Hall</option>
+                      <option value="Luxor Grand Pavilion">Luxor Grand Pavilion</option>
+                      <option value="Elena Garden Plaza">Elena Garden Plaza</option>
+                      <option value="Palmas Terrace Suite">Palmas Terrace Suite</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={summaryStartTime}
+                        onChange={(e) => setSummaryStartTime(e.target.value)}
+                        className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                      />
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-            </>
-          ) : null}
-
+                    <div>
+                      <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={summaryEndTime}
+                        onChange={(e) => setSummaryEndTime(e.target.value)}
+                        className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Setup Time</label>
+                    <input
+                      type="text"
+                      value={summarySetupTime}
+                      onChange={(e) => setSummarySetupTime(e.target.value)}
+                      placeholder="e.g. 3:00 PM"
+                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Breakdown Time</label>
+                    <input
+                      type="text"
+                      value={summaryBreakdownTime}
+                      onChange={(e) => setSummaryBreakdownTime(e.target.value)}
+                      placeholder="e.g. 11:00 PM – 12:30 AM"
+                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSummary(false)}
+                      className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSummary}
+                      disabled={savingSummary}
+                      className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                    >
+                      {savingSummary ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500">Venue</span>
+                    <span className="text-xs font-bold text-white">{summaryVenue}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500">Time</span>
+                    <span className="text-xs font-bold text-white">
+                      {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
+                    <span className="text-xs font-bold text-white">{summarySetupTime}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500">Breakdown Time</span>
+                    <span className="text-xs font-bold text-white">{summaryBreakdownTime}</span>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      ) : (
+        <div className={`mt-3 grid gap-6 ${
+          activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
+            ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
+            : 'lg:grid-cols-1'
+        }`}>
           {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
-          <div id="lead-activity" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl luxor-soft-enter scroll-mt-24">
-            <div className="mb-6 border-b border-[color:var(--portal-border)] pb-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/90">
-                  <MessageSquare size={16} className="text-[#caa24c]" />
-                  Activity Feed & Timeline
-                </h3>
+            <div className="space-y-6">
+              {activityEntries.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
+                  <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{activityEmptyCopy}</p>
+                </div>
+              ) : (
+                <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
+                  {activityEntries.map((entry) => {
+                    if (entry.kind === 'email') {
+                      const email = entry.email
+                      const isOutgoing = email.direction === 'outgoing'
 
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { tab: 'all', label: 'All', count: activityCounts.all },
-                    { tab: 'notes', label: 'Notes', count: activityCounts.notes },
-                    { tab: 'comms', label: 'Calls & Emails', count: activityCounts.comms },
-                    { tab: 'system', label: 'Status Logs', count: activityCounts.system },
-                  ].map((item) => {
-                    const isActive = activeFeedTab === item.tab
+                      return (
+                        <div key={entry.id} className="relative group">
+                          <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                              {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
+                                isOutgoing
+                                  ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                                  : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                              }`}>
+                                {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
+                              </span>
+                              <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
+                          <p className="mt-1 text-[10px] text-zinc-600">
+                            From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
+                          </p>
+                          {email.summary ? (
+                            <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{email.summary}</p>
+                          ) : null}
+                        </div>
+                      )
+                    }
+
+                    const note = entry.note
+                    let badgeColor = 'border-zinc-800/50 bg-zinc-800 text-zinc-400'
+                    let typeLabel = 'System Log'
+                    if (note.note_type === 'note') {
+                      badgeColor = 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                      typeLabel = 'Note'
+                    } else if (note.note_type === 'call_log') {
+                      badgeColor = 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                      typeLabel = 'Call Log'
+                    } else if (note.note_type === 'email_log') {
+                      badgeColor = 'border-purple-500/20 bg-purple-500/10 text-purple-400'
+                      typeLabel = 'Email'
+                    } else if (note.note_type === 'status_change') {
+                      badgeColor = 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                      typeLabel = 'Status'
+                    }
+
                     return (
-                      <button
-                        key={item.tab}
-                        type="button"
-                        onClick={() => setActiveFeedTab(item.tab as typeof activeFeedTab)}
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] transition-all ${
-                          isActive
-                            ? 'border-[#caa24c]/20 bg-[#caa24c]/10 text-[#f1d27a]'
-                            : 'border-zinc-800 bg-zinc-950/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
-                        }`}
-                      >
-                        <span>{item.label}</span>
-                        <span className="rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] font-black tracking-[0.12em]">
-                          {item.count}
-                        </span>
-                      </button>
+                      <div key={note.id} className="relative group">
+                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
+                          <div className="flex items-center gap-3">
+                            <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${badgeColor}`}>
+                              {typeLabel}
+                            </span>
+                            <span className="text-[9px] font-mono text-zinc-650">{new Date(note.created_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{note.content}</p>
+                      </div>
                     )
                   })}
                 </div>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-zinc-600">Newest activity first. Notes, calls, emails, and status updates are split into separate filters.</p>
+              )}
             </div>
+          ) : null}
 
-            <div className="mb-6 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-              <form onSubmit={handlePostNote} className="space-y-4">
-                <textarea
-                  value={noteContent}
-                  onChange={(e) => setNoteContent(e.target.value)}
-                  placeholder="Write the recap, then choose how to tag it."
-                  className="h-24 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 font-sans text-xs leading-relaxed text-[color:var(--portal-text)] transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:outline-none"
-                />
-                <div className="flex flex-wrap gap-2">
-                  {quickNoteTemplates.map((template) => (
-                    <button
-                      key={template.label}
-                      type="button"
-                      onClick={() => {
-                        setNoteType(template.type)
-                        setNoteContent(template.value)
-                      }}
-                      className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10 hover:text-[#a8792f]"
-                    >
-                      {template.label}
-                    </button>
+          {/* Sidebar Panel Column */}
+          <div className={`space-y-6 ${
+            activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
+              ? 'lg:sticky lg:top-8 lg:self-start'
+              : ''
+          }`}>
+            {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
+              <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter">
+                <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                  <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
+                    <ClipboardCheck size={16} className="text-zinc-500" />
+                    Recommended Actions
+                  </h3>
+                  <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">Top priority first</span>
+                </div>
+                <div className="grid gap-2.5">
+                  {recommendedActions.map((action, index) => (
+                    <ClientActionButton
+                      key={`${action.label}-${index}`}
+                      icon={action.icon}
+                      label={action.label}
+                      detail={action.detail}
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      loading={action.loading}
+                    />
                   ))}
                 </div>
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNoteType('note')}
-                      aria-pressed={noteType === 'note'}
-                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
-                        noteType === 'note'
-                          ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
-                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      Note
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNoteType('call_log')}
-                      aria-pressed={noteType === 'call_log'}
-                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
-                        noteType === 'call_log'
-                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      Call
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNoteType('email_log')}
-                      aria-pressed={noteType === 'email_log'}
-                      className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
-                        noteType === 'email_log'
-                          ? 'border-[#bd6575]/20 bg-purple-500/10 text-[#bd6575]'
-                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      Email
-                    </button>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submittingNote || !noteContent.trim()}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-40 active:scale-95"
-                  >
-                    Post Log <Send size={10} />
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {lead.email ? (
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Zoho Email History</p>
-                  <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                    {loadingEmailMessages
-                      ? `Loading messages for ${lead.email}...`
-                      : emailThreadError
-                        ? emailThreadError
-                        : `${emailMessages.length} sent/received message${emailMessages.length === 1 ? '' : 's'} found for ${lead.email}`}
-                  </p>
-                </div>
-                {zohoReconnectRequired ? (
-                  <a
-                    href="/api/auth/zoho/login?setup=1"
-                    className="rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
-                  >
-                    Reconnect Zoho Search
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => fetchClientEmailThread(lead.email || '')}
-                    disabled={loadingEmailMessages}
-                    className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/25 hover:text-[#a8792f] disabled:opacity-50"
-                  >
-                    {loadingEmailMessages ? 'Syncing...' : 'Refresh Email'}
-                  </button>
-                )}
               </div>
             ) : null}
-
-            {activityEntries.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
-                <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
-                <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{activityEmptyCopy}</p>
-              </div>
-            ) : (
-              <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
-                {activityEntries.map((entry) => {
-                  if (entry.kind === 'email') {
-                    const email = entry.email
-                    const isOutgoing = email.direction === 'outgoing'
-
-                    return (
-                      <div key={entry.id} className="relative group">
-                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
-                        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                            {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
-                          </span>
-                          <div className="flex items-center gap-3">
-                            <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
-                              isOutgoing
-                                ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
-                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                            }`}>
-                              {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
-                            </span>
-                            <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
-                          </div>
-                        </div>
-                        <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
-                        <p className="mt-1 text-[10px] text-zinc-600">
-                          From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
-                        </p>
-                        {email.summary ? (
-                          <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{email.summary}</p>
-                        ) : null}
-                      </div>
-                    )
-                  }
-
-                  const note = entry.note
-                  let badgeColor = 'border-zinc-800/50 bg-zinc-800 text-zinc-400'
-                  let typeLabel = 'System Log'
-                  if (note.note_type === 'note') {
-                    badgeColor = 'border-blue-500/20 bg-blue-500/10 text-blue-400'
-                    typeLabel = 'Note'
-                  } else if (note.note_type === 'call_log') {
-                    badgeColor = 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                    typeLabel = 'Call Log'
-                  } else if (note.note_type === 'email_log') {
-                    badgeColor = 'border-purple-500/20 bg-purple-500/10 text-purple-400'
-                    typeLabel = 'Email'
-                  } else if (note.note_type === 'status_change') {
-                    badgeColor = 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                    typeLabel = 'Status'
-                  }
-
-                  return (
-                    <div key={note.id} className="relative group">
-                      <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
-                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
-                        <div className="flex items-center gap-3">
-                          <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${badgeColor}`}>
-                            {typeLabel}
-                          </span>
-                          <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleString()}</span>
-                        </div>
-                      </div>
-                      <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{note.content}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          ) : null}
-          </div>
-        ) : null}
-
-        {/* Sidebar Panel Column */}
-        <div className={`space-y-6 ${
-          activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-            ? 'lg:sticky lg:top-8 lg:self-start'
-            : ''
-        }`}>
-          {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
-          <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-              <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                <ClipboardCheck size={16} className="text-zinc-500" />
-                Recommended Actions
-              </h3>
-              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">Top priority first</span>
-            </div>
-            <div className="grid gap-2.5">
-              {recommendedActions.map((action, index) => (
-                <ClientActionButton
-                  key={`${action.label}-${index}`}
-                  icon={action.icon}
-                  label={action.label}
-                  detail={action.detail}
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                  loading={action.loading}
-                />
-              ))}
-            </div>
-          </div>
-          ) : null}
 
           {activeLeadTab === 'tasks' ? (
           <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
@@ -1830,6 +2150,7 @@ export default function LeadDetailPage({
           ) : null}
         </div>
       </div>
+      )}
 
       {/* Invoice drafting modal */}
       <PortalModal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
@@ -2243,74 +2564,187 @@ function ClientDossierLoading() {
 }
 
 function LeadLifecycleRail({
-  currentStatus,
+  lead,
+  bookings,
+  latestBooking,
+  latestInvoice,
   isSaving = false,
 }: {
-  currentStatus: LuxorInquiry['status']
+  lead: LuxorInquiry
+  bookings: LuxorBooking[]
+  latestBooking: LuxorBooking | null
+  latestInvoice: LuxorInvoice | null
   isSaving?: boolean
 }) {
-  const steps: Array<{ status: LuxorInquiry['status']; label: string; dateLabel: string }> = [
-    { status: 'new', label: 'Inquiry', dateLabel: 'Intake' },
-    { status: 'contacted', label: 'Contacted', dateLabel: 'Outreach' },
-    { status: 'tour_requested', label: 'Tour', dateLabel: 'Schedule' },
-    { status: 'tour_confirmed', label: 'Tour Confirmed', dateLabel: 'Confirmed' },
-    { status: 'proposal_sent', label: 'Proposal', dateLabel: 'Sent' },
-    { status: 'booked', label: 'Booked', dateLabel: 'Deposit' },
+  const inquiryDate = new Date(lead.created_at)
+  const formattedInquiryDate = inquiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const tourDate = lead.preferred_tour_date ? new Date(lead.preferred_tour_date) : null
+  const formattedTourDate = tourDate ? tourDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+
+  const eventDate = lead.target_date ? new Date(lead.target_date) : null
+  const formattedEventDate = eventDate ? eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+
+  const formattedProposalSentDate = lead.status === 'proposal_sent' || lead.status === 'booked'
+    ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : ''
+
+  const steps = [
+    {
+      id: 'inquiry',
+      label: 'Inquiry',
+      subtext: formattedInquiryDate,
+      isCompleted: true,
+      isActive: false,
+    },
+    {
+      id: 'tour',
+      label: 'Tour',
+      subtext: formattedTourDate || 'Jul 6',
+      isCompleted: lead.status !== 'new' && lead.status !== 'contacted',
+      isActive: lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
+    },
+    {
+      id: 'proposal_sent',
+      label: 'Proposal',
+      subtext: formattedProposalSentDate || 'Jul 9',
+      isCompleted: lead.status === 'proposal_sent' || lead.status === 'booked',
+      isActive: lead.status === 'proposal_sent' && !latestBooking,
+    },
+    {
+      id: 'proposal_accepted',
+      label: 'Proposal',
+      subtext: lead.status === 'booked' ? 'Jul 9' : '',
+      isCompleted: lead.status === 'booked',
+      isActive: lead.status === 'proposal_sent' && !!latestBooking,
+    },
+    {
+      id: 'contract',
+      label: 'Contract',
+      subtext: latestBooking?.contract_status === 'signed'
+        ? 'Signed'
+        : latestBooking?.contract_status === 'sent'
+        ? 'Sent'
+        : '',
+      isCompleted: latestBooking?.contract_status === 'signed',
+      isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking),
+    },
+    {
+      id: 'deposit',
+      label: 'Deposit',
+      subtext: latestBooking?.security_deposit_status === 'collected'
+        ? 'Paid'
+        : latestBooking?.contract_status === 'signed'
+        ? 'Pending'
+        : '',
+      isCompleted: latestBooking?.security_deposit_status === 'collected',
+      isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
+    },
+    {
+      id: 'planning',
+      label: 'Planning',
+      subtext: '',
+      isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
+      isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
+    },
+    {
+      id: 'final_payment',
+      label: 'Final Payment',
+      subtext: '',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: latestBooking?.status === 'confirmed',
+    },
+    {
+      id: 'event',
+      label: 'Event',
+      subtext: formattedEventDate || 'Aug 30',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: false,
+    },
+    {
+      id: 'complete',
+      label: 'Complete',
+      subtext: '',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: false,
+    },
   ]
-  const currentIndex = currentStatus === 'closed_lost'
-    ? -1
-    : Math.max(0, steps.findIndex((step) => step.status === currentStatus))
+
+  const activeIndex = steps.findIndex(s => s.isActive)
+  let finalSteps = steps.map((step, idx) => {
+    let active = step.isActive
+    const completed = step.isCompleted
+    if (activeIndex === -1) {
+      const firstNonCompletedIdx = steps.findIndex(s => !s.isCompleted)
+      if (firstNonCompletedIdx === idx) {
+        active = true
+      }
+    }
+    return { ...step, isActive: active, isCompleted: completed }
+  })
+
+  let hasMetIncomplete = false
+  finalSteps = finalSteps.map((step) => {
+    if (!step.isCompleted) {
+      hasMetIncomplete = true
+    }
+    return {
+      ...step,
+      isCompleted: step.isCompleted && !hasMetIncomplete,
+    }
+  })
+
+  finalSteps = finalSteps.map((step) => {
+    if (step.isActive) {
+      return { ...step, isCompleted: false }
+    }
+    return step
+  })
 
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {steps.map((step, index) => {
-          const isDone = currentIndex >= index && currentIndex !== -1
-          const isCurrent = currentIndex === index
-          const segmentFilled = currentIndex > index && currentIndex !== -1
+    <div className="portal-scrollbar overflow-x-auto pb-2">
+      <div className="relative flex min-w-[960px] items-center justify-between px-6 py-4">
+        {/* Track Line */}
+        <div className="absolute left-[5%] right-[5%] top-[34px] h-[2px] bg-zinc-200 dark:bg-zinc-800" />
+        
+        {finalSteps.map((step, index) => {
+          const isDone = step.isCompleted
+          const isCurrent = step.isActive
+
           return (
-            <div key={step.status} className="relative min-w-0">
-              {index < steps.length - 1 ? (
-                <span className="absolute left-[calc(50%+1.2rem)] right-[calc(-50%+1.2rem)] top-4 hidden h-px overflow-hidden bg-[color:var(--portal-border)] xl:block">
-                  <span
-                    className={`block h-full bg-[#caa24c] transition-[width] duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${segmentFilled ? 'w-full' : 'w-0'}`}
-                    style={{ transitionDelay: segmentFilled ? '120ms' : '0ms' }}
-                  />
-                </span>
-              ) : null}
-              <div className="relative flex flex-col items-center text-center">
-                <span className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border text-[10px] font-black transition-colors duration-300 ${
-                  isDone
-                    ? 'border-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
-                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
-                }`}>
-                  <span
-                    className={`absolute inset-x-0 bottom-0 bg-[#caa24c] transition-[height] duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isDone ? 'h-full' : 'h-0'}`}
-                    style={{ transitionDelay: isDone ? `${Math.max(0, index - 1) * 90 + 220}ms` : '0ms' }}
-                  />
-                  <span className={`relative z-10 transition-opacity duration-200 ${isDone ? 'opacity-0' : 'opacity-100'}`}>
-                    {index + 1}
-                  </span>
-                  <Check
-                    size={13}
-                    className={`absolute z-10 transition-all duration-200 ${isDone ? 'scale-100 opacity-100' : 'scale-75 opacity-0'}`}
-                    style={{ transitionDelay: isDone ? `${Math.max(0, index - 1) * 90 + 620}ms` : '0ms' }}
-                  />
-                </span>
-                <span className={`mt-2 truncate text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${isCurrent ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                  {step.label}{isCurrent && isSaving ? '...' : ''}
-                </span>
-                <span className="mt-0.5 text-[9px] font-semibold text-[color:var(--portal-faint)]">{step.dateLabel}</span>
+            <div key={index} className="relative flex flex-col items-center flex-1">
+              <div className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
+                isDone
+                  ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
+                  : isCurrent
+                  ? 'border-2 border-[#caa24c] bg-white dark:bg-zinc-950 text-[#caa24c] ring-4 ring-[#caa24c]/10'
+                  : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650'
+              }`}>
+                {isDone ? (
+                  <Check size={13} className="stroke-[3]" />
+                ) : isCurrent ? (
+                  <FileText size={13} className="stroke-[2.5]" />
+                ) : (
+                  <Circle size={6} className="fill-current text-zinc-300 dark:text-zinc-700 border-none" />
+                )}
               </div>
+
+              <span className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] ${
+                isCurrent
+                  ? 'text-[#a8792f]'
+                  : isDone
+                  ? 'text-white/95'
+                  : 'text-zinc-550'
+              }`}>
+                {step.label}
+              </span>
+              <span className="mt-1 h-3 text-[9px] font-medium text-zinc-400 dark:text-zinc-600">
+                {step.subtext}
+              </span>
             </div>
           )
         })}
       </div>
-      {currentStatus === 'closed_lost' ? (
-        <p className="mt-3 rounded-lg border border-zinc-500/15 bg-zinc-500/5 px-3 py-2 text-xs font-semibold text-[color:var(--portal-muted)]">
-          This lead is currently marked closed lost. Re-open it if the client comes back.
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -2615,6 +3049,19 @@ function normalizeLeadFieldValue(field: EditableLeadField, value: string): strin
 
 function normalizeComparableValue(value: unknown) {
   return value === null || value === undefined ? '' : String(value).trim()
+}
+
+function formatTimeString(timeStr: string) {
+  if (!timeStr) return ''
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return timeStr
+
+  let hours = Number(match[1])
+  const minutes = match[2]
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12
+  hours = hours ? hours : 12
+  return `${hours}:${minutes} ${ampm}`
 }
 
 function normalizeTimeInputValue(value: string | null | undefined) {

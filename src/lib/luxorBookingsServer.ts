@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment } from './luxorInquiryTypes'
+import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, LuxorBookingExpense } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
@@ -105,4 +105,12 @@ export async function updateLuxorBooking(
   })
 
   return updated ?? null
+}
+
+export async function listAllPayments() {
+  return supabaseRest<LuxorPayment[]>('luxor_payments?select=*')
+}
+
+export async function listAllExpenses() {
+  return supabaseRest<LuxorBookingExpense[]>('luxor_booking_expenses?select=*')
 }

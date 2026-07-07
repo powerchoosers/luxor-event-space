@@ -86,3 +86,7 @@ export async function updateTask(
 
   return updated ?? null
 }
+
+export async function listAllTasks() {
+  return supabaseRest<LuxorTask[]>('luxor_tasks?select=*')
+}
