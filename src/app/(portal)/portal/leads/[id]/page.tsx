@@ -1999,42 +1999,11 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group relative min-h-[92px] rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
+      className={`group/card relative min-h-[92px] rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3.5 shadow-lg shadow-black/10 transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/[0.035] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
-        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          {canCopy ? (
-            <button
-              type="button"
-              aria-label={`Copy ${label}`}
-              onClick={copyDetail}
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all ${
-                copied
-                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
-                  : 'border-zinc-800 bg-black/35 text-zinc-500 hover:border-[#caa24c]/25 hover:text-[#f1d27a]'
-              }`}
-            >
-              {copied ? <Check size={13} /> : <Copy size={13} />}
-            </button>
-          ) : null}
-          {canEdit && !isEditing ? (
-            <button
-              type="button"
-              aria-label={`Edit ${label}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                startEditing()
-              }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
-            >
-              <Pencil size={13} />
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</div>
 
       {isEditing ? (
         <input
@@ -2060,14 +2029,51 @@ function DetailItem({
               setIsEditing(false)
             }
           }}
-          className={`w-full rounded-lg border border-[#caa24c]/25 bg-black/45 px-3 py-2 text-sm font-bold text-white outline-none transition-all placeholder:text-zinc-700 focus:border-[#caa24c]/45 ${
+          className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-black/45 px-3 py-2 text-sm font-bold text-white outline-none transition-all placeholder:text-zinc-700 focus:border-[#caa24c]/45 ${
             isMono ? 'font-mono' : ''
           }`}
         />
       ) : (
-        <p className={`break-words text-sm font-bold leading-normal text-zinc-100 transition-colors group-hover:text-white ${isMono ? 'font-mono text-xs' : ''}`}>
-          {isSaving ? 'Saving...' : value}
-        </p>
+        <div className="group/value relative mt-2 inline-flex max-w-full items-center">
+          <p
+            className={`min-w-0 break-words text-sm font-bold leading-normal text-zinc-100 transition-colors group-hover/value:text-white ${
+              isMono ? 'font-mono text-xs' : ''
+            }`}
+          >
+            {isSaving ? 'Saving...' : value}
+          </p>
+          {canCopy || (canEdit && !isEditing) ? (
+            <div className="pointer-events-none absolute left-full top-1/2 ml-2 inline-flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover/value:pointer-events-auto group-hover/value:opacity-100 group-focus-within/value:pointer-events-auto group-focus-within/value:opacity-100">
+              {canCopy ? (
+                <button
+                  type="button"
+                  aria-label={`Copy ${label}`}
+                  onClick={copyDetail}
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all ${
+                    copied
+                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                      : 'border-zinc-800 bg-black/35 text-zinc-500 hover:border-[#caa24c]/25 hover:text-[#f1d27a]'
+                  }`}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              ) : null}
+              {canEdit ? (
+                <button
+                  type="button"
+                  aria-label={`Edit ${label}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    startEditing()
+                  }}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 bg-black/35 text-zinc-500 transition-all hover:border-[#caa24c]/25 hover:text-[#f1d27a]"
+                >
+                  <Pencil size={13} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       )}
       {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#caa24c]">{subtext}</p>}
     </div>
