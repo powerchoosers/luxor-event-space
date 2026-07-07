@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useLayoutEffect, useRef, useState, use } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -148,7 +148,97 @@ export default function LeadDetailPage({
   const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('11:00 PM – 12:30 AM')
   const [savingSummary, setSavingSummary] = useState(false)
 
-  const latestBooking = getMostRecentBooking(bookings)
+  const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
+
+  const leadDerivedData = useMemo(() => {
+    if (!lead) {
+      return {
+        chatMessages: [] as { role: string; content: string }[],
+        isGrandOpeningLead: false,
+        latestInvoice: null as LuxorInvoice | null,
+        noteEntries: [] as ActivityEntry[],
+        emailEntries: [] as ActivityEntry[],
+        allActivityEntries: [] as ActivityEntry[],
+        activityCounts: { all: 0, notes: 0, comms: 0, system: 0 },
+        sortedTasks: [] as LuxorTask[],
+        pendingTaskCount: 0,
+        sortedBookings: [] as LuxorBooking[],
+        sortedInvoices: [] as LuxorInvoice[],
+      }
+    }
+
+    const derivedNoteEntries: ActivityEntry[] = notes.map((note) => ({
+      kind: 'note',
+      id: `note-${note.id}`,
+      createdAt: note.created_at,
+      note,
+    }))
+    const derivedEmailEntries: ActivityEntry[] = emailMessages.map((email) => ({
+      kind: 'email',
+      id: `email-${email.id || email.direction || email.subject}-${email.receivedAt || email.from}`,
+      createdAt: normalizeTimelineDate(email.receivedAt),
+      email,
+    }))
+    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    const derivedSortedTasks = [...tasks].sort((a, b) => {
+      const rank = (task: LuxorTask) => {
+        if (task.status === 'pending' && task.priority === 'urgent') return 0
+        if (task.status === 'pending' && task.priority === 'high') return 1
+        if (task.status === 'pending') return 2
+        if (task.status === 'completed') return 3
+        return 4
+      }
+
+      const rankDiff = rank(a) - rank(b)
+      if (rankDiff !== 0) return rankDiff
+
+      const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY
+      const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
+      return aDue - bDue
+    })
+    const derivedSortedBookings = [...bookings].sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.created_at).getTime()
+      const bTime = new Date(b.updated_at || b.created_at).getTime()
+      return bTime - aTime
+    })
+    const derivedSortedInvoices = [...invoices].sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.created_at).getTime()
+      const bTime = new Date(b.updated_at || b.created_at).getTime()
+      return bTime - aTime
+    })
+
+    return {
+      chatMessages: (lead.metadata?.chatMessages as { role: string; content: string }[]) || [],
+      isGrandOpeningLead: isGrandOpeningRsvp(lead),
+      latestInvoice: derivedSortedInvoices[0] ?? null,
+      noteEntries: derivedNoteEntries,
+      emailEntries: derivedEmailEntries,
+      allActivityEntries: derivedAllActivityEntries,
+      activityCounts: {
+        all: derivedNoteEntries.length + derivedEmailEntries.length,
+        notes: notes.filter((note) => note.note_type === 'note').length,
+        comms: derivedEmailEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
+        system: notes.filter((note) => note.note_type === 'status_change').length,
+      },
+      sortedTasks: derivedSortedTasks,
+      pendingTaskCount: derivedSortedTasks.filter((task) => task.status === 'pending').length,
+      sortedBookings: derivedSortedBookings,
+      sortedInvoices: derivedSortedInvoices,
+    }
+  }, [bookings, emailMessages, invoices, lead, notes, tasks])
+
+  const activityEntries = useMemo(() => {
+    return leadDerivedData.allActivityEntries.filter((entry) => {
+      if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
+      if (activeFeedTab === 'comms') {
+        return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+      }
+      if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
+      return true
+    })
+  }, [activeFeedTab, leadDerivedData.allActivityEntries])
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
@@ -213,19 +303,33 @@ export default function LeadDetailPage({
   }
 
   useLayoutEffect(() => {
+    let frame = 0
     const updateIndicator = () => {
       const activeButton = tabButtonRefs.current[activeLeadTab]
       if (!activeButton) return
 
-      setTabIndicator({
+      const nextIndicator = {
         left: activeButton.offsetLeft,
         width: activeButton.offsetWidth,
+      }
+      setTabIndicator((current) => {
+        if (current.left === nextIndicator.left && current.width === nextIndicator.width) {
+          return current
+        }
+        return nextIndicator
       })
+    }
+    const scheduleIndicatorUpdate = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updateIndicator)
     }
 
     updateIndicator()
-    window.addEventListener('resize', updateIndicator)
-    return () => window.removeEventListener('resize', updateIndicator)
+    window.addEventListener('resize', scheduleIndicatorUpdate)
+    return () => {
+      window.removeEventListener('resize', scheduleIndicatorUpdate)
+      cancelAnimationFrame(frame)
+    }
   }, [activeLeadTab])
 
   useEffect(() => {
@@ -760,33 +864,19 @@ export default function LeadDetailPage({
     )
   }
 
-  // Parse chat logs if available in metadata
-  const chatMessages = (lead.metadata?.chatMessages as { role: string; content: string }[]) || []
-  const isGrandOpeningLead = isGrandOpeningRsvp(lead)
-  const latestInvoice = invoices[0] ?? null
-  const noteEntries: ActivityEntry[] = notes.map((note) => ({
-    kind: 'note',
-    id: `note-${note.id}`,
-    createdAt: note.created_at,
-    note,
-  }))
-  const emailEntries: ActivityEntry[] = emailMessages.map((email) => ({
-    kind: 'email',
-    id: `email-${email.id || email.direction || email.subject}-${email.receivedAt || email.from}`,
-    createdAt: normalizeTimelineDate(email.receivedAt),
-    email,
-  }))
-  const allActivityEntries = [...noteEntries, ...emailEntries].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
-  const activityEntries = allActivityEntries.filter((entry) => {
-    if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
-    if (activeFeedTab === 'comms') {
-      return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
-    }
-    if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
-    return true
-  })
+  const {
+    chatMessages,
+    isGrandOpeningLead,
+    latestInvoice,
+    noteEntries,
+    emailEntries,
+    allActivityEntries,
+    activityCounts,
+    sortedTasks,
+    pendingTaskCount,
+    sortedBookings,
+    sortedInvoices,
+  } = leadDerivedData
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
   const eventDetails: Array<{
     label: string
@@ -900,39 +990,6 @@ export default function LeadDetailPage({
     { label: 'Marketing Opt In', value: lead.marketing_opt_in ? 'Yes' : 'No' },
     { label: 'User Agent', value: lead.user_agent || 'Not captured', isMono: true },
   ]
-  const activityCounts = {
-    all: noteEntries.length + emailEntries.length,
-    notes: notes.filter((note) => note.note_type === 'note').length,
-    comms: emailEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
-    system: notes.filter((note) => note.note_type === 'status_change').length,
-  }
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const rank = (task: LuxorTask) => {
-      if (task.status === 'pending' && task.priority === 'urgent') return 0
-      if (task.status === 'pending' && task.priority === 'high') return 1
-      if (task.status === 'pending') return 2
-      if (task.status === 'completed') return 3
-      return 4
-    }
-
-    const rankDiff = rank(a) - rank(b)
-    if (rankDiff !== 0) return rankDiff
-
-    const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY
-    const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
-    return aDue - bDue
-  })
-  const pendingTaskCount = sortedTasks.filter((task) => task.status === 'pending').length
-  const sortedBookings = [...bookings].sort((a, b) => {
-    const aTime = new Date(a.updated_at || a.created_at).getTime()
-    const bTime = new Date(b.updated_at || b.created_at).getTime()
-    return bTime - aTime
-  })
-  const sortedInvoices = [...invoices].sort((a, b) => {
-    const aTime = new Date(a.updated_at || a.created_at).getTime()
-    const bTime = new Date(b.updated_at || b.created_at).getTime()
-    return bTime - aTime
-  })
   const recommendedActions: Array<{
     icon: React.ReactNode
     label: string

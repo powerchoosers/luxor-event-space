@@ -35,6 +35,7 @@ import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
+import { ToastProvider } from '@/components/portal/ToastProvider'
 
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
@@ -167,6 +168,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
+      <ToastProvider>
       <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto portal-scrollbar ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -440,6 +442,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         </div>
       </main>
       {elenaOpen ? <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} /> : null}
+      </ToastProvider>
     </body>
   )
 }

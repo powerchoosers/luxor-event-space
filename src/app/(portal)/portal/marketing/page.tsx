@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   BarChart3,
@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
 
@@ -63,6 +64,15 @@ type CampaignEvent = {
   device_type: string | null
 }
 
+type MarketingActivityEvent = CampaignEvent & {
+  campaign_id: string
+  recipient_id: string
+  recipient_email: string | null
+  recipient_name: string | null
+  campaign_name: string | null
+  campaign_subject: string | null
+}
+
 type CampaignDetail = {
   campaign: Campaign
   recipients: CampaignRecipient[]
@@ -70,6 +80,7 @@ type CampaignDetail = {
 }
 
 export default function MarketingPage() {
+  const { notify } = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('sources')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,9 +89,12 @@ export default function MarketingPage() {
   const [selectedDetail, setSelectedDetail] = useState<CampaignDetail | null>(null)
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
+  const latestActivityAtRef = useRef<string | null>(null)
+  const seenActivityIdsRef = useRef<Set<string>>(new Set())
+  const selectedCampaignIdRef = useRef<string | null>(null)
 
-  async function loadCampaigns() {
-    setLoading(true)
+  const loadCampaigns = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) setLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/marketing/campaigns', { cache: 'no-store' })
@@ -90,13 +104,17 @@ export default function MarketingPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load campaigns.')
     } finally {
-      setLoading(false)
+      if (!options.silent) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadCampaigns()
-  }, [])
+  }, [loadCampaigns])
+
+  useEffect(() => {
+    selectedCampaignIdRef.current = selectedDetail?.campaign.id ?? null
+  }, [selectedDetail?.campaign.id])
 
   const stats = useMemo(() => {
     const recipients = campaigns.reduce((sum, campaign) => sum + Number(campaign.recipient_count || 0), 0)
@@ -126,7 +144,11 @@ export default function MarketingPage() {
       if (!response.ok) throw new Error(payload.error || 'Unable to cancel campaign.')
       await loadCampaigns()
     } catch (cancelError) {
-      alert(cancelError instanceof Error ? cancelError.message : 'Unable to cancel campaign.')
+      notify({
+        title: 'Campaign was not cancelled',
+        description: cancelError instanceof Error ? cancelError.message : 'Unable to cancel campaign.',
+        variant: 'error',
+      })
     } finally {
       setBusyId(null)
     }
@@ -144,25 +166,108 @@ export default function MarketingPage() {
       if (!response.ok) throw new Error(payload.error || 'Unable to send campaign now.')
       await loadCampaigns()
     } catch (sendError) {
-      alert(sendError instanceof Error ? sendError.message : 'Unable to send campaign now.')
+      notify({
+        title: 'Campaign was not sent',
+        description: sendError instanceof Error ? sendError.message : 'Unable to send campaign now.',
+        variant: 'error',
+      })
     } finally {
       setBusyId(null)
     }
   }
 
-  async function openCampaignReport(id: string) {
-    setDetailLoadingId(id)
+  const refreshCampaignReport = useCallback(async (id: string, options: { silent?: boolean } = {}) => {
+    if (!options.silent) setDetailLoadingId(id)
     try {
       const response = await fetch(`/api/marketing/campaigns/${id}`, { cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Unable to load campaign report.')
       setSelectedDetail(payload)
     } catch (reportError) {
-      alert(reportError instanceof Error ? reportError.message : 'Unable to load campaign report.')
+      notify({
+        title: 'Report could not load',
+        description: reportError instanceof Error ? reportError.message : 'Unable to load campaign report.',
+        variant: 'error',
+      })
     } finally {
-      setDetailLoadingId(null)
+      if (!options.silent) setDetailLoadingId(null)
     }
+  }, [notify])
+
+  function openCampaignReport(id: string) {
+    void refreshCampaignReport(id)
   }
+
+  useEffect(() => {
+    let active = true
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const pollMarketingActivity = async (initial = false) => {
+      try {
+        const since = latestActivityAtRef.current
+        const url = since
+          ? `/api/marketing/events?since=${encodeURIComponent(since)}&limit=25`
+          : '/api/marketing/events?limit=25'
+        const response = await fetch(url, { cache: 'no-store' })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error || 'Unable to load marketing events.')
+        if (!active) return
+
+        const events = Array.isArray(payload.events) ? payload.events as MarketingActivityEvent[] : []
+        if (events.length) {
+          const newest = events[0]?.created_at
+          if (newest && (!latestActivityAtRef.current || new Date(newest).getTime() > new Date(latestActivityAtRef.current).getTime())) {
+            latestActivityAtRef.current = newest
+          }
+        }
+
+        if (initial) {
+          events.forEach((event) => seenActivityIdsRef.current.add(event.id))
+          return
+        }
+
+        const newEvents = events
+          .filter((event) => !seenActivityIdsRef.current.has(event.id))
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+        if (!newEvents.length) return
+
+        newEvents.forEach((event) => {
+          seenActivityIdsRef.current.add(event.id)
+          const recipient = event.recipient_name || event.recipient_email || 'Unknown recipient'
+          const campaign = event.campaign_name || event.campaign_subject || 'Unknown campaign'
+          const title = event.event_type === 'click' ? 'Marketing link clicked' : 'Marketing email opened'
+          const target = event.event_type === 'click' && event.url ? ` -> ${shortenUrl(event.url)}` : ''
+
+          notify({
+            title,
+            description: `${recipient} on ${campaign}${target}`,
+            variant: event.event_type === 'click' ? 'success' : 'info',
+          })
+        })
+
+        await loadCampaigns({ silent: true })
+
+        const selectedCampaignId = selectedCampaignIdRef.current
+        if (selectedCampaignId && newEvents.some((event) => event.campaign_id === selectedCampaignId)) {
+          await refreshCampaignReport(selectedCampaignId, { silent: true })
+        }
+      } catch (activityError) {
+        console.error('Marketing activity watcher failed:', activityError)
+      } finally {
+        if (active) {
+          timeoutId = setTimeout(() => pollMarketingActivity(false), 3000)
+        }
+      }
+    }
+
+    void pollMarketingActivity(true)
+
+    return () => {
+      active = false
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [loadCampaigns, notify, refreshCampaignReport])
 
   function openTemplateInBuilder(template: EmailTemplate) {
     setBuilderTemplate(template)
@@ -193,7 +298,7 @@ export default function MarketingPage() {
             {activeTab === 'overview' && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={loadCampaigns}
+                  onClick={() => loadCampaigns()}
                   disabled={loading}
                   className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-3.5 py-2 text-xs font-black uppercase tracking-[0.15em] text-zinc-400 transition-all hover:text-white disabled:opacity-50"
                 >
@@ -474,16 +579,9 @@ function CampaignCard({
 }
 
 function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | null; onClose: () => void }) {
-  const [activeDetail, setActiveDetail] = useState<CampaignDetail | null>(null)
+  if (!detail) return null
 
-  if (detail && detail !== activeDetail) {
-    setActiveDetail(detail)
-  }
-
-  const showDetail = detail || activeDetail
-  if (!showDetail) return null
-
-  const { campaign, recipients, events } = showDetail
+  const { campaign, recipients, events } = detail
   const engaged = recipients.filter((recipient) => recipient.open_count > 0 || recipient.click_count > 0).length
 
   return (
@@ -586,6 +684,16 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="font-mono text-lg font-bold text-white">{value}</p>
     </div>
   )
+}
+
+function shortenUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    const value = `${parsed.hostname}${parsed.pathname === '/' ? '' : parsed.pathname}`
+    return value.length > 42 ? `${value.slice(0, 39)}...` : value
+  } catch {
+    return url.length > 42 ? `${url.slice(0, 39)}...` : url
+  }
 }
 
 function MachineStep({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {

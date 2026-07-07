@@ -50,6 +50,13 @@ export type MarketingTemplateInput = {
   createdBy?: string | null
 }
 
+export type MarketingActivityEvent = LuxorMarketingEvent & {
+  recipient_email: string | null
+  recipient_name: string | null
+  campaign_name: string | null
+  campaign_subject: string | null
+}
+
 function absoluteUrl(path: string) {
   return `${PUBLIC_BASE_URL.replace(/\/$/, '')}${path}`
 }
@@ -220,6 +227,44 @@ export async function getMarketingCampaignDetail(id: string) {
     recipients,
     events,
   }
+}
+
+export async function listMarketingActivityEvents(options: { since?: string | null; limit?: number } = {}) {
+  const limit = Math.min(Math.max(options.limit ?? 25, 1), 100)
+  const sinceFilter = options.since ? `&created_at=gt.${encodeURIComponent(options.since)}` : ''
+  const events = await supabaseRest<LuxorMarketingEvent[]>(
+    `luxor_marketing_events?select=*&event_type=in.(open,click)&order=created_at.desc&limit=${encodeURIComponent(limit)}${sinceFilter}`,
+  )
+
+  if (!events.length) return []
+
+  const recipientIds = Array.from(new Set(events.map((event) => event.recipient_id).filter(Boolean)))
+  const campaignIds = Array.from(new Set(events.map((event) => event.campaign_id).filter(Boolean)))
+
+  const [recipients, campaigns] = await Promise.all([
+    recipientIds.length
+      ? supabaseRest<LuxorMarketingRecipient[]>(`luxor_marketing_recipients?select=id,email,name&id=in.(${recipientIds.join(',')})`)
+      : Promise.resolve([]),
+    campaignIds.length
+      ? supabaseRest<LuxorMarketingCampaign[]>(`luxor_marketing_campaigns?select=id,name,subject&id=in.(${campaignIds.join(',')})`)
+      : Promise.resolve([]),
+  ])
+
+  const recipientsById = new Map(recipients.map((recipient) => [recipient.id, recipient]))
+  const campaignsById = new Map(campaigns.map((campaign) => [campaign.id, campaign]))
+
+  return events.map((event): MarketingActivityEvent => {
+    const recipient = recipientsById.get(event.recipient_id)
+    const campaign = campaignsById.get(event.campaign_id)
+
+    return {
+      ...event,
+      recipient_email: recipient?.email ?? null,
+      recipient_name: recipient?.name ?? null,
+      campaign_name: campaign?.name ?? null,
+      campaign_subject: campaign?.subject ?? null,
+    }
+  })
 }
 
 export async function createMarketingCampaign(data: {
