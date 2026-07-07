@@ -77,7 +77,10 @@ export function PortalStickyTable({
 
 export function PortalStickyThead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="sticky top-0 z-20 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] shadow-[0_1px_0_rgba(124,91,36,0.08)]">
+    <thead 
+      className="sticky top-0 z-20 border-b border-[color:var(--portal-border)] bg-[color:color-mix(in_srgb,var(--portal-bg)_96%,transparent)] shadow-[0_1px_0_rgba(124,91,36,0.08)]"
+      style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+    >
       {children}
     </thead>
   )
@@ -364,7 +367,8 @@ export function PortalSelect({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.985 }}
               transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-card,rgba(8,7,6,0.98))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+              className="portal-scrollbar absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:color-mix(in_srgb,var(--portal-bg)_75%,transparent)] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+              style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
             >
               <div className="space-y-0.5">
                 {options.map((opt) => {
@@ -504,7 +508,8 @@ export function PortalDatePicker({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.985 }}
               transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-card,rgba(8,7,6,0.98))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+              className="absolute right-0 z-50 mt-2 w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:color-mix(in_srgb,var(--portal-bg)_75%,transparent)] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5 backdrop-blur-xl"
+              style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
             >
             {/* Header navigation */}
             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">

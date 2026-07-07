@@ -593,3 +593,14 @@ body[data-portal-theme='light'] .text-zinc-900 {
   }
 }
 
+/* Sticky table header cells with glassmorphic blur */
+thead.sticky th,
+.portal-sticky-th th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  background-color: color-mix(in srgb, var(--portal-bg) 75%, transparent) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+}
+
