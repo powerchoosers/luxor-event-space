@@ -919,7 +919,7 @@ export default function LeadDetailPage({
   ]
 
   return (
-    <PortalPageFrame className="max-w-[1560px] gap-0">
+    <PortalPageFrame className="max-w-[1560px] !gap-0">
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
@@ -981,7 +981,7 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky top-0 z-30 overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
         <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
           <div className="relative flex min-w-max gap-6">
             <span
