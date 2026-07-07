@@ -1356,10 +1356,9 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="space-y-6">
-          <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Column 1: Next Step & Event Details */}
-            <div className="space-y-6">
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] gap-6">
+          {/* Left Column: Dossier main sections */}
+          <div className="space-y-6">
             {/* Next Step */}
             <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex flex-col items-center text-center justify-between min-h-[220px] luxor-soft-enter">
               <div className="flex flex-col items-center">
@@ -1393,261 +1392,303 @@ export default function LeadDetailPage({
               </div>
             </section>
 
-            {/* Event Details */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
-                <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-                  Edit inline
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                <div className="space-y-1">
-                  {eventDetails.slice(0, 3).map((item) => (
-                    <DetailItem
-                      key={item.label}
-                      icon={item.icon}
-                      label={item.label}
-                      value={item.value}
-                      editValue={item.editValue}
-                      copyValue={item.copyValue}
-                      inputType={item.inputType}
-                      placeholder={item.placeholder}
-                      isMono={item.isMono}
-                      isSaving={savingLeadField === item.field}
-                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                    />
-                  ))}
+            {/* Event & Client Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Event Details */}
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                  <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
+                    Edit inline
+                  </span>
                 </div>
-                <div className="space-y-1">
-                  {eventDetails.slice(3).map((item) => (
-                    <DetailItem
-                      key={item.label}
-                      icon={item.icon}
-                      label={item.label}
-                      value={item.value}
-                      editValue={item.editValue}
-                      copyValue={item.copyValue}
-                      inputType={item.inputType}
-                      placeholder={item.placeholder}
-                      isMono={item.isMono}
-                      isSaving={savingLeadField === item.field}
-                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Internal Metadata */}
-              <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
-                    <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowInternalSignals((current) => !current)}
-                    className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
-                  >
-                    {showInternalSignals ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {showInternalSignals ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {internalDetails.map((item) => (
+                
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                  <div className="space-y-1">
+                    {eventDetails.slice(0, 3).map((item) => (
                       <DetailItem
                         key={item.label}
+                        icon={item.icon}
                         label={item.label}
                         value={item.value}
-                        copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                        editValue={item.editValue}
+                        copyValue={item.copyValue}
+                        inputType={item.inputType}
+                        placeholder={item.placeholder}
                         isMono={item.isMono}
-                        subtext={item.subtext}
+                        isSaving={savingLeadField === item.field}
+                        onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
                       />
                     ))}
                   </div>
-                ) : null}
-              </div>
-            </section>
-          </div>
-
-          {/* Column 2: Client Details & Recent Activity */}
-          <div className="space-y-6">
-            {/* Client Details */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
-                <User size={18} className="text-[#a8792f] opacity-80" />
-              </div>
-              <div className="grid gap-1">
-                {clientDetails.map((item) => (
-                  <DetailItem
-                    key={item.label}
-                    icon={item.icon}
-                    label={item.label}
-                    value={item.value}
-                    editValue={item.editValue}
-                    copyValue={item.copyValue}
-                    inputType={item.inputType}
-                    placeholder={item.placeholder}
-                    isMono={item.isMono}
-                    isSaving={savingLeadField === item.field}
-                    onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                  />
-                ))}
-                
-                {/* Editable Address */}
-                <DetailItem
-                  icon={<MapPin size={14} />}
-                  label="Address"
-                  value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                  editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                  copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                  inputType="text"
-                  placeholder="San Antonio, TX"
-                  isSaving={savingLeadField === 'address'}
-                  onCommit={(value) => handleLeadFieldUpdate('address', value)}
-                />
-
-                <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
-                    <Sparkles size={14} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
-                    <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
+                  <div className="space-y-1">
+                    {eventDetails.slice(3).map((item) => (
+                      <DetailItem
+                        key={item.label}
+                        icon={item.icon}
+                        label={item.label}
+                        value={item.value}
+                        editValue={item.editValue}
+                        copyValue={item.copyValue}
+                        inputType={item.inputType}
+                        placeholder={item.placeholder}
+                        isMono={item.isMono}
+                        isSaving={savingLeadField === item.field}
+                        onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                      />
+                    ))}
                   </div>
                 </div>
-              </div>
-            </section>
 
-            {/* Recent Activity */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
-                <button
-                  type="button"
-                  onClick={() => setActiveLeadTab('activity')}
-                  className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                >
-                  View all activity &rarr;
-                </button>
-              </div>
+                {/* Internal Metadata */}
+                <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
+                      <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowInternalSignals((current) => !current)}
+                      className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
+                    >
+                      {showInternalSignals ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {showInternalSignals ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {internalDetails.map((item) => (
+                        <DetailItem
+                          key={item.label}
+                          label={item.label}
+                          value={item.value}
+                          copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                          isMono={item.isMono}
+                          subtext={item.subtext}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </section>
 
-              <div className="space-y-4">
-                {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
-                  <>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <FileSignature size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Contract created <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
+              {/* Client Details */}
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
+                  <User size={18} className="text-[#a8792f] opacity-80" />
+                </div>
+                <div className="grid gap-1">
+                  {clientDetails.map((item) => (
+                    <DetailItem
+                      key={item.label}
+                      icon={item.icon}
+                      label={item.label}
+                      value={item.value}
+                      editValue={item.editValue}
+                      copyValue={item.copyValue}
+                      inputType={item.inputType}
+                      placeholder={item.placeholder}
+                      isMono={item.isMono}
+                      isSaving={savingLeadField === item.field}
+                      onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                    />
+                  ))}
+                  
+                  {/* Editable Address */}
+                  <DetailItem
+                    icon={<MapPin size={14} />}
+                    label="Address"
+                    value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                    editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                    copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                    inputType="text"
+                    placeholder="San Antonio, TX"
+                    isSaving={savingLeadField === 'address'}
+                    onCommit={(value) => handleLeadFieldUpdate('address', value)}
+                  />
+
+                  <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
+                      <Sparkles size={14} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
+                      <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
                     </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                          <CheckCircle2 size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <Send size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Proposal sent <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                          <CheckCircle2 size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Tour completed <span className="text-zinc-500 font-medium">by You</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
-                    </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
-                          <Mail size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-white leading-tight">
-                            Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
-                    </div>
-                  </>
-                ) : allActivityEntries.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
-                ) : (
-                  allActivityEntries.slice(0, 5).map((entry) => {
-                    const isEmail = entry.kind === 'email'
-                    return (
-                      <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
-                            isEmail 
-                              ? 'bg-purple-500/10 text-purple-400' 
-                              : entry.note.note_type === 'call_log'
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : entry.note.note_type === 'email_log'
-                              ? 'bg-purple-500/10 text-purple-400'
-                              : 'bg-zinc-500/10 text-zinc-500'
-                          }`}>
-                            {isEmail ? (
-                              <Mail size={13} />
-                            ) : entry.note.note_type === 'call_log' ? (
-                              <Phone size={13} />
-                            ) : (
-                              <FileText size={13} />
-                            )}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* Recent Activity & Inquiry Payload Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Recent Activity */}
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveLeadTab('activity')}
+                    className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                  >
+                    View all activity &rarr;
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
+                    <>
+                      <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                            <FileSignature size={13} />
                           </span>
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-white leading-tight truncate">
-                              {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
+                            <p className="text-xs font-bold text-white leading-tight">
+                              Contract created <span className="text-zinc-500 font-medium">by You</span>
                             </p>
                           </div>
                         </div>
-                        <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
-                          {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </span>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                            <CheckCircle2 size={13} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white leading-tight">
+                              Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                            <Send size={13} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white leading-tight">
+                              Proposal sent <span className="text-zinc-500 font-medium">by You</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                            <CheckCircle2 size={13} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white leading-tight">
+                              Tour completed <span className="text-zinc-500 font-medium">by You</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
+                            <Mail size={13} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white leading-tight">
+                              Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
+                      </div>
+                    </>
+                  ) : allActivityEntries.length === 0 ? (
+                    <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
+                  ) : (
+                    allActivityEntries.slice(0, 5).map((entry) => {
+                      const isEmail = entry.kind === 'email'
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+                              isEmail 
+                                ? 'bg-purple-500/10 text-purple-400' 
+                                : entry.note.note_type === 'call_log'
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : entry.note.note_type === 'email_log'
+                                ? 'bg-purple-500/10 text-purple-400'
+                                : 'bg-zinc-500/10 text-zinc-500'
+                            }`}>
+                              {isEmail ? (
+                                <Mail size={13} />
+                              ) : entry.note.note_type === 'call_log' ? (
+                                <Phone size={13} />
+                              ) : (
+                                <FileText size={13} />
+                              )}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white leading-tight truncate">
+                                {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
+                            {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </section>
+
+              {/* RSVP / Inquiry Message */}
+              <div className="nodal-void-card h-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
+                <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                  {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
+                </h4>
+                <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
+                  &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
+                </p>
+              </div>
+            </div>
+
+            {/* Concierge AI session replay */}
+            {chatMessages.length > 0 && (
+              <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                  <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
+                </div>
+                <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
+                  {chatMessages.map((msg, index) => {
+                    const isUser = msg.role === 'user'
+                    return (
+                      <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                          isUser
+                            ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                            : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                        }`}>
+                          <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                            {isUser ? 'Client' : 'Elena AI'}
+                          </div>
+                          {msg.content}
+                        </div>
                       </div>
                     )
-                  })
-                )}
+                  })}
+                </div>
               </div>
-            </section>
+            )}
           </div>
 
-          {/* Column 3: Recommended Actions & Event Summary */}
-          <div className="space-y-6">
+          {/* Right Column: Sticky actions & summary */}
+          <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
             {/* Recommended Actions */}
             <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
               <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
@@ -1810,54 +1851,7 @@ export default function LeadDetailPage({
             </section>
           </div>
         </div>
-
-        {/* Bottom Row: Large content panels (Inquiry Message & Chat Replay) */}
-        {(lead.message || chatMessages.length > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className={chatMessages.length > 0 ? "lg:col-span-1" : "lg:col-span-3"}>
-              <div className="nodal-void-card h-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
-                <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-                  {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
-                </h4>
-                <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
-                  &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
-                </p>
-              </div>
-            </div>
-
-            {chatMessages.length > 0 && (
-              <div className="lg:col-span-2">
-                <div className="nodal-void-card h-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                  <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                    <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
-                  </div>
-                  <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
-                    {chatMessages.map((msg, index) => {
-                      const isUser = msg.role === 'user'
-                      return (
-                        <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
-                            isUser
-                              ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                              : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                          }`}>
-                            <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                              {isUser ? 'Client' : 'Elena AI'}
-                            </div>
-                            {msg.content}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    ) : (
+      ) : (
         <div className={`mt-3 grid gap-6 ${
           activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
             ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
