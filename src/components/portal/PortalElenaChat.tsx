@@ -4,9 +4,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import { 
   X, 
   Send, 
-  Terminal, 
-  ChevronDown, 
-  ChevronUp, 
   Info,
   RefreshCw
 } from 'lucide-react'
@@ -40,7 +37,7 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hello! I am **Elena**, your internal operations assistant. I have full secure access to your CRM database. You can ask me to run queries, summarize invoices, list tasks, show leads, or even write updates.'
+      content: "Hey bestie! 💕 Your COO, CFO, Marketing guru, and business mentor is in the house. I've got full access to our Luxor database, so whether you want to crunch numbers, check leads, brainstorm marketing ideas, or get some operations advice, I've got your back. What are we tackling today?"
     }
   ])
   const [input, setInput] = useState('')
@@ -166,14 +163,6 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
               </div>
             </div>
 
-            {/* Render SQL queries if present */}
-            {msg.executedQueries && msg.executedQueries.length > 0 && (
-              <div className="w-[88%] mt-2 pl-8 space-y-2">
-                {msg.executedQueries.map((eq, qIdx) => (
-                  <CollapsibleQuery key={qIdx} query={eq.query} result={eq.result} />
-                ))}
-              </div>
-            )}
           </div>
         ))}
 
@@ -245,68 +234,6 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
 }
 
 /* Collapsible SQL Query Renderer */
-function CollapsibleQuery({ query, result }: { query: string; result: unknown }) {
-  const [isOpen, setIsOpen] = useState(false)
-  
-  const isError = !!(
-    result && 
-    typeof result === 'object' && 
-    'error' in result
-  )
-  
-  const isSuccess = !!(
-    result && 
-    typeof result === 'object' && 
-    'status' in result && 
-    (result as { status: unknown }).status === 'success'
-  )
-
-  const recordCount = Array.isArray(result) 
-    ? result.length 
-    : (isSuccess ? 1 : 0)
-
-  return (
-    <div className="rounded-lg border border-zinc-900 bg-zinc-950/40 text-xs overflow-hidden">
-      <button 
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-zinc-950 hover:bg-zinc-900 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Terminal size={12} className={isError ? 'text-red-400' : 'text-green-500'} />
-          <span className="font-mono text-[10px] text-zinc-400 truncate max-w-[200px]">
-            {query.replace(/\s+/g, ' ')}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
-            isError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
-          }`}>
-            {isError ? 'ERROR' : `SQL [${recordCount}]`}
-          </span>
-          {isOpen ? <ChevronUp size={12} className="text-zinc-500" /> : <ChevronDown size={12} className="text-zinc-500" />}
-        </div>
-      </button>
-
-      {isOpen && (
-        <div className="p-2 border-t border-zinc-900 space-y-2 bg-[#020202]">
-          <div>
-            <span className="text-[9px] font-semibold text-zinc-650 uppercase">SQL Statement</span>
-            <pre className="mt-1 p-2 rounded bg-black border border-zinc-800 text-[10px] font-mono text-[#caa24c] overflow-x-auto leading-relaxed">
-              {query}
-            </pre>
-          </div>
-          <div>
-            <span className="text-[9px] font-semibold text-zinc-650 uppercase">Query Response</span>
-            <pre className="mt-1 p-2 rounded bg-black border border-zinc-800 text-[10px] font-mono text-zinc-400 overflow-x-auto leading-relaxed max-h-[160px] overflow-y-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 /* Local formatting helper function */
 function renderFormattedContent(content: string) {
