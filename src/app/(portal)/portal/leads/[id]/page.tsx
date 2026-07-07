@@ -981,7 +981,7 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky top-0 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl sm:-top-6 lg:-top-8">
         <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
           <div className="relative flex min-w-max gap-6">
             <span
@@ -1023,7 +1023,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`mt-6 grid gap-6 ${
+      <div className={`mt-8 grid gap-6 lg:mt-10 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
