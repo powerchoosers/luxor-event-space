@@ -1031,8 +1031,8 @@ export default function LeadDetailPage({
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
       }`}>
-        {/* Main Details and Activity Column */}
-        <div className="space-y-6">
+        {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
+          <div className="space-y-6">
           {activeLeadTab === 'overview' ? (
             <>
           <div id="lead-overview" className="grid gap-4 scroll-mt-24 md:grid-cols-2">
@@ -1446,7 +1446,8 @@ export default function LeadDetailPage({
             )}
           </div>
           ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {/* Sidebar Panel Column */}
         <div className={`space-y-6 ${
