@@ -981,7 +981,7 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky -top-4 z-30 mb-6 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/75 shadow-lg shadow-black/10 backdrop-blur-2xl backdrop-saturate-150 sm:-top-6 sm:mb-7 lg:-top-8 lg:mb-8">
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/45 shadow-lg shadow-black/10 backdrop-blur-[28px] backdrop-saturate-150 sm:-top-6 lg:-top-8">
         <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
           <div className="relative flex min-w-max gap-6">
             <span
@@ -1023,7 +1023,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`mt-10 grid gap-6 lg:mt-12 ${
+      <div className={`mt-4 grid gap-6 lg:mt-5 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
@@ -1446,7 +1446,7 @@ export default function LeadDetailPage({
         </div>
 
         {/* Sidebar Panel Column */}
-        <div className={`space-y-6 ${
+        <div className={`space-y-6 pt-4 lg:pt-5 ${
           activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
             ? 'lg:sticky lg:top-4 lg:self-start'
             : ''
