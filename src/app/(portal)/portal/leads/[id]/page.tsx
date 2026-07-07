@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, use } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState, use } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -125,6 +125,24 @@ export default function LeadDetailPage({
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
+  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
+
+  useLayoutEffect(() => {
+    const updateIndicator = () => {
+      const activeButton = tabButtonRefs.current[activeLeadTab]
+      if (!activeButton) return
+
+      setTabIndicator({
+        left: activeButton.offsetLeft,
+        width: activeButton.offsetWidth,
+      })
+    }
+
+    updateIndicator()
+    window.addEventListener('resize', updateIndicator)
+    return () => window.removeEventListener('resize', updateIndicator)
+  }, [activeLeadTab])
 
   useEffect(() => {
     setShowInternalSignals(false)
@@ -962,35 +980,44 @@ export default function LeadDetailPage({
           <LeadLifecycleRail currentStatus={pendingLifecycleStatus ?? lead.status} isSaving={updatingStatus} />
         </div>
 
-        <div className="portal-scrollbar flex gap-6 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4">
-          {tabItems.map((item) => {
-            const isActive = activeLeadTab === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setActiveLeadTab(item.id)
-                  if (item.id === 'messages') setActiveFeedTab('comms')
-                  if (item.id === 'notes') setActiveFeedTab('notes')
-                  if (item.id === 'activity') setActiveFeedTab('all')
-                  if (item.id === 'tasks') setShowTaskTools(true)
-                }}
-                className={`relative inline-flex shrink-0 items-center gap-2 border-b-2 px-0 py-4 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
-                  isActive
-                    ? 'border-[#caa24c] text-[#a8792f]'
-                    : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                }`}
-              >
-                {item.label}
-                {typeof item.count === 'number' ? (
-                  <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>
-                    {item.count}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
+        <div className="portal-scrollbar overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4">
+          <div className="relative flex min-w-max gap-6">
+            <span
+              className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+              style={{ left: tabIndicator.left, width: tabIndicator.width }}
+            />
+            {tabItems.map((item) => {
+              const isActive = activeLeadTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  ref={(node) => {
+                    tabButtonRefs.current[item.id] = node
+                  }}
+                  type="button"
+                  onClick={() => {
+                    setActiveLeadTab(item.id)
+                    if (item.id === 'messages') setActiveFeedTab('comms')
+                    if (item.id === 'notes') setActiveFeedTab('notes')
+                    if (item.id === 'activity') setActiveFeedTab('all')
+                    if (item.id === 'tasks') setShowTaskTools(true)
+                  }}
+                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-4 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+                    isActive
+                      ? 'text-[#a8792f]'
+                      : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                  }`}
+                >
+                  {item.label}
+                  {typeof item.count === 'number' ? (
+                    <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>
+                      {item.count}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </section>
 
