@@ -728,7 +728,7 @@ export default function LeadDetailPage({
           : 'Use the note box above to add the first update or wait for email history to sync.'
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+    <PortalPageFrame className="">
       <div className="shrink-0 flex items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 transition-colors hover:text-white">
           <ArrowLeft size={14} /> Back to Leads
@@ -805,9 +805,9 @@ export default function LeadDetailPage({
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
         {/* Main Details and Activity Column */}
-        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3" data-client-scroll-column="main">
+        <div className="space-y-6">
           {isGrandOpeningLead ? (
             <div className="rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/8 p-5 shadow-xl shadow-black/20 luxor-soft-enter">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -882,7 +882,7 @@ export default function LeadDetailPage({
                 <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-400">Concierge AI Chat Session Replay</h4>
                 <span className="text-[9px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded uppercase">Elena Concierge</span>
               </div>
-              <div className="p-6 max-h-[350px] overflow-y-auto space-y-4 portal-scrollbar bg-black/40">
+              <div className="p-6 space-y-4 portal-scrollbar bg-black/40">
                 {chatMessages.map((msg, index) => {
                   const isUser = msg.role === 'user'
                   return (
@@ -1128,7 +1128,7 @@ export default function LeadDetailPage({
         </div>
 
         {/* Sidebar Panel Column */}
-        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-2" data-client-scroll-column="actions">
+        <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
           <div className="nodal-void-card rounded-2xl border border-zinc-900 p-6 bg-black/40 backdrop-blur-xl shadow-2xl luxor-soft-enter">
             <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-3">
               <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
@@ -1201,7 +1201,7 @@ export default function LeadDetailPage({
                 <p className="mt-1 text-zinc-600">Add a task now so the next step does not get lost in the notes.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[320px] overflow-y-auto portal-scrollbar">
+              <div className="space-y-3">
                 {sortedTasks.map((task) => {
                   const isCompleted = task.status === 'completed'
                   let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
@@ -1641,7 +1641,7 @@ export default function LeadDetailPage({
 
 function ClientDossierLoading() {
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+    <PortalPageFrame className="">
       <div className="shrink-0 flex items-center justify-between">
         <div className="h-4 w-32 luxor-skeleton rounded" />
         <div className="h-8 w-44 luxor-skeleton rounded-lg" />
@@ -1682,8 +1682,8 @@ function ClientDossierLoading() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:overflow-hidden">
-        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
+        <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
             {Array.from({ length: 9 }).map((_, index) => (
               <div key={index} className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4">
@@ -1706,7 +1706,7 @@ function ClientDossierLoading() {
           </div>
         </div>
 
-        <div className="portal-scrollbar min-h-0 space-y-6 overflow-y-auto pr-1 lg:pr-2">
+        <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="rounded-2xl border border-zinc-900 bg-black/40 p-6">
               <div className="h-5 w-44 luxor-skeleton rounded" />
