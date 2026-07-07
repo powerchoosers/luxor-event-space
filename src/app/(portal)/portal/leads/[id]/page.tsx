@@ -981,9 +981,9 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/45 shadow-lg shadow-black/10 backdrop-blur-[28px] backdrop-saturate-150 sm:-top-6 lg:-top-8">
-        <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
-          <div className="relative flex min-w-max gap-6">
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/30 shadow-lg shadow-black/10 backdrop-blur-3xl backdrop-saturate-150 sm:-top-6 lg:-top-8">
+        <div className="portal-scrollbar overflow-x-auto bg-transparent px-4">
+          <div className="relative flex min-w-max gap-5">
             <span
               className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
               style={{ left: tabIndicator.left, width: tabIndicator.width }}
@@ -1004,7 +1004,7 @@ export default function LeadDetailPage({
                     if (item.id === 'activity') setActiveFeedTab('all')
                     if (item.id === 'tasks') setShowTaskTools(true)
                   }}
-                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-4 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
                     isActive
                       ? 'text-[#a8792f]'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
@@ -1023,7 +1023,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`mt-4 grid gap-6 lg:mt-5 ${
+      <div className={`mt-0 grid gap-6 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
@@ -1446,9 +1446,9 @@ export default function LeadDetailPage({
         </div>
 
         {/* Sidebar Panel Column */}
-        <div className={`space-y-6 pt-4 lg:pt-5 ${
+        <div className={`space-y-6 ${
           activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-            ? 'lg:sticky lg:top-4 lg:self-start'
+            ? 'lg:sticky lg:top-8 lg:self-start'
             : ''
         }`}>
           {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
