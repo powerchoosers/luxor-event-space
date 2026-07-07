@@ -1356,9 +1356,10 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Column 1: Next Step & Event Details */}
-          <div className="space-y-6">
+        <div className="space-y-6">
+          <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Column 1: Next Step & Event Details */}
+            <div className="space-y-6">
             {/* Next Step */}
             <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex flex-col items-center text-center justify-between min-h-[220px] luxor-soft-enter">
               <div className="flex flex-col items-center">
@@ -1469,45 +1470,6 @@ export default function LeadDetailPage({
                 ) : null}
               </div>
             </section>
-
-            {/* RSVP / Inquiry Message */}
-            <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
-              <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
-                {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
-              </h4>
-              <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
-                &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
-              </p>
-            </div>
-
-            {/* Concierge AI session replay */}
-            {chatMessages.length > 0 && (
-              <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                  <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
-                </div>
-                <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
-                  {chatMessages.map((msg, index) => {
-                    const isUser = msg.role === 'user'
-                    return (
-                      <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
-                          isUser
-                            ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                            : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                        }`}>
-                          <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                            {isUser ? 'Client' : 'Elena AI'}
-                          </div>
-                          {msg.content}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Column 2: Client Details & Recent Activity */}
@@ -1848,7 +1810,54 @@ export default function LeadDetailPage({
             </section>
           </div>
         </div>
-      ) : (
+
+        {/* Bottom Row: Large content panels (Inquiry Message & Chat Replay) */}
+        {(lead.message || chatMessages.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className={chatMessages.length > 0 ? "lg:col-span-1" : "lg:col-span-3"}>
+              <div className="nodal-void-card h-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
+                <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                  {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
+                </h4>
+                <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
+                  &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
+                </p>
+              </div>
+            </div>
+
+            {chatMessages.length > 0 && (
+              <div className="lg:col-span-2">
+                <div className="nodal-void-card h-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                  <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                    <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
+                  </div>
+                  <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
+                    {chatMessages.map((msg, index) => {
+                      const isUser = msg.role === 'user'
+                      return (
+                        <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                            isUser
+                              ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                              : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                          }`}>
+                            <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                              {isUser ? 'Client' : 'Elena AI'}
+                            </div>
+                            {msg.content}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    ) : (
         <div className={`mt-3 grid gap-6 ${
           activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
             ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
