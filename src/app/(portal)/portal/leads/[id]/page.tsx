@@ -962,7 +962,7 @@ export default function LeadDetailPage({
           <LeadLifecycleRail currentStatus={pendingLifecycleStatus ?? lead.status} isSaving={updatingStatus} />
         </div>
 
-        <div className="portal-scrollbar flex gap-1 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2">
+        <div className="portal-scrollbar flex gap-6 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4">
           {tabItems.map((item) => {
             const isActive = activeLeadTab === item.id
             return (
@@ -976,10 +976,10 @@ export default function LeadDetailPage({
                   if (item.id === 'activity') setActiveFeedTab('all')
                   if (item.id === 'tasks') setShowTaskTools(true)
                 }}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
+                className={`relative inline-flex shrink-0 items-center gap-2 border-b-2 px-0 py-4 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
                   isActive
-                    ? 'bg-[color:var(--portal-card)] text-[#a8792f] shadow-sm ring-1 ring-[#caa24c]/18'
-                    : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]'
+                    ? 'border-[#caa24c] text-[#a8792f]'
+                    : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                 }`}
               >
                 {item.label}
