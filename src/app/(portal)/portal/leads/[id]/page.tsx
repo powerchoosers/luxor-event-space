@@ -982,8 +982,12 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 backdrop-blur-3xl backdrop-saturate-150 sm:-top-6 lg:-top-8"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--portal-bg) 90%, transparent)' }}
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
+          backdropFilter: 'blur(50px)',
+          WebkitBackdropFilter: 'blur(50px)',
+        }}
       >
         <div className="portal-scrollbar overflow-x-auto bg-transparent px-4">
           <div className="relative flex min-w-max gap-5">
