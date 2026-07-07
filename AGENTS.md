@@ -47,6 +47,7 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 - Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
 - The gallery page uses a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves the experience beyond the current custom implementation.
 - Keep new packages conservative. Prefer existing Next.js, React, Tailwind, Framer Motion, and Lucide patterns unless a package solves a real interaction or accessibility problem.
+- Make sure all dropdowns and calendars in the portal use React elements (e.g. PortalSelect and PortalDatePicker from '@/components/portal/PortalUI') instead of native browser elements.
 - If README and AGENTS disagree, follow AGENTS and the source files.
 
 ## Commit And Push

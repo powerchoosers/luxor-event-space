@@ -65,7 +65,7 @@ type EditableLeadField =
   | 'phone'
   | 'address'
 
-type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
+type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'booking' | 'billing' | 'documents' | 'messages' | 'notes'
 
 export default function LeadDetailPage({
@@ -1002,6 +1002,7 @@ export default function LeadDetailPage({
     inputType?: LeadDetailInputType
     placeholder?: string
     isMono?: boolean
+    options?: { value: string; label: string }[]
   }> = [
     {
       label: 'Event Type',
@@ -1038,7 +1039,13 @@ export default function LeadDetailPage({
       copyValue: lead.package_interest || '',
       field: 'package_interest',
       icon: <Briefcase size={14} />,
+      inputType: 'select',
       placeholder: 'Package or room interest',
+      options: [
+        { value: 'Foundation', label: 'Foundation' },
+        { value: 'Signature', label: 'Signature' },
+        { value: 'Showpiece', label: 'Showpiece' },
+      ],
     },
     {
       label: 'Preferred Tour Date',
@@ -1607,6 +1614,7 @@ export default function LeadDetailPage({
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
                               onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                              options={item.options}
                             />
                           ))}
                         </div>
@@ -1624,6 +1632,7 @@ export default function LeadDetailPage({
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
                               onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                              options={item.options}
                             />
                           ))}
                         </div>
@@ -4255,6 +4264,7 @@ function DetailItem({
   subtext,
   isSaving = false,
   onCommit,
+  options = [],
 }: {
   icon?: React.ReactNode
   label: string
@@ -4267,6 +4277,7 @@ function DetailItem({
   subtext?: string
   isSaving?: boolean
   onCommit?: (value: string) => Promise<boolean>
+  options?: { value: string; label: string }[]
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
@@ -4347,6 +4358,23 @@ function DetailItem({
           <div className="mt-2 w-full" onClick={(event) => event.stopPropagation()}>
             <PortalDatePicker
               value={draft}
+              onChange={async (val) => {
+                setDraft(val)
+                if (onCommit) {
+                  const saved = await onCommit(val)
+                  if (saved) {
+                    setIsEditing(false)
+                  }
+                }
+              }}
+            />
+          </div>
+        ) : inputType === 'select' ? (
+          <div className="mt-2 w-full" onClick={(event) => event.stopPropagation()}>
+            <PortalSelect
+              value={draft}
+              disabled={isSaving}
+              options={options}
               onChange={async (val) => {
                 setDraft(val)
                 if (onCommit) {
