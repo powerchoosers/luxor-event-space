@@ -27,6 +27,7 @@ import Link from 'next/link'
 import {
   PortalPageFrame,
   PortalPageHeader,
+  PortalAnimatedTabs,
   PortalStatusBadge,
   PortalTableCard,
   PortalStickyTable,
@@ -202,26 +203,18 @@ export default function EventsPage() {
 
                 {/* Sub-tab switcher */}
                 <div className="flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] pt-3 mt-1">
-                  {[
+                  <PortalAnimatedTabs
+                    tabs={[
                     { id: 'timeline', label: 'Timeline' },
                     { id: 'layout', label: 'Floor Plan' },
                     { id: 'vendors', label: 'Vendors' },
                     { id: 'payments', label: 'Payments' },
                     { id: 'checklist', label: 'Checklist' },
                     { id: 'walkthrough', label: 'Walkthrough' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveDetailTab(tab.id as 'timeline' | 'layout' | 'vendors' | 'payments' | 'checklist' | 'walkthrough')}
-                      className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded cursor-pointer transition-colors ${
-                        activeDetailTab === tab.id
-                          ? 'bg-[#caa24c]/15 text-[#f1d27a]'
-                          : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                    ]}
+                    activeTab={activeDetailTab}
+                    onTabChange={(tab) => setActiveDetailTab(tab as 'timeline' | 'layout' | 'vendors' | 'payments' | 'checklist' | 'walkthrough')}
+                  />
                 </div>
               </div>
 

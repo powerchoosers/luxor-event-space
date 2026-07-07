@@ -43,6 +43,132 @@ export function PortalPageHeader({
   )
 }
 
+type PortalAnimatedTabItem<T extends string> = {
+  id: T
+  label: string
+  icon?: React.ReactNode
+  count?: number
+}
+
+export function PortalAnimatedTabs<T extends string>({
+  tabs,
+  activeTab,
+  onTabChange,
+  className = '',
+  buttonClassName = '',
+  ariaLabel = 'Portal tabs',
+}: {
+  tabs: readonly PortalAnimatedTabItem<T>[]
+  activeTab: T
+  onTabChange: (tab: T) => void
+  className?: string
+  buttonClassName?: string
+  ariaLabel?: string
+}) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const buttonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({})
+  const [indicator, setIndicator] = React.useState({ left: 0, width: 0, visible: false })
+  const tabsSignature = tabs.map((tab) => `${tab.id}:${tab.label}:${tab.count ?? ''}`).join('|')
+
+  React.useLayoutEffect(() => {
+    let frame = 0
+
+    const updateIndicator = () => {
+      const activeButton = buttonRefs.current[activeTab]
+      if (!activeButton) return
+
+      const nextIndicator = {
+        left: activeButton.offsetLeft,
+        width: activeButton.offsetWidth,
+        visible: true,
+      }
+
+      setIndicator((current) => {
+        if (
+          current.left === nextIndicator.left &&
+          current.width === nextIndicator.width &&
+          current.visible === nextIndicator.visible
+        ) {
+          return current
+        }
+
+        return nextIndicator
+      })
+    }
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updateIndicator)
+    }
+
+    scheduleUpdate()
+
+    const observer =
+      typeof window !== 'undefined' && 'ResizeObserver' in window
+        ? new ResizeObserver(scheduleUpdate)
+        : null
+
+    if (observer) {
+      if (containerRef.current) observer.observe(containerRef.current)
+      const activeButton = buttonRefs.current[activeTab]
+      if (activeButton) observer.observe(activeButton)
+    }
+
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.removeEventListener('resize', scheduleUpdate)
+      cancelAnimationFrame(frame)
+      observer?.disconnect()
+    }
+  }, [activeTab, tabsSignature])
+
+  return (
+    <div ref={containerRef} role="tablist" aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-end gap-5 ${className}`}>
+      <span
+        className="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        style={{
+          left: indicator.left,
+          width: indicator.width,
+          opacity: indicator.visible ? 1 : 0,
+        }}
+      />
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id
+        return (
+          <button
+            key={tab.id}
+            ref={(node) => {
+              buttonRefs.current[tab.id] = node
+            }}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onTabChange(tab.id)}
+            className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+              isActive
+                ? 'text-[#a8792f]'
+                : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+            } ${buttonClassName}`}
+          >
+            {tab.icon}
+            {tab.label}
+            {typeof tab.count === 'number' ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${
+                  isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'
+                }`}
+              >
+                {tab.count}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function PortalTableCard({
   controls,
   children,

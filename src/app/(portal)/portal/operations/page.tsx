@@ -26,6 +26,7 @@ import {
 import {
   PortalPageFrame,
   PortalPageHeader,
+  PortalAnimatedTabs,
   PortalTableCard,
   PortalStickyTable,
   PortalStickyThead,
@@ -381,7 +382,8 @@ function OperationsPageContent() {
 
       {/* Sub-tab navigation */}
       <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
-        {[
+        <PortalAnimatedTabs
+          tabs={[
           { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} /> },
           { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} /> },
           { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} /> },
@@ -390,21 +392,10 @@ function OperationsPageContent() {
           { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} /> },
           { id: 'cleaning', label: 'Cleaning checklists', icon: <Sparkles size={15} /> },
           { id: 'staff', label: 'Staff Rota (Future)', icon: <Clock size={15} /> }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => router.push(`/portal/operations?tab=${tab.id}`)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#f1d27a]'
-                : 'border border-transparent text-zinc-500 hover:text-zinc-350 hover:bg-zinc-950/40'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+        />
       </div>
 
       {/* Tab Panels */}

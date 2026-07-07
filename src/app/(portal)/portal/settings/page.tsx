@@ -18,6 +18,7 @@ import {
 import {
   PortalPageFrame,
   PortalPageHeader,
+  PortalAnimatedTabs,
   PortalTableCard,
   PortalSelect
 } from '@/components/portal/PortalUI'
@@ -53,28 +54,18 @@ export default function SettingsPage() {
 
       {/* Sub-tab navigation */}
       <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
-        {[
-          { id: 'business', label: 'Venue Information', icon: <Building size={15} /> },
-          { id: 'branding', label: 'Portal Branding', icon: <Image size={15} /> },
-          { id: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
-          { id: 'team', label: 'Team & Permissions', icon: <Lock size={15} /> },
-          { id: 'integrations', label: 'Integrations', icon: <Cpu size={15} /> },
-          { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as Tab)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#f1d27a]'
-                : 'border border-transparent text-zinc-500 hover:text-zinc-350 hover:bg-zinc-950/40'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
+        <PortalAnimatedTabs
+          tabs={[
+            { id: 'business', label: 'Venue Information', icon: <Building size={15} /> },
+            { id: 'branding', label: 'Portal Branding', icon: <Image size={15} /> },
+            { id: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
+            { id: 'team', label: 'Team & Permissions', icon: <Lock size={15} /> },
+            { id: 'integrations', label: 'Integrations', icon: <Cpu size={15} /> },
+            { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> }
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab as Tab)}
+        />
       </div>
 
       {/* Settings Forms */}

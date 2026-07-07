@@ -15,7 +15,7 @@ import {
   Send,
   X,
 } from 'lucide-react'
-import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal } from '@/components/portal/PortalUI'
+import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal, PortalAnimatedTabs } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { EmailBuilderShell } from './EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
@@ -314,21 +314,12 @@ export default function MarketingPage() {
             )}
 
             {/* Bottom row: Navigation Tabs */}
-            <div className="flex items-center gap-1 p-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => tab.id === 'builder' ? openBlankBuilder() : setActiveTab(tab.id)}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${
-                    activeTab === tab.id
-                      ? 'bg-[#caa24c] text-black shadow-md shadow-[#caa24c]/20'
-                      : 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
-                  }`}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-1 rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-1 overflow-x-auto portal-scrollbar">
+              <PortalAnimatedTabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={(tab) => (tab === 'builder' ? openBlankBuilder() : setActiveTab(tab))}
+              />
             </div>
           </div>
         }

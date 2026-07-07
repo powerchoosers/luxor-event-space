@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
-import { PortalDatePicker, PortalSelect, PortalModal } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs } from '@/components/portal/PortalUI'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -131,19 +131,11 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
 
           {/* Tabs */}
           <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1 border border-zinc-800">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-[#caa24c] text-black'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            <PortalAnimatedTabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={(tab) => setActiveTab(tab)}
+            />
           </div>
 
           <button
