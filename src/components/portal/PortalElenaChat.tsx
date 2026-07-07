@@ -8,6 +8,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import Image from 'next/image'
+import { AnimatePresence, motion } from 'framer-motion'
 
 type ExecutedQuery = {
   query: string
@@ -109,10 +110,11 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
   }
 
   return (
-    <aside 
-      className={`fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] sm:w-[420px] ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}
+    <motion.aside 
+      initial={{ x: '100%' }}
+      animate={{ x: isOpen ? 0 : '100%' }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#caa24c]/10 px-4">
@@ -144,40 +146,58 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
 
       {/* Messages Window */}
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              {msg.role === 'assistant' && (
-                <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                  <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
-                </div>
-              )}
-              <div 
-                className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
-                  msg.role === 'user'
-                    ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-[#f7efe3]'
-                    : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/80 text-zinc-300'
-                }`}
+        <AnimatePresence initial={false}>
+          {messages.map((msg, index) => (
+            <motion.div 
+              layout
+              key={index} 
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 30, scale: 0.88, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
               >
-                {renderFormattedContent(msg.content)}
+                {msg.role === 'assistant' && (
+                  <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
+                    <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                  </div>
+                )}
+                <div 
+                  className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
+                    msg.role === 'user'
+                      ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-[#f7efe3]'
+                      : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/80 text-zinc-300'
+                  }`}
+                >
+                  {renderFormattedContent(msg.content)}
+                </div>
+              </motion.div>
+            </motion.div>
+          ))}
+
+          {/* Typing indicator */}
+          {isLoading && (
+            <motion.div
+              layout
+              key="thinking-indicator"
+              initial={{ opacity: 0, y: 20, scale: 0.9, originX: 0, originY: 1 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8, y: 10 }}
+              transition={{ duration: 0.3 }}
+              className="flex items-start gap-2 max-w-[80%]"
+            >
+              <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
+                <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
               </div>
-            </div>
-
-          </div>
-        ))}
-
-        {/* Typing indicator */}
-        {isLoading && (
-          <div className="flex items-start gap-2 max-w-[80%]">
-            <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-              <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
-            </div>
-            <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
-              <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
-              <span>Querying venue database...</span>
-            </div>
-          </div>
-        )}
+              <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
+                <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
+                <span>Querying venue database...</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
 
@@ -229,7 +249,7 @@ export function PortalElenaChat({ isOpen, onClose }: PortalElenaChatProps) {
           Queries will run securely on the server with owner authorization.
         </p>
       </div>
-    </aside>
+    </motion.aside>
   )
 }
 
