@@ -919,15 +919,15 @@ export default function LeadDetailPage({
   ]
 
   return (
-    <PortalPageFrame className="max-w-[1560px] gap-4">
-      <div className="flex shrink-0 items-center justify-between">
+    <PortalPageFrame className="max-w-[1560px] gap-0">
+      <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
         </Link>
         <PortalStatusBadge status={lead.status} />
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
+      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
@@ -981,7 +981,7 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky top-0 z-30 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-lg shadow-black/10 backdrop-blur-xl">
         <div className="portal-scrollbar overflow-x-auto bg-[color:var(--portal-soft)] px-4">
           <div className="relative flex min-w-max gap-6">
             <span
@@ -1023,7 +1023,7 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      <div className={`grid gap-6 ${
+      <div className={`mt-6 grid gap-6 ${
         activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
           ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
           : 'lg:grid-cols-1'
@@ -1260,13 +1260,13 @@ export default function LeadDetailPage({
               <p className="mt-2 text-xs leading-5 text-zinc-600">Newest activity first. Notes, calls, emails, and status updates are split into separate filters.</p>
             </div>
 
-            <div className="mb-6 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4">
+            <div className="mb-6 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
               <form onSubmit={handlePostNote} className="space-y-4">
                 <textarea
                   value={noteContent}
                   onChange={(e) => setNoteContent(e.target.value)}
                   placeholder="Write the recap, then choose how to tag it."
-                  className="w-full h-24 bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-blue-500 transition-colors leading-relaxed font-sans"
+                  className="h-24 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 font-sans text-xs leading-relaxed text-[color:var(--portal-text)] transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:outline-none"
                 />
                 <div className="flex flex-wrap gap-2">
                   {quickNoteTemplates.map((template) => (
@@ -1277,7 +1277,7 @@ export default function LeadDetailPage({
                         setNoteType(template.type)
                         setNoteContent(template.value)
                       }}
-                      className="rounded-full border border-zinc-800 bg-zinc-950/80 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-all hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                      className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10 hover:text-[#a8792f]"
                     >
                       {template.label}
                     </button>
@@ -1292,7 +1292,7 @@ export default function LeadDetailPage({
                       className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'note'
                           ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       Note
@@ -1304,7 +1304,7 @@ export default function LeadDetailPage({
                       className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'call_log'
                           ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       Call
@@ -1316,7 +1316,7 @@ export default function LeadDetailPage({
                       className={`rounded-md border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                         noteType === 'email_log'
                           ? 'border-[#bd6575]/20 bg-purple-500/10 text-[#bd6575]'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       Email
@@ -1334,10 +1334,10 @@ export default function LeadDetailPage({
             </div>
 
             {lead.email ? (
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-zinc-950/35 px-4 py-3">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Zoho Email History</p>
-                  <p className="mt-1 text-[11px] text-zinc-500">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Zoho Email History</p>
+                  <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
                     {loadingEmailMessages
                       ? `Loading messages for ${lead.email}...`
                       : emailThreadError
@@ -1357,7 +1357,7 @@ export default function LeadDetailPage({
                     type="button"
                     onClick={() => fetchClientEmailThread(lead.email || '')}
                     disabled={loadingEmailMessages}
-                    className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
+                    className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/25 hover:text-[#a8792f] disabled:opacity-50"
                   >
                     {loadingEmailMessages ? 'Syncing...' : 'Refresh Email'}
                   </button>
@@ -1366,12 +1366,12 @@ export default function LeadDetailPage({
             ) : null}
 
             {activityEntries.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-6 text-sm text-zinc-500">
-                <p className="font-semibold text-zinc-300">{activityEmptyTitle}</p>
-                <p className="mt-1 text-xs leading-5 text-zinc-600">{activityEmptyCopy}</p>
+              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{activityEmptyCopy}</p>
               </div>
             ) : (
-              <div className="relative ml-3 space-y-6 border-l border-zinc-900 pl-6">
+              <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
                 {activityEntries.map((entry) => {
                   if (entry.kind === 'email') {
                     const email = entry.email
@@ -1379,7 +1379,7 @@ export default function LeadDetailPage({
 
                     return (
                       <div key={entry.id} className="relative group">
-                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 transition-all group-hover:border-[#caa24c]" />
+                        <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full border-2 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] transition-all group-hover:border-[#caa24c]" />
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                             {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
@@ -1425,7 +1425,7 @@ export default function LeadDetailPage({
 
                   return (
                     <div key={note.id} className="relative group">
-                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full bg-zinc-900 border-2 border-zinc-800 animate-pulse transition-all group-hover:border-[#caa24c]" />
+                      <div className="absolute -left-[32px] top-1 h-3 w-3 rounded-full border-2 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] animate-pulse transition-all group-hover:border-[#caa24c]" />
                       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
                         <div className="flex items-center gap-3">
