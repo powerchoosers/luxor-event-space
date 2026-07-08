@@ -36,6 +36,10 @@ export function RouteTransition({
   }
 
   const isPortal = surface === 'portal'
+  const isLeadsListPage = pathname === '/portal/leads'
+  const portalClass = isLeadsListPage 
+    ? 'flex-1 min-h-0 flex flex-col transform-gpu' 
+    : 'w-full transform-gpu'
   const initialState = isPortal
     ? { opacity: 0, y: 8 }
     : { opacity: 0, y: 16, filter: 'blur(6px)' }
@@ -51,7 +55,7 @@ export function RouteTransition({
       <motion.div
         id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
         key={pathname}
-        className={isPortal ? 'flex-1 min-h-0 flex flex-col transform-gpu' : 'min-h-screen'}
+        className={isPortal ? portalClass : 'min-h-screen'}
         initial={initialState}
         animate={animateState}
         exit={exitState}
