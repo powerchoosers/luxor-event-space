@@ -415,6 +415,10 @@ export async function createMarketingCampaign(data: {
   scheduledFor?: string | null
   audienceLabel?: string | null
   createdBy?: string | null
+  ignoreSuppressions?: boolean
+  senderFrom?: string | null
+  senderName?: string | null
+  metadata?: Record<string, unknown>
 }) {
   if (!data.name.trim()) throw new Error('Please name this campaign.')
   if (!data.subject.trim()) throw new Error('Please add a subject line.')
@@ -423,7 +427,7 @@ export async function createMarketingCampaign(data: {
 
   const sendableRecipients: MarketingRecipientInput[] = []
   for (const recipient of data.recipients) {
-    if (!await isMarketingSuppressed(recipient.email)) {
+    if (data.ignoreSuppressions || !await isMarketingSuppressed(recipient.email)) {
       sendableRecipients.push(recipient)
     }
   }
@@ -449,6 +453,10 @@ export async function createMarketingCampaign(data: {
       created_by: data.createdBy || null,
       recipient_count: sendableRecipients.length,
       metadata: {
+        ...(data.metadata || {}),
+        sender_from: data.senderFrom || null,
+        sender_name: data.senderName || null,
+        ignore_suppressions: Boolean(data.ignoreSuppressions),
         skipped_suppressed_count: data.recipients.length - sendableRecipients.length,
       },
     }),
@@ -483,6 +491,8 @@ export async function createMarketingCampaign(data: {
         campaign_id: campaign.id,
         marketing_recipient_id: createdRecipient.id,
         tracking_token: trackingToken,
+        sender_from: data.senderFrom || null,
+        sender_name: data.senderName || null,
       },
     })
 

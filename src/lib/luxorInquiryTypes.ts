@@ -229,7 +229,13 @@ export type LuxorBookingExpense = {
 }
 
 export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
-export type LuxorEmailJobKind = 'tour_confirmation' | 'tour_reminder' | 'tour_no_show_reschedule' | 'contract_signature' | 'marketing_campaign'
+export type LuxorEmailJobKind =
+  | 'tour_confirmation'
+  | 'tour_reminder'
+  | 'tour_no_show_reschedule'
+  | 'contract_signature'
+  | 'marketing_campaign'
+  | 'grand_opening_rsvp_confirmation'
 
 export type LuxorEmailJob = {
   id: string

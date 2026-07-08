@@ -14,6 +14,15 @@ function absoluteUrl(path: string) {
   return `${PUBLIC_BASE_URL.replace(/\/$/, '')}${path}`
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function createPublicToken() {
   return crypto.randomBytes(24).toString('base64url')
 }
@@ -71,6 +80,123 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       'Luxor Event Space',
     ].filter(Boolean).join('\n\n'),
   }
+}
+
+export function buildGrandOpeningRsvpEmail(inquiry: LuxorInquiry) {
+  const attendeeCount = inquiry.attendee_count || inquiry.guest_count || 1
+  const interestLine = inquiry.package_interest || inquiry.event_type || 'your future event plans'
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+
+  return {
+    subject: 'Your Luxor Grand Opening RSVP is confirmed',
+    body: [
+      `Hi ${firstName},`,
+      'Thank you for RSVPing to the Luxor Grand Opening Showcase.',
+      'We have your spot saved for Saturday, July 25 at Luxor Event Space.',
+      `Attending: ${attendeeCount} guest${attendeeCount === 1 ? '' : 's'}`,
+      `Interest noted: ${interestLine}`,
+      'You can expect venue tours, vendor connections, tastings, giveaways, and a closer look at what Luxor offers for future events.',
+      'If your plans change or you need anything before the event, reply to this email and our team will help.',
+      'Luxor Event Space',
+      '803 Castroville Rd #402, San Antonio, TX 78237',
+      'luxoratlaspalmas.com',
+    ].join('\n\n'),
+  }
+}
+
+export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
+  const attendeeCount = inquiry.attendee_count || inquiry.guest_count || 1
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const interestLine = inquiry.package_interest || inquiry.event_type || 'Future event planning'
+  const websiteUrl = absoluteUrl('/')
+  const tourUrl = absoluteUrl('/visit')
+  const pricingUrl = absoluteUrl('/pricing')
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Your Luxor RSVP Is Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505">
+    <tr>
+      <td align="center" style="padding:28px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+          <tr>
+            <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
+              <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p style="margin:6px 0 0;font-size:8px;letter-spacing:0.42em;color:rgba(202,162,76,0.62);text-transform:uppercase;">At Las Palmas Events</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:60px 48px 34px;text-align:center;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
+              <p style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Grand Opening Showcase</p>
+              <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:44px;font-weight:600;line-height:1.05;color:#f7efe3;">Your RSVP Is Confirmed</h1>
+              <p style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
+                Hi ${escapeHtml(firstName)}, we saved your spot for the Luxor Grand Opening Showcase on Saturday, July 25.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:2px;background:linear-gradient(90deg,transparent,#caa24c,transparent);font-size:1px;line-height:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:36px 48px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="48%" style="width:48%;vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);">
+                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Attending</p>
+                    <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:1.1;color:#f7efe3;">${attendeeCount}</p>
+                  </td>
+                  <td width="4%" style="width:4%;">&nbsp;</td>
+                  <td width="48%" style="width:48%;vertical-align:top;padding-left:16px;">
+                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Interest</p>
+                    <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${escapeHtml(interestLine)}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 48px 18px;">
+              <p style="margin:0 0 14px;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+                You can expect venue tours, vendor connections, tastings, giveaways, and a closer look at what Luxor offers for weddings, quinceañeras, private celebrations, and more.
+              </p>
+              <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+                If your plans change or you want to talk with the team before the event, use one of the links below.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:14px 48px 34px;">
+              <a href="${tourUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Schedule A Tour</a>
+              <a href="${pricingUrl}" target="_blank" style="display:inline-block;background-color:#0f0c09;color:#f7efe3;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(202,162,76,0.28);margin:0 6px 12px;">View Pricing</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
+              <p style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
+                803 Castroville Rd #402, San Antonio, TX 78237<br />
+                Private venue tours by appointment.<br />
+                <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
+              </p>
+              <p style="margin:0;font-size:9px;line-height:1.7;color:rgba(215,194,154,0.32);">
+                This RSVP confirmation was sent because you reserved a spot for the Luxor Grand Opening Showcase.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 export function buildSignatureEmail(signature: LuxorSignatureRequest) {
@@ -162,6 +288,10 @@ export async function processLuxorEmailJobs(
 
   for (const job of jobs) {
     try {
+      const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+      const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
+      const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
+
       if (markSending) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
@@ -169,8 +299,8 @@ export async function processLuxorEmailJobs(
         to: job.recipient_email,
         subject: job.subject,
         content: job.body,
-        from: 'booking@luxoratlaspalmas.com',
-        fromName: 'Luxor Event Space',
+        from: senderFrom,
+        fromName: senderName,
       })
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       if (job.job_type === 'marketing_campaign') {

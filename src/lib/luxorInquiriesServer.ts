@@ -2,6 +2,7 @@ import 'server-only'
 
 import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
+import { createMarketingCampaign } from './luxorMarketingServer'
 import { supabaseRest } from './supabaseRestServer'
 import {
   applyTourSlotToInquiry,
@@ -115,6 +116,31 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       }
     } catch (emailError) {
       console.error('Luxor tour email queue failed:', emailError)
+    }
+  }
+
+  if (created?.email && created.source === 'grand_opening_rsvp' && created.rsvp_status === 'attending') {
+    try {
+      const { buildGrandOpeningRsvpEmailHtml } = await import('./luxorEmailJobsServer')
+      await createMarketingCampaign({
+        name: `Grand Opening RSVP Confirmation - ${created.full_name}`,
+        subject: 'Your Luxor Grand Opening RSVP is confirmed',
+        htmlBody: buildGrandOpeningRsvpEmailHtml(created),
+        recipients: [{ email: created.email, name: created.full_name }],
+        audienceLabel: 'Automated RSVP Confirmation',
+        createdBy: 'system',
+        ignoreSuppressions: true,
+        senderFrom: 'hello@luxoratlaspalmas.com',
+        senderName: 'Luxor Event Space',
+        metadata: {
+          automation_type: 'grand_opening_rsvp_confirmation',
+          inquiry_id: created.id,
+          campaign_key: created.campaign_key,
+          source: created.source,
+        },
+      })
+    } catch (emailError) {
+      console.error('Luxor grand opening RSVP email queue failed:', emailError)
     }
   }
 
