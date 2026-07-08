@@ -337,7 +337,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                 </button>
 
                 <p className="text-[10px] text-zinc-700 text-center">
-                  Sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are handled by the cron sender.
+                  Sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are processed by the Supabase email scheduler.
                 </p>
               </div>
             </div>

@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/luxor-email-jobs",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}
+{}

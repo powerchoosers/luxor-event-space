@@ -131,16 +131,19 @@ create policy "Service role can manage Luxor signature events"
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
--- Production uses Vercel cron from vercel.json.
--- Keep this pg_cron example only as an optional fallback if Luxor ever needs database-driven scheduling instead.
--- Replace YOUR_CRON_SECRET with the same CRON_SECRET value configured in Vercel.
+-- Production scheduled Luxor email jobs should be triggered from Supabase pg_cron.
+-- Store the shared secret in vault as `luxor_email_jobs_cron_secret`, then schedule the
+-- HTTP trigger with that vault-backed secret instead of relying on Vercel cron.
 -- select cron.schedule(
---   'luxor-email-jobs-every-5-minutes',
+--   'luxor-email-jobs-supabase',
 --   '*/5 * * * *',
 --   $$
 --     select net.http_post(
 --       url := 'https://www.luxoratlaspalmas.com/api/cron/luxor-email-jobs',
---       headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', 'YOUR_CRON_SECRET'),
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'luxor_email_jobs_cron_secret' limit 1)
+--       ),
 --       body := jsonb_build_object('source', 'supabase-cron'),
 --       timeout_milliseconds := 10000
 --     );

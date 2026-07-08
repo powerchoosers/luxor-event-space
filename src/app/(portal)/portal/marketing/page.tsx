@@ -397,7 +397,7 @@ export default function MarketingPage() {
                 <h3 className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-600">How To Use It</h3>
                 <div className="nodal-void-card rounded-2xl border border-zinc-900 bg-black/40 p-6 shadow-2xl backdrop-blur-xl">
                   <MachineStep icon={<PenSquare size={14} />} title="Build" text="Use the email builder or a template. Keep one clear call-to-action per campaign." />
-                  <MachineStep icon={<CalendarClock size={14} />} title="Schedule" text="Paste a recipient list, pick a time, and the site creates cron-ready email jobs." />
+                  <MachineStep icon={<CalendarClock size={14} />} title="Schedule" text="Paste a recipient list, pick a time, and the site creates Supabase-scheduled email jobs." />
                   <MachineStep icon={<BarChart3 size={14} />} title="Measure" text="Every recipient gets a tracking pixel and wrapped links, so opens and clicks return here." />
                 </div>
 

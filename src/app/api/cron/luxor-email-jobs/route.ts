@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processDueLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 
+export const dynamic = 'force-dynamic'
+
 async function handleCronRequest(request: NextRequest) {
-  const configuredSecret = process.env.CRON_SECRET
+  const configuredSecret =
+    process.env.LUXOR_CRON_SECRET ||
+    process.env.CRON_SECRET ||
+    process.env.LUXOR_PORTAL_SESSION_SECRET
   const authHeader = request.headers.get('authorization')
   const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
   const providedSecret = bearerSecret || request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret')
