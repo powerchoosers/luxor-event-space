@@ -300,7 +300,7 @@ export default function LeadsPage() {
   const grandOpeningCount = leads.filter(isGrandOpeningRsvp).length
   const missingContact = leads.filter((l) => !l.email && !l.phone).length
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden">
+    <PortalPageFrame className="flex-1 min-h-0 overflow-hidden">
       <PortalPageHeader
         icon={<Users size={18} />}
         title="Leads & Clients"

@@ -51,7 +51,7 @@ export function RouteTransition({
       <motion.div
         id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
         key={pathname}
-        className={isPortal ? 'h-full min-h-0 transform-gpu' : 'min-h-screen'}
+        className={isPortal ? 'flex-1 min-h-0 flex flex-col transform-gpu' : 'min-h-screen'}
         initial={initialState}
         animate={animateState}
         exit={exitState}
