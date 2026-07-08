@@ -3,7 +3,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   ArrowLeft,
   Calendar,
@@ -36,7 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
-import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
+import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 
 type ZohoEmailMessage = {
@@ -80,6 +79,7 @@ export default function LeadDetailPage({
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
   const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
@@ -104,7 +104,7 @@ export default function LeadDetailPage({
   const [invoiceDesc, setInvoiceDesc] = useState('')
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
   const [invoiceItems, setInvoiceItems] = useState<LuxorInvoiceLineItem[]>([
-    { description: 'Venue Rental Fee', quantity: 1, unitPrice: 2500, total: 2500 },
+    { description: '', quantity: 1, unitPrice: 0, total: 0 },
   ])
   const [invoiceNotes, setInvoiceNotes] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
@@ -143,19 +143,19 @@ export default function LeadDetailPage({
 
   // Event Summary states
   const [isEditingSummary, setIsEditingSummary] = useState(false)
-  const [summaryVenue, setSummaryVenue] = useState('Luxor Main Hall')
-  const [summaryStartTime, setSummaryStartTime] = useState('17:00')
-  const [summaryEndTime, setSummaryEndTime] = useState('23:00')
-  const [summarySetupTime, setSummarySetupTime] = useState('3:00 PM')
-  const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('11:00 PM – 12:30 AM')
+  const [summaryVenue, setSummaryVenue] = useState('')
+  const [summaryStartTime, setSummaryStartTime] = useState('')
+  const [summaryEndTime, setSummaryEndTime] = useState('')
+  const [summarySetupTime, setSummarySetupTime] = useState('')
+  const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('')
   const [savingSummary, setSavingSummary] = useState(false)
 
   // Tour Attendance states
   const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
-  const [tourGuests, setTourGuests] = useState('Miguel Martinez')
-  const [tourNotes, setTourNotes] = useState('Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.')
-  const [tourBudget, setTourBudget] = useState('$5,000')
-  const [cateringPreferences, setCateringPreferences] = useState('Outside catering, open bar setup.')
+  const [tourGuests, setTourGuests] = useState('')
+  const [tourNotes, setTourNotes] = useState('')
+  const [tourBudget, setTourBudget] = useState('')
+  const [cateringPreferences, setCateringPreferences] = useState('')
   const [savingTourAttendance, setSavingTourAttendance] = useState(false)
 
   const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
@@ -174,6 +174,7 @@ export default function LeadDetailPage({
         pendingTaskCount: 0,
         sortedBookings: [] as LuxorBooking[],
         sortedInvoices: [] as LuxorInvoice[],
+        sortedPayments: [] as LuxorPayment[],
       }
     }
 
@@ -218,6 +219,11 @@ export default function LeadDetailPage({
       const bTime = new Date(b.updated_at || b.created_at).getTime()
       return bTime - aTime
     })
+    const derivedSortedPayments = [...payments].sort((a, b) => {
+      const aTime = new Date(a.paid_at || a.updated_at || a.created_at).getTime()
+      const bTime = new Date(b.paid_at || b.updated_at || b.created_at).getTime()
+      return bTime - aTime
+    })
 
     return {
       chatMessages: (lead.metadata?.chatMessages as { role: string; content: string }[]) || [],
@@ -236,8 +242,9 @@ export default function LeadDetailPage({
       pendingTaskCount: derivedSortedTasks.filter((task) => task.status === 'pending').length,
       sortedBookings: derivedSortedBookings,
       sortedInvoices: derivedSortedInvoices,
+      sortedPayments: derivedSortedPayments,
     }
-  }, [bookings, emailMessages, invoices, lead, notes, tasks])
+  }, [bookings, emailMessages, invoices, lead, notes, payments, tasks])
 
   const activityEntries = useMemo(() => {
     return leadDerivedData.allActivityEntries.filter((entry) => {
@@ -317,15 +324,15 @@ export default function LeadDetailPage({
   useEffect(() => {
     if (lead) {
       const metadata = lead.metadata || {}
-      setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || 'Luxor Main Hall'))
-      setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || '17:00'))
-      setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || '23:00'))
-      setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || '3:00 PM'))
-      setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || '11:00 PM – 12:30 AM'))
-      setTourGuests(String(metadata.tourGuests || 'Miguel Martinez'))
-      setTourNotes(String(metadata.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
-      setTourBudget(String(metadata.estimatedBudget || '$5,000'))
-      setCateringPreferences(String(metadata.cateringPreferences || 'Outside catering, open bar setup.'))
+      setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || ''))
+      setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || ''))
+      setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || ''))
+      setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || ''))
+      setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || ''))
+      setTourGuests(String(metadata.tourGuests || ''))
+      setTourNotes(String(metadata.tourNotes || ''))
+      setTourBudget(String(metadata.estimatedBudget || ''))
+      setCateringPreferences(String(metadata.cateringPreferences || ''))
     }
   }, [lead, latestBooking])
 
@@ -369,7 +376,7 @@ export default function LeadDetailPage({
         if (!res.ok) throw new Error('Failed to save lead event summary.')
       }
 
-      await fetchAllData()
+      await fetchAllData(false)
       setIsEditingSummary(false)
     } catch (err) {
       console.error(err)
@@ -506,9 +513,9 @@ export default function LeadDetailPage({
     }
   }
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (showPageLoader = true) => {
     try {
-      setLoading(true)
+      if (showPageLoader) setLoading(true)
       setError(null)
 
       const leadRes = await fetch(`/api/inquiries?id=${id}`)
@@ -518,7 +525,7 @@ export default function LeadDetailPage({
 
       void fetchClientEmailThread(leadData.email || '')
 
-      const [notesData, tasksData, invoicesData, bookingsData] = await Promise.all([
+      const [notesData, tasksData, invoicesData, bookingsData, paymentsData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -531,17 +538,21 @@ export default function LeadDetailPage({
         fetch(`/api/bookings?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
+        fetch(`/api/payments?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
       ])
 
       setNotes(notesData)
       setTasks(tasksData)
       setInvoices(invoicesData)
       setBookings(bookingsData)
+      setPayments(paymentsData)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
     } finally {
-      setLoading(false)
+      if (showPageLoader) setLoading(false)
     }
   }
 
@@ -595,25 +606,7 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error('Failed to update status.')
       const updated = await res.json()
       setLead(updated)
-
-      // Add a status change log entry in notes
-      await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: id,
-          content: `Lead status updated to ${newStatus.replace('_', ' ').toUpperCase()}`,
-          noteType: 'status_change',
-          author: 'Portal System',
-        }),
-      })
-
-      // Refresh notes list
-      const notesRes = await fetch(`/api/notes?inquiryId=${id}`)
-      if (notesRes.ok) {
-        const notesData = await notesRes.json()
-        setNotes(notesData)
-      }
+      await fetchAllData(false)
     } catch (err) {
       console.error(err)
       alert('Error updating status.')
@@ -852,7 +845,7 @@ export default function LeadDetailPage({
       setInvoiceDesc('')
       setInvoiceDueDate('')
       setInvoiceNotes('')
-      setInvoiceItems([{ description: 'Venue Rental Fee', quantity: 1, unitPrice: 2500, total: 2500 }])
+      setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
     } catch (err) {
       console.error(err)
       alert('Error creating invoice.')
@@ -861,20 +854,150 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleSendContract = async (bookingId: string) => {
+  const createFlowNote = async (content: string, noteType: LuxorNote['note_type'] = 'note') => {
+    const res = await fetch('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inquiryId: id,
+        content,
+        noteType,
+        author: 'Admin Owner',
+      }),
+    })
+    if (!res.ok) throw new Error('Failed to write activity note.')
+    return await res.json() as LuxorNote
+  }
+
+  const createFlowTask = async (title: string, description: string, priority: LuxorTask['priority'] = 'medium') => {
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inquiryId: id,
+        title,
+        description,
+        priority,
+      }),
+    })
+    if (!res.ok) throw new Error('Failed to create follow-up task.')
+    return await res.json() as LuxorTask
+  }
+
+  const handleTrackContractStatus = async (booking: LuxorBooking, status: NonNullable<LuxorBooking['contract_status']>) => {
     try {
-      const res = await fetch('/api/signatures', {
-        method: 'POST',
+      setUpdatingStatus(true)
+      const now = new Date().toISOString()
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId }),
+        body: JSON.stringify({
+          id: booking.id,
+          contract_status: status,
+          contract_sent_at: status === 'sent' ? now : booking.contract_sent_at,
+          contract_signed_at: status === 'signed' ? now : booking.contract_signed_at,
+          status: status === 'signed' && booking.security_deposit_status === 'collected' ? 'confirmed' : booking.status,
+          metadata: {
+            ...booking.metadata,
+            manual_contract_tracking: true,
+          },
+        }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to send contract.')
-      await fetchAllData()
-      alert('Contract signature email queued.')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to update contract tracking.')
+      await createFlowNote(
+        status === 'signed'
+          ? 'Contract marked signed manually. No signature portal or contract email was generated from this action.'
+          : 'Contract marked sent manually. No signature portal or contract email was generated from this action.',
+        'status_change',
+      )
+      await fetchAllData(false)
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to send contract.')
+      alert(err instanceof Error ? err.message : 'Failed to update contract tracking.')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleGuidedStatusChange = async (newStatus: LuxorInquiry['status']) => {
+    await handleStatusChange(newStatus)
+
+    try {
+      if (newStatus === 'contacted') {
+        const task = await createFlowTask('Confirm tour date or next decision', 'Follow up with the client to lock the next step after first outreach.', 'high')
+        setTasks((prev) => [task, ...prev])
+      } else if (newStatus === 'tour_confirmed') {
+        const task = await createFlowTask('Prepare tour recap and proposal numbers', 'Capture tour notes, pricing assumptions, and package fit before sending the proposal.', 'high')
+        setTasks((prev) => [task, ...prev])
+      } else if (newStatus === 'proposal_sent') {
+        const task = await createFlowTask('Follow up on proposal decision', 'Check for objections, confirm package fit, and move toward booking.', 'high')
+        setTasks((prev) => [task, ...prev])
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final') => {
+    const paidTotal = getPaidTotal(payments)
+    const remainingBalance = Math.max(0, Number(booking.contract_total || 0) - paidTotal)
+    const depositBalance = Math.max(0, Number(booking.deposit_required || 0) - getPaidTotal(payments, 'deposit'))
+    const amount = paymentKind === 'deposit' ? depositBalance : remainingBalance
+
+    if (amount <= 0) {
+      alert(paymentKind === 'deposit' ? 'The deposit is already covered.' : 'There is no remaining balance to record.')
+      return
+    }
+
+    try {
+      setUpdatingStatus(true)
+      const paymentRes = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiry_id: id,
+          booking_id: booking.id,
+          amount,
+          status: 'paid',
+          payment_method: 'Manual record',
+          notes: paymentKind === 'deposit' ? 'Security deposit recorded manually in owner portal.' : 'Final balance recorded manually in owner portal.',
+          metadata: {
+            payment_kind: paymentKind,
+            manual_entry: true,
+          },
+        }),
+      })
+      const paymentPayload = await paymentRes.json().catch(() => ({}))
+      if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
+
+      const nextStatus: LuxorBookingStatus = paymentKind === 'final' ? 'completed' : 'confirmed'
+      const bookingRes = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: booking.id,
+          status: nextStatus,
+          security_deposit_status: paymentKind === 'deposit' ? 'collected' : booking.security_deposit_status,
+          metadata: {
+            ...booking.metadata,
+            [`${paymentKind}_payment_recorded_manually_at`]: new Date().toISOString(),
+          },
+        }),
+      })
+      const bookingPayload = await bookingRes.json().catch(() => ({}))
+      if (!bookingRes.ok) throw new Error(bookingPayload.error || 'Failed to update booking after payment.')
+
+      await createFlowNote(
+        `${paymentKind === 'deposit' ? 'Security deposit' : 'Final balance'} recorded manually for ${formatMoney(amount)}.`,
+        'status_change',
+      )
+      await fetchAllData(false)
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to record payment.')
+    } finally {
+      setUpdatingStatus(false)
     }
   }
 
@@ -965,7 +1088,7 @@ export default function LeadDetailPage({
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
-            onClick={fetchAllData}
+            onClick={() => fetchAllData()}
             className="inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-blue-300 transition-all hover:bg-blue-500/15 hover:text-white"
           >
             Retry Load
@@ -990,7 +1113,19 @@ export default function LeadDetailPage({
     pendingTaskCount,
     sortedBookings,
     sortedInvoices,
+    sortedPayments,
   } = leadDerivedData
+  const paidTotal = getPaidTotal(sortedPayments)
+  const depositPaidTotal = getPaidTotal(sortedPayments, 'deposit')
+  const bookingContractAmount = Number(latestBooking?.contract_total || 0)
+  const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
+  const depositBalance = Math.max(0, bookingDepositAmount - depositPaidTotal)
+  const remainingBalance = Math.max(0, bookingContractAmount - paidTotal)
+  const proposalAmount = latestInvoice?.total || latestBooking?.contract_total || 0
+  const proposalSentAt = notes.find((note) => (
+    note.note_type === 'status_change' &&
+    note.content.toLowerCase().includes('proposal')
+  ))?.created_at || (lead.status === 'proposal_sent' ? lead.updated_at : null)
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
   const eventDetails: Array<{
     label: string
@@ -1128,7 +1263,7 @@ export default function LeadDetailPage({
       icon: <ArrowLeft size={15} />,
       label: 'Re-open lead',
       detail: 'Bring this inquiry back into the pipeline',
-      onClick: () => handleStatusChange('new'),
+      onClick: () => handleGuidedStatusChange('new'),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -1137,7 +1272,7 @@ export default function LeadDetailPage({
       icon: <Phone size={15} />,
       label: 'Mark contacted',
       detail: 'Log the first outreach touch',
-      onClick: () => handleStatusChange('contacted'),
+      onClick: () => handleGuidedStatusChange('contacted'),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -1146,7 +1281,7 @@ export default function LeadDetailPage({
       icon: <Calendar size={15} />,
       label: 'Confirm tour scheduled',
       detail: 'Move lifecycle to tour confirmed',
-      onClick: () => handleStatusChange('tour_confirmed'),
+      onClick: () => handleGuidedStatusChange('tour_confirmed'),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -1155,7 +1290,7 @@ export default function LeadDetailPage({
       icon: <FileSignature size={15} />,
       label: 'Mark proposal sent',
       detail: 'Use after sending pricing',
-      onClick: () => handleStatusChange('proposal_sent'),
+      onClick: () => handleGuidedStatusChange('proposal_sent'),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -1172,17 +1307,19 @@ export default function LeadDetailPage({
   } else if (lead.status === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : 'Send contract') : 'Create booking record',
+      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : 'Mark contract sent') : 'Create booking record',
       detail: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? 'Contract is already signed'
-          : 'Send the contract to keep momentum moving'
+          : 'Track contract progress without sending a portal email'
         : 'Create the booking record first',
       onClick: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? () => scrollToSection('lead-booking')
-          : () => handleSendContract(latestBooking.id)
+          : () => handleTrackContractStatus(latestBooking, 'sent')
         : openBookingModal,
+      disabled: updatingStatus,
+      loading: updatingStatus,
     })
   }
 
@@ -1286,21 +1423,9 @@ export default function LeadDetailPage({
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
-              {lead.full_name.toLowerCase().includes('sophia martinez') ? (
-                <div className="relative h-20 w-20 overflow-hidden rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 shadow-xl shadow-black/10">
-                  <Image
-                    src="/images/sophia-avatar.jpg"
-                    alt={lead.full_name}
-                    fill
-                    priority
-                    className="object-cover animate-[luxor-soft-enter_0.3s_ease-out]"
-                  />
-                </div>
-              ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
-                  {getInitials(lead.full_name)}
-                </div>
-              )}
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
+                {getInitials(lead.full_name)}
+              </div>
               <button
                 type="button"
                 className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] hover:bg-[#caa24c]/10 hover:text-[#f1d27a] transition-all duration-200 cursor-pointer shadow-md"
@@ -1568,9 +1693,9 @@ export default function LeadDetailPage({
                           <DetailItem
                             icon={<MapPin size={14} />}
                             label="Address"
-                            value={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                            editValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
-                            copyValue={lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'}
+                            value={lead.metadata?.address ? String(lead.metadata.address) : 'Not captured'}
+                            editValue={lead.metadata?.address ? String(lead.metadata.address) : ''}
+                            copyValue={lead.metadata?.address ? String(lead.metadata.address) : ''}
                             inputType="text"
                             placeholder="San Antonio, TX"
                             isSaving={savingLeadField === 'address'}
@@ -1738,10 +1863,10 @@ export default function LeadDetailPage({
                               type="button"
                               onClick={() => {
                                 setIsEditingTourAttendance(false)
-                                setTourGuests(String(lead.metadata?.tourGuests || 'Miguel Martinez'))
-                                setTourNotes(String(lead.metadata?.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
-                                setTourBudget(String(lead.metadata?.estimatedBudget || '$5,000'))
-                                setCateringPreferences(String(lead.metadata?.cateringPreferences || 'Outside catering, open bar setup.'))
+                                setTourGuests(String(lead.metadata?.tourGuests || ''))
+                                setTourNotes(String(lead.metadata?.tourNotes || ''))
+                                setTourBudget(String(lead.metadata?.estimatedBudget || ''))
+                                setCateringPreferences(String(lead.metadata?.cateringPreferences || ''))
                               }}
                               className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
                             >
@@ -1763,7 +1888,7 @@ export default function LeadDetailPage({
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
-                                <p className="font-semibold text-white mt-0.5">{tourBudget}</p>
+                                <p className="font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
                               </div>
                               <div>
                                 <p className="text-[9px] uppercase font-bold text-zinc-500">Guests on Tour</p>
@@ -1772,12 +1897,12 @@ export default function LeadDetailPage({
                             </div>
                             <div>
                               <p className="text-[9px] uppercase font-bold text-zinc-500">Catering Preferences</p>
-                              <p className="font-semibold text-zinc-300 mt-0.5">{cateringPreferences}</p>
+                              <p className="font-semibold text-zinc-300 mt-0.5">{cateringPreferences || 'Not captured'}</p>
                             </div>
                           </div>
                           <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3.5 sm:pt-0 sm:pl-4 space-y-2">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Intake / Specific Requirements</p>
-                            <p className="text-zinc-400 italic leading-relaxed mt-0.5">&ldquo;{tourNotes}&rdquo;</p>
+                            <p className="text-zinc-400 italic leading-relaxed mt-0.5">&ldquo;{tourNotes || 'No tour notes captured yet.'}&rdquo;</p>
                           </div>
                         </div>
                       )}
@@ -1797,75 +1922,7 @@ export default function LeadDetailPage({
                       </div>
 
                       <div className="space-y-4">
-                        {lead.full_name.toLowerCase().includes('sophia martinez') && allActivityEntries.length === 0 ? (
-                          <>
-                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                                  <FileSignature size={13} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white leading-tight">
-                                    Contract created <span className="text-zinc-500 font-medium">by You</span>
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Today, 10:45 AM</span>
-                            </div>
-                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                                  <CheckCircle2 size={13} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white leading-tight">
-                                    Proposal accepted <span className="text-zinc-500 font-medium">by Sophia Martinez</span>
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                            </div>
-                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                                  <Send size={13} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white leading-tight">
-                                    Proposal sent <span className="text-zinc-500 font-medium">by You</span>
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 9, 2026</span>
-                            </div>
-                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-                                  <CheckCircle2 size={13} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white leading-tight">
-                                    Tour completed <span className="text-zinc-500 font-medium">by You</span>
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 8, 2026</span>
-                            </div>
-                            <div className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-500/10 text-zinc-500">
-                                  <Mail size={13} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white leading-tight">
-                                    Inquiry received <span className="text-zinc-500 font-medium">via Google</span>
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono text-zinc-500 shrink-0">Jul 5, 2026</span>
-                            </div>
-                          </>
-                        ) : allActivityEntries.length === 0 ? (
+                        {allActivityEntries.length === 0 ? (
                           <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
                         ) : (
                           allActivityEntries.slice(0, 5).map((entry) => {
@@ -1907,7 +1964,7 @@ export default function LeadDetailPage({
                     </section>
 
                     {/* RSVP / Inquiry Message */}
-                    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-message">
+                    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-messages">
                       <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
                         {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
                       </h4>
@@ -1962,7 +2019,7 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Date</span>
-                              <span className="font-bold text-white">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Jul 6, 2026'}</span>
+                              <span className="font-bold text-white">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Not scheduled'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Time</span>
@@ -1970,7 +2027,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned To</span>
-                              <span className="font-bold text-white">Arianna Patterson</span>
+                              <span className="font-bold text-white">{String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
@@ -2058,10 +2115,10 @@ export default function LeadDetailPage({
                                 type="button"
                                 onClick={() => {
                                   setIsEditingTourAttendance(false)
-                                  setTourGuests(String(lead.metadata?.tourGuests || 'Miguel Martinez'))
-                                  setTourNotes(String(lead.metadata?.tourNotes || 'Client loved the modern chandelier and open bar space. Interested in black & gold theme. Mentioned needing help with décor and photography.'))
-                                  setTourBudget(String(lead.metadata?.estimatedBudget || '$5,000'))
-                                  setCateringPreferences(String(lead.metadata?.cateringPreferences || 'Outside catering, open bar setup.'))
+                                  setTourGuests(String(lead.metadata?.tourGuests || ''))
+                                  setTourNotes(String(lead.metadata?.tourNotes || ''))
+                                  setTourBudget(String(lead.metadata?.estimatedBudget || ''))
+                                  setCateringPreferences(String(lead.metadata?.cateringPreferences || ''))
                                 }}
                                 className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
                               >
@@ -2099,18 +2156,18 @@ export default function LeadDetailPage({
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
                                     <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
-                                    <p className="text-xs font-semibold text-white mt-0.5">{tourBudget}</p>
+                                    <p className="text-xs font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
                                   </div>
                                   <div>
                                     <p className="text-[9px] uppercase font-bold text-zinc-500">Catering / Bar</p>
-                                    <p className="text-xs font-semibold text-zinc-300 mt-0.5 truncate">{cateringPreferences}</p>
+                                    <p className="text-xs font-semibold text-zinc-300 mt-0.5 truncate">{cateringPreferences || 'Not captured'}</p>
                                   </div>
                                 </div>
                               </div>
                               <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3 sm:pt-0 sm:pl-4">
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes & Prep</p>
                                 <p className="text-xs text-zinc-400 italic leading-relaxed">
-                                  &ldquo;{tourNotes}&rdquo;
+                                  &ldquo;{tourNotes || 'No tour notes captured yet.'}&rdquo;
                                 </p>
                                 <button
                                   type="button"
@@ -2281,15 +2338,15 @@ export default function LeadDetailPage({
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Date</span>
-                                <span className="font-bold text-white">{lead.target_date ? formatDisplayDate(lead.target_date) : 'August 30, 2026'}</span>
+                                <span className="font-bold text-white">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : lead.target_date ? formatDisplayDate(lead.target_date) : 'Date not set'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
-                                <span className="font-bold text-white">6:00 PM – 11:00 PM</span>
+                                <span className="font-bold text-white">{latestBooking?.start_time && latestBooking?.end_time ? `${formatTimeString(latestBooking.start_time)} – ${formatTimeString(latestBooking.end_time)}` : 'Time not set'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
-                                <span className="font-bold text-white">{lead.event_type || 'Anniversary Party'}</span>
+                                <span className="font-bold text-white">{lead.event_type || 'Event type not captured'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
@@ -2297,11 +2354,11 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
-                                <span className="font-bold text-white">{lead.guest_count || 80} Guests (Estimated)</span>
+                                <span className="font-bold text-white">{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
-                                <span className="font-bold text-white">Black & Gold Modern Elegance</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.event_style || 'Not captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -2324,15 +2381,15 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Music Style</span>
-                                <span className="font-bold text-white">R&B, 90s, Top 40</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.music_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Lighting</span>
-                                <span className="font-bold text-white">Warm & Dimmed</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.lighting_preference || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Special Requests</span>
-                                <span className="font-bold text-white">None at this time</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.special_requests || lead.message || 'None captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -2353,19 +2410,19 @@ export default function LeadDetailPage({
                               <div className="col-span-3 space-y-2 text-xs">
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Head Table</span>
-                                  <span className="font-bold text-white">Yes</span>
+                                  <span className="font-bold text-white">{String(lead.metadata?.head_table || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Dance Floor</span>
-                                  <span className="font-bold text-white">Yes</span>
+                                  <span className="font-bold text-white">{String(lead.metadata?.dance_floor || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Stage</span>
-                                  <span className="font-bold text-white">No</span>
+                                  <span className="font-bold text-white">{String(lead.metadata?.stage_needed || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Other Areas</span>
-                                  <span className="font-bold text-white">Open Bar, Lounge</span>
+                                  <span className="font-bold text-white">{String(lead.metadata?.other_areas || 'Not captured')}</span>
                                 </div>
                               </div>
                             </div>
@@ -2380,23 +2437,23 @@ export default function LeadDetailPage({
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Selected Package</span>
-                                <span className="font-bold text-white">Luxury Package</span>
+                                <span className="font-bold text-white">{lead.package_interest || latestBooking?.package_name || 'Not selected'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Décor Style</span>
-                                <span className="font-bold text-white">Black & Gold Modern</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.decor_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Centerpieces</span>
-                                <span className="font-bold text-white">Tall Gold Stands</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.centerpieces || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Linens</span>
-                                <span className="font-bold text-white">Black</span>
+                                <span className="font-bold text-white">{String(lead.metadata?.linens || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between items-start">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500 mt-0.5">Additional Notes</span>
-                                <span className="font-bold text-white text-right max-w-[60%]">Client loves the modern chandelier and open bar.</span>
+                                <span className="font-bold text-white text-right max-w-[60%]">{tourNotes || 'No planning notes captured yet.'}</span>
                               </div>
                             </div>
                           </section>
@@ -2462,34 +2519,33 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Package Option</span>
-                              <span className="font-bold text-white">{lead.package_interest || 'Luxury Package'}</span>
+                              <span className="font-bold text-white">{lead.package_interest || latestBooking?.package_name || 'Not selected'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Est. Total Amount</span>
-                              <span className="font-bold text-[#caa24c]">$12,500</span>
+                              <span className="font-bold text-[#caa24c]">{proposalAmount > 0 ? formatMoney(proposalAmount) : 'Not priced'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
-                              <span className="font-bold text-white">July 9, 2026</span>
+                              <span className="font-bold text-white">{proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not marked sent'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Expiration Date</span>
-                              <span className="font-bold text-white">July 23, 2026</span>
+                              <span className="font-bold text-white">{latestInvoice?.due_date ? formatDisplayDate(latestInvoice.due_date) : 'No expiration set'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Viewed by Client</span>
-                              <span className="font-bold text-emerald-400">Yes (July 10, 2026)</span>
+                              <span className="font-bold text-zinc-400">{String(lead.metadata?.proposal_viewed_at ? formatDisplayDate(String(lead.metadata.proposal_viewed_at)) : 'Not tracked')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Awaiting Signature</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestInvoice?.status || lead.status.replaceAll('_', ' ')}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Edit Proposal</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Duplicate</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Convert to Contract</button>
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Draft Invoice</button>
+                          <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
                         </div>
                       </section>
 
@@ -2498,26 +2554,22 @@ export default function LeadDetailPage({
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Line Items Breakdown</p>
                           <div className="space-y-2 text-xs">
-                            <div className="flex justify-between py-1 border-b border-zinc-850">
-                              <span className="text-zinc-400">Venue Rental Fee</span>
-                              <span className="font-mono font-bold text-white">$2,500</span>
-                            </div>
-                            <div className="flex justify-between py-1 border-b border-zinc-850">
-                              <span className="text-zinc-400">Catering & Dinner Service</span>
-                              <span className="font-mono font-bold text-white">$6,000</span>
-                            </div>
-                            <div className="flex justify-between py-1 border-b border-zinc-850">
-                              <span className="text-zinc-400">Bar Package (Open Bar)</span>
-                              <span className="font-mono font-bold text-white">$2,500</span>
-                            </div>
-                            <div className="flex justify-between py-1 border-b border-zinc-850">
-                              <span className="text-zinc-400">Coordination & Design Fee</span>
-                              <span className="font-mono font-bold text-white">$1,500</span>
-                            </div>
-                            <div className="flex justify-between py-1.5 pt-2">
-                              <span className="font-bold text-white">Estimated Total</span>
-                              <span className="font-mono font-bold text-[#caa24c] text-sm">$12,500</span>
-                            </div>
+                            {latestInvoice?.line_items?.length ? (
+                              <>
+                                {latestInvoice.line_items.map((item, index) => (
+                                  <div key={`${item.description}-${index}`} className="flex justify-between py-1 border-b border-zinc-850">
+                                    <span className="text-zinc-400">{item.description}</span>
+                                    <span className="font-mono font-bold text-white">{formatMoney(item.total)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between py-1.5 pt-2">
+                                  <span className="font-bold text-white">Estimated Total</span>
+                                  <span className="font-mono font-bold text-[#caa24c] text-sm">{formatMoney(latestInvoice.total)}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-xs text-zinc-500">No proposal or invoice line items have been drafted yet.</p>
+                            )}
                           </div>
                         </div>
                       </section>
@@ -2550,30 +2602,35 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Document Type</span>
-                              <span className="font-bold text-white">Venue Rental Contract</span>
+                              <span className="font-bold text-white">{latestBooking ? 'Venue rental agreement' : 'Booking record needed'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Waiting for signature</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestBooking?.contract_status?.replaceAll('_', ' ') || 'not started'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
-                              <span className="font-bold text-white">July 9, 2026</span>
+                              <span className="font-bold text-white">{latestBooking?.contract_sent_at ? formatDisplayDate(latestBooking.contract_sent_at) : 'Not marked sent'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Signed Date</span>
-                              <span className="font-bold text-zinc-500">Pending Client Signature</span>
+                              <span className="font-bold text-zinc-500">{latestBooking?.contract_signed_at ? formatDisplayDate(latestBooking.contract_signed_at) : 'Pending'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Signers</span>
-                              <span className="font-bold text-white">Sophia Martinez, Venue Manager</span>
+                              <span className="font-bold text-white">{lead.full_name}{lead.email ? `, ${lead.email}` : ''}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Contract</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Remind Client</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Download PDF</button>
+                          {latestBooking ? (
+                            <>
+                              <button type="button" onClick={() => handleTrackContractStatus(latestBooking, 'sent')} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Mark Sent</button>
+                              <button type="button" onClick={() => handleTrackContractStatus(latestBooking, 'signed')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Signed</button>
+                            </>
+                          ) : (
+                            <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
+                          )}
                         </div>
                       </section>
 
@@ -2585,22 +2642,22 @@ export default function LeadDetailPage({
                             <div className="flex items-center gap-3">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
                               <div>
-                                <p className="font-bold text-white">Draft created by Venue Manager</p>
-                                <p className="text-[9px] text-zinc-500">July 9, 2026 at 10:45 AM</p>
+                                <p className="font-bold text-white">Booking record created</p>
+                                <p className="text-[9px] text-zinc-500">{latestBooking ? formatTimelineDate(latestBooking.created_at) : 'Not created yet'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
                               <div>
-                                <p className="font-bold text-white">Contract sent to Sophia Martinez</p>
-                                <p className="text-[9px] text-zinc-500">July 9, 2026 at 10:48 AM</p>
+                                <p className="font-bold text-white">Contract marked sent</p>
+                                <p className="text-[9px] text-zinc-500">{latestBooking?.contract_sent_at ? formatTimelineDate(latestBooking.contract_sent_at) : 'Waiting for manual tracking'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 animate-pulse"><Circle size={4} className="fill-current" /></span>
                               <div>
-                                <p className="font-bold text-white">Awaiting client signature</p>
-                                <p className="text-[9px] text-zinc-500">Emailed to sophia.m@example.com</p>
+                                <p className="font-bold text-white">{latestBooking?.contract_status === 'signed' ? 'Contract signed' : 'Awaiting client signature'}</p>
+                                <p className="text-[9px] text-zinc-500">{latestBooking?.contract_signed_at ? formatTimelineDate(latestBooking.contract_signed_at) : 'No email or portal generated here'}</p>
                               </div>
                             </div>
                           </div>
@@ -2621,7 +2678,7 @@ export default function LeadDetailPage({
                         <p className="text-xs text-[color:var(--portal-muted)]">Track initial deposit invoices and payment schedules.</p>
                       </div>
                       <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        View Invoice
+                        Draft Invoice
                       </button>
                     </div>
 
@@ -2635,30 +2692,31 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Number</span>
-                              <span className="font-bold text-white">INV-2026-001</span>
+                              <span className="font-bold text-white">{latestInvoice ? latestInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Due Date</span>
-                              <span className="font-bold text-white">July 16, 2026</span>
+                              <span className="font-bold text-white">{latestInvoice?.due_date ? formatDisplayDate(latestInvoice.due_date) : 'No due date set'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Amount</span>
-                              <span className="font-bold text-[#caa24c] font-mono">$1,000</span>
+                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(bookingDepositAmount)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Paid Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Pending</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestBooking?.security_deposit_status || (depositBalance <= 0 && bookingDepositAmount > 0 ? 'collected' : 'pending')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-white font-mono">$11,500</span>
+                              <span className="font-bold text-white font-mono">{formatMoney(remainingBalance)}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Invoice</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Record Payment</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Refund</button>
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Draft Invoice</button>
+                          {latestBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Deposit Paid</button>
+                          ) : null}
                         </div>
                       </section>
 
@@ -2670,16 +2728,16 @@ export default function LeadDetailPage({
                             <div className="flex justify-between py-1 border-b border-zinc-850">
                               <div>
                                 <p className="font-bold text-white">1. Initial Security Deposit</p>
-                                <p className="text-[9px] text-zinc-500">Due July 16, 2026</p>
+                                <p className="text-[9px] text-zinc-500">{latestInvoice?.due_date ? `Due ${formatDisplayDate(latestInvoice.due_date)}` : 'Due date not set'}</p>
                               </div>
-                              <span className="font-mono font-bold text-[#caa24c]">$1,000</span>
+                              <span className="font-mono font-bold text-[#caa24c]">{formatMoney(bookingDepositAmount)}</span>
                             </div>
                             <div className="flex justify-between py-1">
                               <div>
                                 <p className="font-bold text-zinc-400">2. Event Rental Balance</p>
-                                <p className="text-[9px] text-zinc-500">Due July 31, 2026</p>
+                                <p className="text-[9px] text-zinc-500">{latestBooking?.final_payment_due_date ? `Due ${formatDisplayDate(latestBooking.final_payment_due_date)}` : 'Due date not set'}</p>
                               </div>
-                              <span className="font-mono font-bold text-zinc-400">$11,500</span>
+                              <span className="font-mono font-bold text-zinc-400">{formatMoney(remainingBalance)}</span>
                             </div>
                           </div>
                         </div>
@@ -2713,11 +2771,11 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-[#caa24c] font-mono">$11,500</span>
+                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(remainingBalance)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
-                              <span className="font-bold text-white">July 31, 2026</span>
+                              <span className="font-bold text-white">{latestBooking?.final_payment_due_date ? formatDisplayDate(latestBooking.final_payment_due_date) : 'No due date set'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Late Status</span>
@@ -2725,17 +2783,19 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
-                              <span className="font-bold text-white">INV-2026-001</span>
+                              <span className="font-bold text-white">{latestInvoice ? latestInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Pending</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{remainingBalance <= 0 && bookingContractAmount > 0 ? 'paid' : 'pending'}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Collect Final Payment</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Reminder</button>
+                          {latestBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Mark Final Paid</button>
+                          ) : null}
+                          <button type="button" onClick={() => setActiveLeadTab('tasks')} className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Create Reminder Task</button>
                         </div>
                       </section>
 
@@ -2744,20 +2804,17 @@ export default function LeadDetailPage({
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Transaction History</p>
                           <div className="space-y-3 text-xs">
-                            <div className="flex justify-between items-center py-1.5 border-b border-zinc-850">
-                              <div>
-                                <p className="font-bold text-white">Initial Security Deposit</p>
-                                <p className="text-[9px] text-zinc-500">Paid July 12, 2026</p>
+                            {sortedPayments.length ? sortedPayments.map((payment) => (
+                              <div key={payment.id} className="flex justify-between items-center py-1.5 border-b border-zinc-850 last:border-0">
+                                <div>
+                                  <p className="font-bold text-white">{String(payment.metadata?.payment_kind || 'Payment').replaceAll('_', ' ')}</p>
+                                  <p className="text-[9px] text-zinc-500">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p>
+                                </div>
+                                <span className="font-mono font-bold text-emerald-400">+{formatMoney(payment.amount)} {payment.status}</span>
                               </div>
-                              <span className="font-mono font-bold text-emerald-400">+$1,000 Paid</span>
-                            </div>
-                            <div className="flex justify-between items-center py-1.5">
-                              <div>
-                                <p className="font-bold text-zinc-400">Event Rental Balance</p>
-                                <p className="text-[9px] text-zinc-500">Due July 31, 2026</p>
-                              </div>
-                              <span className="font-mono font-bold text-zinc-400">$11,500 Pending</span>
-                            </div>
+                            )) : (
+                              <p className="text-xs text-zinc-500">No payments have been recorded yet.</p>
+                            )}
                           </div>
                         </div>
                       </section>
@@ -2794,19 +2851,19 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned Coordinator</span>
-                              <span className="font-bold text-white">Arianna Patterson</span>
+                              <span className="font-bold text-white">{String(lead.metadata?.event_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Gate Access Code</span>
-                              <span className="font-mono font-bold text-[#caa24c]">*4920#</span>
+                              <span className="font-mono font-bold text-[#caa24c]">{String(lead.metadata?.gate_access_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Backdoor Code</span>
-                              <span className="font-mono font-bold text-white">1204</span>
+                              <span className="font-mono font-bold text-white">{String(lead.metadata?.backdoor_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Emergency Line</span>
-                              <span className="font-bold text-white">(210) 555-0199</span>
+                              <span className="font-bold text-white">{String(lead.metadata?.emergency_contact || 'Not set')}</span>
                             </div>
                           </div>
                         </div>
@@ -2817,11 +2874,11 @@ export default function LeadDetailPage({
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Operation Milestones</p>
                         <div className="space-y-2 text-xs">
                           {[
-                            { label: 'Coordinator on-site briefing (2:00 PM)', done: true },
-                            { label: 'Caterer & DJ setup inspection (3:30 PM)', done: true },
-                            { label: 'Room decoration & table setup sign-off (4:30 PM)', done: false },
-                            { label: 'Main doors & gate open to guests (5:30 PM)', done: false },
-                            { label: 'Reception & dinner service starts (7:00 PM)', done: false },
+                            { label: 'Coordinator assigned', done: Boolean(lead.metadata?.event_coordinator) },
+                            { label: 'Access details captured', done: Boolean(lead.metadata?.gate_access_code || lead.metadata?.backdoor_code) },
+                            { label: 'Run of show confirmed', done: Boolean(lead.metadata?.run_of_show_confirmed_at) },
+                            { label: 'Vendor arrival windows confirmed', done: Boolean(lead.metadata?.vendor_windows_confirmed_at) },
+                            { label: 'Final walkthrough complete', done: Boolean(lead.metadata?.final_walkthrough_completed_at) },
                           ].map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
@@ -2859,12 +2916,12 @@ export default function LeadDetailPage({
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Wrap-Up Checklist</p>
                         <div className="space-y-2 text-xs">
                           {[
-                            { label: 'Thank-you email sent', done: true },
-                            { label: 'Review request sent (Google, WeddingWire)', done: true },
-                            { label: 'Photo/video assets requested', done: false },
-                            { label: 'Security deposit return authorized', done: false },
-                            { label: 'Damage report & final inspection cleared', done: false },
-                            { label: 'Anniversary reminder automation active', done: true },
+                            { label: 'Thank-you follow-up logged', done: Boolean(lead.metadata?.thank_you_follow_up_logged_at) },
+                            { label: 'Review request ready', done: Boolean(lead.metadata?.review_request_ready_at) },
+                            { label: 'Photo/video assets requested', done: Boolean(lead.metadata?.assets_requested_at) },
+                            { label: 'Security deposit return authorized', done: Boolean(lead.metadata?.deposit_return_authorized_at) },
+                            { label: 'Damage report & final inspection cleared', done: Boolean(lead.metadata?.final_inspection_cleared_at) },
+                            { label: 'Anniversary reminder noted', done: Boolean(lead.metadata?.anniversary_reminder_date) },
                           ].map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
@@ -2883,7 +2940,9 @@ export default function LeadDetailPage({
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Anniversary Reminder</p>
                           <p className="text-xs text-zinc-400 leading-relaxed">
-                            Anniversary reminder is set for <strong>August 30, 2027</strong>. A marketing flow will trigger automatically 14 days prior.
+                            {lead.metadata?.anniversary_reminder_date
+                              ? <>Anniversary reminder noted for <strong>{formatDisplayDate(String(lead.metadata.anniversary_reminder_date))}</strong>. No post-event email automation is created from this page.</>
+                              : 'No anniversary reminder date has been captured yet.'}
                           </p>
                         </div>
                       </section>
@@ -3059,7 +3118,7 @@ export default function LeadDetailPage({
                         <div className="space-y-3.5">
                           <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
                             <span className="text-[10px] uppercase font-bold text-zinc-500">Venue</span>
-                            <span className="text-xs font-bold text-white">{summaryVenue}</span>
+                            <span className="text-xs font-bold text-white">{summaryVenue || 'Not captured'}</span>
                           </div>
                           <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
                             <span className="text-[10px] uppercase font-bold text-zinc-500">Time</span>
@@ -3069,11 +3128,11 @@ export default function LeadDetailPage({
                           </div>
                           <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
                             <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
-                            <span className="text-xs font-bold text-white">{summarySetupTime}</span>
+                            <span className="text-xs font-bold text-white">{summarySetupTime || 'Not set'}</span>
                           </div>
                           <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
                             <span className="text-[10px] uppercase font-bold text-zinc-500">Breakdown Time</span>
-                            <span className="text-xs font-bold text-white">{summaryBreakdownTime}</span>
+                            <span className="text-xs font-bold text-white">{summaryBreakdownTime || 'Not set'}</span>
                           </div>
                         </div>
                       )}
@@ -3083,43 +3142,49 @@ export default function LeadDetailPage({
               }
               
               // For all stages other than inquiry, render the layout from the sister's mockup
-              const clientSummaryEmail = lead.email || 'sophia.m@example.com'
-              const clientSummaryPhone = lead.phone || '214-555-4321'
-              const clientSummaryAddress = lead.metadata?.address ? String(lead.metadata.address) : 'San Antonio, TX'
-              const clientSummaryGuests = lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : '80 Guests (Estimated)'
-              const clientSummaryEventType = lead.event_type || 'Anniversary Party'
+              const clientSummaryEmail = lead.email || 'No email captured'
+              const clientSummaryPhone = lead.phone || 'No phone captured'
+              const clientSummaryAddress = lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'
+              const clientSummaryGuests = lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'
+              const clientSummaryEventType = lead.event_type || 'Event type not captured'
               
-              let nextStepTitle = 'Send Proposal'
-              let nextStepDetail = 'Create and send custom proposal'
-              let nextStepButton = 'Create Proposal'
+              let nextStepTitle = 'Prepare proposal'
+              let nextStepDetail = 'Draft pricing and confirm the next decision step'
+              let nextStepButton = 'Open Billing'
+              let nextStepAction = () => setActiveLeadTab('billing')
               
               if (currentStage === 'proposal') {
-                nextStepTitle = 'Convert to Contract'
-                nextStepDetail = 'Draft and send legal agreement'
-                nextStepButton = 'Create Contract'
+                nextStepTitle = 'Create booking record'
+                nextStepDetail = 'Capture event date, package, total, and deposit'
+                nextStepButton = 'Create Booking'
+                nextStepAction = openBookingModal
               } else if (currentStage === 'contract') {
-                nextStepTitle = 'Collect Deposit'
-                nextStepDetail = 'Send deposit invoice to client'
-                nextStepButton = 'Collect Deposit'
+                nextStepTitle = 'Track contract'
+                nextStepDetail = 'Mark sent or signed manually once handled outside the portal'
+                nextStepButton = 'Open Booking'
+                nextStepAction = () => scrollToSection('lead-booking')
               } else if (currentStage === 'deposit') {
-                nextStepTitle = 'Start Planning'
-                nextStepDetail = 'Open event planning checklist'
-                nextStepButton = 'Start Planning'
+                nextStepTitle = 'Record deposit'
+                nextStepDetail = 'Manually mark deposit paid after payment is confirmed'
+                nextStepButton = latestBooking ? 'Mark Deposit Paid' : 'Create Booking'
+                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'deposit') : openBookingModal
               } else if (currentStage === 'planning') {
-                nextStepTitle = 'Final Payment Reminder'
-                nextStepDetail = 'Request final rental balance'
-                nextStepButton = 'Send Reminder'
+                nextStepTitle = 'Confirm planning details'
+                nextStepDetail = 'Fill any missing event details before final balance'
+                nextStepButton = 'Open Tasks'
+                nextStepAction = () => setActiveLeadTab('tasks')
               } else if (currentStage === 'final_payment') {
-                nextStepTitle = 'Run Event Day'
-                nextStepDetail = 'Access checklist & operations'
-                nextStepButton = 'Start Event Day'
+                nextStepTitle = 'Record final payment'
+                nextStepDetail = 'Manually mark balance paid after payment is confirmed'
+                nextStepButton = latestBooking ? 'Mark Final Paid' : 'Create Booking'
+                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'final') : openBookingModal
               } else if (currentStage === 'event') {
-                nextStepTitle = 'Close Out & Review'
-                nextStepDetail = 'Send post-event feedback request'
+                nextStepTitle = 'Close out event'
+                nextStepDetail = 'Finish inspection, deposit return, and review readiness'
                 nextStepButton = 'Close Out Event'
               } else if (currentStage === 'closing') {
                 nextStepTitle = 'Complete Lead'
-                nextStepDetail = 'Archive lead as successful'
+                nextStepDetail = 'Mark the booking complete when all wrap-up work is done'
                 nextStepButton = 'Complete Lead'
               }
 
@@ -3131,11 +3196,11 @@ export default function LeadDetailPage({
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
                     </div>
                     <div className="space-y-3.5 text-xs text-left">
-                      <a href={`mailto:${clientSummaryEmail}`} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                      <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
                         <Mail size={14} className="text-[#a8792f]" />
                         <span>{clientSummaryEmail}</span>
                       </a>
-                      <a href={`tel:${clientSummaryPhone}`} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                      <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
                         <Phone size={14} className="text-[#a8792f]" />
                         <span>{clientSummaryPhone}</span>
                       </a>
@@ -3155,7 +3220,7 @@ export default function LeadDetailPage({
                     <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
                       <button
                         type="button"
-                        onClick={() => scrollToSection('lead-message')}
+                        onClick={() => scrollToSection('lead-messages')}
                         className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
                       >
                         View Full Details &rarr;
@@ -3180,6 +3245,7 @@ export default function LeadDetailPage({
                     <div className="mt-5">
                       <button
                         type="button"
+                        onClick={nextStepAction}
                         className="w-full py-2.5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95"
                       >
                         {nextStepButton}
@@ -3193,33 +3259,19 @@ export default function LeadDetailPage({
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
                     </div>
                     <div className="space-y-4 text-left">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
-                          <Check size={11} className="stroke-[3]" />
-                        </span>
-                        <div>
-                          <p className="text-xs font-bold text-white leading-tight">Tour marked completed</p>
-                          <p className="text-[9px] text-zinc-500 mt-0.5">July 6, 2026 at 4:15 PM</p>
+                      {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => (
+                        <div key={entry.id} className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                            {entry.kind === 'email' ? <Mail size={11} /> : <Check size={11} className="stroke-[3]" />}
+                          </span>
+                          <div>
+                            <p className="text-xs font-bold text-white leading-tight">{entry.kind === 'email' ? entry.email.subject : describeActivityEntry(entry)}</p>
+                            <p className="text-[9px] text-zinc-500 mt-0.5">{formatTimelineDate(entry.createdAt)}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
-                          <Mail size={11} />
-                        </span>
-                        <div>
-                          <p className="text-xs font-bold text-white leading-tight">Tour confirmation email sent</p>
-                          <p className="text-[9px] text-zinc-500 mt-0.5">July 5, 2026 at 9:21 AM</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                          <Calendar size={11} />
-                        </span>
-                        <div>
-                          <p className="text-xs font-bold text-white leading-tight">Tour scheduled</p>
-                          <p className="text-[9px] text-zinc-500 mt-0.5">July 5, 2026 at 9:10 AM</p>
-                        </div>
-                      </div>
+                      )) : (
+                        <p className="text-xs text-zinc-500">No recent activity logged yet.</p>
+                      )}
                     </div>
                     <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
                       <button
@@ -3481,7 +3533,7 @@ export default function LeadDetailPage({
             {sortedBookings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
                 <p className="font-semibold text-zinc-300">No booking record is linked yet.</p>
-                <p className="mt-1 text-zinc-600">Use a real booking form when the event date is ready, then send the contract from here.</p>
+                <p className="mt-1 text-zinc-600">Use the booking form when the event date is ready, then track contract progress manually until the real contract workflow is connected.</p>
                 <button
                   type="button"
                   onClick={openBookingModal}
@@ -3523,11 +3575,11 @@ export default function LeadDetailPage({
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleSendContract(booking.id)}
+                        onClick={() => handleTrackContractStatus(booking, booking.contract_status === 'sent' ? 'signed' : 'sent')}
                         disabled={booking.contract_status === 'signed'}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12 disabled:opacity-45"
                       >
-                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' ? 'Resend Contract' : 'Send Contract'}
+                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' ? 'Mark Signed' : 'Mark Sent'}
                       </button>
                       <button
                         type="button"
@@ -4675,6 +4727,22 @@ function getMostRecentBooking(bookings: LuxorBooking[]) {
     const bTime = new Date(b.updated_at || b.created_at).getTime()
     return bTime - aTime
   })[0] ?? null
+}
+
+function formatMoney(value: number | null | undefined) {
+  return Number(value || 0).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function getPaidTotal(payments: LuxorPayment[], paymentKind?: 'deposit' | 'final') {
+  return payments
+    .filter((payment) => payment.status === 'paid')
+    .filter((payment) => !paymentKind || payment.metadata?.payment_kind === paymentKind)
+    .reduce((total, payment) => total + Number(payment.amount || 0), 0)
 }
 
 function isGrandOpeningRsvp(lead: LuxorInquiry) {

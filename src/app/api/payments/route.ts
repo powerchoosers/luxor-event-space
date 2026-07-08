@@ -13,10 +13,13 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const bookingId = searchParams.get('bookingId')
+    const inquiryId = searchParams.get('inquiryId')
 
     let path = 'luxor_payments?select=*&order=created_at.desc'
     if (bookingId) {
       path = `luxor_payments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=created_at.desc`
+    } else if (inquiryId) {
+      path = `luxor_payments?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc`
     }
 
     const payments = await supabaseRest(path)
