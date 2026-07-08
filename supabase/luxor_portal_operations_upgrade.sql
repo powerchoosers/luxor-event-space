@@ -131,6 +131,8 @@ create policy "Service role can manage Luxor signature events"
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
+-- Production uses Vercel cron from vercel.json.
+-- Keep this pg_cron example only as an optional fallback if Luxor ever needs database-driven scheduling instead.
 -- Replace YOUR_CRON_SECRET with the same CRON_SECRET value configured in Vercel.
 -- select cron.schedule(
 --   'luxor-email-jobs-every-5-minutes',

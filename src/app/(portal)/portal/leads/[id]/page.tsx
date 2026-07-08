@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
   Calendar,
@@ -34,8 +35,11 @@ import {
   Star,
   ChevronDown,
   ChevronRight,
+  Eye,
+  MousePointerClick,
+  RefreshCw,
 } from 'lucide-react'
-import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 
 type ZohoEmailMessage = {
@@ -53,6 +57,46 @@ type ActivityEntry =
   | { kind: 'note'; id: string; createdAt: string; note: LuxorNote }
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
 
+type LeadMarketingEvent = {
+  id: string
+  created_at: string
+  event_type: 'open' | 'click' | 'unsubscribe'
+  url: string | null
+  device_type: string | null
+  campaign_name: string | null
+  campaign_subject: string | null
+}
+
+type LeadMarketingCampaign = {
+  recipient_id: string
+  campaign_id: string
+  campaign_name: string | null
+  campaign_subject: string | null
+  audience_label: string | null
+  campaign_status: string
+  scheduled_for: string | null
+  sent_at: string | null
+  recipient_status: string
+  open_count: number
+  click_count: number
+  first_opened_at: string | null
+  last_opened_at: string | null
+  last_clicked_at: string | null
+}
+
+type LeadMarketingEngagement = {
+  email: string
+  recipient_count: number
+  total_campaigns: number
+  total_opens: number
+  total_clicks: number
+  latest_opened_at: string | null
+  latest_clicked_at: string | null
+  subscribed: boolean
+  campaigns: LeadMarketingCampaign[]
+  recent_events: LeadMarketingEvent[]
+}
+
 type EditableLeadField =
   | 'event_type'
   | 'guest_count'
@@ -65,7 +109,7 @@ type EditableLeadField =
   | 'address'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
-type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'documents' | 'messages' | 'notes'
+type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
 
 export default function LeadDetailPage({
   params,
@@ -73,6 +117,7 @@ export default function LeadDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const searchParams = useSearchParams()
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
@@ -136,10 +181,166 @@ export default function LeadDetailPage({
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
 
+  // Vendors Tab States & Actions
+  const [allVendors, setAllVendors] = useState<LuxorVendor[]>([])
+  const [loadingVendors, setLoadingVendors] = useState(false)
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false)
+
+  // Timeline Tab States & Actions
+  const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false)
+  const [timelineEditIndex, setTimelineEditIndex] = useState<number | null>(null)
+  const [timelineTime, setTimelineTime] = useState('')
+  const [timelineTitle, setTimelineTitle] = useState('')
+  const [timelineDescription, setTimelineDescription] = useState('')
+
+  const fetchVendors = async () => {
+    try {
+      setLoadingVendors(true)
+      const res = await fetch('/api/vendors')
+      if (res.ok) {
+        const data = await res.json()
+        setAllVendors(data)
+      }
+    } catch (err) {
+      console.error('Failed to load vendors', err)
+    } finally {
+      setLoadingVendors(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeLeadTab === 'vendors') {
+      fetchVendors()
+    }
+  }, [activeLeadTab])
+
+  const handleMetadataUpdate = async (updatedMetadata: Record<string, unknown>) => {
+    if (!lead) return false
+    const previousLead = lead
+    try {
+      const mergedMetadata = { ...lead.metadata, ...updatedMetadata }
+      setLead((current) => current ? { ...current, metadata: mergedMetadata, updated_at: new Date().toISOString() } : current)
+      
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, metadata: mergedMetadata }),
+      })
+
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to update metadata.')
+      }
+
+      const updated = payload as LuxorInquiry
+      setLead(updated)
+      return true
+    } catch (err) {
+      console.error(err)
+      setLead(previousLead)
+      alert(err instanceof Error ? err.message : 'Failed to update metadata.')
+      return false
+    }
+  }
+
+  const toggleVendorSelection = async (vendorId: string) => {
+    if (!lead) return
+    const currentLinked = (lead.metadata?.vendors as Array<{ id: string; notes: string }>) || []
+    const exists = currentLinked.some((v) => v.id === vendorId)
+    let nextLinked
+    if (exists) {
+      nextLinked = currentLinked.filter((v) => v.id !== vendorId)
+    } else {
+      nextLinked = [...currentLinked, { id: vendorId, notes: '' }]
+    }
+    await handleMetadataUpdate({ vendors: nextLinked })
+  }
+
+  const updateVendorNotes = async (vendorId: string, notes: string) => {
+    if (!lead) return
+    const currentLinked = (lead.metadata?.vendors as Array<{ id: string; notes: string }>) || []
+    const nextLinked = currentLinked.map((v) => (v.id === vendorId ? { ...v, notes } : v))
+    await handleMetadataUpdate({ vendors: nextLinked })
+  }
+
+  const parseTimeToMinutes = (timeStr: string) => {
+    const match = timeStr.trim().match(/^(\d+):(\d+)\s*(AM|PM)$/i)
+    if (!match) return 0
+    let hours = parseInt(match[1], 10)
+    const minutes = parseInt(match[2], 10)
+    const ampm = match[3].toUpperCase()
+    if (ampm === 'PM' && hours < 12) hours += 12
+    if (ampm === 'AM' && hours === 12) hours = 0
+    return hours * 60 + minutes
+  }
+
+  const openTimelineModal = (editIndex: number | null) => {
+    setTimelineEditIndex(editIndex)
+    if (editIndex !== null && lead?.metadata?.timeline) {
+      const items = (lead.metadata.timeline as Array<{ time: string; title: string; description?: string }>)
+      const item = items[editIndex]
+      setTimelineTime(item.time)
+      setTimelineTitle(item.title)
+      setTimelineDescription(item.description || '')
+    } else {
+      setTimelineTime('')
+      setTimelineTitle('')
+      setTimelineDescription('')
+    }
+    setIsTimelineModalOpen(true)
+  }
+
+  const saveTimelineItem = async (item: { time: string; title: string; description?: string }, editIndex: number | null) => {
+    if (!lead) return false
+    const currentTimeline = (lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }>) || []
+    let nextTimeline
+    if (editIndex !== null) {
+      nextTimeline = currentTimeline.map((itemVal, idx) => idx === editIndex ? item : itemVal)
+    } else {
+      nextTimeline = [...currentTimeline, item]
+    }
+    return await handleMetadataUpdate({ timeline: nextTimeline })
+  }
+
+  const deleteTimelineItem = async (indexToDelete: number) => {
+    if (!lead) return
+    const currentTimeline = (lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }>) || []
+    const nextTimeline = currentTimeline.filter((_, idx) => idx !== indexToDelete)
+    await handleMetadataUpdate({ timeline: nextTimeline })
+  }
+
+  const handleTimelineSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!timelineTime.trim() || !timelineTitle.trim()) return
+
+    let formattedTime = timelineTime.trim().toUpperCase()
+    if (/^\d+\s*(AM|PM)$/.test(formattedTime)) {
+      const match = formattedTime.match(/^(\d+)\s*(AM|PM)$/)
+      if (match) formattedTime = `${match[1]}:00 ${match[2]}`
+    }
+    if (/^\d+:\d+$/.test(formattedTime)) {
+      formattedTime = `${formattedTime} PM`
+    }
+
+    const item = {
+      time: formattedTime,
+      title: timelineTitle.trim(),
+      description: timelineDescription.trim() || undefined,
+    }
+
+    const success = await saveTimelineItem(item, timelineEditIndex)
+    if (success) {
+      setIsTimelineModalOpen(false)
+    }
+  }
+
   // Marketing subscription states
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [togglingMarketing, setTogglingMarketing] = useState(false)
   const [marketingMessage, setMarketingMessage] = useState<'added' | 'removed' | null>(null)
+  const [marketingEngagement, setMarketingEngagement] = useState<LeadMarketingEngagement | null>(null)
+  const [loadingMarketingEngagement, setLoadingMarketingEngagement] = useState(false)
+  const [marketingEngagementError, setMarketingEngagementError] = useState<string | null>(null)
 
   // Event Summary states
   const [isEditingSummary, setIsEditingSummary] = useState(false)
@@ -479,6 +680,67 @@ export default function LeadDetailPage({
     return () => { active = false }
   }, [lead?.email])
 
+  const fetchMarketingEngagement = async (email: string, options: { silent?: boolean } = {}) => {
+    if (!email) {
+      setMarketingEngagement(null)
+      setMarketingEngagementError(null)
+      return
+    }
+
+    try {
+      if (!options.silent) setLoadingMarketingEngagement(true)
+      setMarketingEngagementError(null)
+
+      const response = await fetch(`/api/marketing/lead?email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({})) as LeadMarketingEngagement & { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to load marketing engagement.')
+
+      setMarketingEngagement(payload)
+      setIsSubscribed(payload.subscribed)
+    } catch (err) {
+      console.error('Failed to load marketing engagement:', err)
+      setMarketingEngagementError(err instanceof Error ? err.message : 'Unable to load marketing engagement.')
+    } finally {
+      if (!options.silent) setLoadingMarketingEngagement(false)
+    }
+  }
+
+  useEffect(() => {
+    const email = lead?.email
+    if (!email) {
+      setMarketingEngagement(null)
+      setMarketingEngagementError(null)
+      return
+    }
+
+    void fetchMarketingEngagement(email)
+  }, [lead?.email])
+
+  useEffect(() => {
+    const email = lead?.email
+    if (!email) return
+
+    let active = true
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const pollMarketingEngagement = async () => {
+      if (!active) return
+
+      await fetchMarketingEngagement(email, { silent: true })
+
+      if (active) {
+        timeoutId = setTimeout(pollMarketingEngagement, 15000)
+      }
+    }
+
+    timeoutId = setTimeout(pollMarketingEngagement, 15000)
+
+    return () => {
+      active = false
+      if (timeoutId) window.clearTimeout(timeoutId)
+    }
+  }, [lead?.email])
+
   const handleToggleMarketing = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!lead?.email || togglingMarketing) return
@@ -501,6 +763,7 @@ export default function LeadDetailPage({
       if (res.ok) {
         setIsSubscribed(newStatus)
         setMarketingMessage(newStatus ? 'added' : 'removed')
+        setMarketingEngagement((current) => current ? { ...current, subscribed: newStatus } : current)
         window.setTimeout(() => setMarketingMessage(null), 2500)
       } else {
         throw new Error('Failed to update marketing list subscription.')
@@ -1127,6 +1390,10 @@ export default function LeadDetailPage({
     note.content.toLowerCase().includes('proposal')
   ))?.created_at || (lead.status === 'proposal_sent' ? lead.updated_at : null)
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
+  const marketingRecentEvents = marketingEngagement?.recent_events ?? []
+  const marketingCampaigns = marketingEngagement?.campaigns ?? []
+  const marketingTopCampaign = marketingCampaigns[0] ?? null
+  const marketingLastTouchedAt = marketingEngagement?.latest_clicked_at || marketingEngagement?.latest_opened_at || null
   const eventDetails: Array<{
     label: string
     value: string
@@ -1375,6 +1642,35 @@ export default function LeadDetailPage({
       setShowTaskTools(true)
     }
   }
+
+  useEffect(() => {
+    const requestedTab = searchParams?.get('tab')
+    const requestedSection = searchParams?.get('section')
+    const requestedStage = searchParams?.get('stage')
+    const requestedPlanningTab = searchParams?.get('planningTab')
+
+    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'documents', 'messages', 'notes'].includes(requestedTab)) {
+      setActiveLeadTab(requestedTab as LeadDetailTab)
+      if (requestedTab === 'tasks') {
+        setShowTaskTools(true)
+      }
+    }
+
+    if (requestedStage) {
+      setSelectedStageOverride(requestedStage)
+      setActiveLeadTab('overview')
+    }
+
+    if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
+      setPlanningSubTab(requestedPlanningTab as 'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files')
+    }
+
+    if (requestedSection) {
+      window.setTimeout(() => {
+        document.getElementById(requestedSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+    }
+  }, [searchParams])
   const quickNoteTemplates = [
     { label: 'Call recap', value: 'Call recap:\n- \nNext step:\n', type: 'call_log' as const },
     { label: 'Follow-up sent', value: 'Follow-up email sent:\n\n', type: 'email_log' as const },
@@ -1402,10 +1698,155 @@ export default function LeadDetailPage({
     { id: 'overview', label: 'Overview' },
     { id: 'activity', label: 'Activity', count: activityCounts.all },
     { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
+    { id: 'vendors', label: 'Vendors', count: (lead?.metadata?.vendors as unknown[])?.length || 0 },
+    { id: 'timeline', label: 'Timeline', count: (lead?.metadata?.timeline as unknown[])?.length || 0 },
     { id: 'documents', label: 'Documents', count: sortedBookings.length + sortedInvoices.length },
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
+
+  const renderMarketingEngagementCard = () => (
+    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Marketing Signals</p>
+          <p className="mt-1 text-[10px] text-zinc-650 font-medium">
+            {lead.email ? 'Opens, clicks, and campaign context for this lead.' : 'Add an email address to track campaign engagement.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => lead.email ? void fetchMarketingEngagement(lead.email) : undefined}
+          disabled={!lead.email || loadingMarketingEngagement}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw size={11} className={loadingMarketingEngagement ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
+
+      {!lead.email ? (
+        <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+          This lead has no email address yet, so Luxor cannot match campaign activity.
+        </p>
+      ) : marketingEngagementError ? (
+        <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-4 text-xs leading-5 text-red-200">
+          {marketingEngagementError}
+        </p>
+      ) : loadingMarketingEngagement && !marketingEngagement ? (
+        <p className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+          Loading marketing engagement...
+        </p>
+      ) : marketingEngagement ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <SignalMetric
+              label="Campaigns"
+              value={String(marketingEngagement.total_campaigns)}
+              detail={marketingEngagement.subscribed ? 'On marketing list' : 'Not on list'}
+            />
+            <SignalMetric
+              label="Opens"
+              value={String(marketingEngagement.total_opens)}
+              detail={marketingEngagement.latest_opened_at ? `Last ${formatRelativeTime(marketingEngagement.latest_opened_at)}` : 'No opens yet'}
+            />
+            <SignalMetric
+              label="Clicks"
+              value={String(marketingEngagement.total_clicks)}
+              detail={marketingEngagement.latest_clicked_at ? `Last ${formatRelativeTime(marketingEngagement.latest_clicked_at)}` : 'No clicks yet'}
+            />
+            <SignalMetric
+              label="Latest Touch"
+              value={marketingLastTouchedAt ? formatRelativeTime(marketingLastTouchedAt) : 'None'}
+              detail={marketingTopCampaign?.campaign_name || marketingTopCampaign?.campaign_subject || 'No campaign activity'}
+            />
+          </div>
+
+          {marketingTopCampaign ? (
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Most Recent Campaign</p>
+                  <p className="mt-1 text-sm font-bold text-white">
+                    {marketingTopCampaign.campaign_name || marketingTopCampaign.campaign_subject || 'Untitled campaign'}
+                  </p>
+                  {marketingTopCampaign.campaign_subject && marketingTopCampaign.campaign_name !== marketingTopCampaign.campaign_subject ? (
+                    <p className="mt-1 text-[11px] text-zinc-400">{marketingTopCampaign.campaign_subject}</p>
+                  ) : null}
+                </div>
+                <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[#caa24c]">
+                  {marketingTopCampaign.recipient_status}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Audience</p>
+                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.audience_label || 'Manual list'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Sent</p>
+                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.sent_at ? formatTimelineDate(marketingTopCampaign.sent_at) : 'Not sent yet'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Opens</p>
+                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.open_count}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Clicks</p>
+                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.click_count}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+              No marketing campaigns have reached this lead yet.
+            </div>
+          )}
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Recent Opens & Clicks</p>
+              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-600">
+                Auto-refreshes every 15s
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {marketingRecentEvents.length ? marketingRecentEvents.slice(0, 5).map((event) => (
+                <div key={event.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                          event.event_type === 'click'
+                            ? 'bg-[#caa24c]/12 text-[#caa24c]'
+                            : 'bg-blue-500/10 text-blue-300'
+                        }`}>
+                          {event.event_type === 'click' ? <MousePointerClick size={11} /> : <Eye size={11} />}
+                        </span>
+                        <p className="text-xs font-bold text-white">
+                          {event.event_type === 'click' ? 'Clicked a campaign link' : 'Opened a campaign email'}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-[11px] text-zinc-400">
+                        {event.campaign_name || event.campaign_subject || 'Unknown campaign'}
+                      </p>
+                      {event.url ? (
+                        <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">{shortenUrl(event.url)}</p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 text-[9px] font-mono text-zinc-500">{formatRelativeTime(event.created_at)}</span>
+                  </div>
+                </div>
+              )) : (
+                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+                  No open or click activity has been recorded for this lead yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
 
 
   return (
@@ -1547,7 +1988,10 @@ export default function LeadDetailPage({
             latestInvoice={latestInvoice}
             isSaving={updatingStatus}
             activeStageId={selectedStageOverride || activeStage}
-            onStepClick={(stageId) => setSelectedStageOverride(stageId)}
+            onStepClick={(stageId) => {
+              setSelectedStageOverride(stageId)
+              setActiveLeadTab('overview')
+            }}
           />
         </div>
       </section>
@@ -3024,6 +3468,8 @@ export default function LeadDetailPage({
                       </div>
                     </section>
 
+                    {renderMarketingEngagementCard()}
+
                     {/* Event Summary */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
@@ -3251,6 +3697,8 @@ export default function LeadDetailPage({
                     </div>
                   </section>
 
+                  {renderMarketingEngagementCard()}
+
                   {/* RECENT ACTIVITY */}
                   <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                     <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
@@ -3476,12 +3924,18 @@ export default function LeadDetailPage({
                   <div className="space-y-3">
                     {sortedTasks.map((task) => {
                       const isCompleted = task.status === 'completed'
+                      const isHighlightedTask = searchParams?.get('highlightTask') === task.id
                       let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
                       if (task.priority === 'high') prioColor = 'border-amber-500/10 bg-amber-500/5 text-amber-500'
                       else if (task.priority === 'urgent') prioColor = 'border-red-500/10 bg-red-500/5 text-red-500'
 
                       return (
-                        <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-900 p-3 transition-colors hover:border-zinc-800">
+                        <div
+                          key={task.id}
+                          className={`flex items-start justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-zinc-800 ${
+                            isHighlightedTask ? 'border-[#caa24c] bg-[#caa24c]/8 shadow-[0_0_0_1px_rgba(202,162,76,0.2)]' : 'border-zinc-900'
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={() => handleToggleTask(task)}
@@ -4577,6 +5031,51 @@ function normalizeLeadFieldValue(field: EditableLeadField, value: string): strin
 
 function normalizeComparableValue(value: unknown) {
   return value === null || value === undefined ? '' : String(value).trim()
+}
+
+function SignalMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail: string
+}) {
+  return (
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3">
+      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">{label}</p>
+      <p className="mt-2 text-lg font-bold text-white">{value}</p>
+      <p className="mt-1 text-[10px] leading-4 text-zinc-500">{detail}</p>
+    </div>
+  )
+}
+
+function formatRelativeTime(value: string) {
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return 'Unknown'
+
+  const diffMs = Date.now() - timestamp
+  const future = diffMs < 0
+  const absMs = Math.abs(diffMs)
+  const minutes = Math.round(absMs / 60_000)
+  const hours = Math.round(absMs / 3_600_000)
+  const days = Math.round(absMs / 86_400_000)
+
+  if (minutes < 1) return future ? 'in moments' : 'just now'
+  if (minutes < 60) return future ? `in ${minutes}m` : `${minutes}m ago`
+  if (hours < 24) return future ? `in ${hours}h` : `${hours}h ago`
+  return future ? `in ${days}d` : `${days}d ago`
+}
+
+function shortenUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname === '/' ? '' : parsed.pathname
+    return `${parsed.hostname}${path}`.slice(0, 64)
+  } catch {
+    return url.length > 64 ? `${url.slice(0, 61)}...` : url
+  }
 }
 
 function formatTimeString(timeStr: string) {

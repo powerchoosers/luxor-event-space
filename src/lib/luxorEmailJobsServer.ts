@@ -122,6 +122,15 @@ export async function listDueLuxorEmailJobs(limit = 25) {
   )
 }
 
+export async function claimDueLuxorEmailJobs(limit = 25) {
+  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_email_jobs', {
+    method: 'POST',
+    body: JSON.stringify({
+      job_limit: Math.min(Math.max(limit, 1), 100),
+    }),
+  })
+}
+
 export async function listQueuedLuxorEmailJobsByIds(ids: string[]) {
   const safeIds = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id))
   if (!safeIds.length) return []
@@ -144,12 +153,18 @@ export async function updateLuxorEmailJob(id: string, updates: Partial<LuxorEmai
   return updated ?? null
 }
 
-export async function processLuxorEmailJobs(jobs: LuxorEmailJob[]) {
+export async function processLuxorEmailJobs(
+  jobs: LuxorEmailJob[],
+  options: { markSending?: boolean } = {},
+) {
+  const { markSending = true } = options
   const results: { id: string; status: 'sent' | 'failed'; error?: string }[] = []
 
   for (const job of jobs) {
     try {
-      await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
+      if (markSending) {
+        await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
+      }
       await sendLuxorZohoEmail({
         to: job.recipient_email,
         subject: job.subject,
@@ -176,8 +191,8 @@ export async function processLuxorEmailJobs(jobs: LuxorEmailJob[]) {
 }
 
 export async function processDueLuxorEmailJobs(limit = 25) {
-  const jobs = await listDueLuxorEmailJobs(limit)
-  return processLuxorEmailJobs(jobs)
+  const jobs = await claimDueLuxorEmailJobs(limit)
+  return processLuxorEmailJobs(jobs, { markSending: false })
 }
 
 async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {

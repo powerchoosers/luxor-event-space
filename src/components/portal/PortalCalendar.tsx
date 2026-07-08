@@ -12,6 +12,8 @@ export type PortalCalendarItem = {
   title: string
   subtitle?: string
   tone?: 'gold' | 'blue' | 'green' | 'rose' | 'zinc'
+  href?: string
+  openLabel?: string
   content?: React.ReactNode
 }
 
@@ -217,6 +219,14 @@ export function PortalCalendar({
               <p className="text-lg font-bold text-[color:var(--portal-text)]">{selectedItem.title}</p>
               {selectedItem.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selectedItem.subtitle}</p> : null}
             </div>
+            {selectedItem.href ? (
+              <a
+                href={selectedItem.href}
+                className="inline-flex items-center justify-center rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/15"
+              >
+                {selectedItem.openLabel || 'Open record'}
+              </a>
+            ) : null}
             {selectedItem.content ? <div>{selectedItem.content}</div> : null}
           </div>
         ) : null}
@@ -245,7 +255,7 @@ function renderDayDetails(items: PortalCalendarItem[], onSelectItem: (item: Port
               {item.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{item.subtitle}</p> : null}
             </div>
             <span className="rounded-full border border-[color:var(--portal-border)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
-              Open
+              {item.openLabel || 'Open'}
             </span>
           </div>
         </button>

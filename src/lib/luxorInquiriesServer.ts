@@ -10,6 +10,15 @@ import {
   reserveLuxorTourSlot,
 } from './luxorTourSlotsServer'
 
+const OPTIONAL_INQUIRY_COLUMNS = [
+  'attendee_count',
+  'campaign_key',
+  'rsvp_status',
+  'marketing_opt_in',
+  'page_path',
+  'referrer',
+] as const
+
 export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const fullName = compactText(input.fullName)
   const email = compactText(input.email).toLowerCase()
@@ -66,17 +75,13 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
 
   const status = row.preferred_tour_date || row.preferred_tour_time ? 'tour_requested' : 'new'
   const pipelineStage: LuxorPipelineStage = status === 'tour_requested' ? 'tour' : 'inquiry'
-
-  const [created] = await supabaseRest<LuxorInquiry[]>('luxor_inquiries?select=*', {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      ...row,
-      status,
-      pipeline_stage: pipelineStage,
-      tour_attendance_status: status === 'tour_requested' ? 'pending' : null,
-    }),
-  })
+  const insertPayload = {
+    ...row,
+    status,
+    pipeline_stage: pipelineStage,
+    tour_attendance_status: status === 'tour_requested' ? 'pending' : null,
+  }
+  const [created] = await insertLuxorInquiryRow(insertPayload)
 
   if (created && selectedTourSlot) {
     await reserveLuxorTourSlot(selectedTourSlot)
@@ -114,6 +119,39 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
   }
 
   return created
+}
+
+async function insertLuxorInquiryRow(payload: Record<string, unknown>) {
+  try {
+    return await supabaseRest<LuxorInquiry[]>('luxor_inquiries?select=*', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify(payload),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const missingColumn = getMissingColumnFromSchemaCacheError(message)
+
+    if (!missingColumn || !OPTIONAL_INQUIRY_COLUMNS.includes(missingColumn as (typeof OPTIONAL_INQUIRY_COLUMNS)[number])) {
+      throw error
+    }
+
+    const retryPayload = { ...payload }
+    delete retryPayload[missingColumn]
+
+    console.warn(`luxor_inquiries is missing optional column "${missingColumn}". Retrying insert without it.`)
+
+    return supabaseRest<LuxorInquiry[]>('luxor_inquiries?select=*', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify(retryPayload),
+    })
+  }
+}
+
+function getMissingColumnFromSchemaCacheError(message: string) {
+  const match = message.match(/Could not find the '([^']+)' column of 'luxor_inquiries' in the schema cache/i)
+  return match?.[1] ?? null
 }
 
 export async function listLuxorInquiries(limit = 50) {

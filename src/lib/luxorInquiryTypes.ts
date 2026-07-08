@@ -348,3 +348,15 @@ export type LuxorMarketingSuppression = {
   source: string | null
   metadata: Record<string, unknown>
 }
+
+export type LuxorVendor = {
+  id: string
+  created_at: string
+  updated_at: string
+  vendor_type: string
+  name: string
+  email: string | null
+  phone: string | null
+  rating: string | null
+  coi_active: boolean
+}

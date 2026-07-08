@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
 import { listLuxorTourRequests } from '@/lib/luxorInquiriesServer'
+import { listAllTasks } from '@/lib/luxorTasksServer'
 import { listUpcomingLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
@@ -11,13 +12,14 @@ export async function GET() {
       return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     }
 
-    const [tours, slots, bookings] = await Promise.all([
+    const [tours, slots, bookings, tasks] = await Promise.all([
       listLuxorTourRequests(150),
       listUpcomingLuxorTourSlots(150),
       listLuxorBookingsWithPayments(150).catch(() => []),
+      listAllTasks().catch(() => []),
     ])
 
-    return NextResponse.json({ tours, slots, bookings })
+    return NextResponse.json({ tours, slots, bookings, tasks })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load calendar data.'
     return NextResponse.json({ error: message }, { status: 500 })

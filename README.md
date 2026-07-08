@@ -46,6 +46,13 @@ The local site runs at `http://localhost:3000`.
 - Public hero content should render immediately, not after scroll-triggered reveal effects.
 - Header and footer navigation should point to real pages, not hash links, unless the jump is intentional.
 
+## Production Email Cron
+
+- Vercel cron is configured in [vercel.json](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/vercel.json) to call `/api/cron/luxor-email-jobs` every 5 minutes.
+- Set `CRON_SECRET` in Vercel. Vercel sends it as a bearer token to the cron route.
+- Run the Supabase SQL in [supabase/luxor_portal_operations_upgrade.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_portal_operations_upgrade.sql), [supabase/luxor_marketing_machine.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_marketing_machine.sql), and [supabase/luxor_email_jobs_cron.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_email_jobs_cron.sql).
+- `luxor_claim_due_email_jobs` atomically claims due rows before sending so overlapping cron runs do not send the same email twice.
+
 ## Useful Files
 
 - `src/app/(site)/layout.tsx`

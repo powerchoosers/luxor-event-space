@@ -57,6 +57,36 @@ export type MarketingActivityEvent = LuxorMarketingEvent & {
   campaign_subject: string | null
 }
 
+export type LeadMarketingCampaignSummary = {
+  recipient_id: string
+  campaign_id: string
+  campaign_name: string | null
+  campaign_subject: string | null
+  audience_label: string | null
+  campaign_status: LuxorMarketingCampaign['status']
+  scheduled_for: string | null
+  sent_at: string | null
+  recipient_status: LuxorMarketingRecipient['status']
+  open_count: number
+  click_count: number
+  first_opened_at: string | null
+  last_opened_at: string | null
+  last_clicked_at: string | null
+}
+
+export type LeadMarketingEngagement = {
+  email: string
+  recipient_count: number
+  total_campaigns: number
+  total_opens: number
+  total_clicks: number
+  latest_opened_at: string | null
+  latest_clicked_at: string | null
+  subscribed: boolean
+  campaigns: LeadMarketingCampaignSummary[]
+  recent_events: MarketingActivityEvent[]
+}
+
 function absoluteUrl(path: string) {
   return `${PUBLIC_BASE_URL.replace(/\/$/, '')}${path}`
 }
@@ -265,6 +295,116 @@ export async function listMarketingActivityEvents(options: { since?: string | nu
       campaign_subject: campaign?.subject ?? null,
     }
   })
+}
+
+export async function getLeadMarketingEngagement(email: string, options: { eventLimit?: number } = {}) {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) {
+    throw new Error('Email is required.')
+  }
+
+  const recipients = await supabaseRest<LuxorMarketingRecipient[]>(
+    `luxor_marketing_recipients?select=*&email=eq.${encodeURIComponent(normalizedEmail)}&order=created_at.desc`,
+  )
+
+  if (!recipients.length) {
+    return {
+      email: normalizedEmail,
+      recipient_count: 0,
+      total_campaigns: 0,
+      total_opens: 0,
+      total_clicks: 0,
+      latest_opened_at: null,
+      latest_clicked_at: null,
+      subscribed: await isMarketingMember(normalizedEmail),
+      campaigns: [],
+      recent_events: [],
+    } satisfies LeadMarketingEngagement
+  }
+
+  const campaignIds = Array.from(new Set(recipients.map((recipient) => recipient.campaign_id).filter(Boolean)))
+  const recipientIds = Array.from(new Set(recipients.map((recipient) => recipient.id).filter(Boolean)))
+  const eventLimit = Math.min(Math.max(options.eventLimit ?? 12, 1), 50)
+
+  const [campaigns, recentEvents, subscribed] = await Promise.all([
+    campaignIds.length
+      ? supabaseRest<LuxorMarketingCampaign[]>(
+          `luxor_marketing_campaigns?select=id,name,subject,audience_label,status,scheduled_for,sent_at&` +
+          `id=in.(${campaignIds.join(',')})`,
+        )
+      : Promise.resolve([]),
+    recipientIds.length
+      ? supabaseRest<LuxorMarketingEvent[]>(
+          `luxor_marketing_events?select=*&recipient_id=in.(${recipientIds.join(',')})&` +
+          `event_type=in.(open,click,unsubscribe)&order=created_at.desc&limit=${encodeURIComponent(eventLimit)}`,
+        )
+      : Promise.resolve([]),
+    isMarketingMember(normalizedEmail),
+  ])
+
+  const campaignsById = new Map(campaigns.map((campaign) => [campaign.id, campaign]))
+  const recipientsById = new Map(recipients.map((recipient) => [recipient.id, recipient]))
+
+  const recentActivity = recentEvents.map((event): MarketingActivityEvent => {
+    const recipient = recipientsById.get(event.recipient_id)
+    const campaign = campaignsById.get(event.campaign_id)
+
+    return {
+      ...event,
+      recipient_email: recipient?.email ?? normalizedEmail,
+      recipient_name: recipient?.name ?? null,
+      campaign_name: campaign?.name ?? null,
+      campaign_subject: campaign?.subject ?? null,
+    }
+  })
+
+  const campaignSummaries = recipients
+    .map((recipient): LeadMarketingCampaignSummary => {
+      const campaign = campaignsById.get(recipient.campaign_id)
+
+      return {
+        recipient_id: recipient.id,
+        campaign_id: recipient.campaign_id,
+        campaign_name: campaign?.name ?? null,
+        campaign_subject: campaign?.subject ?? null,
+        audience_label: campaign?.audience_label ?? null,
+        campaign_status: campaign?.status ?? 'draft',
+        scheduled_for: campaign?.scheduled_for ?? null,
+        sent_at: campaign?.sent_at ?? null,
+        recipient_status: recipient.status,
+        open_count: Number(recipient.open_count || 0),
+        click_count: Number(recipient.click_count || 0),
+        first_opened_at: recipient.first_opened_at,
+        last_opened_at: recipient.last_opened_at,
+        last_clicked_at: recipient.last_clicked_at,
+      }
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.last_clicked_at || a.last_opened_at || a.sent_at || a.scheduled_for || 0).getTime()
+      const bTime = new Date(b.last_clicked_at || b.last_opened_at || b.sent_at || b.scheduled_for || 0).getTime()
+      return bTime - aTime
+    })
+
+  return {
+    email: normalizedEmail,
+    recipient_count: recipients.length,
+    total_campaigns: campaignSummaries.length,
+    total_opens: recipients.reduce((sum, recipient) => sum + Number(recipient.open_count || 0), 0),
+    total_clicks: recipients.reduce((sum, recipient) => sum + Number(recipient.click_count || 0), 0),
+    latest_opened_at: recipients.reduce<string | null>((latest, recipient) => {
+      if (!recipient.last_opened_at) return latest
+      if (!latest) return recipient.last_opened_at
+      return new Date(recipient.last_opened_at).getTime() > new Date(latest).getTime() ? recipient.last_opened_at : latest
+    }, null),
+    latest_clicked_at: recipients.reduce<string | null>((latest, recipient) => {
+      if (!recipient.last_clicked_at) return latest
+      if (!latest) return recipient.last_clicked_at
+      return new Date(recipient.last_clicked_at).getTime() > new Date(latest).getTime() ? recipient.last_clicked_at : latest
+    }, null),
+    subscribed,
+    campaigns: campaignSummaries,
+    recent_events: recentActivity,
+  } satisfies LeadMarketingEngagement
 }
 
 export async function createMarketingCampaign(data: {
