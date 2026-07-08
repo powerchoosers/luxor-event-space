@@ -205,11 +205,11 @@ export function PortalTableCard({
 }) {
   return (
     <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
-      {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-6">{controls}</div> : null}
+      {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{controls}</div> : null}
       <div className="portal-scrollbar min-h-[22rem] flex-1 overflow-auto" data-portal-table-scroller>
         {children}
       </div>
-      {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-6">{footer}</div> : null}
+      {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{footer}</div> : null}
     </section>
   )
 }

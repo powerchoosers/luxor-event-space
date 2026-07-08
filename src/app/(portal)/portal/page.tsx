@@ -291,8 +291,8 @@ export default async function PortalOverview() {
     <PortalPageFrame className="min-h-full pb-10 group/portal space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-[color:var(--portal-text)]">Follow-Up Workspace</h1>
-        <p className="text-[color:var(--portal-muted)] font-medium text-sm">Live inquiry pipeline and owner follow-up queue for Luxor Event Space.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-[color:var(--portal-text)]">Luxor Operations Hub</h1>
+        <p className="text-[color:var(--portal-muted)] font-medium text-sm">Live bookings, inquiries, tours, and owner operations for Luxor Event Space.</p>
       </div>
 
       {loadError && (

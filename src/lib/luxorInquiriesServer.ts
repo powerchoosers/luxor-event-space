@@ -161,8 +161,8 @@ export async function updateLuxorInquiry(id: string, updates: Partial<Record<str
 
 export function stageForStatus(status: LuxorInquiryStatus): LuxorPipelineStage {
   if (status === 'tour_requested' || status === 'tour_confirmed') return 'tour'
-  if (status === 'proposal_sent') return 'proposal_sent'
-  if (status === 'booked') return 'book_reserve'
+  if (status === 'proposal_sent') return 'proposal'
+  if (status === 'booked') return 'contract'
   if (status === 'closed_lost') return 'closed_lost'
   return 'inquiry'
 }

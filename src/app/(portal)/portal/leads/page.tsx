@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Users,
   Search,
@@ -46,16 +46,31 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
 const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
   { id: 'inquiry', label: 'Inquiry', short: 'Inquiry', tone: 'blue', status: 'new' },
   { id: 'tour', label: 'Tour', short: 'Tour', tone: 'purple', status: 'tour_requested' },
-  { id: 'proposal_sent', label: 'Proposal Sent', short: 'Proposal', tone: 'indigo', status: 'proposal_sent' },
-  { id: 'book_reserve', label: 'Book & Reserve', short: 'Reserve', tone: 'green', status: 'booked' },
-  { id: 'planning_begins', label: 'Planning Begins', short: 'Planning', tone: 'cyan', status: 'booked' },
-  { id: 'final_details', label: 'Final Details', short: 'Details', tone: 'amber', status: 'booked' },
-  { id: 'setup_event_day', label: 'Set Up + Event Day', short: 'Event Day', tone: 'rose', status: 'booked' },
-  { id: 'after_event', label: 'After Event', short: 'After', tone: 'zinc', status: 'booked' },
+  { id: 'proposal', label: 'Proposal', short: 'Proposal', tone: 'indigo', status: 'proposal_sent' },
+  { id: 'contract', label: 'Contract', short: 'Contract', tone: 'indigo', status: 'booked' },
+  { id: 'deposit', label: 'Deposit', short: 'Deposit', tone: 'green', status: 'booked' },
+  { id: 'planning', label: 'Planning', short: 'Planning', tone: 'cyan', status: 'booked' },
+  { id: 'final_payment', label: 'Final Payment', short: 'Final Payment', tone: 'amber', status: 'booked' },
+  { id: 'event', label: 'Event', short: 'Event', tone: 'rose', status: 'booked' },
+  { id: 'closing', label: 'Complete', short: 'Complete', tone: 'zinc', status: 'booked' },
+]
+
+const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
+  { value: 'inquiry', label: 'Inquiry' },
+  { value: 'tour', label: 'Tour' },
+  { value: 'proposal', label: 'Proposal' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'deposit', label: 'Deposit' },
+  { value: 'planning', label: 'Planning' },
+  { value: 'final_payment', label: 'Final Payment' },
+  { value: 'event', label: 'Event' },
+  { value: 'closing', label: 'Complete' },
+  { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
+  const boardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
@@ -63,14 +78,14 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients'>('dashboard')
   
   // View mode toggle
-  const [viewMode, setViewMode] = useState<'list' | 'board'>('board')
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [campaignFilter, setCampaignFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState<number>(1)
 
   // New Lead Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -98,6 +113,43 @@ export default function LeadsPage() {
       setLoading(false)
     }
   }, [])
+
+  // Load view preferences from cache on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem('luxor_leads_active_tab')
+      const savedViewMode = localStorage.getItem('luxor_leads_view_mode')
+      const savedPage = localStorage.getItem('luxor_leads_current_page')
+      if (savedTab) {
+        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients')
+      }
+      if (savedViewMode) {
+        setViewMode(savedViewMode as 'list' | 'board')
+      }
+      if (savedPage) {
+        setCurrentPage(parseInt(savedPage, 10))
+      }
+    }
+  }, [])
+
+  // Restore board scroll position once data is loaded and columns are rendered
+  useEffect(() => {
+    if (!loading && activeTab === 'pipeline' && viewMode === 'board') {
+      const savedScroll = localStorage.getItem('luxor_leads_board_scroll_left')
+      if (savedScroll && boardRef.current) {
+        requestAnimationFrame(() => {
+          if (boardRef.current) {
+            boardRef.current.scrollLeft = parseInt(savedScroll, 10)
+          }
+        })
+      }
+    }
+  }, [loading, activeTab, viewMode])
+
+  const handleBoardScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const scrollLeft = e.currentTarget.scrollLeft
+    localStorage.setItem('luxor_leads_board_scroll_left', String(scrollLeft))
+  }
 
   useEffect(() => {
     fetchLeads()
@@ -209,13 +261,9 @@ export default function LeadsPage() {
       (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (lead.phone && lead.phone.includes(searchTerm))
 
-    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter
-    const matchesCampaign =
-      campaignFilter === 'all' ||
-      (campaignFilter === 'grand_opening' && isGrandOpeningRsvp(lead)) ||
-      (campaignFilter === 'standard' && !isGrandOpeningRsvp(lead))
+    const matchesStatus = statusFilter === 'all' || getPipelineStage(lead) === statusFilter
 
-    return matchesSearch && matchesStatus && matchesCampaign
+    return matchesSearch && matchesStatus
   })
 
   const sortedLeads = [...filteredLeads].sort((a, b) => {
@@ -232,6 +280,23 @@ export default function LeadsPage() {
   // Computed Metrics
   const totalCount = sortedLeads.length
   const newLeadsCount = leads.filter((l) => l.status === 'new').length
+
+  // Pagination Calculations
+  const totalPages = Math.ceil(totalCount / 25)
+  const startIndex = (currentPage - 1) * 25
+  const paginatedLeads = sortedLeads.slice(startIndex, startIndex + 25)
+
+  // Ensure current page bounds stay valid when filters change
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(1)
+    }
+  }, [totalPages, currentPage])
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    localStorage.setItem('luxor_leads_current_page', String(page))
+  }
   const grandOpeningCount = leads.filter(isGrandOpeningRsvp).length
   const missingContact = leads.filter((l) => !l.email && !l.phone).length
   return (
@@ -241,70 +306,60 @@ export default function LeadsPage() {
         title="Leads & Clients"
         description="Monitor and manage the intake pipeline of event space prospects."
         actions={
-          <div className="flex w-full flex-col items-stretch gap-3 xl:w-auto xl:items-end">
-            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-              <LeadMetric label="Live Inquiries" value={String(leads.length)} detail="Forms and chat" />
-              <LeadMetric label="Grand Opening" value={String(grandOpeningCount)} detail="RSVP campaign" tone="gold" />
-              <LeadMetric label="New Leads" value={String(newLeadsCount)} detail={missingContact ? `${missingContact} missing contact` : 'Ready for follow-up'} tone="green" />
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              {activeTab === 'pipeline' && (
-                <>
-                  <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('list')}
-                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                        viewMode === 'list'
-                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
-                      }`}
-                    >
-                      List
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('board')}
-                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                        viewMode === 'board'
-                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
-                      }`}
-                    >
-                      Board
-                    </button>
-                  </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {activeTab === 'pipeline' && (
+              <>
+                <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('list')
+                      localStorage.setItem('luxor_leads_view_mode', 'list')
+                    }}
+                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                      viewMode === 'list'
+                        ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                        : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                    }`}
+                  >
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('board')
+                      setStatusFilter('all')
+                      localStorage.setItem('luxor_leads_view_mode', 'board')
+                    }}
+                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                      viewMode === 'board'
+                        ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                        : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                    }`}
+                  >
+                    Board
+                  </button>
+                </div>
 
+                {viewMode === 'list' && (
                   <PortalSelect
                     value={statusFilter}
                     onChange={setStatusFilter}
                     options={[
-                      { value: 'all', label: 'All Statuses' },
-                      ...INQUIRY_STATUS_OPTIONS.map((option) => ({
-                        value: option.value,
-                        label: option.value === 'booked' ? 'Booked (Won)' : option.label,
-                      })),
+                      { value: 'all', label: 'All Steps' },
+                      ...PIPELINE_STAGE_OPTIONS
                     ]}
                   />
-                  <PortalSelect
-                    value={campaignFilter}
-                    onChange={setCampaignFilter}
-                    options={[
-                      { value: 'all', label: 'All Sources' },
-                      { value: 'grand_opening', label: 'Grand Opening RSVPs' },
-                      { value: 'standard', label: 'Standard Leads' },
-                    ]}
-                  />
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
-              >
-                <Plus size={14} /> New Lead
-              </button>
-            </div>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
+            >
+              <Plus size={14} /> New Lead
+            </button>
           </div>
         }
       />
@@ -320,7 +375,11 @@ export default function LeadsPage() {
           { id: 'clients', label: 'Booked Clients', icon: <UserCheck size={15} /> },
           ]}
           activeTab={activeTab}
-          onTabChange={(tab) => setActiveTab(tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients')}
+          onTabChange={(tab) => {
+            const nextTab = tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients'
+            setActiveTab(nextTab)
+            localStorage.setItem('luxor_leads_active_tab', nextTab)
+          }}
         />
         <Link
           href="/portal/communications"
@@ -331,11 +390,11 @@ export default function LeadsPage() {
         </Link>
       </div>
 
-      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-hidden mt-4">
+      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} />}
-        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMoveStatus={handleMoveStatus} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMoveStatus={handleMoveStatus} />}
-        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMoveStatus={handleMoveStatus} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
+        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
 
         {activeTab === 'pipeline' && (
           viewMode === 'list' ? (
@@ -390,22 +449,63 @@ export default function LeadsPage() {
             </div>
           }
           footer={
-            <div className="flex items-center justify-between text-[10px] uppercase font-bold text-zinc-600 tracking-widest">
-              <p>
-                Showing <span className="text-zinc-400">{totalCount}</span> live Luxor inquiries
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-[10px] uppercase font-bold text-zinc-550 tracking-widest select-none">
+              <div>
+                Showing <span className="text-zinc-350 font-mono">{startIndex + 1}</span> -{' '}
+                <span className="text-zinc-350 font-mono">{Math.min(startIndex + 25, totalCount)}</span> of{' '}
+                <span className="text-zinc-350 font-mono">{totalCount}</span> leads
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={currentPage === 1}
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
+                  >
+                    Prev
+                  </button>
+                  <div className="flex items-center gap-1 font-mono">
+                    {Array.from({ length: totalPages }).map((_, i) => {
+                      const pageNum = i + 1
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
+                            currentPage === pageNum
+                              ? 'bg-[#caa24c]/15 text-[#f1d27a] border-[#caa24c]/30 font-bold'
+                              : 'bg-zinc-950/20 text-zinc-550 border-zinc-900/60 hover:text-zinc-355 hover:bg-zinc-900'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={currentPage === totalPages}
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           }
         >
           <PortalStickyTable minWidth="1060px">
             <PortalStickyThead>
-              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em]">
-                <th className="px-8 py-5">Full Name & Contact</th>
-                <th className="px-6 py-5">Status</th>
-                <th className="px-6 py-5">Event Parameters</th>
-                <th className="px-6 py-5">Intake Date</th>
-                <th className="px-6 py-5">Source Node</th>
-                <th className="px-8 py-5 text-right">Engagement</th>
+              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em] bg-[#0c0c0c]/85">
+                <th className="px-8 py-3.5">Full Name & Contact</th>
+                <th className="px-6 py-3.5">Step</th>
+                <th className="px-6 py-3.5">Event Parameters</th>
+                <th className="px-6 py-3.5">Intake Date</th>
+                <th className="px-6 py-3.5">Source Node</th>
+                <th className="px-8 py-3.5 text-right">Engagement</th>
               </tr>
             </PortalStickyThead>
             <tbody className="divide-y divide-zinc-900/30">
@@ -431,24 +531,24 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                sortedLeads.map((lead) => (
+                paginatedLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
-                    <td className="px-8 py-6">
+                    <td className="px-8 py-3">
                       <Link
                         href={`/portal/leads/${lead.id}`}
                         className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
                       >
                         <div className="relative">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 text-xs font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
                             {getInitials(lead.full_name)}
                           </div>
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-white/90 leading-tight mb-1 group-hover:translate-x-0.5 transition-transform">
+                          <p className="text-sm font-semibold text-white/90 leading-tight mb-0.5 group-hover:translate-x-0.5 transition-transform">
                             {lead.full_name}
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[11px] text-zinc-500 font-medium group-hover:text-zinc-400">
+                            <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
                               {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
                             </p>
                             {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
@@ -456,17 +556,17 @@ export default function LeadsPage() {
                         </div>
                       </Link>
                     </td>
-                    <td className="px-6 py-6 font-mono">
+                    <td className="px-6 py-3 font-mono">
                       <PortalSelect
-                        value={lead.status}
-                        onChange={(value) => handleMoveStatus(lead.id, value as LuxorInquiryStatus)}
-                        options={INQUIRY_STATUS_OPTIONS}
+                        value={getPipelineStage(lead)}
+                        onChange={(value) => handleMovePipelineStage(lead.id, value as LuxorPipelineStage)}
+                        options={PIPELINE_STAGE_OPTIONS}
                         className="min-w-[170px]"
                       />
                     </td>
-                    <td className="px-6 py-6 font-mono text-xs text-zinc-300">
+                    <td className="px-6 py-3 font-mono text-xs text-zinc-355">
                       <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
-                      <div className="text-zinc-500 mt-1">
+                      <div className="text-zinc-550 text-[10px] mt-0.5">
                         {isGrandOpeningRsvp(lead)
                           ? `${lead.attendee_count || lead.guest_count || 1} attending`
                           : lead.guest_count
@@ -474,20 +574,20 @@ export default function LeadsPage() {
                             : 'Guest count needed'}
                       </div>
                     </td>
-                    <td className="px-6 py-6">
+                    <td className="px-6 py-3">
                       <div className="flex items-start flex-col">
                         <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
-                        <span className="text-[10px] text-[#caa24c] font-medium uppercase tracking-tighter mt-1">
+                        <span className="text-[9px] text-[#caa24c] font-bold uppercase tracking-tighter mt-0.5">
                           {lead.target_date || 'Date requested'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-6">
-                      <span className={`text-xs font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#f1d27a]' : 'text-zinc-500'}`}>
+                    <td className="px-6 py-3">
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#f1d27a]' : 'text-zinc-550'}`}>
                         {formatSourceLabel(lead)}
                       </span>
                     </td>
-                    <td className="px-8 py-6 text-right">
+                    <td className="px-8 py-3 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
                         <Link
                           href={`/portal/leads/${lead.id}`}
@@ -505,11 +605,11 @@ export default function LeadsPage() {
           </PortalStickyTable>
         </PortalTableCard>
       ) : (
-        <div className="flex-1 min-h-0 overflow-x-auto portal-scrollbar pb-4 flex gap-4 select-none">
+        <div ref={boardRef} onScroll={handleBoardScroll} className="flex-1 min-h-0 overflow-x-auto portal-scrollbar -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 flex gap-4 select-none">
           {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
             const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
             return (
-              <div key={col.id} className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/15 border border-zinc-900/60 rounded-2xl flex flex-col h-[calc(100vh-21rem)] overflow-hidden">
+              <div key={col.id} className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/15 border border-zinc-900/60 rounded-2xl flex flex-col h-full overflow-hidden">
                 {/* Column Header */}
                 <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -631,7 +731,7 @@ export default function LeadsPage() {
           })}
 
           {/* Lost Leads Drawer / Collapsed Last Column */}
-          <div className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/5 border border-zinc-900/40 rounded-2xl flex flex-col h-[calc(100vh-21rem)] overflow-hidden opacity-60 hover:opacity-100 transition-all duration-300">
+          <div className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/5 border border-zinc-900/40 rounded-2xl flex flex-col h-full overflow-hidden opacity-60 hover:opacity-100 transition-all duration-300">
             <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shadow-[0_0_8px_rgba(113,113,122,0.5)]" />
@@ -851,8 +951,8 @@ function formatSourceLabel(lead: LuxorInquiry) {
 function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   if (lead.pipeline_stage) return lead.pipeline_stage
   if (lead.status === 'tour_requested' || lead.status === 'tour_confirmed') return 'tour'
-  if (lead.status === 'proposal_sent') return 'proposal_sent'
-  if (lead.status === 'booked') return 'book_reserve'
+  if (lead.status === 'proposal_sent') return 'proposal'
+  if (lead.status === 'booked') return 'contract'
   if (lead.status === 'closed_lost') return 'closed_lost'
   return 'inquiry'
 }
@@ -1060,7 +1160,7 @@ function StatsCard({
   )
 }
 
-function LeadsClientsTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+function LeadsClientsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
   const clients = leads.filter(l => l.status === 'booked')
   return (
     <PortalTableCard
@@ -1107,7 +1207,7 @@ function LeadsClientsTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMov
   )
 }
 
-function LeadsToursTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+function LeadsToursTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
   const tours = leads.filter(l => l.status === 'tour_requested' || l.status === 'tour_confirmed')
   return (
     <PortalTableCard
@@ -1122,7 +1222,7 @@ function LeadsToursTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveS
               <th className="px-8 py-5">Client Name</th>
               <th className="px-6 py-5">Tour Time Preference</th>
               <th className="px-6 py-5">Event Type</th>
-              <th className="px-6 py-5">Lifecycle Status</th>
+              <th className="px-6 py-5">Lifecycle Step</th>
               <th className="px-8 py-5 text-right">Action</th>
             </tr>
           </PortalStickyThead>
@@ -1145,9 +1245,9 @@ function LeadsToursTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveS
                   <td className="px-6 py-5 text-zinc-350 font-medium">{t.event_type || 'Quinceañera'}</td>
                   <td className="px-6 py-5 font-mono">
                     <PortalSelect
-                      value={t.status}
-                      onChange={(val) => onMoveStatus(t.id, val as LuxorInquiryStatus)}
-                      options={INQUIRY_STATUS_OPTIONS}
+                      value={getPipelineStage(t)}
+                      onChange={(val) => onMovePipelineStage(t.id, val as LuxorPipelineStage)}
+                      options={PIPELINE_STAGE_OPTIONS}
                     />
                   </td>
                   <td className="px-8 py-5 text-right">
@@ -1163,7 +1263,7 @@ function LeadsToursTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveS
   )
 }
 
-function LeadsProposalsTab({ leads, onMoveStatus }: { leads: LuxorInquiry[]; onMoveStatus: (id: string, status: LuxorInquiryStatus) => void }) {
+function LeadsProposalsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
   const proposals = leads.filter(l => l.status === 'proposal_sent')
   return (
     <PortalTableCard
