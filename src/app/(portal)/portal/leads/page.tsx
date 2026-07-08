@@ -262,7 +262,9 @@ export default function LeadsPage() {
       (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (lead.phone && lead.phone.includes(searchTerm))
 
-    const matchesStatus = statusFilter === 'all' || getPipelineStage(lead) === statusFilter
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'grand_opening' ? isGrandOpeningRsvp(lead) : getPipelineStage(lead) === statusFilter)
 
     return matchesSearch && matchesStatus
   })
@@ -348,6 +350,7 @@ export default function LeadsPage() {
                     onChange={setStatusFilter}
                     options={[
                       { value: 'all', label: 'All Steps' },
+                      { value: 'grand_opening', label: 'Grand Opening RSVP' },
                       ...PIPELINE_STAGE_OPTIONS
                     ]}
                   />

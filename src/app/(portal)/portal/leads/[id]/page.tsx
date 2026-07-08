@@ -1338,6 +1338,42 @@ export default function LeadDetailPage({
     }
   }
 
+  useEffect(() => {
+    const requestedTab = searchParams?.get('tab')
+    const requestedSection = searchParams?.get('section')
+    const requestedStage = searchParams?.get('stage')
+    const requestedPlanningTab = searchParams?.get('planningTab')
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'documents', 'messages', 'notes'].includes(requestedTab)) {
+      setActiveLeadTab(requestedTab as LeadDetailTab)
+      if (requestedTab === 'tasks') {
+        setShowTaskTools(true)
+      }
+    }
+
+    if (requestedStage) {
+      setSelectedStageOverride(requestedStage)
+      setActiveLeadTab('overview')
+    }
+
+    if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
+      setPlanningSubTab(requestedPlanningTab as 'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files')
+    }
+
+    if (requestedSection) {
+      timeoutId = window.setTimeout(() => {
+        document.getElementById(requestedSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+    }
+
+    return () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [searchParams])
+
   if (loading) {
     return <ClientDossierLoading />
   }
@@ -1643,34 +1679,6 @@ export default function LeadDetailPage({
     }
   }
 
-  useEffect(() => {
-    const requestedTab = searchParams?.get('tab')
-    const requestedSection = searchParams?.get('section')
-    const requestedStage = searchParams?.get('stage')
-    const requestedPlanningTab = searchParams?.get('planningTab')
-
-    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'documents', 'messages', 'notes'].includes(requestedTab)) {
-      setActiveLeadTab(requestedTab as LeadDetailTab)
-      if (requestedTab === 'tasks') {
-        setShowTaskTools(true)
-      }
-    }
-
-    if (requestedStage) {
-      setSelectedStageOverride(requestedStage)
-      setActiveLeadTab('overview')
-    }
-
-    if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
-      setPlanningSubTab(requestedPlanningTab as 'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files')
-    }
-
-    if (requestedSection) {
-      window.setTimeout(() => {
-        document.getElementById(requestedSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 80)
-    }
-  }, [searchParams])
   const quickNoteTemplates = [
     { label: 'Call recap', value: 'Call recap:\n- \nNext step:\n', type: 'call_log' as const },
     { label: 'Follow-up sent', value: 'Follow-up email sent:\n\n', type: 'email_log' as const },
