@@ -321,8 +321,17 @@ export async function processLuxorEmailJobs(
 }
 
 export async function processDueLuxorEmailJobs(limit = 25) {
-  const jobs = await claimDueLuxorEmailJobs(limit)
-  return processLuxorEmailJobs(jobs, { markSending: false })
+  try {
+    const jobs = await claimDueLuxorEmailJobs(limit)
+    return processLuxorEmailJobs(jobs, { markSending: false })
+  } catch (error) {
+    console.warn(
+      'luxor_claim_due_email_jobs RPC unavailable, falling back to direct due-job processing:',
+      error instanceof Error ? error.message : error,
+    )
+    const jobs = await listDueLuxorEmailJobs(limit)
+    return processLuxorEmailJobs(jobs, { markSending: true })
+  }
 }
 
 async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {
