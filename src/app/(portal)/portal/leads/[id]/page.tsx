@@ -721,7 +721,7 @@ export default function LeadDetailPage({
     if (!email) return
 
     let active = true
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let timeoutId: number | null = null
 
     const pollMarketingEngagement = async () => {
       if (!active) return
@@ -729,11 +729,11 @@ export default function LeadDetailPage({
       await fetchMarketingEngagement(email, { silent: true })
 
       if (active) {
-        timeoutId = setTimeout(pollMarketingEngagement, 15000)
+        timeoutId = window.setTimeout(pollMarketingEngagement, 15000)
       }
     }
 
-    timeoutId = setTimeout(pollMarketingEngagement, 15000)
+    timeoutId = window.setTimeout(pollMarketingEngagement, 15000)
 
     return () => {
       active = false
@@ -1343,7 +1343,7 @@ export default function LeadDetailPage({
     const requestedSection = searchParams?.get('section')
     const requestedStage = searchParams?.get('stage')
     const requestedPlanningTab = searchParams?.get('planningTab')
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let timeoutId: number | null = null
 
     if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'documents', 'messages', 'notes'].includes(requestedTab)) {
       setActiveLeadTab(requestedTab as LeadDetailTab)
