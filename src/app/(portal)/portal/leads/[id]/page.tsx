@@ -65,7 +65,7 @@ type EditableLeadField =
   | 'address'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
-type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'booking' | 'billing' | 'documents' | 'messages' | 'notes'
+type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'documents' | 'messages' | 'notes'
 
 export default function LeadDetailPage({
   params,
@@ -1354,8 +1354,8 @@ export default function LeadDetailPage({
       'lead-overview': 'overview',
       'lead-activity': 'activity',
       'lead-tasks': 'tasks',
-      'lead-booking': 'booking',
-      'lead-billing': 'billing',
+      'lead-booking': 'documents',
+      'lead-billing': 'documents',
       'lead-documents': 'documents',
       'lead-messages': 'messages',
       'lead-notes': 'notes',
@@ -1402,8 +1402,6 @@ export default function LeadDetailPage({
     { id: 'overview', label: 'Overview' },
     { id: 'activity', label: 'Activity', count: activityCounts.all },
     { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
-    { id: 'booking', label: 'Booking', count: sortedBookings.length },
-    { id: 'billing', label: 'Billing', count: sortedInvoices.length },
     { id: 'documents', label: 'Documents', count: sortedBookings.length + sortedInvoices.length },
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
@@ -3150,8 +3148,8 @@ export default function LeadDetailPage({
               
               let nextStepTitle = 'Prepare proposal'
               let nextStepDetail = 'Draft pricing and confirm the next decision step'
-              let nextStepButton = 'Open Billing'
-              let nextStepAction = () => setActiveLeadTab('billing')
+              let nextStepButton = 'Open Documents'
+              let nextStepAction = () => setActiveLeadTab('documents')
               
               if (currentStage === 'proposal') {
                 nextStepTitle = 'Create booking record'
@@ -3520,7 +3518,7 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'booking' || activeLeadTab === 'documents' ? (
+          {activeLeadTab === 'documents' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
@@ -3596,7 +3594,7 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'billing' || activeLeadTab === 'documents' ? (
+          {activeLeadTab === 'documents' ? (
           <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
