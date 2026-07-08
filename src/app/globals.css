@@ -623,3 +623,16 @@ thead.sticky th,
   -webkit-backdrop-filter: blur(24px) !important;
 }
 
+/* Ensure all interactive and clickable elements turn the cursor into a finger pointer for user feedback */
+a,
+button,
+select,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+[role="button"],
+[role="tab"],
+[data-tab-key] {
+  cursor: pointer !important;
+}
+
