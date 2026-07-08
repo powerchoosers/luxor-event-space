@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Users,
   Search,
@@ -416,35 +417,70 @@ export default function LeadsPage() {
                 <button
                   type="button"
                   onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-                  className="flex items-center gap-1 text-zinc-350 hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 text-zinc-355 hover:text-white transition-colors select-none cursor-pointer"
                 >
-                  {sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'} <ChevronDown size={14} />
+                  <span>{sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'}</span>
+                  <ChevronDown size={12} className={`text-zinc-550 transition-transform duration-150 ${sortDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {sortDropdownOpen && (
-                  <div className="absolute right-0 top-6 z-30 bg-[#080706] border border-zinc-900 rounded-md shadow-xl p-1.5 min-w-[120px] space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-450 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
-                    >
-                      Recently Active
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
-                    >
-                      Name
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
-                      className="w-full text-left text-[10px] font-bold uppercase tracking-wider text-zinc-455 hover:text-white px-2 py-1 hover:bg-zinc-900 rounded-md"
-                    >
-                      Guest Count
-                    </button>
-                  </div>
-                )}
+                <AnimatePresence>
+                  {sortDropdownOpen && (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-20 cursor-default"
+                        onClick={() => setSortDropdownOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                        className="absolute right-0 top-6 z-30 mt-1 w-44 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 origin-top-right flex flex-col gap-0.5"
+                        style={{
+                          backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                          backdropFilter: 'blur(24px)',
+                          WebkitBackdropFilter: 'blur(24px)'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
+                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
+                            sortBy === 'active' || (!sortBy)
+                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
+                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
+                          }`}
+                        >
+                          Recently Active
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
+                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
+                            sortBy === 'name'
+                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
+                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
+                          }`}
+                        >
+                          Name
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
+                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
+                            sortBy === 'guests'
+                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
+                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
+                          }`}
+                        >
+                          Guest Count
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           }
