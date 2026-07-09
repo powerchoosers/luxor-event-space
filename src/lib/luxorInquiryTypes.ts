@@ -7,6 +7,19 @@ export type LuxorInquiryStatus =
   | 'booked'
   | 'closed_lost'
 
+export const LUXOR_EVENT_TYPES = [
+  'Wedding',
+  'Quinceañera',
+  'Baby shower',
+  'Birthday',
+  'Anniversary',
+  'Corporate event',
+  'Private celebration',
+  'Other',
+] as const
+
+export type LuxorEventType = (typeof LUXOR_EVENT_TYPES)[number]
+
 export type LuxorPipelineStage =
   | 'inquiry'
   | 'tour'

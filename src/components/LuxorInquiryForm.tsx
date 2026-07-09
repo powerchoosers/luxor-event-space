@@ -3,7 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { ArrowRight, CalendarDays, Check, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 
@@ -16,8 +16,6 @@ type LuxorInquiryFormProps = {
   compact?: boolean
   onSubmitted?: () => void
 }
-
-const eventTypes = ['Wedding', 'Quinceañera', 'Baby shower', 'Birthday', 'Corporate event', 'Private celebration']
 
 export function LuxorInquiryForm({
   source,
@@ -123,7 +121,7 @@ export function LuxorInquiryForm({
                 onChange={setEventType}
                 className="w-full text-left"
                 placeholder="Select event type"
-                options={eventTypes.map(t => ({ value: t, label: t }))}
+                options={LUXOR_EVENT_TYPES.map(t => ({ value: t, label: t }))}
               />
             </div>
 

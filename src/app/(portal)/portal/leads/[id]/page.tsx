@@ -38,6 +38,10 @@ import {
   Eye,
   MousePointerClick,
   RefreshCw,
+  Baby,
+  Cake,
+  Heart,
+  PartyPopper,
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
@@ -95,6 +99,23 @@ type LeadMarketingEngagement = {
   subscribed: boolean
   campaigns: LeadMarketingCampaign[]
   recent_events: LeadMarketingEvent[]
+}
+
+function EventTypeIcon({ eventType }: { eventType: string | null }) {
+  const normalized = eventType?.trim().toLowerCase() || ''
+  const Icon = normalized.includes('wedding')
+    ? Heart
+    : normalized.includes('quince') || normalized.includes('birthday')
+      ? Cake
+      : normalized.includes('baby')
+        ? Baby
+        : normalized.includes('corporate')
+          ? Briefcase
+          : normalized.includes('anniversary')
+            ? Sparkles
+            : PartyPopper
+
+  return <Icon size={12} strokeWidth={1.8} aria-hidden="true" />
 }
 
 type EditableLeadField =
@@ -1850,18 +1871,17 @@ export default function LeadDetailPage({
               <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
                 {getInitials(lead.full_name)}
               </div>
-              <button
-                type="button"
-                className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] hover:bg-[#caa24c]/10 hover:text-[#f1d27a] transition-all duration-200 cursor-pointer shadow-md"
-                title="Edit avatar"
+              <div
+                className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] shadow-md"
+                title={`${lead.event_type || 'Other'} event`}
+                aria-label={`${lead.event_type || 'Other'} event`}
               >
-                <Pencil size={11} />
-              </button>
+                <EventTypeIcon eventType={lead.event_type} />
+              </div>
             </div>
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="truncate font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
-                {isGrandOpeningLead ? <Sparkles size={16} className="shrink-0 text-[#caa24c]" /> : null}
                 {lead.email && (
                   <div className="flex items-center gap-3">
                     <button
@@ -1887,6 +1907,11 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                     </button>
+                    {isGrandOpeningLead ? (
+                      <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c]">
+                        Grand Opening
+                      </span>
+                    ) : null}
                     <AnimatePresence>
                       {marketingMessage && (
                         <motion.span
