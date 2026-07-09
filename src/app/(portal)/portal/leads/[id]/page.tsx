@@ -460,53 +460,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const steps = [
-      {
-        id: 'inquiry',
-        isCompleted: true,
-        isActive: false,
-      },
-      {
-        id: 'tour',
-        isCompleted: lead.status !== 'new' && lead.status !== 'contacted',
-        isActive: lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
-      },
-      {
-        id: 'proposal',
-        isCompleted: lead.status === 'proposal_sent' || lead.status === 'booked',
-        isActive: lead.status === 'proposal_sent' && !latestBooking,
-      },
-      {
-        id: 'contract',
-        isCompleted: latestBooking?.contract_status === 'signed',
-        isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking) || (lead.status === 'proposal_sent' && !!latestBooking),
-      },
-      {
-        id: 'deposit',
-        isCompleted: latestBooking?.security_deposit_status === 'collected',
-        isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
-      },
-      {
-        id: 'planning',
-        isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
-        isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
-      },
-      {
-        id: 'final_payment',
-        isCompleted: latestBooking?.status === 'completed',
-        isActive: latestBooking?.status === 'confirmed',
-      },
-      {
-        id: 'event',
-        isCompleted: latestBooking?.status === 'completed',
-        isActive: false,
-      },
-      {
-        id: 'closing',
-        isCompleted: latestBooking?.status === 'completed',
-        isActive: false,
-      },
-    ]
+    const steps = getLeadLifecycleSteps(lead, latestBooking)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -4550,83 +4504,58 @@ function LeadLifecycleRail({
     ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : ''
 
-  const steps = [
-    {
-      id: 'inquiry',
-      label: 'Inquiry',
-      subtext: formattedInquiryDate,
-      isCompleted: true,
-      isActive: false,
-    },
-    {
-      id: 'tour',
-      label: 'Tour',
-      subtext: formattedTourDate || 'Jul 6',
-      isCompleted: lead.status !== 'new' && lead.status !== 'contacted',
-      isActive: lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
-    },
-    {
-      id: 'proposal',
-      label: 'Proposal',
-      subtext: lead.status === 'booked' 
-        ? 'Accepted' 
-        : lead.status === 'proposal_sent' 
-        ? (formattedProposalSentDate || 'Jul 9') 
-        : '',
-      isCompleted: lead.status === 'proposal_sent' || lead.status === 'booked',
-      isActive: lead.status === 'proposal_sent' && !latestBooking,
-    },
-    {
-      id: 'contract',
-      label: 'Contract',
-      subtext: latestBooking?.contract_status === 'signed'
-        ? 'Signed'
-        : latestBooking?.contract_status === 'sent'
-        ? 'Sent'
-        : '',
-      isCompleted: latestBooking?.contract_status === 'signed',
-      isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking),
-    },
-    {
-      id: 'deposit',
-      label: 'Deposit',
-      subtext: latestBooking?.security_deposit_status === 'collected'
-        ? 'Paid'
-        : latestBooking?.contract_status === 'signed'
-        ? 'Pending'
-        : '',
-      isCompleted: latestBooking?.security_deposit_status === 'collected',
-      isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
-    },
-    {
-      id: 'planning',
-      label: 'Planning',
-      subtext: '',
-      isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
-      isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
-    },
-    {
-      id: 'final_payment',
-      label: 'Final Payment',
-      subtext: '',
-      isCompleted: latestBooking?.status === 'completed',
-      isActive: latestBooking?.status === 'confirmed',
-    },
-    {
-      id: 'event',
-      label: 'Event',
-      subtext: formattedEventDate || 'Aug 30',
-      isCompleted: latestBooking?.status === 'completed',
-      isActive: false,
-    },
-    {
-      id: 'complete',
-      label: 'Complete',
-      subtext: '',
-      isCompleted: latestBooking?.status === 'completed',
-      isActive: false,
-    },
-  ]
+  const steps = getLeadLifecycleSteps(lead, latestBooking).map((step) => {
+    if (step.id === 'inquiry') {
+      return { ...step, label: 'Inquiry', subtext: formattedInquiryDate }
+    }
+    if (step.id === 'tour') {
+      return { ...step, label: 'Tour', subtext: formattedTourDate || '' }
+    }
+    if (step.id === 'proposal') {
+      return {
+        ...step,
+        label: 'Proposal',
+        subtext:
+          lead.status === 'booked'
+            ? 'Accepted'
+            : lead.status === 'proposal_sent'
+              ? formattedProposalSentDate || ''
+              : '',
+      }
+    }
+    if (step.id === 'contract') {
+      return {
+        ...step,
+        label: 'Contract',
+        subtext: latestBooking?.contract_status === 'signed'
+          ? 'Signed'
+          : latestBooking?.contract_status === 'sent'
+            ? 'Sent'
+            : '',
+      }
+    }
+    if (step.id === 'deposit') {
+      return {
+        ...step,
+        label: 'Deposit',
+        subtext: latestBooking?.security_deposit_status === 'collected'
+          ? 'Paid'
+          : latestBooking?.contract_status === 'signed'
+            ? 'Pending'
+            : '',
+      }
+    }
+    if (step.id === 'planning') {
+      return { ...step, label: 'Planning', subtext: '' }
+    }
+    if (step.id === 'final_payment') {
+      return { ...step, label: 'Final Payment', subtext: '' }
+    }
+    if (step.id === 'event') {
+      return { ...step, label: 'Event', subtext: formattedEventDate || '' }
+    }
+    return { ...step, label: 'Complete', subtext: '' }
+  })
 
   const getStageIdFromStepId = (stepId: string) => {
     if (stepId === 'proposal_sent' || stepId === 'proposal_accepted' || stepId === 'proposal') return 'proposal'
@@ -5252,6 +5181,65 @@ function getPaidTotal(payments: LuxorPayment[], paymentKind?: 'deposit' | 'final
 
 function isGrandOpeningRsvp(lead: LuxorInquiry) {
   return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
+}
+
+type LeadLifecycleStepState = {
+  id: 'inquiry' | 'tour' | 'proposal' | 'contract' | 'deposit' | 'planning' | 'final_payment' | 'event' | 'closing' | 'complete'
+  isCompleted: boolean
+  isActive: boolean
+}
+
+function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null): LeadLifecycleStepState[] {
+  const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
+  const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
+
+  return [
+    {
+      id: 'inquiry',
+      isCompleted: lead.status !== 'new',
+      isActive: lead.status === 'new',
+    },
+    {
+      id: 'tour',
+      isCompleted: hasTourStepBeenReached,
+      isActive: lead.status === 'contacted' || lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
+    },
+    {
+      id: 'proposal',
+      isCompleted: hasProposalStepBeenReached,
+      isActive: lead.status === 'proposal_sent' && !latestBooking,
+    },
+    {
+      id: 'contract',
+      isCompleted: latestBooking?.contract_status === 'signed',
+      isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking) || (lead.status === 'proposal_sent' && !!latestBooking),
+    },
+    {
+      id: 'deposit',
+      isCompleted: latestBooking?.security_deposit_status === 'collected',
+      isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
+    },
+    {
+      id: 'planning',
+      isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
+      isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
+    },
+    {
+      id: 'final_payment',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: latestBooking?.status === 'confirmed',
+    },
+    {
+      id: 'event',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: false,
+    },
+    {
+      id: 'closing',
+      isCompleted: latestBooking?.status === 'completed',
+      isActive: false,
+    },
+  ]
 }
 
 function normalizeTimelineDate(value: string | null) {
