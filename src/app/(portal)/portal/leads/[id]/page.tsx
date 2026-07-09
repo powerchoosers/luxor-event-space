@@ -111,6 +111,8 @@ type EditableLeadField =
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
 
+const ACTIVITY_BATCH_SIZE = 18
+
 export default function LeadDetailPage({
   params,
 }: {
@@ -175,6 +177,7 @@ export default function LeadDetailPage({
   const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
   const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
+  const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
@@ -457,6 +460,11 @@ export default function LeadDetailPage({
       return true
     })
   }, [activeFeedTab, leadDerivedData.allActivityEntries])
+  const visibleActivityEntries = useMemo(
+    () => activityEntries.slice(0, visibleActivityCount),
+    [activityEntries, visibleActivityCount],
+  )
+  const hiddenActivityCount = Math.max(0, activityEntries.length - visibleActivityEntries.length)
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
@@ -612,6 +620,10 @@ export default function LeadDetailPage({
     setShowInternalSignals(false)
     setShowTaskTools(false)
   }, [id])
+
+  useEffect(() => {
+    setVisibleActivityCount(ACTIVITY_BATCH_SIZE)
+  }, [activeFeedTab, id])
 
   useEffect(() => {
     const email = lead?.email
@@ -3781,13 +3793,14 @@ export default function LeadDetailPage({
                 </div>
               ) : (
                 <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
-                  {activityEntries.map((entry) => {
+                  {visibleActivityEntries.map((entry) => {
                     if (entry.kind === 'email') {
                       const email = entry.email
                       const isOutgoing = email.direction === 'outgoing'
+                      const emailSummary = compactActivityText(email.summary)
 
                       return (
-                        <div key={entry.id} className="relative group">
+                        <div key={entry.id} className="portal-render-surface relative group">
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -3808,14 +3821,15 @@ export default function LeadDetailPage({
                           <p className="mt-1 text-[10px] text-zinc-600">
                             From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
                           </p>
-                          {email.summary ? (
-                            <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{email.summary}</p>
+                          {emailSummary ? (
+                            <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{emailSummary}</p>
                           ) : null}
                         </div>
                       )
                     }
 
                     const note = entry.note
+                    const noteContent = compactActivityText(note.content)
                     let badgeColor = 'border-zinc-800/50 bg-zinc-800 text-zinc-400'
                     let typeLabel = 'System Log'
                     if (note.note_type === 'note') {
@@ -3833,8 +3847,8 @@ export default function LeadDetailPage({
                     }
 
                     return (
-                      <div key={note.id} className="relative group">
-                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] animate-pulse transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                      <div key={note.id} className="portal-render-surface relative group">
+                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
                           <div className="flex items-center gap-3">
@@ -3844,10 +3858,24 @@ export default function LeadDetailPage({
                             <span className="text-[9px] font-mono text-zinc-650">{new Date(note.created_at).toLocaleString()}</span>
                           </div>
                         </div>
-                        <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{note.content}</p>
+                        <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{noteContent}</p>
                       </div>
                     )
                   })}
+                  {hiddenActivityCount > 0 ? (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleActivityCount((count) => count + ACTIVITY_BATCH_SIZE)}
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-[#caa24c] transition-colors hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10"
+                      >
+                        Show {Math.min(ACTIVITY_BATCH_SIZE, hiddenActivityCount)} more activity items
+                      </button>
+                      <p className="mt-2 text-center text-[9px] font-medium uppercase tracking-[0.16em] text-zinc-600">
+                        {hiddenActivityCount} more hidden to keep this tab smooth
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -5563,6 +5591,15 @@ function normalizeTimelineDate(value: string | null) {
 function formatTimelineDate(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString()
+}
+
+function compactActivityText(value: string | null | undefined, maxLength = 520) {
+  if (!value) return ''
+
+  const trimmed = value.trim()
+  if (trimmed.length <= maxLength) return trimmed
+
+  return `${trimmed.slice(0, maxLength).trimEnd()}...`
 }
 
 function formatSourceLabel(lead: LuxorInquiry) {
