@@ -932,6 +932,8 @@ export default function LeadDetailPage({
       const note = await res.json()
       setNotes((prev) => [...prev, note])
       setNoteContent('')
+      setNoteType('note')
+      setActiveFeedTab('notes')
     } catch (err) {
       console.error(err)
       alert('Error saving note.')
@@ -3713,6 +3715,65 @@ export default function LeadDetailPage({
         }`}>
           {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
             <div className="space-y-6">
+              {activeLeadTab === 'notes' ? (
+                <form
+                  onSubmit={handlePostNote}
+                  className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter"
+                >
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                    <div>
+                      <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
+                        <NotebookPen size={16} className="text-zinc-500" />
+                        Manual Note
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-600">Save a private lead note to Supabase for this client.</p>
+                    </div>
+                    <PortalSelect
+                      value={noteType}
+                      onChange={(value) => setNoteType(value as typeof noteType)}
+                      options={[
+                        { value: 'note', label: 'Note' },
+                        { value: 'call_log', label: 'Call' },
+                        { value: 'email_log', label: 'Email' },
+                      ]}
+                    />
+                  </div>
+
+                  <textarea
+                    value={noteContent}
+                    onChange={(event) => setNoteContent(event.target.value)}
+                    placeholder="Type the note here..."
+                    className="min-h-32 w-full rounded-xl border border-zinc-900 bg-zinc-950/70 p-4 text-sm leading-6 text-zinc-200 outline-none transition-colors placeholder:text-zinc-700 focus:border-[#caa24c]/40"
+                  />
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      {quickNoteTemplates.map((template) => (
+                        <button
+                          key={template.label}
+                          type="button"
+                          onClick={() => {
+                            setNoteType(template.type)
+                            setNoteContent(template.value)
+                          }}
+                          className="rounded-full border border-zinc-850 bg-zinc-950/60 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                        >
+                          {template.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={submittingNote || !noteContent.trim()}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-[#b98a3e]/10 transition-colors hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Send size={12} />
+                      {submittingNote ? 'Saving...' : 'Save Note'}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
               {activityEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
                   <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
