@@ -1666,6 +1666,15 @@ export default function LeadDetailPage({
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
+  const linkedVendorRefs = (lead.metadata?.vendors as Array<{ id: string; notes?: string }> | undefined) || []
+  const linkedVendorIds = new Set(linkedVendorRefs.map((vendor) => vendor.id))
+  const linkedVendors = linkedVendorRefs.map((vendorRef) => ({
+    ref: vendorRef,
+    vendor: allVendors.find((vendor) => vendor.id === vendorRef.id) || null,
+  }))
+  const timelineItems = ((lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }> | undefined) || [])
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .sort((a, b) => parseTimeToMinutes(a.item.time) - parseTimeToMinutes(b.item.time))
 
   const renderMarketingEngagementCard = () => (
     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -3934,6 +3943,143 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
+          {activeLeadTab === 'vendors' ? (
+          <div id="lead-vendors" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+              <div>
+                <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
+                  <Briefcase size={16} className="text-zinc-500" />
+                  Vendors
+                </h3>
+                <p className="mt-1 text-xs text-zinc-600">Track vendor options and notes for this event.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVendorModalOpen(true)
+                  void fetchVendors()
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+              >
+                <Plus size={12} /> Add Vendor
+              </button>
+            </div>
+
+            {linkedVendors.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVendorModalOpen(true)
+                  void fetchVendors()
+                }}
+                className="w-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/25 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+              >
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#caa24c]">
+                  <Plus size={18} />
+                </span>
+                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-zinc-300">Add event vendors</span>
+                <span className="mt-2 block text-xs leading-5 text-zinc-600">No vendors are linked yet. Add DJs, catering, decorators, photographers, or other vendor notes for this lead.</span>
+              </button>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {linkedVendors.map(({ ref, vendor }) => (
+                  <div key={ref.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-white">{vendor?.name || 'Vendor record unavailable'}</p>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">{vendor?.vendor_type || 'Linked vendor'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleVendorSelection(ref.id)}
+                        className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-300"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-[10px] text-zinc-500 sm:grid-cols-2">
+                      <span>{vendor?.phone || 'No phone'}</span>
+                      <span>{vendor?.email || 'No email'}</span>
+                    </div>
+                    <textarea
+                      value={ref.notes || ''}
+                      onChange={(event) => updateVendorNotes(ref.id, event.target.value)}
+                      placeholder="Vendor notes for this event..."
+                      className="mt-3 h-20 w-full rounded-lg border border-zinc-900 bg-zinc-950/70 p-3 text-xs leading-5 text-zinc-300 outline-none transition-colors focus:border-[#caa24c]/40"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          ) : null}
+
+          {activeLeadTab === 'timeline' ? (
+          <div id="lead-timeline" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+              <div>
+                <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
+                  <Clock size={16} className="text-zinc-500" />
+                  Event Timeline
+                </h3>
+                <p className="mt-1 text-xs text-zinc-600">Build the run of show without needing to advance the lead stage.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openTimelineModal(null)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+              >
+                <Plus size={12} /> Add Step
+              </button>
+            </div>
+
+            {timelineItems.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => openTimelineModal(null)}
+                className="w-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/25 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+              >
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#caa24c]">
+                  <Plus size={18} />
+                </span>
+                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-zinc-300">Add timeline step</span>
+                <span className="mt-2 block text-xs leading-5 text-zinc-600">No timeline steps are planned yet. Add setup, vendor arrivals, ceremony, dinner, breakdown, or custom event milestones.</span>
+              </button>
+            ) : (
+              <div className="relative ml-3 space-y-4 border-l border-zinc-850 pl-6">
+                {timelineItems.map(({ item, originalIndex }) => (
+                  <div key={`${item.time}-${item.title}-${originalIndex}`} className="relative rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                    <span className="absolute -left-[31px] top-5 flex h-3 w-3 rounded-full border border-[#caa24c] bg-[#080706]" />
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-xs font-black text-[#caa24c]">{item.time}</p>
+                        <p className="mt-1 text-sm font-bold text-white">{item.title}</p>
+                        {item.description ? <p className="mt-2 text-xs leading-5 text-zinc-500">{item.description}</p> : null}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openTimelineModal(originalIndex)}
+                          className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-[#caa24c]/20 hover:text-[#f1d27a]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteTimelineItem(originalIndex)}
+                          className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-300"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          ) : null}
+
           {activeLeadTab === 'documents' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
@@ -4062,6 +4208,112 @@ export default function LeadDetailPage({
         </div>
       </div>
       )}
+
+      {/* Vendor picker modal */}
+      <PortalModal isOpen={isVendorModalOpen} onClose={() => setIsVendorModalOpen(false)} maxWidth="max-w-2xl">
+        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Add Vendors</h3>
+            <p className="mt-1 text-[11px] text-zinc-500">Link existing operation vendors to this lead.</p>
+          </div>
+          <button type="button" onClick={() => setIsVendorModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
+            Close
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto bg-[#080706] p-6 portal-scrollbar">
+          {loadingVendors ? (
+            <div className="rounded-xl border border-dashed border-zinc-900 p-6 text-center text-xs text-zinc-500">Loading vendors...</div>
+          ) : allVendors.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-900 p-6 text-center text-xs leading-5 text-zinc-500">
+              <p className="font-semibold text-zinc-300">No vendor records found.</p>
+              <p className="mt-1 text-zinc-600">Add vendors in Operations first, then link them here.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {allVendors.map((vendor) => {
+                const isLinked = linkedVendorIds.has(vendor.id)
+                return (
+                  <button
+                    key={vendor.id}
+                    type="button"
+                    onClick={() => toggleVendorSelection(vendor.id)}
+                    className={`flex items-center justify-between gap-4 rounded-xl border p-4 text-left transition-colors ${
+                      isLinked
+                        ? 'border-[#caa24c]/35 bg-[#caa24c]/10'
+                        : 'border-zinc-900 bg-zinc-950/35 hover:border-[#caa24c]/20 hover:bg-[#caa24c]/5'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-white">{vendor.name}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">{vendor.vendor_type}</p>
+                      <p className="mt-1 text-[10px] text-zinc-500">{[vendor.phone, vendor.email].filter(Boolean).join(' • ') || 'No contact details'}</p>
+                    </div>
+                    <span className={`rounded border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+                      isLinked
+                        ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]'
+                        : 'border-zinc-800 text-zinc-500'
+                    }`}>
+                      {isLinked ? 'Linked' : 'Add'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </PortalModal>
+
+      {/* Timeline item modal */}
+      <PortalModal isOpen={isTimelineModalOpen} onClose={() => setIsTimelineModalOpen(false)} maxWidth="max-w-lg">
+        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">{timelineEditIndex === null ? 'Add Timeline Step' : 'Edit Timeline Step'}</h3>
+            <p className="mt-1 text-[11px] text-zinc-500">Build a simple run of show for this event.</p>
+          </div>
+          <button type="button" onClick={() => setIsTimelineModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
+            Close
+          </button>
+        </div>
+        <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[#080706] p-6">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Time</label>
+            <input
+              type="text"
+              required
+              value={timelineTime}
+              onChange={(event) => setTimelineTime(event.target.value)}
+              placeholder="e.g. 4:00 PM"
+              className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Step Title</label>
+            <input
+              type="text"
+              required
+              value={timelineTitle}
+              onChange={(event) => setTimelineTitle(event.target.value)}
+              placeholder="e.g. Vendor load-in"
+              className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Description</label>
+            <textarea
+              value={timelineDescription}
+              onChange={(event) => setTimelineDescription(event.target.value)}
+              placeholder="Optional details, owner, or notes..."
+              className="h-24 w-full rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300 outline-none focus:border-[#caa24c]/50"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full rounded-lg bg-[#b98a3e] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f]"
+          >
+            {timelineEditIndex === null ? 'Add Step' : 'Save Step'}
+          </button>
+        </form>
+      </PortalModal>
 
       {/* Invoice drafting modal */}
       <PortalModal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
@@ -4577,14 +4829,11 @@ function LeadLifecycleRail({
     return { ...step, isActive: active, isCompleted: completed }
   })
 
-  let hasMetIncomplete = false
-  finalSteps = finalSteps.map((step) => {
-    if (!step.isCompleted) {
-      hasMetIncomplete = true
-    }
+  const firstIncompleteIndex = finalSteps.findIndex((step) => !step.isCompleted)
+  finalSteps = finalSteps.map((step, index) => {
     return {
       ...step,
-      isCompleted: step.isCompleted && !hasMetIncomplete,
+      isCompleted: step.isCompleted && (firstIncompleteIndex === -1 || index < firstIncompleteIndex),
     }
   })
 
