@@ -385,13 +385,6 @@ export default function LeadsPage() {
             localStorage.setItem('luxor_leads_active_tab', nextTab)
           }}
         />
-        <Link
-          href="/portal/communications"
-          className="flex items-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-350 hover:bg-zinc-950/40 transition-all"
-        >
-          <Mail size={15} />
-          Communication History
-        </Link>
       </div>
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
