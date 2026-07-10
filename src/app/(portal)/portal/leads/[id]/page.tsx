@@ -2118,51 +2118,41 @@ export default function LeadDetailPage({
                         </div>
                       </section>
 
-                      {/* Client Details */}
+                      {/* Client Summary */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                         <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Details</p>
-                          <User size={18} className="text-[#a8792f] opacity-80" />
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
                         </div>
-                        <div className="grid gap-1">
-                          {clientDetails.map((item) => (
-                            <DetailItem
-                              key={item.label}
-                              icon={item.icon}
-                              label={item.label}
-                              value={item.value}
-                              editValue={item.editValue}
-                              copyValue={item.copyValue}
-                              inputType={item.inputType}
-                              placeholder={item.placeholder}
-                              isMono={item.isMono}
-                              isSaving={savingLeadField === item.field}
-                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
-                            />
-                          ))}
-                          
-                          {/* Editable Address */}
-                          <DetailItem
-                            icon={<MapPin size={14} />}
-                            label="Address"
-                            value={lead.metadata?.address ? String(lead.metadata.address) : 'Not captured'}
-                            editValue={lead.metadata?.address ? String(lead.metadata.address) : ''}
-                            copyValue={lead.metadata?.address ? String(lead.metadata.address) : ''}
-                            inputType="text"
-                            placeholder="San Antonio, TX"
-                            isSaving={savingLeadField === 'address'}
-                            onCommit={(value) => handleLeadFieldUpdate('address', value)}
-                          />
-
-                          <div className="flex items-center gap-3 py-3 px-3 -mx-3 rounded-xl border border-transparent">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
-                              <Sparkles size={14} />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source</p>
-                              <p className="mt-1 text-sm font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
-                            </div>
+                        <div className="space-y-3.5 text-xs text-left">
+                          <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                            <Mail size={14} className="text-[#a8792f]" />
+                            <span>{lead.email || 'No email captured'}</span>
+                          </a>
+                          <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
+                            <Phone size={14} className="text-[#a8792f]" />
+                            <span>{lead.phone || 'No phone captured'}</span>
+                          </a>
+                          <div className="flex items-center gap-3 py-1 text-zinc-300">
+                            <MapPin size={14} className="text-[#a8792f]" />
+                            <span>{lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'}</span>
                           </div>
+                          <div className="flex items-center gap-3 py-1 text-zinc-300">
+                            <Users size={14} className="text-[#a8792f]" />
+                            <span>{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
+                          </div>
+                          <div className="flex items-center gap-3 py-1 text-zinc-300">
+                            <Star size={14} className="text-[#a8792f]" />
+                            <span>{lead.event_type || 'Event type not captured'}</span>
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                          <button
+                            type="button"
+                            onClick={() => scrollToSection('lead-messages')}
+                            className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                          >
+                            View Full Details &rarr;
+                          </button>
                         </div>
                       </section>
                     </div>
