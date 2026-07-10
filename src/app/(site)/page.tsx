@@ -293,9 +293,9 @@ export default function Home() {
           <Reveal delay={120}>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                ['/tour-header.png', 'Grand hall'],
-                ['/baby-shower.png', 'Private celebration'],
-                ['/corporate.png', 'Corporate dinner'],
+                ['/images/dining-hall/main-hall-wedding-wide.png', 'Main hall reception'],
+                ['/images/dining-hall/main-hall-conversation-candid.png', 'Wedding guests in conversation'],
+                ['/images/dining-hall/main-hall-side-dance-candid.png', 'Guests dancing in the main hall'],
               ].map(([src, alt], index) => (
                 <Reveal key={src} delay={index * 90} variant="scale" amount={18}>
                   <figure className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">

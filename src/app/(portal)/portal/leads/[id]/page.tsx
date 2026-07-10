@@ -2067,95 +2067,56 @@ export default function LeadDetailPage({
               if (currentStage === 'inquiry') {
                 return (
                   <>
-                    {/* Next Step & Client Details Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Next Step */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl shadow-black/10 flex items-start gap-4 luxor-soft-enter">
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20">
-                          <ClipboardCheck size={20} />
-                        </span>
-                        <div className="flex-1 flex flex-col justify-between min-h-[160px]">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Next Step</p>
-                            <h2 className="mt-2 text-sm font-bold text-[color:var(--portal-text)] leading-snug">{nextBestMove.title}</h2>
-                            <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
-                            
-                            {/* Next Step Stage-dependent Context Box */}
-                            <div className="mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[11px] space-y-2 text-left w-full">
-                              <div className="flex justify-between">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Source</span>
-                                <span className="font-bold text-[color:var(--portal-text)] capitalize">{formatSourceLabel(lead)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry Date</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Lead Score</span>
-                                <span className="font-bold text-emerald-400">High / Hot Lead</span>
-                              </div>
-                            </div>
+                    {/* Next Step */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#a8792f]">
+                            <ClipboardCheck size={18} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Next Step</p>
+                            <h2 className="mt-1 text-sm font-bold leading-snug text-[color:var(--portal-text)]">{nextBestMove.title}</h2>
+                            <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
                           </div>
-                          <div className="mt-4 flex flex-col items-start">
-                            {recommendedActions[0] ? (
-                              <button
-                                type="button"
-                                onClick={recommendedActions[0].onClick}
-                                disabled={recommendedActions[0].disabled}
-                                className="py-2 px-5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
-                              >
-                                {updatingStatus ? 'Saving...' : recommendedActions[0].label}
-                              </button>
-                            ) : null}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left sm:flex sm:border-y-0 sm:border-l sm:py-0 sm:pl-4 xl:shrink-0">
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Source</p>
+                            <p className="mt-1 truncate text-[10px] font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
+                          </div>
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry</p>
+                            <p className="mt-1 text-[10px] font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</p>
+                          </div>
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Lead Score</p>
+                            <p className="mt-1 text-[10px] font-bold text-emerald-400">High / Hot</p>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-3 xl:justify-end">
+                          {recommendedActions[0] ? (
                             <button
                               type="button"
-                              onClick={() => scrollToSection('lead-booking')}
-                              className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                              onClick={recommendedActions[0].onClick}
+                              disabled={recommendedActions[0].disabled}
+                              className="flex-1 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-95 disabled:opacity-40 xl:flex-none cursor-pointer"
                             >
-                              Preview Contract &rarr;
+                              {updatingStatus ? 'Saving...' : recommendedActions[0].label}
                             </button>
-                          </div>
-                        </div>
-                      </section>
-
-                      {/* Client Summary */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
-                        </div>
-                        <div className="space-y-3.5 text-xs text-left">
-                          <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
-                            <Mail size={14} className="text-[#a8792f]" />
-                            <span>{lead.email || 'No email captured'}</span>
-                          </a>
-                          <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
-                            <Phone size={14} className="text-[#a8792f]" />
-                            <span>{lead.phone || 'No phone captured'}</span>
-                          </a>
-                          <div className="flex items-center gap-3 py-1 text-zinc-300">
-                            <MapPin size={14} className="text-[#a8792f]" />
-                            <span>{lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'}</span>
-                          </div>
-                          <div className="flex items-center gap-3 py-1 text-zinc-300">
-                            <Users size={14} className="text-[#a8792f]" />
-                            <span>{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
-                          </div>
-                          <div className="flex items-center gap-3 py-1 text-zinc-300">
-                            <Star size={14} className="text-[#a8792f]" />
-                            <span>{lead.event_type || 'Event type not captured'}</span>
-                          </div>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                          ) : null}
                           <button
                             type="button"
-                            onClick={() => scrollToSection('lead-messages')}
-                            className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                            onClick={() => scrollToSection('lead-booking')}
+                            className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] transition-colors hover:text-[#f1d27a] cursor-pointer"
                           >
-                            View Full Details &rarr;
+                            Contract &rarr;
                           </button>
                         </div>
-                      </section>
-                    </div>
+                      </div>
+                    </section>
 
                     {/* Event Details */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -2630,13 +2591,13 @@ export default function LeadDetailPage({
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Photos & Documents Shared</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/dining-hall-wedding.jpg" alt="Wedding layout" className="object-cover w-full h-full" />
+                          <img src="/images/dining-hall/main-hall-wedding-wide.png" alt="Main hall wedding layout" className="object-cover w-full h-full" />
                         </div>
                         <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/dining-hall-wedding-angle.jpg" alt="Dining hall angle" className="object-cover w-full h-full" />
+                          <img src="/images/dining-hall/main-hall-quinceanera-angle.png" alt="Main hall Quinceañera layout" className="object-cover w-full h-full" />
                         </div>
                         <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/dining-hall-wedding-candid.jpg" alt="Dining hall candid" className="object-cover w-full h-full" />
+                          <img src="/images/dining-hall/main-hall-table-candid.png" alt="Main hall candid table view" className="object-cover w-full h-full" />
                         </div>
                         <div className="aspect-[4/3] rounded-lg border border-dashed border-zinc-800 flex flex-col items-center justify-center text-zinc-600 hover:text-white cursor-pointer hover:border-zinc-500 transition-colors">
                           <Plus size={16} />
@@ -3419,6 +3380,23 @@ export default function LeadDetailPage({
               if (currentStage === 'inquiry') {
                 return (
                   <>
+                    {/* Client Summary */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
+                      </div>
+                      <div className="space-y-3.5 text-xs text-left">
+                        <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer"><Mail size={14} className="text-[#a8792f]" /><span>{lead.email || 'No email captured'}</span></a>
+                        <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer"><Phone size={14} className="text-[#a8792f]" /><span>{lead.phone || 'No phone captured'}</span></a>
+                        <div className="flex items-center gap-3 py-1 text-zinc-300"><MapPin size={14} className="text-[#a8792f]" /><span>{lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'}</span></div>
+                        <div className="flex items-center gap-3 py-1 text-zinc-300"><Users size={14} className="text-[#a8792f]" /><span>{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span></div>
+                        <div className="flex items-center gap-3 py-1 text-zinc-300"><Star size={14} className="text-[#a8792f]" /><span>{lead.event_type || 'Event type not captured'}</span></div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                        <button type="button" onClick={() => scrollToSection('lead-messages')} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer">View Full Details &rarr;</button>
+                      </div>
+                    </section>
+
                     {/* Recommended Actions */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
