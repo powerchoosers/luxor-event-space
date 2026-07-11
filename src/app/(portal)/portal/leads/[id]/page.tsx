@@ -43,7 +43,7 @@ import {
   Heart,
   PartyPopper,
 } from 'lucide-react'
-import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -1371,38 +1371,6 @@ export default function LeadDetailPage({
       notify({ title: 'Booking not created', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSubmittingBooking(false)
-    }
-  }
-
-  const handleClientSummaryUpdate = async ({ email, phone, address }: { email: string; phone: string; address: string }) => {
-    if (!lead || savingLeadField) return false
-    const previousLead = lead
-    const normalizedEmail = normalizeLeadFieldValue('email', email)
-    const normalizedPhone = normalizeLeadFieldValue('phone', phone)
-    const normalizedAddress = normalizeLeadFieldValue('address', address)
-    const updatedMetadata = { ...lead.metadata, address: normalizedAddress }
-
-    try {
-      setSavingLeadField('email')
-      const res = await fetch('/api/inquiries', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, email: normalizedEmail, phone: normalizedPhone, metadata: updatedMetadata }),
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload.error || 'Failed to update client details.')
-      const updated = payload as LuxorInquiry
-      setLead(updated)
-      void fetchClientEmailThread(updated.email || '')
-      notify({ title: 'Client details updated', variant: 'success' })
-      return true
-    } catch (err) {
-      console.error(err)
-      setLead(previousLead)
-      notify({ title: 'Client details not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
-      return false
-    } finally {
-      setSavingLeadField(null)
     }
   }
 
@@ -3533,7 +3501,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
@@ -3543,7 +3511,7 @@ export default function LeadDetailPage({
                     <ClientSummaryCard
                       lead={lead}
                       isSaving={Boolean(savingLeadField)}
-                      onUpdate={handleClientSummaryUpdate}
+                      onUpdate={handleLeadFieldUpdate}
                       onViewDetails={() => scrollToSection('lead-messages')}
                     />
 
@@ -3762,7 +3730,7 @@ export default function LeadDetailPage({
                   <ClientSummaryCard
                     lead={lead}
                     isSaving={Boolean(savingLeadField)}
-                    onUpdate={handleClientSummaryUpdate}
+                    onUpdate={handleLeadFieldUpdate}
                     onViewDetails={() => scrollToSection('lead-messages')}
                   />
 
@@ -3993,7 +3961,7 @@ export default function LeadDetailPage({
           {/* Sidebar Panel Column */}
           <div className={`space-y-6 ${
             activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-              ? 'lg:sticky lg:top-8 lg:self-start'
+              ? 'lg:sticky lg:top-20 lg:self-start'
               : ''
           }`}>
             {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
@@ -4912,7 +4880,7 @@ function ClientDossierLoading() {
         </div>
 
         {/* Sidebar Recommended Actions Column Skeleton */}
-        <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
+        <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
               <div className="h-5 w-40 luxor-skeleton rounded" />
@@ -4944,34 +4912,31 @@ function ClientSummaryCard({
 }: {
   lead: LuxorInquiry
   isSaving: boolean
-  onUpdate: (details: { email: string; phone: string; address: string }) => Promise<boolean>
+  onUpdate: (field: EditableLeadField, value: string) => Promise<boolean>
   onViewDetails: () => void
 }) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [email, setEmail] = useState(lead.email || '')
-  const [phone, setPhone] = useState(lead.phone || '')
-  const [address, setAddress] = useState(lead.metadata?.address ? String(lead.metadata.address) : '')
-
-  const handleSave = async () => {
-    const saved = await onUpdate({ email, phone, address })
-    if (saved) setIsEditing(false)
-  }
-
-  const handleToggleEdit = () => {
-    if (!isEditing) {
-      setEmail(lead.email || '')
-      setPhone(lead.phone || '')
-      setAddress(lead.metadata?.address ? String(lead.metadata.address) : '')
-    }
-    setIsEditing((current) => !current)
-  }
-
-  const summaryRows = [
-    { icon: <Mail size={14} />, value: lead.email || 'No email captured', href: lead.email ? `mailto:${lead.email}` : undefined, missing: !lead.email },
-    { icon: <Phone size={14} />, value: lead.phone || 'No phone captured', href: lead.phone ? `tel:${lead.phone}` : undefined, missing: !lead.phone },
-    { icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', missing: !lead.metadata?.address },
-    { icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', missing: !lead.guest_count },
-    { icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', missing: !lead.event_type },
+  const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
+  const guestCountOptions = Array.from(new Set([
+    ...(currentGuestCount ? [currentGuestCount] : []),
+    ...Array.from({ length: 20 }, (_, index) => String((index + 1) * 25)),
+  ])).map((value) => ({ value, label: `${value} guests` }))
+  const summaryRows: Array<{
+    label: string
+    value: string
+    editValue: string
+    copyValue: string
+    field: EditableLeadField
+    icon: React.ReactNode
+    inputType?: LeadDetailInputType
+    placeholder?: string
+    options?: { value: string; label: string }[]
+    isMono?: boolean
+  }> = [
+    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true },
+    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone || 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true },
+    { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
+    { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
+    { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'select', options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
   ]
 
   return (
@@ -4986,46 +4951,24 @@ function ClientSummaryCard({
             <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleToggleEdit}
-          disabled={isSaving}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/25 hover:text-[#caa24c] disabled:opacity-40"
-        >
-          <Pencil size={11} /> {isEditing ? 'Cancel' : 'Edit'}
+        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-600">Hover to edit</span>
+      </div>
+      <div className="flex-1 space-y-0.5">
+        {summaryRows.map((row) => (
+          <DetailItem
+            key={row.label}
+            compact
+            {...row}
+            isSaving={isSaving}
+            onCommit={(value) => onUpdate(row.field, value)}
+          />
+        ))}
+      </div>
+      <div className="mt-4 border-t border-zinc-100/5 pt-3 dark:border-zinc-850/30">
+        <button type="button" onClick={onViewDetails} className="w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:bg-[#caa24c]/14 hover:text-[#f1d27a]">
+          Open Messages &rarr;
         </button>
       </div>
-      {isEditing ? (
-        <div className="space-y-3">
-          {[
-            { label: 'Email', value: email, setValue: setEmail, type: 'email', placeholder: 'client@email.com' },
-            { label: 'Phone', value: phone, setValue: setPhone, type: 'tel', placeholder: 'Phone number' },
-            { label: 'Address', value: address, setValue: setAddress, type: 'text', placeholder: 'San Antonio, TX' },
-          ].map((field) => (
-            <label key={field.label} className="block">
-              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{field.label}</span>
-              <input type={field.type} value={field.value} onChange={(event) => field.setValue(event.target.value)} placeholder={field.placeholder} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-zinc-700 focus:border-[#caa24c]/40" />
-            </label>
-          ))}
-          <button type="button" onClick={handleSave} disabled={isSaving} className="w-full rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f] disabled:opacity-40">
-            {isSaving ? 'Saving...' : 'Save Client Details'}
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="flex-1 space-y-2 text-left text-xs">
-            {summaryRows.map((row, index) => {
-              const content = <><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">{row.icon}</span><span className={row.missing ? 'text-zinc-600' : 'text-zinc-300'}>{row.value}</span></>
-              return row.href ? <a key={index} href={row.href} className="flex items-center gap-3 rounded-lg py-1 transition-colors hover:bg-[#caa24c]/5">{content}</a> : <div key={index} className="flex items-center gap-3 rounded-lg py-1">{content}</div>
-            })}
-          </div>
-          <div className="mt-4 border-t border-zinc-100/5 pt-3 dark:border-zinc-850/30">
-            <button type="button" onClick={onViewDetails} className="w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:bg-[#caa24c]/14 hover:text-[#f1d27a]">
-              Open Messages &rarr;
-            </button>
-          </div>
-        </>
-      )}
     </section>
   )
 }
@@ -5262,6 +5205,7 @@ function DetailItem({
   isSaving = false,
   onCommit,
   options = [],
+  compact = false,
 }: {
   icon?: React.ReactNode
   label: string
@@ -5275,6 +5219,7 @@ function DetailItem({
   isSaving?: boolean
   onCommit?: (value: string) => Promise<boolean>
   options?: { value: string; label: string }[]
+  compact?: boolean
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
@@ -5338,21 +5283,21 @@ function DetailItem({
           startEditing()
         }
       }}
-      className={`group/card relative flex min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5 rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
+      className={`group/card relative flex ${compact ? 'min-h-10 items-center gap-3 px-2 -mx-2 py-1' : 'min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5'} rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
       {icon ? (
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">
+        <span className={`${compact ? '' : 'mt-0.5'} flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]`}>
           {icon}
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div>
+      {!compact ? <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div> : null}
 
       {isEditing ? (
         inputType === 'date' ? (
-          <div className="mt-2 w-full" onClick={(event) => event.stopPropagation()}>
+          <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
             <PortalDatePicker
               value={draft}
               onChange={async (val) => {
@@ -5367,7 +5312,7 @@ function DetailItem({
             />
           </div>
         ) : inputType === 'select' ? (
-          <div className="mt-2 w-full" onClick={(event) => event.stopPropagation()}>
+          <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
             <PortalSelect
               value={draft}
               disabled={isSaving}
@@ -5407,15 +5352,15 @@ function DetailItem({
                 setIsEditing(false)
               }
             }}
-            className={`mt-2 w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 py-2 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
+            className={`${compact ? 'py-1.5' : 'mt-2 py-2'} w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
               isMono ? 'font-mono' : ''
             }`}
           />
         )
       ) : (
-        <div className={`group/value relative mt-2 flex w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
+        <div className={`group/value relative ${compact ? '' : 'mt-2'} flex w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
           <p
-            className={`min-w-0 flex-1 truncate text-sm font-bold leading-normal text-[color:var(--portal-text)] transition-all duration-150 group-hover/value:pr-[5.5rem] ${
+            className={`min-w-0 flex-1 truncate ${compact ? 'text-xs font-medium' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 group-hover/value:pr-[5.5rem] ${
               isMono ? 'font-mono text-xs' : ''
             }`}
           >
