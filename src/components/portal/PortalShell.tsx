@@ -241,11 +241,10 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                     <AnimatePresence initial={false}>
                       {operationsExpanded && !sidebarCollapsed && (
                         <motion.div
-                          initial={{ opacity: 0, scaleY: 0.96 }}
-                          animate={{ opacity: 1, scaleY: 1 }}
-                          exit={{ opacity: 0, scaleY: 0.96 }}
-                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                          style={{ originY: 0 }}
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                           className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1 overflow-hidden"
                         >
                           {operationsSubItems.map((sub) => {
