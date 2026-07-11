@@ -2035,12 +2035,13 @@ export default function LeadDetailPage({
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
             {lead.email && (
-              <a 
-                href={`mailto:${lead.email}`} 
-                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/2"
+              <button 
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/2 cursor-pointer"
               >
                 <Mail size={13} /> Email Client
-              </a>
+              </button>
             )}
             {lead.phone && (
               <div className="relative inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors">
@@ -4379,9 +4380,9 @@ export default function LeadDetailPage({
         <a href={lead.phone ? `tel:${lead.phone}` : undefined} aria-disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] aria-disabled:pointer-events-none aria-disabled:opacity-40">
           <Phone size={14} /> Call
         </a>
-        <a href={lead.email ? `mailto:${lead.email}` : undefined} aria-disabled={!lead.email} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] aria-disabled:pointer-events-none aria-disabled:opacity-40">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))} disabled={!lead.email} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
           <Mail size={14} /> Email
-        </a>
+        </button>
         <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
           <ChevronRight size={14} /> Next
         </button>
@@ -4931,8 +4932,9 @@ function ClientSummaryCard({
     placeholder?: string
     options?: { value: string; label: string }[]
     isMono?: boolean
+    onCompose?: () => void
   }> = [
-    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true },
+    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
     { label: 'Phone', icon: <Phone size={14} />, value: lead.phone || 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true },
     { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
     { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
@@ -5206,6 +5208,7 @@ function DetailItem({
   onCommit,
   options = [],
   compact = false,
+  onCompose,
 }: {
   icon?: React.ReactNode
   label: string
@@ -5220,6 +5223,7 @@ function DetailItem({
   onCommit?: (value: string) => Promise<boolean>
   options?: { value: string; label: string }[]
   compact?: boolean
+  onCompose?: () => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
@@ -5242,6 +5246,10 @@ function DetailItem({
   }, [isEditing, inputType])
 
   const startEditing = () => {
+    if (onCompose) {
+      onCompose()
+      return
+    }
     if (!canEdit || isSaving) return
     setDraft(editValue ?? value)
     setIsEditing(true)
@@ -5380,6 +5388,19 @@ function DetailItem({
                   }`}
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              ) : null}
+              {onCompose ? (
+                <button
+                  type="button"
+                  aria-label={`Email client`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onCompose()
+                  }}
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#a8792f]"
+                >
+                  <Mail size={13} />
                 </button>
               ) : null}
               {canEdit ? (

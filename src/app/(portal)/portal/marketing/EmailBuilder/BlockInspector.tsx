@@ -7,6 +7,7 @@ import { PortalSelect } from '@/components/portal/PortalUI'
 interface InspectorProps {
   block: EmailBlock
   onChange: (updated: EmailBlock) => void
+  onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void
 }
 
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-1.5'
@@ -41,7 +42,7 @@ function RowFields({ children }: { children: React.ReactNode }) {
 }
 
 // ─── Hero Inspector ──────────────────────────────────────────────────────────
-function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: HeroBlock) => void }) {
+function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; onChange: (b: HeroBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void }) {
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
@@ -49,7 +50,18 @@ function HeroInspector({ block, onChange }: { block: HeroBlock; onChange: (b: He
         💡 <strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.
       </div>
       <Field label="Background Image URL">
-        <input className={inputCls} placeholder="https://..." value={block.backgroundImage} onChange={(e) => u({ backgroundImage: e.target.value })} />
+        <div className="flex gap-2">
+          <input className={inputCls} placeholder="https://..." value={block.backgroundImage} onChange={(e) => u({ backgroundImage: e.target.value })} />
+          {onBrowseImage && (
+            <button
+              type="button"
+              onClick={() => onBrowseImage('backgroundImage')}
+              className="shrink-0 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Browse
+            </button>
+          )}
+        </div>
       </Field>
       <RowFields>
         <Field label="Overlay Opacity">
@@ -117,7 +129,7 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
 }
 
 // ─── Image+Text Inspector ─────────────────────────────────────────────────────
-function ImageTextInspector({ block, onChange }: { block: ImageTextBlock; onChange: (b: ImageTextBlock) => void }) {
+function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTextBlock; onChange: (b: ImageTextBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void }) {
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
@@ -125,7 +137,18 @@ function ImageTextInspector({ block, onChange }: { block: ImageTextBlock; onChan
         💡 <strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.
       </div>
       <Field label="Image URL">
-        <input className={inputCls} placeholder="https://..." value={block.imageUrl} onChange={(e) => u({ imageUrl: e.target.value })} />
+        <div className="flex gap-2">
+          <input className={inputCls} placeholder="https://..." value={block.imageUrl} onChange={(e) => u({ imageUrl: e.target.value })} />
+          {onBrowseImage && (
+            <button
+              type="button"
+              onClick={() => onBrowseImage('imageUrl')}
+              className="shrink-0 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Browse
+            </button>
+          )}
+        </div>
       </Field>
       <RowFields>
         <Field label="Image Alt">
@@ -279,7 +302,7 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
 }
 
 // ─── Main Inspector ───────────────────────────────────────────────────────────
-export function BlockInspector({ block, onChange }: InspectorProps) {
+export function BlockInspector({ block, onChange, onBrowseImage }: InspectorProps) {
   const titles: Record<string, string> = {
     hero: '🖼️ Hero Block',
     text: '📝 Text Block',
@@ -298,9 +321,9 @@ export function BlockInspector({ block, onChange }: InspectorProps) {
         <h3 className="text-sm font-bold text-white/90 mt-1">{titles[block.type] ?? 'Block'}</h3>
       </div>
       <div className="flex-1 overflow-y-auto portal-scrollbar px-5 py-5">
-        {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} />}
+        {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} onBrowseImage={onBrowseImage} />}
         {block.type === 'text'        && <TextInspector block={block} onChange={onChange as (b: TextBlock) => void} />}
-        {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} />}
+        {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} onBrowseImage={onBrowseImage} />}
         {block.type === 'button'      && <ButtonInspector block={block} onChange={onChange as (b: ButtonBlock) => void} />}
         {block.type === 'two_column'  && <TwoColumnInspector />}
         {block.type === 'divider'     && <DividerInspector block={block} onChange={onChange as (b: DividerBlock) => void} />}

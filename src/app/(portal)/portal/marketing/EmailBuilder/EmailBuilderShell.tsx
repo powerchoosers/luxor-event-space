@@ -10,6 +10,7 @@ import { BlockInspector } from './BlockInspector'
 import { EmailPreview } from './EmailPreview'
 import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
+import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -289,6 +290,23 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   const [history, setHistory] = useState<EmailBlock[][]>(initialBuilderState.history)
   const [historyIdx, setHistoryIdx] = useState(0)
 
+  // Brand Asset Picker States & Actions
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false)
+  const [activePickerField, setActivePickerField] = useState<'backgroundImage' | 'imageUrl' | null>(null)
+
+  const handleBrowseImage = (field: 'backgroundImage' | 'imageUrl') => {
+    setActivePickerField(field)
+    setAssetPickerOpen(true)
+  }
+
+  const handleAssetSelect = (url: string) => {
+    if (selectedId && activePickerField) {
+      setBlocks(prev => prev.map(b => b.id === selectedId ? { ...b, [activePickerField]: url } : b))
+    }
+    setAssetPickerOpen(false)
+    setActivePickerField(null)
+  }
+
   async function loadSavedTemplates() {
     setTemplatesLoading(true)
     try {
@@ -485,6 +503,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
               onChange={(updated) => {
                 handleBlockChange(updated)
               }}
+              onBrowseImage={handleBrowseImage}
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
@@ -520,6 +539,11 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         blocks={blocks}
         subject={subject || 'Email from Luxor'}
         onClose={() => setShowPreview(false)}
+      />
+      <BrandAssetPicker
+        isOpen={assetPickerOpen}
+        onClose={() => setAssetPickerOpen(false)}
+        onSelect={handleAssetSelect}
       />
     </div>
   )

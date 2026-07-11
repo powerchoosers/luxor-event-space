@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Settings,
   Building,
@@ -13,7 +13,11 @@ import {
   Trash2,
   Lock,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
+  Copy,
+  Check,
+  Loader2
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -23,6 +27,7 @@ import {
   PortalTableCard,
   PortalSelect
 } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 
 type Tab =
   | 'business'
@@ -32,16 +37,114 @@ type Tab =
   | 'integrations'
   | 'hours'
 
+type BrandAsset = {
+  id: string
+  name: string
+  url: string
+  category: string
+  created_at: string
+  metadata?: Record<string, unknown>
+}
+
 export default function SettingsPage() {
+  const { notify } = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('business')
   const [saving, setSaving] = useState(false)
+
+  // Brand Assets Management States
+  const [assets, setAssets] = useState<BrandAsset[]>([])
+  const [loadingAssets, setLoadingAssets] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [assetFile, setAssetFile] = useState<File | null>(null)
+  const [assetName, setAssetName] = useState('')
+  const [assetCategory, setAssetCategory] = useState('general')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchAssets()
+  }, [])
+
+  const fetchAssets = async () => {
+    try {
+      setLoadingAssets(true)
+      const res = await fetch('/api/portal/brand-assets')
+      if (res.ok) {
+        const data = await res.json()
+        setAssets(data.assets || [])
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingAssets(false)
+    }
+  }
+
+  const handleUploadAsset = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!assetFile) return
+
+    try {
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('file', assetFile)
+      formData.append('name', assetName.trim())
+      formData.append('category', assetCategory)
+      formData.append('makeBrandAsset', 'true')
+
+      const res = await fetch('/api/portal/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (res.ok) {
+        notify({ title: 'Brand asset uploaded successfully.', variant: 'success' })
+        setAssetFile(null)
+        setAssetName('')
+        setAssetCategory('general')
+        void fetchAssets()
+      } else {
+        const err = await res.json()
+        throw new Error(err.error || 'Upload failed')
+      }
+    } catch (err) {
+      notify({ title: err instanceof Error ? err.message : 'Upload failed', variant: 'error' })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteAsset = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this brand asset? The file will be removed from storage.')) return
+
+    try {
+      const res = await fetch(`/api/portal/brand-assets?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      })
+
+      if (res.ok) {
+        notify({ title: 'Asset deleted successfully.', variant: 'success' })
+        setAssets(prev => prev.filter(a => a.id !== id))
+      } else {
+        throw new Error('Deletion failed')
+      }
+    } catch (err) {
+      notify({ title: 'Failed to delete asset.', variant: 'error' })
+    }
+  }
+
+  const handleCopyUrl = (id: string, url: string) => {
+    void navigator.clipboard.writeText(url)
+    setCopiedId(id)
+    notify({ title: 'Asset URL copied to clipboard!', variant: 'success' })
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setTimeout(() => {
       setSaving(false)
-      alert('Settings saved successfully.')
+      notify({ title: 'Settings saved successfully.', variant: 'success' })
     }, 800)
   }
 
@@ -108,31 +211,186 @@ export default function SettingsPage() {
 
           {/* PORTAL BRANDING */}
           {activeTab === 'branding' && (
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Branding & Style Guide</h3>
-              <div className="space-y-4 text-xs text-zinc-400">
-                <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-                  <div>
-                    <p className="font-bold text-white">Primary Brand Color</p>
-                    <p className="text-[10px] text-zinc-550 mt-0.5">Luxor Gold Lockup Accent</p>
+            <div className="space-y-6">
+              {/* Style Guide */}
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Branding & Style Guide</h3>
+                <div className="space-y-4 text-xs text-zinc-400">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                    <div>
+                      <p className="font-bold text-white">Primary Brand Color</p>
+                      <p className="text-[10px] text-zinc-550 mt-0.5">Luxor Gold Lockup Accent</p>
+                    </div>
+                    <span className="font-mono text-xs font-bold text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-3 py-1 rounded">#CAA24C</span>
                   </div>
-                  <span className="font-mono text-xs font-bold text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-3 py-1 rounded">#CAA24C</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-                  <div>
-                    <p className="font-bold text-white">Interface Fonts</p>
-                    <p className="text-[10px] text-zinc-550 mt-0.5">Serif: Cormorant Garamond / Sans: Manrope</p>
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                    <div>
+                      <p className="font-bold text-white">Interface Fonts</p>
+                      <p className="text-[10px] text-zinc-550 mt-0.5">Serif: Cormorant Garamond / Sans: Manrope</p>
+                    </div>
+                    <span className="text-xs font-serif text-[#caa24c] italic">Garamond Active</span>
                   </div>
-                  <span className="text-xs font-serif text-[#caa24c] italic">Garamond Active</span>
+                  <div className="space-y-2">
+                    <p className="font-bold text-white">Venue Brand Tagline</p>
+                    <input
+                      type="text"
+                      defaultValue="ELEGANT SPACES. UNFORGETTABLE EVENTS."
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="font-bold text-white">Venue Brand Tagline</p>
-                  <input
-                    type="text"
-                    defaultValue="ELEGANT SPACES. UNFORGETTABLE EVENTS."
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
-                  />
+              </div>
+
+              {/* Brand Assets Manager */}
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Brand Assets Manager</h3>
+                  <p className="text-[10px] text-zinc-550 mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
                 </div>
+
+                {/* Upload Form */}
+                <div className="border border-[color:var(--portal-border)] bg-black/30 rounded-xl p-4 space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Upload New Asset</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* File Input */}
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] uppercase font-bold text-zinc-550">Image File</label>
+                      <div className="relative border border-dashed border-[color:var(--portal-border)] rounded-lg bg-black/50 p-3 flex flex-col items-center justify-center text-center cursor-pointer min-h-[80px]">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => {
+                            if (e.target.files && e.target.files[0]) {
+                              const f = e.target.files[0]
+                              setAssetFile(f)
+                              const base = f.name.substring(0, f.name.lastIndexOf('.')) || f.name
+                              setAssetName(base.replace(/[^a-zA-Z0-9\s-_]/g, ' '))
+                            }
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                        <Upload size={16} className="text-zinc-550 mb-1" />
+                        <p className="text-[10px] text-zinc-400 font-medium truncate max-w-full px-2">
+                          {assetFile ? assetFile.name : 'Choose file...'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Meta Fields */}
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] uppercase font-bold text-zinc-550">Asset Name</label>
+                        <input
+                          type="text"
+                          value={assetName}
+                          onChange={e => setAssetName(e.target.value)}
+                          placeholder="e.g. Logo Header Gold"
+                          className="w-full bg-black border border-[color:var(--portal-border)] rounded-md px-3 py-1.5 text-xs text-zinc-300 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] uppercase font-bold text-zinc-550">Category</label>
+                        <select
+                          value={assetCategory}
+                          onChange={e => setAssetCategory(e.target.value)}
+                          className="w-full bg-black border border-[color:var(--portal-border)] rounded-md px-3 py-1.5 text-xs text-zinc-300 outline-none cursor-pointer"
+                        >
+                          <option value="general">General</option>
+                          <option value="logo">Logo</option>
+                          <option value="banner">Banner</option>
+                          <option value="signature">Signature</option>
+                        </select>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={handleUploadAsset}
+                      disabled={uploading || !assetFile || !assetName.trim()}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#caa24c]/10 border border-[#caa24c]/30 hover:bg-[#caa24c]/20 text-[#f1d27a] px-4 py-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                    >
+                      {uploading ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={12} />
+                          <span>Upload Brand Asset</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Library grid */}
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Asset Library</h4>
+                  {loadingAssets ? (
+                    <div className="text-center py-6 text-xs text-zinc-500 flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin text-[#caa24c]" />
+                      <span>Loading library...</span>
+                    </div>
+                  ) : assets.length === 0 ? (
+                    <p className="text-xs italic text-zinc-650 py-4 text-center border border-zinc-900 border-dashed rounded-xl">
+                      No assets in your brand library yet. Upload an image above to start.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {assets.map(asset => (
+                        <div
+                          key={asset.id}
+                          className="flex items-center gap-3 border border-[color:var(--portal-border)] bg-black/20 rounded-xl p-3 hover:border-zinc-800 transition-colors"
+                        >
+                          {/* Image box */}
+                          <div className="w-12 h-12 bg-black border border-zinc-900 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+                            <img src={asset.url} alt={asset.name} className="max-w-full max-h-full object-contain" />
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-zinc-200 truncate">{asset.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="rounded bg-zinc-950 border border-zinc-900 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-zinc-500">
+                                {asset.category}
+                              </span>
+                              <span className="text-[8px] text-zinc-650 font-mono">
+                                {new Date(asset.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUrl(asset.id, asset.url)}
+                              title="Copy Public URL"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-900 bg-black/40 text-zinc-400 hover:text-[#caa24c] hover:border-[#caa24c]/20 transition-all cursor-pointer"
+                            >
+                              {copiedId === asset.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAsset(asset.id)}
+                              title="Delete Brand Asset"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-900 bg-black/40 text-zinc-400 hover:text-red-400 hover:border-red-500/20 transition-all cursor-pointer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
           )}

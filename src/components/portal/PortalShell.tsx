@@ -36,6 +36,7 @@ import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
 import { ToastProvider } from '@/components/portal/ToastProvider'
+import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
 
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
@@ -104,6 +105,29 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   // Notification State
   const [notificationCount, setNotificationCount] = useState(0)
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
+
+  // Global Email Compose State & Event Listener
+  const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [composeLead, setComposeLead] = useState<LuxorInquiry | null>(null)
+
+  useEffect(() => {
+    const handleComposeEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string }>
+      if (customEvent.detail?.lead) {
+        setComposeLead(customEvent.detail.lead)
+      } else if (customEvent.detail?.email) {
+        setComposeLead({ email: customEvent.detail.email, full_name: customEvent.detail.email } as LuxorInquiry)
+      } else {
+        setComposeLead(null)
+      }
+      setIsComposeOpen(true)
+    }
+
+    window.addEventListener('luxor-compose-email', handleComposeEvent)
+    return () => {
+      window.removeEventListener('luxor-compose-email', handleComposeEvent)
+    }
+  }, [])
   
   // Header Global Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -334,19 +358,39 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                     Matching Dossier Records
                   </div>
                   {searchResults.map((result) => (
-                    <button
+                    <div
                       key={result.id}
-                      onClick={() => selectSearchResult(result.id)}
-                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded hover:bg-[color:var(--portal-soft)] transition-colors"
+                      className="group/item flex items-center justify-between rounded hover:bg-[color:var(--portal-soft)] transition-colors"
                     >
-                      <div className="truncate pr-2">
-                        <p className="text-xs font-bold text-white leading-tight">{result.full_name}</p>
-                        <p className="text-[9px] text-zinc-500 truncate mt-0.5">{result.email || 'No email registered'}</p>
+                      <button
+                        type="button"
+                        onClick={() => selectSearchResult(result.id)}
+                        className="flex-1 text-left px-3 py-2 outline-none cursor-pointer"
+                      >
+                        <div className="truncate pr-2">
+                          <p className="text-xs font-bold text-white leading-tight">{result.full_name}</p>
+                          <p className="text-[9px] text-zinc-500 truncate mt-0.5">{result.email || 'No email registered'}</p>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1.5 pr-3 shrink-0">
+                        {result.email && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: result } }))
+                            }}
+                            className="rounded p-1 text-zinc-500 hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
+                            title={`Email ${result.full_name}`}
+                          >
+                            <Mail size={13} />
+                          </button>
+                        )}
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">
+                          {result.event_type || 'Booking'}
+                        </span>
                       </div>
-                      <span className="shrink-0 text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">
-                        {result.event_type || 'Booking'}
-                      </span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -442,6 +486,11 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         </div>
       </main>
       {elenaOpen ? <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} /> : null}
+      <EmailComposeDrawer
+        isOpen={isComposeOpen}
+        onClose={() => setIsComposeOpen(false)}
+        lead={composeLead}
+      />
       </ToastProvider>
     </body>
   )
