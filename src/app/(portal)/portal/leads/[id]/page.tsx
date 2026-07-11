@@ -45,6 +45,7 @@ import {
 } from 'lucide-react'
 import { LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
+import { useToast } from '@/components/portal/ToastProvider'
 
 type ZohoEmailMessage = {
   id: string
@@ -141,6 +142,7 @@ export default function LeadDetailPage({
 }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
+  const { notify } = useToast()
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
@@ -201,6 +203,8 @@ export default function LeadDetailPage({
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
+  const [showCallMenu, setShowCallMenu] = useState(false)
+  const [showInvoiceMenu, setShowInvoiceMenu] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
@@ -262,7 +266,7 @@ export default function LeadDetailPage({
     } catch (err) {
       console.error(err)
       setLead(previousLead)
-      alert(err instanceof Error ? err.message : 'Failed to update metadata.')
+      notify({ title: 'Update failed', description: err instanceof Error ? err.message : 'Failed to update metadata.', variant: 'error' })
       return false
     }
   }
@@ -564,7 +568,7 @@ export default function LeadDetailPage({
       setIsEditingSummary(false)
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to save event summary.')
+      notify({ title: 'Event summary not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSavingSummary(false)
     }
@@ -601,7 +605,7 @@ export default function LeadDetailPage({
       setIsEditingTourAttendance(false)
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to update tour attendance.')
+      notify({ title: 'Tour details not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSavingTourAttendance(false)
     }
@@ -757,7 +761,7 @@ export default function LeadDetailPage({
       }
     } catch (err) {
       console.error(err)
-      alert('Unable to update marketing subscription status.')
+      notify({ title: 'Marketing status not updated', description: 'Please try again.', variant: 'error' })
     } finally {
       setTogglingMarketing(false)
     }
@@ -844,7 +848,8 @@ export default function LeadDetailPage({
   }
 
   const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
-    if (!lead) return
+    if (!lead) return false
+    const previousStatus = lead.status
     try {
       setUpdatingStatus(true)
       setPendingLifecycleStatus(newStatus)
@@ -856,10 +861,18 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error('Failed to update status.')
       const updated = await res.json()
       setLead(updated)
+      const statusNote = await createFlowNote(
+        `Lead status changed from ${previousStatus.replaceAll('_', ' ')} to ${newStatus.replaceAll('_', ' ')}.`,
+        'status_change',
+      )
+      setNotes((current) => [statusNote, ...current])
       await fetchAllData(false)
+      notify({ title: 'Lead status updated', description: `Moved to ${newStatus.replaceAll('_', ' ')}.`, variant: 'success' })
+      return true
     } catch (err) {
       console.error(err)
-      alert('Error updating status.')
+      notify({ title: 'Status not updated', description: 'The lead stayed at its previous stage. Please try again.', variant: 'error' })
+      return false
     } finally {
       setUpdatingStatus(false)
       setPendingLifecycleStatus(null)
@@ -900,7 +913,7 @@ export default function LeadDetailPage({
       } catch (err) {
         console.error(err)
         setLead(previousLead)
-        alert(err instanceof Error ? err.message : 'Failed to update address detail.')
+        notify({ title: 'Address not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
         return false
       } finally {
         setSavingLeadField(null)
@@ -939,7 +952,7 @@ export default function LeadDetailPage({
     } catch (err) {
       console.error(err)
       setLead(previousLead)
-      alert(err instanceof Error ? err.message : 'Failed to update lead detail.')
+      notify({ title: 'Lead detail not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
       return false
     } finally {
       setSavingLeadField(null)
@@ -967,9 +980,10 @@ export default function LeadDetailPage({
       setNoteContent('')
       setNoteType('note')
       setActiveFeedTab('notes')
+      notify({ title: 'Activity saved', variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert('Error saving note.')
+      notify({ title: 'Note not saved', description: 'Please try again.', variant: 'error' })
     } finally {
       setSubmittingNote(false)
     }
@@ -998,9 +1012,10 @@ export default function LeadDetailPage({
       setTaskDesc('')
       setTaskDueDate('')
       setTaskPriority('medium')
+      notify({ title: 'Task created', variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert('Error adding task.')
+      notify({ title: 'Task not added', description: 'Please try again.', variant: 'error' })
     } finally {
       setSubmittingTask(false)
     }
@@ -1025,9 +1040,10 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error('Failed to update task.')
       const updated = await res.json()
       setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+      notify({ title: newStatus === 'completed' ? 'Task completed' : 'Task reopened', variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert('Failed to update task status.')
+      notify({ title: 'Task not updated', description: 'Please try again.', variant: 'error' })
     }
   }
 
@@ -1098,9 +1114,10 @@ export default function LeadDetailPage({
       setInvoiceDueDate('')
       setInvoiceNotes('')
       setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
+      notify({ title: 'Invoice draft created', description: `${formatMoney(total)} was added to this lead.`, variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert('Error creating invoice.')
+      notify({ title: 'Invoice not created', description: 'Review the invoice fields and try again.', variant: 'error' })
     } finally {
       setSubmittingInvoice(false)
     }
@@ -1164,16 +1181,18 @@ export default function LeadDetailPage({
         'status_change',
       )
       await fetchAllData(false)
+      notify({ title: status === 'signed' ? 'Contract marked signed' : 'Contract marked sent', variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to update contract tracking.')
+      notify({ title: 'Contract status not updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setUpdatingStatus(false)
     }
   }
 
   const handleGuidedStatusChange = async (newStatus: LuxorInquiry['status']) => {
-    await handleStatusChange(newStatus)
+    const statusUpdated = await handleStatusChange(newStatus)
+    if (!statusUpdated) return
 
     try {
       if (newStatus === 'contacted') {
@@ -1198,7 +1217,7 @@ export default function LeadDetailPage({
     const amount = paymentKind === 'deposit' ? depositBalance : remainingBalance
 
     if (amount <= 0) {
-      alert(paymentKind === 'deposit' ? 'The deposit is already covered.' : 'There is no remaining balance to record.')
+      notify({ title: paymentKind === 'deposit' ? 'Deposit already covered' : 'Balance already paid', variant: 'info' })
       return
     }
 
@@ -1245,9 +1264,10 @@ export default function LeadDetailPage({
         'status_change',
       )
       await fetchAllData(false)
+      notify({ title: paymentKind === 'deposit' ? 'Deposit recorded' : 'Final payment recorded', description: formatMoney(amount), variant: 'success' })
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to record payment.')
+      notify({ title: 'Payment not recorded', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setUpdatingStatus(false)
     }
@@ -1318,10 +1338,12 @@ export default function LeadDetailPage({
 
       if (lead.status !== 'booked') {
         await handleStatusChange('booked')
+      } else {
+        notify({ title: 'Booking created', description: bookingEventDate ? formatDisplayDate(bookingEventDate) : 'Event date still to be confirmed.', variant: 'success' })
       }
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : 'Failed to create booking.')
+      notify({ title: 'Booking not created', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSubmittingBooking(false)
     }
@@ -1856,7 +1878,7 @@ export default function LeadDetailPage({
 
 
   return (
-    <PortalPageFrame className="max-w-[1560px] !gap-0">
+    <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0">
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
@@ -1881,7 +1903,7 @@ export default function LeadDetailPage({
             </div>
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="truncate font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+                <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
                 {lead.email && (
                   <div className="flex items-center gap-3">
                     <button
@@ -1953,7 +1975,7 @@ export default function LeadDetailPage({
               </a>
             )}
             {lead.phone && (
-              <div className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors overflow-hidden">
+              <div className="relative inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors">
                 <a 
                   href={`tel:${lead.phone}`} 
                   className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] hover:bg-[#caa24c]/2"
@@ -1963,14 +1985,23 @@ export default function LeadDetailPage({
                 <span className="h-4 w-px bg-[color:var(--portal-border)]" />
                 <button 
                   type="button" 
+                  onClick={() => setShowCallMenu((current) => !current)}
+                  aria-expanded={showCallMenu}
                   className="px-2 py-2 text-zinc-500 hover:text-white transition-colors cursor-pointer" 
                   aria-label="More call options"
                 >
                   <ChevronDown size={12} />
                 </button>
+                {showCallMenu ? (
+                  <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-48 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
+                    <button type="button" onClick={() => { setNoteType('call_log'); setShowCallMenu(false); scrollToSection('lead-activity') }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Log call notes</button>
+                    <a href={`sms:${lead.phone}`} onClick={() => setShowCallMenu(false)} className="block rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Send text message</a>
+                    <button type="button" onClick={async () => { await navigator.clipboard.writeText(lead.phone || ''); setShowCallMenu(false); notify({ title: 'Phone number copied', variant: 'success' }) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Copy phone number</button>
+                  </div>
+                ) : null}
               </div>
             )}
-            <div className="inline-flex items-center rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] shadow-lg shadow-[#b98a3e]/20 transition-all active:scale-95 overflow-hidden">
+            <div className="relative inline-flex items-center rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] shadow-lg shadow-[#b98a3e]/20 transition-all active:scale-95">
               <button
                 type="button"
                 onClick={() => setIsInvoiceModalOpen(true)}
@@ -1981,11 +2012,19 @@ export default function LeadDetailPage({
               <span className="h-4 w-px bg-white/20" />
               <button 
                 type="button" 
+                onClick={() => setShowInvoiceMenu((current) => !current)}
+                aria-expanded={showInvoiceMenu}
                 className="px-2.5 py-2 text-white/80 hover:text-white transition-colors cursor-pointer" 
                 aria-label="More invoice options"
               >
                 <ChevronDown size={12} />
               </button>
+              {showInvoiceMenu ? (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
+                  <button type="button" onClick={() => { setShowInvoiceMenu(false); setIsInvoiceModalOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Draft custom invoice</button>
+                  <button type="button" onClick={() => { setShowInvoiceMenu(false); setActiveLeadTab('documents') }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">View invoices & documents</button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -2884,12 +2923,33 @@ export default function LeadDetailPage({
                     )}
 
                     {planningSubTab !== 'details' && (
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
-                        <Sparkles size={24} className="mx-auto text-zinc-700" />
-                        <p className="text-xs uppercase font-bold tracking-widest">Section Coming Soon</p>
-                        <p className="text-xs leading-relaxed max-w-sm mx-auto">
-                          This sub-tab section is currently under development to hold your detailed vendors, design tools, and timelines.
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-4 luxor-soft-enter">
+                        <Sparkles size={24} className="mx-auto text-[#caa24c]" />
+                        <p className="text-xs uppercase font-bold tracking-widest text-[color:var(--portal-text)]">
+                          {planningSubTab === 'fb' ? 'Food & Beverage Planning' : planningSubTab === 'decor' ? 'Décor & Design Planning' : planningSubTab === 'vendors' ? 'Vendor Planning' : planningSubTab === 'timeline' ? 'Event Timeline' : 'Event Files'}
                         </p>
+                        <p className="mx-auto max-w-md text-xs leading-relaxed">
+                          {planningSubTab === 'fb' || planningSubTab === 'decor'
+                            ? 'Track each decision as a task so it has an owner, due date, priority, and completion history.'
+                            : 'Open the dedicated workspace for this part of the event plan.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (planningSubTab === 'vendors') setActiveLeadTab('vendors')
+                            else if (planningSubTab === 'timeline') setActiveLeadTab('timeline')
+                            else if (planningSubTab === 'files') setActiveLeadTab('documents')
+                            else {
+                              setTaskTitle(planningSubTab === 'fb' ? 'Food & beverage decision' : 'Décor & design decision')
+                              setTaskPriority('medium')
+                              setShowTaskTools(true)
+                              setActiveLeadTab('tasks')
+                            }
+                          }}
+                          className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] hover:bg-[#caa24c]/15"
+                        >
+                          {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Create planning task' : 'Open workspace'}
+                        </button>
                       </div>
                     )}
                   </>
@@ -2905,7 +2965,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Proposal</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Create, customize, and track your custom proposals.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
                         Proposal Builder
                       </button>
                     </div>
@@ -2917,7 +2977,7 @@ export default function LeadDetailPage({
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Proposal Summary</p>
-                            <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit Details</span>
+                            <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit Details</button>
                           </div>
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
@@ -2990,7 +3050,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Contract</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Generate, sign, and manage legal agreements.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={openBookingModal} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
                         Contract Template
                       </button>
                     </div>
@@ -4291,6 +4351,18 @@ export default function LeadDetailPage({
       </div>
       )}
 
+      <div className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
+        <a href={lead.phone ? `tel:${lead.phone}` : undefined} aria-disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] aria-disabled:pointer-events-none aria-disabled:opacity-40">
+          <Phone size={14} /> Call
+        </a>
+        <a href={lead.email ? `mailto:${lead.email}` : undefined} aria-disabled={!lead.email} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] aria-disabled:pointer-events-none aria-disabled:opacity-40">
+          <Mail size={14} /> Email
+        </a>
+        <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
+          <ChevronRight size={14} /> Next
+        </button>
+      </div>
+
       {/* Vendor picker modal */}
       <PortalModal isOpen={isVendorModalOpen} onClose={() => setIsVendorModalOpen(false)} maxWidth="max-w-2xl">
         <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
@@ -4828,10 +4900,10 @@ function LeadLifecycleRail({
   const inquiryDate = new Date(lead.created_at)
   const formattedInquiryDate = inquiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
-  const tourDate = lead.preferred_tour_date ? new Date(lead.preferred_tour_date) : null
+  const tourDate = parseLocalCalendarDate(lead.preferred_tour_date)
   const formattedTourDate = tourDate ? tourDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
 
-  const eventDate = lead.target_date ? new Date(lead.target_date) : null
+  const eventDate = parseLocalCalendarDate(lead.target_date)
   const formattedEventDate = eventDate ? eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
 
   const formattedProposalSentDate = lead.status === 'proposal_sent' || lead.status === 'booked'
@@ -4928,7 +5000,7 @@ function LeadLifecycleRail({
 
   return (
     <div className="portal-scrollbar overflow-x-auto pb-2">
-      <div className="relative flex min-w-[960px] items-center justify-between px-6 py-4">
+      <div className="relative flex min-w-[760px] items-center justify-between px-4 py-4 sm:min-w-[960px] sm:px-6">
         {/* Track Line */}
         <div className="absolute left-[5%] right-[5%] top-[34px] h-[2px] bg-zinc-200 dark:bg-zinc-800" />
         
@@ -5624,4 +5696,16 @@ function formatDisplayDate(value: string | null | undefined): string {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+function parseLocalCalendarDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (dateOnlyMatch) {
+    return new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]), 12)
+  }
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
 }
