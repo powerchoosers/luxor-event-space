@@ -74,6 +74,38 @@ export default function SpacesPage() {
         </div>
       </section>
 
+      <section className="border-b border-[#caa24c]/16 bg-[#0a0807] py-16 sm:py-24 lg:py-28">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-3xl text-center">
+            <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">The Luxor Lounge</p>
+            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">A darker room for cocktails, conversation, and quieter moments.</h2>
+            <p className="mx-auto mt-6 max-w-2xl text-sm leading-7 text-[#d7c29a]/72 sm:text-base">
+              The lounge gives hosts a separate setting for arrivals, drinks, family time, private celebrations, or a change of pace away from the main hall.
+            </p>
+          </Reveal>
+
+          <div className="mt-12 grid gap-4 lg:grid-cols-12 lg:auto-rows-[19rem]">
+            <Reveal className="lg:col-span-7 lg:row-span-2" variant="scale" amount={18}>
+              <figure className="relative h-full min-h-[30rem] overflow-hidden rounded-md border border-[#caa24c]/22">
+                <Image src="/images/luxor-lounge/luxor-lounge-empty.png" alt="The Luxor Lounge furnished with cocktail tables and seating" fill sizes="(min-width: 1024px) 58vw, 100vw" className="object-cover" />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_45%,rgba(0,0,0,0.72))]" />
+                <figcaption className="absolute bottom-5 left-5 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#fff2bf]">Cocktail-ready layout</figcaption>
+              </figure>
+            </Reveal>
+            <Reveal className="lg:col-span-5" delay={90} variant="scale" amount={18}>
+              <figure className="relative h-full min-h-[19rem] overflow-hidden rounded-md border border-[#caa24c]/22">
+                <Image src="/images/luxor-lounge/luxor-lounge-family.png" alt="Family gathering inside The Luxor Lounge" fill sizes="(min-width: 1024px) 42vw, 100vw" className="object-cover" />
+              </figure>
+            </Reveal>
+            <Reveal className="lg:col-span-5" delay={150} variant="scale" amount={18}>
+              <figure className="relative h-full min-h-[19rem] overflow-hidden rounded-md border border-[#caa24c]/22">
+                <Image src="/images/luxor-lounge/luxor-lounge-corporate.png" alt="Networking reception inside The Luxor Lounge" fill sizes="(min-width: 1024px) 42vw, 100vw" className="object-cover" />
+              </figure>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
       <section className="bg-[#050505] py-16 sm:py-24 lg:py-28">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-8">
           <Reveal>

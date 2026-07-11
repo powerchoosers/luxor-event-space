@@ -9,7 +9,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Grid3X3, Maximize2, X } from 'lu
 import { Reveal } from '@/components/Reveal'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
-type GalleryCategory = 'All' | 'Room' | 'Weddings' | 'Celebrations' | 'Corporate'
+type GalleryCategory = 'All' | 'Room' | 'Lounge' | 'Weddings' | 'Celebrations' | 'Corporate'
 
 type GalleryItem = {
   src: string
@@ -21,7 +21,7 @@ type GalleryItem = {
   sizes: string
 }
 
-const filters: GalleryCategory[] = ['All', 'Room', 'Weddings', 'Celebrations', 'Corporate']
+const filters: GalleryCategory[] = ['All', 'Room', 'Lounge', 'Weddings', 'Celebrations', 'Corporate']
 
 const gallery: GalleryItem[] = [
   {
@@ -74,6 +74,60 @@ const gallery: GalleryItem[] = [
     title: 'A shared toast',
     caption: 'An intimate table-level moment surrounded by candlelight and florals.',
     category: 'Room',
+    span: 'lg:col-span-4',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 34vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-empty.png',
+    title: 'The Luxor Lounge',
+    caption: 'A moody cocktail room with lounge seating, warm lighting, and flexible service space.',
+    category: 'Lounge',
+    span: 'lg:col-span-7 lg:row-span-2',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 58vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-family.png',
+    title: 'Family gathering',
+    caption: 'A comfortable setting for conversation across generations.',
+    category: 'Lounge',
+    span: 'lg:col-span-5',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 42vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-quinceanera.png',
+    title: 'Quinceañera cocktail hour',
+    caption: 'A separate lounge for family, portraits, and quieter moments during the celebration.',
+    category: 'Celebrations',
+    span: 'lg:col-span-5',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 42vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
+    title: 'Lounge celebration',
+    caption: 'A relaxed seated setup for showers and intimate daytime gatherings.',
+    category: 'Celebrations',
+    span: 'lg:col-span-4',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 34vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-corporate.png',
+    title: 'Lounge networking',
+    caption: 'A focused setting for cocktails, introductions, and smaller business gatherings.',
+    category: 'Corporate',
+    span: 'lg:col-span-4',
+    aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
+    sizes: '(min-width: 1024px) 34vw, 100vw',
+  },
+  {
+    src: '/images/luxor-lounge/luxor-lounge-wedding.png',
+    title: 'Wedding cocktail hour',
+    caption: 'A warm side room where guests can gather between the main moments.',
+    category: 'Weddings',
     span: 'lg:col-span-4',
     aspect: 'aspect-[4/3] lg:aspect-auto lg:h-full',
     sizes: '(min-width: 1024px) 34vw, 100vw',
