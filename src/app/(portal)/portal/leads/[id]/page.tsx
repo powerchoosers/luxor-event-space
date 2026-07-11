@@ -1946,7 +1946,7 @@ export default function LeadDetailPage({
 
 
   return (
-    <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0 lg:h-full lg:min-h-0 lg:flex lg:flex-col">
+    <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0">
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
@@ -1954,7 +1954,7 @@ export default function LeadDetailPage({
         <PortalStatusBadge status={lead.status} />
       </div>
 
-      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10 lg:shrink-0">
+      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
@@ -2114,7 +2114,7 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8 lg:shrink-0"
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
           backdropFilter: 'blur(50px)',
@@ -2163,7 +2163,7 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:flex-1 lg:min-h-0 lg:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:h-[calc(100vh-13.5rem)] lg:grid-cols-3 lg:items-start">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="space-y-6 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 portal-scrollbar">
             
@@ -3797,9 +3797,9 @@ export default function LeadDetailPage({
           </div>
         </div>
       ) : (
-        <div className={`mt-3 grid gap-6 pb-12 sm:pb-16 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-2 portal-scrollbar ${
+        <div className={`mt-3 grid gap-6 pb-12 sm:pb-16 ${
           activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-            ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)] lg:items-start'
+            ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
             : 'lg:grid-cols-1'
         }`}>
           {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
@@ -4758,7 +4758,7 @@ export default function LeadDetailPage({
 
 function ClientDossierLoading() {
   return (
-    <PortalPageFrame className="max-w-[1560px] !gap-0 lg:h-full lg:min-h-0 lg:flex lg:flex-col">
+    <PortalPageFrame className="max-w-[1560px] !gap-0">
       {/* 1. Header Back & Status */}
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <div className="h-4 w-40 luxor-skeleton rounded" />
