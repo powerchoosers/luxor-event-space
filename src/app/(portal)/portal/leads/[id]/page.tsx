@@ -2114,7 +2114,7 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:top-0"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
           backdropFilter: 'blur(50px)',
@@ -2163,9 +2163,9 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:h-[calc(100dvh-13.5rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
+        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:sticky lg:top-[3.25rem] lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div className="space-y-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 lg:pb-8 portal-scrollbar">
+          <div className="space-y-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
             
             {/* Stage-specific Content Router */}
             {(() => {
@@ -3501,7 +3501,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 lg:pb-8 portal-scrollbar">
+          <div className="space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
