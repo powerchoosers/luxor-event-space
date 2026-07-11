@@ -36,8 +36,8 @@ export function RouteTransition({
   }
 
   const isPortal = surface === 'portal'
-  const isLeadsListPage = pathname === '/portal/leads'
-  const portalClass = isLeadsListPage 
+  const isLeadsPage = pathname.startsWith('/portal/leads')
+  const portalClass = isLeadsPage 
     ? 'flex-1 min-h-0 flex flex-col transform-gpu' 
     : 'w-full transform-gpu'
   const initialState = isPortal
