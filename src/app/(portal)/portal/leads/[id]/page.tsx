@@ -505,7 +505,7 @@ export default function LeadDetailPage({
       return steps[firstNonCompletedIdx].id
     }
     
-    return 'inquiry'
+    return 'closing'
   }, [lead, latestBooking])
 
   // Set Event Summary states from lead metadata or latestBooking
@@ -1217,7 +1217,32 @@ export default function LeadDetailPage({
     const amount = paymentKind === 'deposit' ? depositBalance : remainingBalance
 
     if (amount <= 0) {
-      notify({ title: paymentKind === 'deposit' ? 'Deposit already covered' : 'Balance already paid', variant: 'info' })
+      try {
+        setUpdatingStatus(true)
+        const now = new Date().toISOString()
+        const bookingRes = await fetch('/api/bookings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: booking.id,
+            status: paymentKind === 'deposit' ? 'tentative' : booking.status,
+            security_deposit_status: paymentKind === 'deposit' ? 'collected' : booking.security_deposit_status,
+            metadata: {
+              ...booking.metadata,
+              [`${paymentKind}_payment_recorded_manually_at`]: now,
+            },
+          }),
+        })
+        const bookingPayload = await bookingRes.json().catch(() => ({}))
+        if (!bookingRes.ok) throw new Error(bookingPayload.error || 'Failed to sync the paid status.')
+        await fetchAllData(false)
+        notify({ title: paymentKind === 'deposit' ? 'Deposit already covered' : 'Balance already paid', description: 'Lifecycle updated.', variant: 'success' })
+      } catch (err) {
+        console.error(err)
+        notify({ title: 'Paid status not synced', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      } finally {
+        setUpdatingStatus(false)
+      }
       return
     }
 
@@ -1242,7 +1267,7 @@ export default function LeadDetailPage({
       const paymentPayload = await paymentRes.json().catch(() => ({}))
       if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
 
-      const nextStatus: LuxorBookingStatus = paymentKind === 'final' ? 'completed' : 'confirmed'
+      const nextStatus: LuxorBookingStatus = paymentKind === 'deposit' ? 'tentative' : booking.status
       const bookingRes = await fetch('/api/bookings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1346,6 +1371,81 @@ export default function LeadDetailPage({
       notify({ title: 'Booking not created', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSubmittingBooking(false)
+    }
+  }
+
+  const handleClientSummaryUpdate = async ({ email, phone, address }: { email: string; phone: string; address: string }) => {
+    if (!lead || savingLeadField) return false
+    const previousLead = lead
+    const normalizedEmail = normalizeLeadFieldValue('email', email)
+    const normalizedPhone = normalizeLeadFieldValue('phone', phone)
+    const normalizedAddress = normalizeLeadFieldValue('address', address)
+    const updatedMetadata = { ...lead.metadata, address: normalizedAddress }
+
+    try {
+      setSavingLeadField('email')
+      const res = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, email: normalizedEmail, phone: normalizedPhone, metadata: updatedMetadata }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to update client details.')
+      const updated = payload as LuxorInquiry
+      setLead(updated)
+      void fetchClientEmailThread(updated.email || '')
+      notify({ title: 'Client details updated', variant: 'success' })
+      return true
+    } catch (err) {
+      console.error(err)
+      setLead(previousLead)
+      notify({ title: 'Client details not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      return false
+    } finally {
+      setSavingLeadField(null)
+    }
+  }
+
+  const handleBookingMilestone = async (booking: LuxorBooking, milestone: 'planning' | 'event' | 'closing') => {
+    try {
+      setUpdatingStatus(true)
+      const now = new Date().toISOString()
+      const isClosing = milestone === 'closing'
+      const isPlanning = milestone === 'planning'
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: booking.id,
+          status: isClosing ? 'completed' : isPlanning ? 'confirmed' : booking.status,
+          metadata: {
+            ...booking.metadata,
+            ...(isClosing
+              ? { closeout_completed_at: now }
+              : isPlanning
+                ? { planning_completed_at: now }
+                : { event_completed_at: now }),
+          },
+        }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to update the booking milestone.')
+
+      await createFlowNote(
+        isClosing
+          ? 'Event closeout completed and lead marked complete.'
+          : isPlanning
+            ? 'Planning details confirmed. Final payment is now ready.'
+            : 'Event marked complete. Closeout is now ready.',
+        'status_change',
+      )
+      await fetchAllData(false)
+      notify({ title: isClosing ? 'Lead completed' : isPlanning ? 'Planning confirmed' : 'Event completed', variant: 'success' })
+    } catch (err) {
+      console.error(err)
+      notify({ title: 'Milestone not updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setUpdatingStatus(false)
     }
   }
 
@@ -3440,22 +3540,12 @@ export default function LeadDetailPage({
               if (currentStage === 'inquiry') {
                 return (
                   <>
-                    {/* Client Summary */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
-                      </div>
-                      <div className="space-y-3.5 text-xs text-left">
-                        <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer"><Mail size={14} className="text-[#a8792f]" /><span>{lead.email || 'No email captured'}</span></a>
-                        <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer"><Phone size={14} className="text-[#a8792f]" /><span>{lead.phone || 'No phone captured'}</span></a>
-                        <div className="flex items-center gap-3 py-1 text-zinc-300"><MapPin size={14} className="text-[#a8792f]" /><span>{lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'}</span></div>
-                        <div className="flex items-center gap-3 py-1 text-zinc-300"><Users size={14} className="text-[#a8792f]" /><span>{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span></div>
-                        <div className="flex items-center gap-3 py-1 text-zinc-300"><Star size={14} className="text-[#a8792f]" /><span>{lead.event_type || 'Event type not captured'}</span></div>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
-                        <button type="button" onClick={() => scrollToSection('lead-messages')} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer">View Full Details &rarr;</button>
-                      </div>
-                    </section>
+                    <ClientSummaryCard
+                      lead={lead}
+                      isSaving={Boolean(savingLeadField)}
+                      onUpdate={handleClientSummaryUpdate}
+                      onViewDetails={() => scrollToSection('lead-messages')}
+                    />
 
                     {/* Recommended Actions */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -3527,16 +3617,17 @@ export default function LeadDetailPage({
                         <div className="space-y-4">
                           <div>
                             <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Venue</label>
-                            <select
+                            <PortalSelect
                               value={summaryVenue}
-                              onChange={(e) => setSummaryVenue(e.target.value)}
+                              onChange={setSummaryVenue}
+                              options={[
+                                { value: 'Luxor Main Hall', label: 'Luxor Main Hall' },
+                                { value: 'Luxor Grand Pavilion', label: 'Luxor Grand Pavilion' },
+                                { value: 'Elena Garden Plaza', label: 'Elena Garden Pavilion' },
+                                { value: 'Palmas Terrace Suite', label: 'Palmas Terrace Suite' },
+                              ]}
                               className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                            >
-                              <option value="Luxor Main Hall">Luxor Main Hall</option>
-                              <option value="Luxor Grand Pavilion">Luxor Grand Pavilion</option>
-                              <option value="Elena Garden Plaza">Elena Garden Pavilion</option>
-                              <option value="Palmas Terrace Suite">Palmas Terrace Suite</option>
-                            </select>
+                            />
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -3623,13 +3714,7 @@ export default function LeadDetailPage({
                 )
               }
               
-              // For all stages other than inquiry, render the layout from the sister's mockup
-              const clientSummaryEmail = lead.email || 'No email captured'
-              const clientSummaryPhone = lead.phone || 'No phone captured'
-              const clientSummaryAddress = lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured'
-              const clientSummaryGuests = lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'
-              const clientSummaryEventType = lead.event_type || 'Event type not captured'
-              
+              // For all stages other than inquiry, render the stage action layout.
               let nextStepTitle = 'Prepare proposal'
               let nextStepDetail = 'Draft pricing and confirm the next decision step'
               let nextStepButton = 'Open Documents'
@@ -3653,8 +3738,8 @@ export default function LeadDetailPage({
               } else if (currentStage === 'planning') {
                 nextStepTitle = 'Confirm planning details'
                 nextStepDetail = 'Fill any missing event details before final balance'
-                nextStepButton = 'Open Tasks'
-                nextStepAction = () => setActiveLeadTab('tasks')
+                nextStepButton = latestBooking ? 'Confirm Planning' : 'Create Booking'
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'planning') : openBookingModal
               } else if (currentStage === 'final_payment') {
                 nextStepTitle = 'Record final payment'
                 nextStepDetail = 'Manually mark balance paid after payment is confirmed'
@@ -3664,51 +3749,22 @@ export default function LeadDetailPage({
                 nextStepTitle = 'Close out event'
                 nextStepDetail = 'Finish inspection, deposit return, and review readiness'
                 nextStepButton = 'Close Out Event'
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'event') : openBookingModal
               } else if (currentStage === 'closing') {
                 nextStepTitle = 'Complete Lead'
                 nextStepDetail = 'Mark the booking complete when all wrap-up work is done'
                 nextStepButton = 'Complete Lead'
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'closing') : openBookingModal
               }
 
               return (
                 <>
-                  {/* CLIENT SUMMARY */}
-                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Summary</p>
-                    </div>
-                    <div className="space-y-3.5 text-xs text-left">
-                      <a href={lead.email ? `mailto:${lead.email}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
-                        <Mail size={14} className="text-[#a8792f]" />
-                        <span>{clientSummaryEmail}</span>
-                      </a>
-                      <a href={lead.phone ? `tel:${lead.phone}` : undefined} className="flex items-center gap-3 py-1 text-zinc-300 hover:text-[#caa24c] transition-colors cursor-pointer">
-                        <Phone size={14} className="text-[#a8792f]" />
-                        <span>{clientSummaryPhone}</span>
-                      </a>
-                      <div className="flex items-center gap-3 py-1 text-zinc-300">
-                        <MapPin size={14} className="text-[#a8792f]" />
-                        <span>{clientSummaryAddress}</span>
-                      </div>
-                      <div className="flex items-center gap-3 py-1 text-zinc-300">
-                        <Users size={14} className="text-[#a8792f]" />
-                        <span>{clientSummaryGuests}</span>
-                      </div>
-                      <div className="flex items-center gap-3 py-1 text-zinc-300">
-                        <Star size={14} className="text-[#a8792f]" />
-                        <span>{clientSummaryEventType}</span>
-                      </div>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
-                      <button
-                        type="button"
-                        onClick={() => scrollToSection('lead-messages')}
-                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                      >
-                        View Full Details &rarr;
-                      </button>
-                    </div>
-                  </section>
+                  <ClientSummaryCard
+                    lead={lead}
+                    isSaving={Boolean(savingLeadField)}
+                    onUpdate={handleClientSummaryUpdate}
+                    onViewDetails={() => scrollToSection('lead-messages')}
+                  />
 
                   {/* NEXT STEP */}
                   <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -4880,6 +4936,100 @@ function ClientDossierLoading() {
   )
 }
 
+function ClientSummaryCard({
+  lead,
+  isSaving,
+  onUpdate,
+  onViewDetails,
+}: {
+  lead: LuxorInquiry
+  isSaving: boolean
+  onUpdate: (details: { email: string; phone: string; address: string }) => Promise<boolean>
+  onViewDetails: () => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [email, setEmail] = useState(lead.email || '')
+  const [phone, setPhone] = useState(lead.phone || '')
+  const [address, setAddress] = useState(lead.metadata?.address ? String(lead.metadata.address) : '')
+
+  const handleSave = async () => {
+    const saved = await onUpdate({ email, phone, address })
+    if (saved) setIsEditing(false)
+  }
+
+  const handleToggleEdit = () => {
+    if (!isEditing) {
+      setEmail(lead.email || '')
+      setPhone(lead.phone || '')
+      setAddress(lead.metadata?.address ? String(lead.metadata.address) : '')
+    }
+    setIsEditing((current) => !current)
+  }
+
+  const summaryRows = [
+    { icon: <Mail size={14} />, value: lead.email || 'No email captured', href: lead.email ? `mailto:${lead.email}` : undefined, missing: !lead.email },
+    { icon: <Phone size={14} />, value: lead.phone || 'No phone captured', href: lead.phone ? `tel:${lead.phone}` : undefined, missing: !lead.phone },
+    { icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', missing: !lead.metadata?.address },
+    { icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', missing: !lead.guest_count },
+    { icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', missing: !lead.event_type },
+  ]
+
+  return (
+    <section className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/10 font-serif text-sm text-[#caa24c]">
+            {getInitials(lead.full_name)}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Client Summary</p>
+            <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleToggleEdit}
+          disabled={isSaving}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/25 hover:text-[#caa24c] disabled:opacity-40"
+        >
+          <Pencil size={11} /> {isEditing ? 'Cancel' : 'Edit'}
+        </button>
+      </div>
+      {isEditing ? (
+        <div className="space-y-3">
+          {[
+            { label: 'Email', value: email, setValue: setEmail, type: 'email', placeholder: 'client@email.com' },
+            { label: 'Phone', value: phone, setValue: setPhone, type: 'tel', placeholder: 'Phone number' },
+            { label: 'Address', value: address, setValue: setAddress, type: 'text', placeholder: 'San Antonio, TX' },
+          ].map((field) => (
+            <label key={field.label} className="block">
+              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{field.label}</span>
+              <input type={field.type} value={field.value} onChange={(event) => field.setValue(event.target.value)} placeholder={field.placeholder} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-zinc-700 focus:border-[#caa24c]/40" />
+            </label>
+          ))}
+          <button type="button" onClick={handleSave} disabled={isSaving} className="w-full rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f] disabled:opacity-40">
+            {isSaving ? 'Saving...' : 'Save Client Details'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 space-y-2 text-left text-xs">
+            {summaryRows.map((row, index) => {
+              const content = <><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]">{row.icon}</span><span className={row.missing ? 'text-zinc-600' : 'text-zinc-300'}>{row.value}</span></>
+              return row.href ? <a key={index} href={row.href} className="flex items-center gap-3 rounded-lg py-1 transition-colors hover:bg-[#caa24c]/5">{content}</a> : <div key={index} className="flex items-center gap-3 rounded-lg py-1">{content}</div>
+            })}
+          </div>
+          <div className="mt-4 border-t border-zinc-100/5 pt-3 dark:border-zinc-850/30">
+            <button type="button" onClick={onViewDetails} className="w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:bg-[#caa24c]/14 hover:text-[#f1d27a]">
+              Open Messages &rarr;
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
 function LeadLifecycleRail({
   lead,
   bookings,
@@ -4959,6 +5109,9 @@ function LeadLifecycleRail({
     }
     if (step.id === 'event') {
       return { ...step, label: 'Event', subtext: formattedEventDate || '' }
+    }
+    if (step.id === 'closing') {
+      return { ...step, label: 'Closing', subtext: '' }
     }
     return { ...step, label: 'Complete', subtext: '' }
   })
@@ -5595,6 +5748,12 @@ type LeadLifecycleStepState = {
 function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null): LeadLifecycleStepState[] {
   const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
   const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
+  const bookingMetadata = latestBooking?.metadata || {}
+  const isLegacyComplete = latestBooking?.status === 'completed'
+  const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || latestBooking?.status === 'confirmed' || isLegacyComplete
+  const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || isLegacyComplete
+  const eventCompleted = Boolean(bookingMetadata.event_completed_at) || isLegacyComplete
+  const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || isLegacyComplete
 
   return [
     {
@@ -5624,22 +5783,27 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     },
     {
       id: 'planning',
-      isCompleted: latestBooking?.status === 'confirmed' || latestBooking?.status === 'completed',
-      isActive: latestBooking?.security_deposit_status === 'collected' && latestBooking?.status === 'tentative',
+      isCompleted: planningCompleted,
+      isActive: latestBooking?.security_deposit_status === 'collected' && !planningCompleted,
     },
     {
       id: 'final_payment',
-      isCompleted: latestBooking?.status === 'completed',
-      isActive: latestBooking?.status === 'confirmed',
+      isCompleted: finalPaymentCompleted,
+      isActive: planningCompleted && !finalPaymentCompleted,
     },
     {
       id: 'event',
-      isCompleted: latestBooking?.status === 'completed',
-      isActive: false,
+      isCompleted: eventCompleted,
+      isActive: finalPaymentCompleted && !eventCompleted,
     },
     {
       id: 'closing',
-      isCompleted: latestBooking?.status === 'completed',
+      isCompleted: closeoutCompleted,
+      isActive: eventCompleted && !closeoutCompleted,
+    },
+    {
+      id: 'complete',
+      isCompleted: closeoutCompleted,
       isActive: false,
     },
   ]
