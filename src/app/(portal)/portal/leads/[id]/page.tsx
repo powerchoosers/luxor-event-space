@@ -2163,9 +2163,9 @@ export default function LeadDetailPage({
       </div>
 
       {activeLeadTab === 'overview' ? (
-        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:h-[calc(100vh-13.5rem)] lg:grid-cols-3 lg:items-start">
+        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:h-[calc(100dvh-13.5rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div className="space-y-6 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 portal-scrollbar">
+          <div className="space-y-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 lg:pb-8 portal-scrollbar">
             
             {/* Stage-specific Content Router */}
             {(() => {
@@ -3501,7 +3501,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 portal-scrollbar">
+          <div className="space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2 lg:pb-8 portal-scrollbar">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
