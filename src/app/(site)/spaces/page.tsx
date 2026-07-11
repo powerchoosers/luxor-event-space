@@ -46,7 +46,7 @@ export default function SpacesPage() {
 
           <div>
             <figure className="luxor-deco-frame relative min-h-[520px] overflow-hidden rounded-md border border-[#caa24c]/25 shadow-[0_40px_110px_-50px_rgba(0,0,0,0.95)]">
-              <Image src="/spaces-hero.png" alt="Luxor event space layout" fill priority sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover" />
+              <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall reception layout" fill priority sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover" />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.44))]" />
             </figure>
           </div>
@@ -110,7 +110,7 @@ export default function SpacesPage() {
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-8">
           <Reveal>
             <div className="relative aspect-[4/5] overflow-hidden rounded-md border border-[#caa24c]/22 sm:aspect-[16/11] lg:aspect-[5/6]">
-              <Image src="/tour-header.png" alt="Luxor room with guest seating" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+              <Image src="/images/dining-hall/main-hall-conversation-candid.png" alt="Guests seated inside the Luxor main hall" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.04),rgba(0,0,0,0.54))]" />
             </div>
           </Reveal>

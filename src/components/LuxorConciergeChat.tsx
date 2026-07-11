@@ -40,22 +40,22 @@ type ContactDetails = {
 const eventCards = [
   {
     label: 'Wedding',
-    image: '/pricing-hero.png',
+    image: '/images/dining-hall/main-hall-wedding-dance-candid.png',
     copy: 'Ceremony flow, dinner, portraits, and dancing.',
   },
   {
     label: 'Quinceañera',
-    image: '/tour-header.png',
+    image: '/images/dining-hall/main-hall-quinceanera-angle.png',
     copy: 'Grand entrance, court seating, cake, and family photos.',
   },
   {
     label: 'Baby shower',
-    image: '/baby-shower.png',
+    image: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
     copy: 'A softer setup for family, gifts, photos, and brunch.',
   },
   {
     label: 'Corporate',
-    image: '/corporate.png',
+    image: '/images/luxor-lounge/luxor-lounge-corporate.png',
     copy: 'Awards, networking, presentations, and dinner service.',
   },
 ]

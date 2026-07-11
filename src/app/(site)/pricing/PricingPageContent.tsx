@@ -123,7 +123,7 @@ function PricingHeroVisual() {
         className="luxor-deco-frame relative isolate min-h-[620px] overflow-hidden border border-[#caa24c]/25 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.85)]"
       >
         <Image
-          src="/pricing-hero.png"
+          src="/images/dining-hall/main-hall-wedding-wide.png"
           alt="Luxor venue styling sample"
           fill
           priority

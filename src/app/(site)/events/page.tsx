@@ -10,28 +10,28 @@ const eventTypes = [
   {
     title: 'Weddings',
     copy: 'A polished room for ceremony moments, dinner, portraits, speeches, and dancing.',
-    image: '/pricing-hero.png',
+    image: '/images/dining-hall/main-hall-wedding-dance-candid.png',
     icon: Heart,
     points: ['Ceremony and reception flow', 'Photo-ready room details', 'Dinner and dance floor planning'],
   },
   {
     title: 'Quinceañeras',
     copy: 'A dramatic setting for a grand entrance, court seating, cake, family photos, and dancing.',
-    image: '/tour-header.png',
+    image: '/images/dining-hall/main-hall-quinceanera-angle.png',
     icon: Cake,
     points: ['Grand entrance planning', 'Court and family seating', 'Feature moments for photos'],
   },
   {
     title: 'Baby showers',
     copy: 'A warm, elegant backdrop for lunch, gifts, photos, and a room that feels finished.',
-    image: '/baby-shower.png',
+    image: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
     icon: Baby,
     points: ['Gift and dessert tables', 'Comfortable guest layout', 'Soft decor compatibility'],
   },
   {
     title: 'Corporate events',
     copy: 'A formal space for awards, company dinners, networking nights, and milestone events.',
-    image: '/corporate.png',
+    image: '/images/luxor-lounge/luxor-lounge-corporate.png',
     icon: Briefcase,
     points: ['Dinner and presentation flow', 'Networking layouts', 'Awards and company moments'],
   },
@@ -50,7 +50,7 @@ export default function EventsPage() {
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
       <section className="relative isolate overflow-hidden px-5 pb-16 pt-36 sm:px-6 lg:px-8 lg:pb-24 lg:pt-44">
-        <Image src="/tour-header.png" alt="Luxor event room prepared for guests" fill priority sizes="100vw" className="object-cover" />
+        <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall prepared for guests" fill priority sizes="100vw" className="object-cover" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94),rgba(5,5,5,0.72)_48%,rgba(5,5,5,0.42)),linear-gradient(180deg,rgba(5,5,5,0.5),#050505_92%)]" />
         <div className="absolute inset-0 luxor-noise opacity-[0.18]" />
 

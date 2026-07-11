@@ -18,25 +18,25 @@ const eventCards: EventCard[] = [
   {
     title: 'Weddings',
     copy: 'A polished room for ceremony moments, dinner, portraits, and dancing.',
-    imageSrc: '/pricing-hero.png',
+    imageSrc: '/images/dining-hall/main-hall-wedding-dance-candid.png',
     details: ['Ceremony flow', 'Reception layout', 'Photo moments'],
   },
   {
     title: 'Quinceañeras',
     copy: 'A dramatic setting for the grand entrance, court seating, cake, and family photos.',
-    imageSrc: '/tour-header.png',
+    imageSrc: '/images/dining-hall/main-hall-quinceanera-angle.png',
     details: ['Grand entrance', 'Court seating', 'Family photos'],
   },
   {
     title: 'Private celebrations',
     copy: 'Warm enough for showers and birthdays, refined enough for milestone dinners.',
-    imageSrc: '/baby-shower.png',
+    imageSrc: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
     details: ['Baby showers', 'Birthdays', 'Anniversaries'],
   },
   {
     title: 'Corporate events',
     copy: 'A formal backdrop for awards, dinners, networking, and company gatherings.',
-    imageSrc: '/corporate.png',
+    imageSrc: '/images/luxor-lounge/luxor-lounge-corporate.png',
     details: ['Awards', 'Networking', 'Dinner service'],
   },
 ]
@@ -144,8 +144,8 @@ export default function Home() {
     <main id="top" className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
       <section id="hero" className="relative isolate min-h-[92svh] overflow-hidden pt-28 sm:min-h-screen">
         <Image
-          src="/pricing-hero.png"
-          alt="Luxor reception room"
+          src="/images/dining-hall/main-hall-wedding-wide.png"
+          alt="Luxor main hall prepared for a wedding reception"
           fill
           priority
           sizes="100vw"
@@ -230,7 +230,7 @@ export default function Home() {
         <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-2 lg:items-center lg:px-8">
           <Reveal>
             <div className="relative aspect-[4/5] overflow-hidden rounded-md border border-[#caa24c]/24 sm:aspect-[16/11] lg:aspect-[4/3]">
-              <Image src="/spaces-hero.png" alt="Luxor event room layout" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+              <Image src="/images/dining-hall/main-hall-table-candid.png" alt="Guests gathered inside the Luxor main hall" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.44))]" />
             </div>
           </Reveal>
