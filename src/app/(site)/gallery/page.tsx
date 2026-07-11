@@ -1,7 +1,7 @@
 'use client'
 
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -143,6 +143,7 @@ const photoUses = [
 export default function GalleryPage() {
   const [activeFilter, setActiveFilter] = useState<GalleryCategory>('All')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   const filteredGallery = useMemo(() => {
     if (activeFilter === 'All') return gallery
@@ -153,6 +154,8 @@ export default function GalleryPage() {
 
   useEffect(() => {
     if (!selectedItem) return
+
+    closeButtonRef.current?.focus()
 
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -168,12 +171,22 @@ export default function GalleryPage() {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setSelectedIndex(null)
+      } else if (event.key === 'ArrowLeft') {
+        setSelectedIndex((current) => {
+          if (current === null) return current
+          return current === 0 ? filteredGallery.length - 1 : current - 1
+        })
+      } else if (event.key === 'ArrowRight') {
+        setSelectedIndex((current) => {
+          if (current === null) return current
+          return current === filteredGallery.length - 1 ? 0 : current + 1
+        })
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectedItem])
+  }, [filteredGallery.length, selectedItem])
 
   function showPrevious() {
     setSelectedIndex((current) => {
@@ -302,6 +315,7 @@ export default function GalleryPage() {
                   }}
                 >
                   <button
+                    ref={closeButtonRef}
                     type="button"
                     onClick={() => setSelectedIndex(null)}
                     className="absolute right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/30 bg-black/70 text-[#f7efe3] transition hover:bg-[#caa24c] hover:text-[#050505]"

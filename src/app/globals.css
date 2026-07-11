@@ -610,6 +610,23 @@ body[data-portal-theme='light'] .text-zinc-900 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  body:not([data-portal-theme]) *,
+  body:not([data-portal-theme]) *::before,
+  body:not([data-portal-theme]) *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #f1d27a;
+  outline-offset: 3px;
 }
 
 /* Sticky table header cells with glassmorphic blur */

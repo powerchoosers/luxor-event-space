@@ -88,6 +88,7 @@ export interface FooterBlock {
   showSocial: boolean
   instagramUrl: string
   facebookUrl: string
+  tiktokUrl?: string
 }
 
 export type EmailBlock =
@@ -119,8 +120,9 @@ const defaultFooter: FooterBlock = {
   website: 'luxoratlaspalmas.com',
   unsubscribeUrl: '#unsubscribe',
   showSocial: true,
-  instagramUrl: 'https://instagram.com/luxoratlaspalmas',
-  facebookUrl: 'https://facebook.com/luxoratlaspalmas',
+  instagramUrl: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr',
+  facebookUrl: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr',
+  tiktokUrl: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM',
 }
 
 export const EMAIL_TEMPLATES: EmailTemplate[] = [

@@ -414,7 +414,7 @@ function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; on
       {/* Social */}
       {block.showSocial && (
         <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: GOLD }}>
-          Instagram <span style={{ opacity: 0.4, margin: '0 12px' }}>◆</span> Facebook
+          Instagram <span style={{ opacity: 0.4, margin: '0 12px' }}>◆</span> Facebook <span style={{ opacity: 0.4, margin: '0 12px' }}>◆</span> TikTok
         </div>
       )}
       {/* Tagline */}

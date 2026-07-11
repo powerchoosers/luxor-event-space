@@ -23,6 +23,28 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;')
 }
 
+const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr',
+  facebook: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr',
+  tiktok: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM',
+} as const
+
+function plainTextEmailFooter() {
+  return ['Luxor Event Space']
+}
+
+function socialEmailIconsHtml() {
+  const instagramIcon = absoluteUrl('/social-instagram.png')
+  const facebookIcon = absoluteUrl('/social-facebook.png')
+  const tiktokIcon = absoluteUrl('/social-tiktok.png')
+
+  return `<p style="margin:18px 0 0;">
+    <a href="${SOCIAL_LINKS.instagram}" target="_blank" style="display:inline-block;margin:0 8px;text-decoration:none;"><img src="${instagramIcon}" width="24" height="24" alt="Instagram" style="display:block;width:24px;height:24px;border:0;" /></a>
+    <a href="${SOCIAL_LINKS.facebook}" target="_blank" style="display:inline-block;margin:0 8px;text-decoration:none;"><img src="${facebookIcon}" width="24" height="24" alt="Facebook" style="display:block;width:24px;height:24px;border:0;" /></a>
+    <a href="${SOCIAL_LINKS.tiktok}" target="_blank" style="display:inline-block;margin:0 8px;text-decoration:none;"><img src="${tiktokIcon}" width="24" height="24" alt="TikTok" style="display:block;width:24px;height:24px;border:0;" /></a>
+  </p>`
+}
+
 export function createPublicToken() {
   return crypto.randomBytes(24).toString('base64url')
 }
@@ -48,7 +70,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
         'If you still want to see the space, use the reschedule link below and we will help find a better time.',
         `Reschedule: ${links.rescheduleUrl}`,
         inquiry.message ? `Your event notes: ${inquiry.message}` : '',
-        'Luxor Event Space',
+        ...plainTextEmailFooter(),
       ].filter(Boolean).join('\n\n'),
     }
   }
@@ -63,7 +85,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
         inquiry.message ? `Details you shared: ${inquiry.message}` : '',
         `Confirm your tour: ${links.confirmUrl}`,
         `Need a new time? Reschedule here: ${links.rescheduleUrl}`,
-        'Luxor Event Space',
+        ...plainTextEmailFooter(),
       ].filter(Boolean).join('\n\n'),
     }
   }
@@ -77,7 +99,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       inquiry.message ? `Details you shared: ${inquiry.message}` : '',
       `Confirm your tour: ${links.confirmUrl}`,
       `Need to reschedule? ${links.rescheduleUrl}`,
-      'Luxor Event Space',
+      ...plainTextEmailFooter(),
     ].filter(Boolean).join('\n\n'),
   }
 }
@@ -97,9 +119,7 @@ export function buildGrandOpeningRsvpEmail(inquiry: LuxorInquiry) {
       `Interest noted: ${interestLine}`,
       'You can expect venue tours, vendor connections, tastings, giveaways, and a closer look at what Luxor offers for future events.',
       'If your plans change or you need anything before the event, reply to this email and our team will help.',
-      'Luxor Event Space',
-      '803 Castroville Rd #402, San Antonio, TX 78237',
-      'luxoratlaspalmas.com',
+      ...plainTextEmailFooter(),
     ].join('\n\n'),
   }
 }
@@ -184,8 +204,10 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
               <p style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
                 803 Castroville Rd #402, San Antonio, TX 78237<br />
                 Private venue tours by appointment.<br />
+                <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
                 <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
               </p>
+              ${socialEmailIconsHtml()}
               <p style="margin:0;font-size:9px;line-height:1.7;color:rgba(215,194,154,0.32);">
                 This RSVP confirmation was sent because you reserved a spot for the Luxor Grand Opening Showcase.
               </p>
@@ -206,7 +228,7 @@ export function buildSignatureEmail(signature: LuxorSignatureRequest) {
       `Hi ${signature.client_name},`,
       'Your Luxor Event Space contract is ready to review and sign.',
       `Sign here: ${absoluteUrl(`/secure-portal/sign/${signature.token}`)}`,
-      'Luxor Event Space',
+      ...plainTextEmailFooter(),
     ].join('\n\n'),
   }
 }

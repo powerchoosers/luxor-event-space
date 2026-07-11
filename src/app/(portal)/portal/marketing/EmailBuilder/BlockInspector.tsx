@@ -269,6 +269,9 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
           <Field label="Facebook URL">
             <input className={inputCls} placeholder="https://facebook.com/..." value={block.facebookUrl} onChange={(e) => u({ facebookUrl: e.target.value })} />
           </Field>
+          <Field label="TikTok URL">
+            <input className={inputCls} placeholder="https://tiktok.com/@..." value={block.tiktokUrl || ''} onChange={(e) => u({ tiktokUrl: e.target.value })} />
+          </Field>
         </RowFields>
       )}
     </div>

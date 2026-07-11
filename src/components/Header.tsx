@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CalendarDays, Menu, X } from 'lucide-react'
@@ -20,6 +20,7 @@ export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -37,6 +38,20 @@ export const Header = () => {
       document.documentElement.style.overflow = ''
       document.body.style.overflow = ''
     }
+  }, [mobileMenuOpen])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false)
+        window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [mobileMenuOpen])
 
   useEffect(() => {
@@ -94,6 +109,7 @@ export const Header = () => {
 
           {/* Mobile Menu Toggle */}
           <button 
+            ref={mobileMenuButtonRef}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="relative z-[120] p-2 text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}

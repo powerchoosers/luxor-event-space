@@ -2,7 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { CalendarDays, MapPin } from 'lucide-react'
+import Image from 'next/image'
+import { CalendarDays, Mail, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 const navLinks = [
@@ -13,6 +14,12 @@ const navLinks = [
   { label: 'Pricing', href: '/pricing' },
   { label: 'Visit', href: '/visit' },
 ]
+
+const socialLinks = [
+  { label: 'Instagram', href: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr', icon: '/social-instagram.png' },
+  { label: 'Facebook', href: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr', icon: '/social-facebook.png' },
+  { label: 'TikTok', href: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM', icon: '/social-tiktok.png' },
+] as const
 
 export const Footer = () => {
   return (
@@ -47,10 +54,22 @@ export const Footer = () => {
               Host your wedding, quinceañera, or baby shower in elegance.
             </p>
             <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
-              <p className="flex items-center justify-center gap-3 lg:justify-start">
+              <a
+                href="https://www.google.com/maps/dir/?api=1&destination=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start"
+              >
                 <MapPin className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>803 Castroville Rd #402, San Antonio, TX 78237</span>
-              </p>
+              </a>
+              <a
+                href="mailto:booking@luxoratlaspalmas.com"
+                className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start"
+              >
+                <Mail className="h-4 w-4 shrink-0 text-[#caa24c]" />
+                <span>booking@luxoratlaspalmas.com</span>
+              </a>
               <p>Private venue tours by appointment.</p>
             </div>
           </div>
@@ -66,6 +85,20 @@ export const Footer = () => {
                 <CalendarDays className="h-4 w-4" />
                 Book Your Tour
               </Link>
+              <div className="flex items-center justify-center gap-3 lg:justify-start" aria-label="Luxor social media">
+                {socialLinks.map((social) => (
+                  <a
+                    key={social.label}
+                    href={social.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Follow Luxor on ${social.label}`}
+                    className="flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/24 bg-black/30 transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f1d27a]"
+                  >
+                    <Image src={social.icon} alt="" width={20} height={20} />
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -91,10 +124,10 @@ export const Footer = () => {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-6 border-t border-[#caa24c]/18 pt-8 sm:flex-row">
-          <p className="text-xs text-[#d7c29a]/35">
+          <p className="text-xs text-[#d7c29a]/60">
             &copy; {new Date().getFullYear()} Luxor Event Space. Built with Elegance in San Antonio.
           </p>
-          <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/30 transition-colors hover:text-[#d7c29a]/55">
+          <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/60 transition-colors hover:text-[#f7efe3]">
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/terms">Terms of Service</Link>
           </div>

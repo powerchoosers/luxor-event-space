@@ -46,14 +46,28 @@ export function LuxorInquiryForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitting(true)
     setError(null)
 
     const form = new FormData(event.currentTarget)
+    const email = String(form.get('email') ?? '').trim()
+    const phone = String(form.get('phone') ?? '').trim()
+
+    if (!eventType) {
+      setError('Please select the type of event you are planning.')
+      return
+    }
+
+    if (!email && !phone) {
+      setError('Please provide an email address or phone number so the Luxor team can respond.')
+      return
+    }
+
+    setSubmitting(true)
+
     const payload: LuxorInquiryInput = {
       fullName: String(form.get('fullName') ?? ''),
-      email: String(form.get('email') ?? ''),
-      phone: String(form.get('phone') ?? ''),
+      email,
+      phone,
       eventType: eventType,
       targetDate: String(form.get('targetDate') ?? ''),
       guestCount: String(form.get('guestCount') ?? ''),
@@ -115,7 +129,7 @@ export function LuxorInquiryForm({
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col justify-end">
-              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Event type</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Event type <span aria-hidden="true">*</span></span>
               <PortalSelect
                 value={eventType}
                 onChange={setEventType}
@@ -128,8 +142,11 @@ export function LuxorInquiryForm({
             <TextField name="targetDate" label="Target date" placeholder="Month or date" />
             <TextField name="guestCount" label="Guest count" placeholder="Estimated count" inputMode="numeric" />
             <TextField name="fullName" label="Full name" placeholder="Your name" required />
-            <TextField name="email" label="Email" placeholder="you@example.com" type="email" />
-            <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" />
+            <TextField name="email" label="Email" placeholder="you@example.com" type="email" describedBy="contact-method-help" />
+            <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" describedBy="contact-method-help" />
+            <p id="contact-method-help" className="-mt-1 text-xs leading-5 text-[#d7c29a]/58 sm:col-span-2">
+              Provide at least one contact method so the Luxor team can reply.
+            </p>
 
             {showTourFields && (
               <div className="sm:col-span-2">
@@ -177,7 +194,7 @@ export function LuxorInquiryForm({
           </label>
 
           {error ? (
-            <p className="mt-4 rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200">{error}</p>
+            <p role="alert" aria-live="polite" className="mt-4 rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200">{error}</p>
           ) : null}
 
           <motion.button
@@ -203,6 +220,7 @@ function TextField({
   type = 'text',
   required = false,
   inputMode,
+  describedBy,
 }: {
   name: string
   label: string
@@ -210,6 +228,7 @@ function TextField({
   type?: string
   required?: boolean
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  describedBy?: string
 }) {
   return (
     <label className="block">
@@ -219,6 +238,7 @@ function TextField({
         required={required}
         type={type}
         inputMode={inputMode}
+        aria-describedby={describedBy}
         placeholder={placeholder}
         className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
       />

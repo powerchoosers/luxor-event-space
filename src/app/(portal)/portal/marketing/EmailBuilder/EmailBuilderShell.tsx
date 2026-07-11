@@ -31,7 +31,7 @@ function createBlock(type: BlockType): EmailBlock {
     case 'spacer':
       return { id, type, height: 32 }
     case 'footer':
-      return { id, type, companyName: 'Luxor Event Space', address: '803 Castroville Rd #402, San Antonio, TX 78237', phone: 'Private venue tours by appointment.', website: 'luxoratlaspalmas.com', unsubscribeUrl: '#unsubscribe', showSocial: true, instagramUrl: 'https://instagram.com/luxoratlaspalmas', facebookUrl: 'https://facebook.com/luxoratlaspalmas' }
+      return { id, type, companyName: 'Luxor Event Space', address: '803 Castroville Rd #402, San Antonio, TX 78237', phone: 'Private venue tours by appointment.', website: 'luxoratlaspalmas.com', unsubscribeUrl: '#unsubscribe', showSocial: true, instagramUrl: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr', facebookUrl: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr', tiktokUrl: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM' }
     default:
       return { id, type: 'spacer', height: 24 } as EmailBlock
   }

@@ -293,8 +293,8 @@ export default function PricingPageContent() {
           <Reveal>
             <SectionTitle
               eyebrow="Investment"
-              title="Transparent tiers for your vision."
-              copy="Whether you want the simple elegance of our Foundation room or the full production of our Showpiece package, we offer a clear path to the perfect event."
+              title="Clear package paths for your vision."
+              copy="Compare what each package includes, then request a date-specific quote based on guest count, timing, and the options your event needs."
             />
           </Reveal>
 

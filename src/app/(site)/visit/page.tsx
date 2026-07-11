@@ -21,6 +21,12 @@ const questions = [
   ['Should I tour before I know my exact guest count?', 'Yes. A rough range is enough to start seeing which layouts make sense.'],
   ['Can I compare packages during the visit?', 'Yes. The tour should help connect the package tiers to the event you are actually planning.'],
   ['What should I bring?', 'Bring inspiration photos, target dates, guest count, and any must-have moments like entrance, cake, DJ, or photo booth.'],
+  ['How many guests can the venue hold?', 'Capacity depends on the room, table layout, dance floor, entertainment, and service plan. Share your estimated guest count in the tour request so the team can confirm a realistic layout with you.'],
+  ['What should I know about parking and arrival?', 'Parking and guest arrival details can vary with the event plan. The team will review the current parking arrangement, entrances, and vendor arrival path during your walkthrough.'],
+  ['Can Luxor accommodate accessibility needs?', 'Tell us about any mobility, seating, restroom, or arrival accommodations your guests may need. The team will walk those needs with you in person before you reserve the date.'],
+  ['Can I bring my own caterer or bar service?', 'Catering, beverage, and vendor requirements are confirmed for each event. Bring your preferred vendors or service ideas to the tour so the team can explain the current options and requirements.'],
+  ['How much setup and cleanup time is included?', 'Access, setup, event, and cleanup timing are confirmed in your quote and event agreement. The walkthrough is the right time to map out vendor load-in and the complete event-day schedule.'],
+  ['How do deposits and cancellations work?', 'Deposit amounts, payment timing, cancellation terms, damages, and refunds are provided in your proposal and signed event agreement. Ask the team to review those terms before you reserve a date.'],
 ]
 
 export default function VisitPage() {
@@ -46,10 +52,15 @@ export default function VisitPage() {
               ))}
             </div>
             <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left text-sm leading-6 text-[#d7c29a]/70">
-              <p className="flex items-center gap-3">
+              <a
+                href="https://www.google.com/maps/dir/?api=1&destination=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-3 transition-colors hover:text-[#f7efe3]"
+              >
                 <MapPin className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>803 Castroville Rd #402, San Antonio, TX 78237</span>
-              </p>
+              </a>
               <p className="flex items-center gap-3"><Clock className="h-4 w-4 text-[#caa24c]" /> Private tours by appointment</p>
             </div>
           </div>

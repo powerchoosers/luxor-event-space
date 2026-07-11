@@ -265,12 +265,15 @@ function renderSpacer(block: SpacerBlock): string {
 
 function renderFooter(block: FooterBlock): string {
   const palmMarkUrl = `${SITE_BASE_URL}/luxor-palm-mark.png`
+  const instagramIconUrl = `${SITE_BASE_URL}/social-instagram.png`
+  const facebookIconUrl = `${SITE_BASE_URL}/social-facebook.png`
+  const tiktokIconUrl = `${SITE_BASE_URL}/social-tiktok.png`
 
   const social = block.showSocial
     ? `<tr><td align="center" style="padding-top:20px;">
-        <a href="${block.instagramUrl}" target="_blank" style="font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;text-decoration:none;">Instagram</a>
-        <span style="color:rgba(202,162,76,0.35);font-size:10px;margin:0 16px;">&#9670;</span>
-        <a href="${block.facebookUrl}" target="_blank" style="font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;text-decoration:none;">Facebook</a>
+        <a href="${block.instagramUrl}" target="_blank" style="display:inline-block;margin:0 9px;text-decoration:none;"><img src="${instagramIconUrl}" width="24" height="24" alt="Instagram" style="display:block;width:24px;height:24px;border:0;" /></a>
+        <a href="${block.facebookUrl}" target="_blank" style="display:inline-block;margin:0 9px;text-decoration:none;"><img src="${facebookIconUrl}" width="24" height="24" alt="Facebook" style="display:block;width:24px;height:24px;border:0;" /></a>
+        <a href="${block.tiktokUrl || 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM'}" target="_blank" style="display:inline-block;margin:0 9px;text-decoration:none;"><img src="${tiktokIconUrl}" width="24" height="24" alt="TikTok" style="display:block;width:24px;height:24px;border:0;" /></a>
       </td></tr>`
     : ''
 
@@ -333,6 +336,7 @@ function renderFooter(block: FooterBlock): string {
             <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:400;color:rgba(215,194,154,0.52);line-height:1.9;">
               803 Castroville Rd #402, San Antonio, TX 78237<br />
               Private venue tours by appointment.<br />
+              <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.65);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
               <a href="https://luxoratlaspalmas.com" style="color:rgba(202,162,76,0.65);text-decoration:none;">luxoratlaspalmas.com</a>
             </p>
           </td>
