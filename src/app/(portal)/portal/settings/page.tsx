@@ -29,6 +29,13 @@ import {
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
+const ASSET_CATEGORIES = [
+  { value: 'general', label: 'General' },
+  { value: 'logo', label: 'Logo' },
+  { value: 'banner', label: 'Banner' },
+  { value: 'signature', label: 'Signature' }
+]
+
 type Tab =
   | 'business'
   | 'branding'
@@ -291,16 +298,11 @@ export default function SettingsPage() {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[9px] uppercase font-bold text-zinc-550">Category</label>
-                        <select
+                        <PortalSelect
                           value={assetCategory}
-                          onChange={e => setAssetCategory(e.target.value)}
-                          className="w-full bg-black border border-[color:var(--portal-border)] rounded-md px-3 py-1.5 text-xs text-zinc-300 outline-none cursor-pointer"
-                        >
-                          <option value="general">General</option>
-                          <option value="logo">Logo</option>
-                          <option value="banner">Banner</option>
-                          <option value="signature">Signature</option>
-                        </select>
+                          options={ASSET_CATEGORIES}
+                          onChange={setAssetCategory}
+                        />
                       </div>
                     </div>
 

@@ -13,6 +13,7 @@ import {
   Copy
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
+import { PortalSelect } from '@/components/portal/PortalUI'
 
 type BrandAsset = {
   id: string
@@ -35,6 +36,13 @@ const CATEGORIES = [
   { value: 'banner', label: 'Banners' },
   { value: 'signature', label: 'Signatures' },
   { value: 'general', label: 'General' }
+]
+
+const UPLOAD_CATEGORIES = [
+  { value: 'general', label: 'General' },
+  { value: 'logo', label: 'Logo' },
+  { value: 'banner', label: 'Banner' },
+  { value: 'signature', label: 'Signature' }
 ]
 
 export function BrandAssetPicker({
@@ -329,16 +337,11 @@ export function BrandAssetPicker({
                     {/* Category */}
                     <div className="space-y-1">
                       <label className="text-[9px] uppercase font-bold text-zinc-500">Category</label>
-                      <select
+                      <PortalSelect
                         value={uploadCategory}
-                        onChange={e => setUploadCategory(e.target.value)}
-                        className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none cursor-pointer"
-                      >
-                        <option value="general">General</option>
-                        <option value="logo">Logo</option>
-                        <option value="banner">Banner</option>
-                        <option value="signature">Signature</option>
-                      </select>
+                        options={UPLOAD_CATEGORIES}
+                        onChange={setUploadCategory}
+                      />
                     </div>
 
                     {/* Save to library checkbox */}
