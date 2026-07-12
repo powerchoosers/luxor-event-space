@@ -486,11 +486,15 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         </div>
       </main>
       {elenaOpen ? <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} /> : null}
-      <EmailComposeDrawer
-        isOpen={isComposeOpen}
-        onClose={() => setIsComposeOpen(false)}
-        lead={composeLead}
-      />
+      <AnimatePresence>
+        {isComposeOpen && (
+          <EmailComposeDrawer
+            isOpen={isComposeOpen}
+            onClose={() => setIsComposeOpen(false)}
+            lead={composeLead}
+          />
+        )}
+      </AnimatePresence>
       </ToastProvider>
     </body>
   )

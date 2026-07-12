@@ -13,7 +13,9 @@ import {
   Pencil,
   Sparkles,
   ChevronUp,
-  ExternalLink
+  ExternalLink,
+  Minus,
+  Plus
 } from 'lucide-react'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
@@ -52,6 +54,28 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
+
+  // Preview Scaling & Zoom States & Ref
+  const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit')
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const [iframeHeight, setIframeHeight] = useState(800)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const iframeRef = React.useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (zoomMode !== 'fit' || !containerRef.current) return
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width
+        if (width > 0) {
+          const scale = Math.min(1, width / 600)
+          setZoomLevel(scale)
+        }
+      }
+    })
+    resizeObserver.observe(containerRef.current)
+    return () => resizeObserver.disconnect()
+  }, [zoomMode, activeTab, isExpanded])
 
   // Form Fields
   const [fromAddress, setFromAddress] = useState('booking@luxoratlaspalmas.com')
@@ -227,6 +251,23 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     }
   }, [selectedTemplateId, bodyText, templateBlocks, subject])
 
+  const updateIframeHeight = () => {
+    if (iframeRef.current?.contentWindow?.document?.body) {
+      const height = iframeRef.current.contentWindow.document.body.scrollHeight + 20
+      setIframeHeight(height)
+    }
+  }
+
+  const handleIframeLoad = () => {
+    updateIframeHeight()
+  }
+
+  // Also update iframe height when compiledHtml changes or activeTab transitions
+  useEffect(() => {
+    const timer = setTimeout(updateIframeHeight, 150)
+    return () => clearTimeout(timer)
+  }, [compiledHtml, activeTab])
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!toAddress.trim()) {
@@ -283,8 +324,6 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     }
   }
 
-  if (!isOpen || !lead) return null
-
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
     fixed right-6 bottom-0 z-50
@@ -295,13 +334,19 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   `
 
   return (
-    <div className={drawerClasses}>
+    <motion.div
+      initial={{ y: '100%', opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: '100%', opacity: 0 }}
+      transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      className={drawerClasses}
+    >
       {/* Header Bar */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#caa24c]/20 bg-black/40 px-4 py-2">
         <div className="flex items-center gap-2 min-w-0">
           <Mail size={14} className="text-[#caa24c]" />
           <span className="truncate text-xs font-black uppercase tracking-wider text-white">
-            {isMinimized ? `Draft to ${lead.full_name}` : 'New Message'}
+            {isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -711,15 +756,76 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                   <Eye size={12} className="text-[#caa24c]" />
                   <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Live Brand Preview</span>
                 </div>
-                <span className="text-[9px] font-mono text-zinc-600">Dynamic HTML Frame</span>
+                
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-1.5 shrink-0 bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-0.5 select-none">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomMode('custom')
+                      setZoomLevel(prev => Math.max(0.2, Number((prev - 0.1).toFixed(1))))
+                    }}
+                    className="p-0.5 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <Minus size={11} />
+                  </button>
+                  <span className="text-[9px] font-mono text-zinc-400 min-w-[28px] text-center">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomMode('custom')
+                      setZoomLevel(prev => Math.min(2.0, Number((prev + 0.1).toFixed(1))))
+                    }}
+                    className="p-0.5 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <Plus size={11} />
+                  </button>
+                  <span className="h-2.5 w-px bg-zinc-800" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomMode('fit')
+                    }}
+                    className={`px-1 py-0.5 text-[8px] font-black uppercase tracking-wider rounded transition-colors cursor-pointer ${
+                      zoomMode === 'fit'
+                        ? 'text-[#caa24c] bg-[#caa24c]/10'
+                        : 'text-zinc-500 hover:text-white'
+                    }`}
+                    title="Fit to Screen"
+                  >
+                    Auto Fit
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 rounded-xl border border-zinc-900 bg-black overflow-hidden relative">
-                <iframe
-                  title="luxor-email-preview"
-                  srcDoc={compiledHtml}
-                  sandbox="allow-same-origin"
-                  className="w-full h-full border-none"
-                />
+              <div ref={containerRef} className="flex-1 rounded-xl border border-zinc-900 bg-black overflow-auto portal-scrollbar relative w-full h-full">
+                <div
+                  style={{
+                    width: `${600 * zoomLevel}px`,
+                    height: `${iframeHeight * zoomLevel}px`,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <iframe
+                    ref={iframeRef}
+                    title="luxor-email-preview"
+                    srcDoc={compiledHtml.replace('</head>', '<style>body::-webkit-scrollbar { width: 6px; height: 6px; } body::-webkit-scrollbar-track { background: #000000; } body::-webkit-scrollbar-thumb { background: rgba(202, 162, 76, 0.4); border-radius: 3px; } body::-webkit-scrollbar-thumb:hover { background: rgba(202, 162, 76, 0.6); }</style></head>')}
+                    sandbox="allow-same-origin"
+                    onLoad={handleIframeLoad}
+                    className="border-none absolute left-0 top-0 origin-top-left"
+                    style={{
+                      width: '600px',
+                      height: `${iframeHeight}px`,
+                      transform: `scale(${zoomLevel})`,
+                      overflow: 'hidden',
+                    }}
+                    scrolling="no"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -778,6 +884,6 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
         onClose={() => setAssetPickerOpen(false)}
         onSelect={handleAssetSelect}
       />
-    </div>
+    </motion.div>
   )
 }
