@@ -1962,7 +1962,7 @@ export default function LeadDetailPage({
                 {getInitials(lead.full_name)}
               </div>
               <div
-                className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] shadow-md"
+                className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] shadow-md"
                 title={`${lead.event_type || 'Other'} event`}
                 aria-label={`${lead.event_type || 'Other'} event`}
               >
