@@ -126,10 +126,15 @@ function renderHero(block: HeroBlock): string {
 function renderText(block: TextBlock): string {
   const align = block.textAlign
   const lines = block.content.split('\n')
-  const paragraphs = lines.map((line) => {
-    if (!line.trim()) return `<p style="margin:0 0 6px;">&nbsp;</p>`
-    return `<p style="margin:0 0 14px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:${block.fontSize}px;font-weight:400;line-height:1.8;color:${block.color};text-align:${align};">${line}</p>`
-  }).join('')
+  
+  // If it's already HTML (e.g. from rich text editor), render it directly inside a styled container
+  const isHtml = block.content.trim().startsWith('<') && block.content.trim().endsWith('>')
+  const paragraphs = isHtml 
+    ? `<div style="font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:${block.fontSize}px;font-weight:400;line-height:1.8;color:${block.color};text-align:${align};">${block.content}</div>`
+    : lines.map((line) => {
+        if (!line.trim()) return `<p style="margin:0 0 6px;">&nbsp;</p>`
+        return `<p style="margin:0 0 14px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:${block.fontSize}px;font-weight:400;line-height:1.8;color:${block.color};text-align:${align};">${line}</p>`
+      }).join('')
 
   return `
   <!-- Text Block -->

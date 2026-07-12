@@ -15,7 +15,16 @@ import {
   ChevronUp,
   ExternalLink,
   Minus,
-  Plus
+  Plus,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Link,
+  Image as ImageIcon
 } from 'lucide-react'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
@@ -98,6 +107,46 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  // Rich Text Editor Ref, Selection States & Cmd Helpers
+  const editorRef = React.useRef<HTMLDivElement>(null)
+  const [savedSelectionRange, setSavedSelectionRange] = useState<Range | null>(null)
+
+  const syncEditorValue = () => {
+    if (editorRef.current) {
+      setBodyText(editorRef.current.innerHTML)
+    }
+  }
+
+  const saveSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      setSavedSelectionRange(sel.getRangeAt(0))
+    }
+  }
+
+  const restoreSelection = () => {
+    if (savedSelectionRange) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedSelectionRange)
+      }
+    }
+  }
+
+  const execCmd = (command: string, value: string = '') => {
+    document.execCommand(command, false, value)
+    editorRef.current?.focus()
+    syncEditorValue()
+  }
+
+  const handleLinkPrompt = () => {
+    const url = prompt('Enter link URL (e.g. https://...):')
+    if (url) {
+      execCmd('createLink', url)
+    }
+  }
+
   // Brand Asset Picker States & Helpers
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
@@ -109,8 +158,21 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     setAssetPickerOpen(true)
   }
 
+  const triggerInlineAssetPicker = () => {
+    saveSelection()
+    setActiveBlockId('inline')
+    setActiveBlockField('imageUrl')
+    setAssetPickerOpen(true)
+  }
+
   const handleAssetSelect = (url: string) => {
-    if (activeBlockId && activeBlockField) {
+    if (activeBlockId === 'inline') {
+      editorRef.current?.focus()
+      restoreSelection()
+      const imgHtml = `<img src="${url}" style="max-width: 100%; height: auto; border-radius: 6px; margin: 10px 0; display: block; border: 1px solid rgba(202, 162, 76, 0.15);" alt="Luxor Inline Asset" />`
+      document.execCommand('insertHTML', false, imgHtml)
+      syncEditorValue()
+    } else if (activeBlockId && activeBlockField) {
       handleBlockFieldChange(activeBlockId, activeBlockField, url)
     }
     setAssetPickerOpen(false)
@@ -149,6 +211,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     }
     setSubject('')
     setBodyText('')
+    if (editorRef.current) {
+      editorRef.current.innerHTML = ''
+    }
     setSelectedTemplateId('regular')
     setTemplateBlocks([])
     setErrorMsg(null)
@@ -521,14 +586,101 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
               </div>
 
               {selectedTemplateId === 'regular' ? (
-                // Regular Plain-text Editor
-                <div className="flex-1 min-h-0">
-                  <textarea
-                    placeholder="Write your email content here. It will be wrapped automatically in the premium Luxor brand layout..."
-                    value={bodyText}
-                    onChange={(e) => setBodyText(e.target.value)}
-                    className="h-full w-full resize-none rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-relaxed text-zinc-300 outline-none focus:border-[#caa24c]/40"
-                  />
+                // Regular Rich-Text Editor
+                <div className="flex-1 flex flex-col min-h-0 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-lg overflow-hidden focus-within:border-[#caa24c]/40 transition-colors">
+                  {/* Editor Toolbar */}
+                  <div className="flex flex-wrap items-center gap-1 bg-black/40 border-b border-[color:var(--portal-border)] px-3 py-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => execCmd('bold')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Bold (Ctrl+B)"
+                    >
+                      <Bold size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => execCmd('italic')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Italic (Ctrl+I)"
+                    >
+                      <Italic size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => execCmd('underline')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Underline (Ctrl+U)"
+                    >
+                      <Underline size={13} />
+                    </button>
+                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => execCmd('insertUnorderedList')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Bullet List"
+                    >
+                      <List size={13} />
+                    </button>
+                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => execCmd('justifyLeft')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Align Left"
+                    >
+                      <AlignLeft size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => execCmd('justifyCenter')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Align Center"
+                    >
+                      <AlignCenter size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => execCmd('justifyRight')}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Align Right"
+                    >
+                      <AlignRight size={13} />
+                    </button>
+                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={handleLinkPrompt}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Insert Link"
+                    >
+                      <Link size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={triggerInlineAssetPicker}
+                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-[#caa24c] transition-colors cursor-pointer"
+                      title="Insert Brand Asset Image"
+                    >
+                      <ImageIcon size={13} />
+                    </button>
+                  </div>
+                  {/* ContentEditable Container */}
+                  <div className="flex-1 overflow-y-auto portal-scrollbar p-3 relative">
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      onInput={syncEditorValue}
+                      onBlur={syncEditorValue}
+                      className="min-h-[160px] h-full w-full outline-none text-xs leading-relaxed text-zinc-300 relative select-text"
+                    />
+                    {!bodyText && (
+                      <div className="absolute left-3 top-3 pointer-events-none text-xs text-zinc-650 leading-relaxed max-w-[90%] select-none">
+                        Write your email content here. Format it, add bullet points, or insert inline images using the toolbar above...
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 // Marketing Template Field Editor
