@@ -1031,11 +1031,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
           </div>
         </div>
       )}
-      <BrandAssetPicker
-        isOpen={assetPickerOpen}
-        onClose={() => setAssetPickerOpen(false)}
-        onSelect={handleAssetSelect}
-      />
+      <AnimatePresence>
+        {assetPickerOpen && (
+          <BrandAssetPicker
+            isOpen={assetPickerOpen}
+            onClose={() => setAssetPickerOpen(false)}
+            onSelect={handleAssetSelect}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

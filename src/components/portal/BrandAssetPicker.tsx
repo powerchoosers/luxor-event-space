@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
   X,
   Search,
@@ -172,11 +173,21 @@ export function BrandAssetPicker({
     return matchesSearch && matchesCategory
   })
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm luxor-soft-enter">
-      <div className="flex h-[600px] w-full max-w-4xl flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+        className="flex h-[600px] w-full max-w-4xl flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl overflow-hidden"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-6 py-4">
@@ -384,7 +395,7 @@ export function BrandAssetPicker({
 
         </div>
 
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

@@ -11,6 +11,7 @@ import { EmailPreview } from './EmailPreview'
 import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
+import { AnimatePresence } from 'framer-motion'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -540,11 +541,15 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         subject={subject || 'Email from Luxor'}
         onClose={() => setShowPreview(false)}
       />
-      <BrandAssetPicker
-        isOpen={assetPickerOpen}
-        onClose={() => setAssetPickerOpen(false)}
-        onSelect={handleAssetSelect}
-      />
+      <AnimatePresence>
+        {assetPickerOpen && (
+          <BrandAssetPicker
+            isOpen={assetPickerOpen}
+            onClose={() => setAssetPickerOpen(false)}
+            onSelect={handleAssetSelect}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
