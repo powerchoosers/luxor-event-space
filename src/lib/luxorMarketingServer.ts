@@ -821,3 +821,111 @@ export async function isMarketingMember(email: string): Promise<boolean> {
   })
   return Array.isArray(results) && results.length > 0
 }
+
+/**
+ * Finds (or re-uses) the single consolidated Grand Opening RSVP campaign and
+ * adds the given recipient to it, then immediately sends their confirmation email.
+ *
+ * This replaces the old pattern of creating a new campaign per RSVP.
+ */
+export async function addRecipientToGrandOpeningCampaign(data: {
+  email: string
+  name: string | null
+  htmlBody: string
+  senderFrom?: string
+  senderName?: string
+  metadata?: Record<string, unknown>
+}): Promise<void> {
+  const CAMPAIGN_NAME = 'Grand Opening Showcase \u2014 RSVP Confirmations'
+
+  // 1. Find the existing consolidated campaign
+  const existing = await supabaseRest<LuxorMarketingCampaign[]>(
+    `luxor_marketing_campaigns?select=*&name=eq.${encodeURIComponent(CAMPAIGN_NAME)}&limit=1`,
+  )
+  let campaign = existing[0] ?? null
+
+  // 2. If it doesn't exist yet (e.g. fresh environment), create it
+  if (!campaign) {
+    const [created] = await supabaseRest<LuxorMarketingCampaign[]>('luxor_marketing_campaigns?select=*', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        name: CAMPAIGN_NAME,
+        subject: 'Your Luxor Grand Opening RSVP is confirmed',
+        html_body: data.htmlBody,
+        status: 'sent',
+        audience_label: 'Automated RSVP Confirmations',
+        scheduled_for: new Date().toISOString(),
+        created_by: 'system',
+        recipient_count: 0,
+        metadata: {
+          source: 'grand_opening_rsvp',
+          campaign_key: 'grand_opening_2026_07_25',
+          automation_type: 'grand_opening_rsvp_confirmation',
+          sender_from: data.senderFrom || null,
+          sender_name: data.senderName || null,
+          ignore_suppressions: true,
+          consolidated: true,
+          ...(data.metadata || {}),
+        },
+      }),
+    })
+    if (!created) throw new Error('Grand Opening campaign could not be created.')
+    campaign = created
+  }
+
+  // 3. Add the new recipient
+  const trackingToken = createTrackingToken()
+  const [createdRecipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      campaign_id: campaign.id,
+      email: data.email,
+      name: data.name || null,
+      status: 'queued',
+      tracking_token: trackingToken,
+      metadata: data.metadata || {},
+    }),
+  })
+
+  if (!createdRecipient) return
+
+  // 4. Bump recipient_count on the campaign
+  await supabaseRest<LuxorMarketingCampaign[]>(
+    `luxor_marketing_campaigns?select=*&id=eq.${encodeURIComponent(campaign.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ recipient_count: (campaign.recipient_count ?? 0) + 1 }),
+    },
+  )
+
+  // 5. Create and immediately send the individual email job
+  const now = new Date().toISOString()
+  const job = await createLuxorEmailJob({
+    jobType: 'marketing_campaign',
+    recipientEmail: data.email,
+    subject: 'Your Luxor Grand Opening RSVP is confirmed',
+    body: instrumentMarketingHtml(data.htmlBody, trackingToken),
+    scheduledFor: now,
+    metadata: {
+      campaign_id: campaign.id,
+      marketing_recipient_id: createdRecipient.id,
+      tracking_token: trackingToken,
+      sender_from: data.senderFrom || null,
+      sender_name: data.senderName || null,
+    },
+  })
+
+  await supabaseRest<LuxorMarketingRecipient[]>(
+    `luxor_marketing_recipients?select=*&id=eq.${encodeURIComponent(createdRecipient.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ email_job_id: job.id }),
+    },
+  )
+
+  // 6. Process the job immediately
+  const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
+  await processLuxorEmailJobs(jobs)
+}
