@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Info } from 'lucide-react'
 import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
@@ -46,8 +47,9 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        💡 <strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.</span>
       </div>
       <Field label="Background Image URL">
         <div className="flex gap-2">
@@ -102,8 +104,9 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
   const u = (patch: Partial<TextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        💡 <strong>Paragraph text</strong> can be typed directly on the canvas.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Paragraph text</strong> can be typed directly on the canvas.</span>
       </div>
       <RowFields>
         <Field label="Font Size (px)">
@@ -133,8 +136,9 @@ function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTe
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        💡 <strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.</span>
       </div>
       <Field label="Image URL">
         <div className="flex gap-2">
@@ -175,8 +179,9 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
   const u = (patch: Partial<ButtonBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        💡 <strong>Button text</strong> can be typed directly on the button on the canvas.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Button text</strong> can be typed directly on the button on the canvas.</span>
       </div>
       <Field label="URL">
         <input className={inputCls} placeholder="https://..." value={block.url} onChange={(e) => u({ url: e.target.value })} />
@@ -211,11 +216,9 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
 function TwoColumnInspector() {
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-4 text-center leading-relaxed">
-        📢 <strong>Two Columns</strong> content (headlines and body paragraphs) is edited entirely in-place.
-        <br />
-        <br />
-        Simply click on the text areas on the canvas and start typing.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Two Columns</strong> content is edited entirely in-place — click any text area on the canvas and start typing.</span>
       </div>
     </div>
   )
@@ -266,8 +269,9 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
   const u = (patch: Partial<FooterBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        💡 <strong>Address</strong> and <strong>phone/details</strong> can be typed directly on the footer on the canvas.
+      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+        <span><strong>Address</strong> and <strong>phone/details</strong> can be typed directly on the footer on the canvas.</span>
       </div>
       <Field label="Website">
         <input className={inputCls} value={block.website} onChange={(e) => u({ website: e.target.value })} />
@@ -304,14 +308,14 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
 // ─── Main Inspector ───────────────────────────────────────────────────────────
 export function BlockInspector({ block, onChange, onBrowseImage }: InspectorProps) {
   const titles: Record<string, string> = {
-    hero: '🖼️ Hero Block',
-    text: '📝 Text Block',
-    image_text: '🖼️ Image + Text',
-    button: '🔘 Button',
-    two_column: '⬛ Two Columns',
-    divider: '➖ Divider',
-    spacer: '↕️ Spacer',
-    footer: '📌 Footer',
+    hero: 'Hero Block',
+    text: 'Text Block',
+    image_text: 'Image + Text',
+    button: 'Button',
+    two_column: 'Two Columns',
+    divider: 'Divider',
+    spacer: 'Spacer',
+    footer: 'Footer',
   }
 
   return (
