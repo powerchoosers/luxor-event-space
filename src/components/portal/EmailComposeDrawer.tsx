@@ -329,7 +329,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     fixed right-6 bottom-0 z-50
     flex flex-col
     bg-[color:var(--portal-card)] border border-[#caa24c]/30 rounded-t-2xl shadow-2xl backdrop-blur-xl
-    transition-all duration-300 ease-in-out
+    transition-[width,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
     ${isMinimized ? 'h-12 w-[380px]' : isExpanded ? 'h-[85vh] w-[960px]' : 'h-[600px] w-[540px]'}
   `
 
