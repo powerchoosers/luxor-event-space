@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
@@ -47,6 +47,21 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
   const html = renderEmailToHtml(subject, blocks)
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
   const isScheduled = Boolean(scheduledFor)
+
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [iframeHeight, setIframeHeight] = useState(800)
+
+  const updateIframeHeight = () => {
+    if (iframeRef.current?.contentWindow?.document?.body) {
+      const height = iframeRef.current.contentWindow.document.body.scrollHeight + 50
+      setIframeHeight(height)
+    }
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(updateIframeHeight, 150)
+    return () => clearTimeout(timer)
+  }, [html, activeTab])
 
   // Load contacts
   useEffect(() => {
@@ -218,7 +233,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
 
   return (
     <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-4xl">
-        
+      <div className="h-[80vh] flex flex-col bg-[color:var(--portal-bg)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-6 py-4 flex-shrink-0">
           <div className="flex items-center gap-4">
@@ -234,6 +249,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
               tabs={tabs}
               activeTab={activeTab}
               onTabChange={(tab) => setActiveTab(tab)}
+              buttonClassName="px-3"
             />
           </div>
 
@@ -246,7 +262,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
         </div>
 
         {/* Content */}
-        <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
+        <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden flex flex-col">
           
           {/* Preview tab */}
           {activeTab === 'preview' && (
@@ -258,27 +274,30 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                   <span className="h-3 w-3 rounded-full bg-amber-400" />
                   <span className="h-3 w-3 rounded-full bg-emerald-400" />
                 </div>
-                <div className="flex-1 bg-zinc-800 rounded px-3 py-1 text-[10px] text-zinc-500 font-mono">
+                <div className="flex-1 bg-zinc-800 rounded px-3 py-1 text-[10px] text-zinc-550 font-mono">
                   {subject || 'Untitled Email'}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleCopyHtml} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 transition-all">
+                  <button onClick={handleCopyHtml} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 transition-all cursor-pointer">
                     <Copy size={11} />
                     {copied ? 'Copied!' : 'Copy HTML'}
                   </button>
-                  <button onClick={handleDownload} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 transition-all">
+                  <button onClick={handleDownload} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 transition-all cursor-pointer">
                     <Download size={11} />
                     Download
                   </button>
                 </div>
               </div>
-              {/* iframe preview */}
-              <div className="flex-1 bg-zinc-100 overflow-hidden">
+              {/* iframe preview container with custom scrollbar */}
+              <div className="flex-1 bg-zinc-950 overflow-y-auto portal-scrollbar p-6 flex justify-center">
                 <iframe
+                  ref={iframeRef}
                   srcDoc={html}
                   title="Email Preview"
-                  className="w-full h-full border-0"
+                  className="w-[600px] border-0 bg-white shadow-2xl rounded-xl transition-all"
+                  style={{ height: `${iframeHeight}px` }}
                   sandbox="allow-same-origin"
+                  onLoad={updateIframeHeight}
                 />
               </div>
             </div>
@@ -601,6 +620,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
             </div>
           )}
         </PortalTabTransition>
-      </PortalModal>
+      </div>
+    </PortalModal>
   )
 }
