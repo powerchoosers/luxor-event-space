@@ -46,6 +46,7 @@ import {
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 
 type ZohoEmailMessage = {
   id: string
@@ -134,6 +135,12 @@ type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
 
 const ACTIVITY_BATCH_SIZE = 18
+const EVENT_TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
+  const hours = Math.floor(index / 4)
+  const minutes = (index % 4) * 15
+  const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  return { value, label: formatTimeString(value) }
+})
 
 export default function LeadDetailPage({
   params,
@@ -513,8 +520,9 @@ export default function LeadDetailPage({
     if (lead) {
       const metadata = lead.metadata || {}
       setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || ''))
-      setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || ''))
-      setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || ''))
+      const grandOpeningLead = isGrandOpeningRsvp(lead)
+      setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.startTime : '')))
+      setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.endTime : '')))
       setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || ''))
       setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || ''))
       setTourGuests(String(metadata.tourGuests || ''))
@@ -528,6 +536,7 @@ export default function LeadDetailPage({
     if (!lead) return
     try {
       setSavingSummary(true)
+      const durationMinutes = calculateEventDurationMinutes(summaryStartTime, summaryEndTime)
       if (latestBooking) {
         const res = await fetch('/api/bookings', {
           method: 'PATCH',
@@ -541,6 +550,7 @@ export default function LeadDetailPage({
               venue: summaryVenue,
               setup_time: summarySetupTime,
               breakdown_time: summaryBreakdownTime,
+              duration_minutes: durationMinutes,
             }
           })
         })
@@ -558,6 +568,7 @@ export default function LeadDetailPage({
               end_time: summaryEndTime,
               setup_time: summarySetupTime,
               breakdown_time: summaryBreakdownTime,
+              duration_minutes: durationMinutes,
             }
           })
         })
@@ -2853,7 +2864,11 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
-                                <span className="font-bold text-white">{latestBooking?.start_time && latestBooking?.end_time ? `${formatTimeString(latestBooking.start_time)} – ${formatTimeString(latestBooking.end_time)}` : 'Time not set'}</span>
+                                <span className="font-bold text-white">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Duration</span>
+                                <span className="font-bold text-white">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
@@ -3601,20 +3616,22 @@ export default function LeadDetailPage({
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Start Time</label>
-                              <input
-                                type="time"
+                              <PortalSelect
                                 value={summaryStartTime}
-                                onChange={(e) => setSummaryStartTime(e.target.value)}
-                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                onChange={setSummaryStartTime}
+                                options={EVENT_TIME_OPTIONS}
+                                placeholder="Select start time"
+                                className="w-full"
                               />
                             </div>
                             <div>
                               <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">End Time</label>
-                              <input
-                                type="time"
+                              <PortalSelect
                                 value={summaryEndTime}
-                                onChange={(e) => setSummaryEndTime(e.target.value)}
-                                className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
+                                onChange={setSummaryEndTime}
+                                options={EVENT_TIME_OPTIONS}
+                                placeholder="Select end time"
+                                className="w-full"
                               />
                             </div>
                           </div>
@@ -3667,6 +3684,10 @@ export default function LeadDetailPage({
                             <span className="text-xs font-bold text-white">
                               {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
                             </span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">Duration</span>
+                            <span className="text-xs font-bold text-white">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
                           </div>
                           <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
                             <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
@@ -4670,20 +4691,22 @@ export default function LeadDetailPage({
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Start Time</label>
-                  <input
-                    type="time"
+                  <PortalSelect
                     value={bookingStartTime}
-                    onChange={(e) => setBookingStartTime(e.target.value)}
-                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                    onChange={setBookingStartTime}
+                    options={EVENT_TIME_OPTIONS}
+                    placeholder="Select start time"
+                    className="w-full"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">End Time</label>
-                  <input
-                    type="time"
+                  <PortalSelect
                     value={bookingEndTime}
-                    onChange={(e) => setBookingEndTime(e.target.value)}
-                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                    onChange={setBookingEndTime}
+                    options={EVENT_TIME_OPTIONS}
+                    placeholder="Select end time"
+                    className="w-full"
                   />
                 </div>
               </div>
@@ -5548,6 +5571,27 @@ function formatTimeString(timeStr: string) {
   hours = hours % 12
   hours = hours ? hours : 12
   return `${hours}:${minutes} ${ampm}`
+}
+
+function calculateEventDurationMinutes(startTime: string, endTime: string) {
+  const parse = (value: string) => {
+    const match = value.match(/^(\d{1,2}):(\d{2})$/)
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null
+  }
+  const start = parse(startTime)
+  const end = parse(endTime)
+  if (start === null || end === null) return null
+  return end >= start ? end - start : 24 * 60 - start + end
+}
+
+function formatEventDuration(startTime: string, endTime: string) {
+  const totalMinutes = calculateEventDurationMinutes(startTime, endTime)
+  if (totalMinutes === null) return 'Not set'
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (!hours) return `${minutes} min`
+  if (!minutes) return `${hours} hour${hours === 1 ? '' : 's'}`
+  return `${hours} hr ${minutes} min`
 }
 
 function normalizeTimeInputValue(value: string | null | undefined) {

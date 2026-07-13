@@ -90,6 +90,7 @@ export default function MarketingPage() {
   const [selectedDetail, setSelectedDetail] = useState<CampaignDetail | null>(null)
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
+  const [builderSession, setBuilderSession] = useState(0)
   const [elenaState, setElenaState] = useState<{ status: string; prompt?: string } | null>(null)
   const latestActivityAtRef = useRef<string | null>(null)
   const seenActivityIdsRef = useRef<Set<string>>(new Set())
@@ -138,6 +139,9 @@ export default function MarketingPage() {
     }
 
     handleStateChange()
+    if (localStorage.getItem('elena_active_campaign_draft')) {
+      handleDraftLoaded()
+    }
     window.addEventListener('elena-generation-state-change', handleStateChange)
     window.addEventListener('elena-campaign-published', handleCampaignPublished)
     window.addEventListener('elena-campaign-draft-loaded', handleDraftLoaded)
@@ -307,12 +311,17 @@ export default function MarketingPage() {
   }, [loadCampaigns, notify, refreshCampaignReport])
 
   function openTemplateInBuilder(template: EmailTemplate) {
+    localStorage.removeItem('luxor_email_builder_working_draft')
     setBuilderTemplate(template)
+    setBuilderSession((current) => current + 1)
     setActiveTab('builder')
   }
 
   function openBlankBuilder() {
+    localStorage.removeItem('elena_active_campaign_draft')
+    localStorage.removeItem('luxor_email_builder_working_draft')
     setBuilderTemplate(null)
+    setBuilderSession((current) => current + 1)
     setActiveTab('builder')
   }
 
@@ -355,7 +364,7 @@ export default function MarketingPage() {
               <PortalAnimatedTabs
                 tabs={tabs}
                 activeTab={activeTab}
-                onTabChange={(tab) => (tab === 'builder' ? openBlankBuilder() : setActiveTab(tab))}
+                onTabChange={setActiveTab}
               />
             </div>
           </div>
@@ -486,7 +495,7 @@ export default function MarketingPage() {
 
         {activeTab === 'builder' && (
           <div className="min-h-0 flex-1">
-            <EmailBuilderShell key={builderTemplate?.id || 'blank-builder'} initialTemplate={builderTemplate} />
+            <EmailBuilderShell key={`${builderTemplate?.id || 'blank-builder'}-${builderSession}`} initialTemplate={builderTemplate} />
           </div>
         )}
 

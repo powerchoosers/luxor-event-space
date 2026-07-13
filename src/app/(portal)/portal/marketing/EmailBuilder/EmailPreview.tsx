@@ -23,12 +23,20 @@ interface EmailPreviewProps {
   isOpen: boolean
   blocks: EmailBlock[]
   subject: string
+  initialAudienceLabel?: string
+  onAudienceLabelChange?: (value: string) => void
   onClose: () => void
 }
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 
-export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewProps) {
+type MarketingList = {
+  name: string
+  memberCount: number
+  members: { email: string; full_name: string | null }[]
+}
+
+export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', onAudienceLabelChange, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [selectedEmails, setSelectedEmails] = useState<string[]>([])
   const [typedInput, setTypedInput] = useState('')
@@ -37,7 +45,10 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
   const [contactsLoading, setContactsLoading] = useState(false)
   const [sendSubject, setSendSubject] = useState(subject)
   const [campaignName, setCampaignName] = useState(subject)
-  const [audienceLabel, setAudienceLabel] = useState('Manual list')
+  const [audienceLabel, setAudienceLabel] = useState(initialAudienceLabel)
+  const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
+  const [newListName, setNewListName] = useState('')
+  const [creatingList, setCreatingList] = useState(false)
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [sendStatus, setSendStatus] = useState<SendStatus>('idle')
@@ -82,8 +93,69 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
         })
         .catch((err) => console.error(err))
         .finally(() => setContactsLoading(false))
+
+      fetch('/api/marketing/lists', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((data) => setMarketingLists(Array.isArray(data.lists) ? data.lists : []))
+        .catch((err) => console.error(err))
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !marketingLists.length) return
+    const matchingList = marketingLists.find((list) => list.name.toLowerCase() === initialAudienceLabel.toLowerCase())
+    if (matchingList) {
+      setAudienceLabel(matchingList.name)
+      setSelectedEmails(matchingList.members.map((member) => member.email))
+    }
+  }, [initialAudienceLabel, isOpen, marketingLists])
+
+  const handleAudienceChange = (value: string) => {
+    if (value === '__create_new__') {
+      setAudienceLabel(value)
+      return
+    }
+    setAudienceLabel(value)
+    onAudienceLabelChange?.(value)
+    if (value === 'Manual list') return
+    const list = marketingLists.find((item) => item.name === value)
+    if (list) setSelectedEmails(list.members.map((member) => member.email))
+  }
+
+  const handleCreateList = async () => {
+    const name = newListName.trim()
+    if (!name || !selectedEmails.length) {
+      setSendStatus('error')
+      setSendMessage('Select at least one recipient and enter a name for the new list.')
+      return
+    }
+    setCreatingList(true)
+    try {
+      const response = await fetch('/api/marketing/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listName: name, recipients: selectedEmails.map((email) => ({ email })) }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to create marketing list.')
+      const newList: MarketingList = {
+        name,
+        memberCount: selectedEmails.length,
+        members: selectedEmails.map((email) => ({ email, full_name: null })),
+      }
+      setMarketingLists((current) => [...current.filter((list) => list.name !== name), newList])
+      setAudienceLabel(name)
+      onAudienceLabelChange?.(name)
+      setNewListName('')
+      setSendStatus('idle')
+      setSendMessage('')
+    } catch (error) {
+      setSendStatus('error')
+      setSendMessage(error instanceof Error ? error.message : 'Unable to create marketing list.')
+    } finally {
+      setCreatingList(false)
+    }
+  }
 
   // Filter contacts based on search query
   const filteredContacts = allContacts.filter((c) => {
@@ -171,6 +243,11 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
   async function handleSend() {
     const emails = selectedEmails
 
+    if (audienceLabel === '__create_new__') {
+      setSendMessage('Create the new marketing list before sending this campaign.')
+      setSendStatus('error')
+      return
+    }
     if (!emails.length) {
       setSendMessage('Please enter at least one recipient email address.')
       setSendStatus('error')
@@ -549,12 +626,36 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Audience Label</label>
-                      <input
-                        className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
-                        placeholder="Wedding leads, no-shows..."
+                      <PortalSelect
                         value={audienceLabel}
-                        onChange={(e) => setAudienceLabel(e.target.value)}
+                        onChange={handleAudienceChange}
+                        className="w-full"
+                        placeholder="Choose a marketing list"
+                        options={[
+                          { value: 'Manual list', label: 'Manual selection' },
+                          ...marketingLists.map((list) => ({ value: list.name, label: `${list.name} (${list.memberCount})` })),
+                          { value: '__create_new__', label: '+ Create new list' },
+                        ]}
                       />
+                      {audienceLabel === '__create_new__' ? (
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            value={newListName}
+                            onChange={(event) => setNewListName(event.target.value)}
+                            placeholder="New list name"
+                            className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateList}
+                            disabled={creatingList || !newListName.trim() || !selectedEmails.length}
+                            className="rounded-md bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-black disabled:opacity-40"
+                          >
+                            {creatingList ? 'Saving' : 'Create'}
+                          </button>
+                        </div>
+                      ) : null}
+                      <p className="text-[10px] text-zinc-600">Choosing a list selects all of its saved members.</p>
                     </div>
                     <div className="space-y-1.5">
                       <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Schedule Date</label>

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
+
 import crypto from 'crypto'
 import { LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
@@ -114,7 +116,7 @@ export function buildGrandOpeningRsvpEmail(inquiry: LuxorInquiry) {
     body: [
       `Hi ${firstName},`,
       'Thank you for RSVPing to the Luxor Grand Opening Showcase.',
-      'We have your spot saved for Saturday, July 25 at Luxor Event Space.',
+      `We have your spot saved for ${LUXOR_GRAND_OPENING.dateLabel}, from ${LUXOR_GRAND_OPENING.timeLabel} at Luxor Event Space.`,
       `Attending: ${attendeeCount} guest${attendeeCount === 1 ? '' : 's'}`,
       `Interest noted: ${interestLine}`,
       'You can expect venue tours, vendor connections, tastings, giveaways, and a closer look at what Luxor offers for future events.',
@@ -158,7 +160,7 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
               <p style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Grand Opening Showcase</p>
               <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:44px;font-weight:600;line-height:1.05;color:#f7efe3;">Your RSVP Is Confirmed</h1>
               <p style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
-                Hi ${escapeHtml(firstName)}, we saved your spot for the Luxor Grand Opening Showcase on Saturday, July 25.
+                Hi ${escapeHtml(firstName)}, we saved your spot for the Luxor Grand Opening Showcase on ${LUXOR_GRAND_OPENING.dateLabel}, from <strong style="color:#f1d27a;">${LUXOR_GRAND_OPENING.timeLabel}</strong>.
               </p>
             </td>
           </tr>

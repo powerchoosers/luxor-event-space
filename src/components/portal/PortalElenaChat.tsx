@@ -362,9 +362,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const handleOpenInBuilder = useCallback((msgIndex: number, draft: CampaignDraft) => {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
     localStorage.setItem('elena_active_campaign_draft', JSON.stringify(draft))
-    window.dispatchEvent(new Event('elena-campaign-draft-loaded'))
-    onClose()
-  }, [onClose])
+    if (activePath === '/portal/marketing') {
+      window.dispatchEvent(new Event('elena-campaign-draft-loaded'))
+      onClose()
+      return
+    }
+    window.location.assign('/portal/marketing')
+  }, [activePath, onClose])
 
   const handleRepromptCampaign = useCallback((msgIndex: number, draft: CampaignDraft) => {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))

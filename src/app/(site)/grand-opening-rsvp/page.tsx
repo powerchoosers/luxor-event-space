@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 
 const showcaseDetails = [
   { label: 'Free tastings', icon: Utensils },
@@ -55,21 +56,25 @@ export default function GrandOpeningPage() {
       fullName: [firstName, lastName].filter(Boolean).join(' '),
       email,
       eventType: eventInterest || 'Grand Opening RSVP',
-      targetDate: 'Saturday, July 25',
+      targetDate: LUXOR_GRAND_OPENING.date,
       guestCount: attendeeCount,
       attendeeCount,
       packageInterest: eventInterest,
       message: `Grand Opening RSVP${eventInterest ? ` - interested in ${eventInterest}` : ''}.`,
       source: 'grand_opening_rsvp',
       flow: 'grand_opening_rsvp',
-      campaignKey: 'grand_opening_2026_07_25',
+      campaignKey: LUXOR_GRAND_OPENING.campaignKey,
       rsvpStatus: 'attending',
       marketingOptIn,
       pagePath: window.location.pathname,
       referrer: document.referrer,
       metadata: {
-        campaignName: 'Luxor Grand Opening Showcase',
-        eventDateLabel: 'Saturday, July 25',
+        campaignName: LUXOR_GRAND_OPENING.name,
+        eventDateLabel: LUXOR_GRAND_OPENING.dateLabel,
+        eventTimeLabel: LUXOR_GRAND_OPENING.timeLabel,
+        start_time: LUXOR_GRAND_OPENING.startTime,
+        end_time: LUXOR_GRAND_OPENING.endTime,
+        duration_minutes: LUXOR_GRAND_OPENING.durationMinutes,
         eventInterest,
         formVersion: 'grand-opening-rsvp-v1',
       },
@@ -109,7 +114,7 @@ export default function GrandOpeningPage() {
               Grand Opening RSVP
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#d7c29a]/78">
-              Join us for the Luxor Grand Opening Showcase on Saturday, July 25. Come tour the venue, meet vendors, enjoy tastings, and celebrate what is next for Luxor at Las Palmas.
+              Join us for the Luxor Grand Opening Showcase on {LUXOR_GRAND_OPENING.dateLabel} from {LUXOR_GRAND_OPENING.timeLabel}. Come tour the venue, meet vendors, enjoy tastings, and celebrate what is next for Luxor at Las Palmas.
             </p>
 
             <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
@@ -155,7 +160,8 @@ export default function GrandOpeningPage() {
               ) : (
                 <>
                   <div className="border-b border-[#caa24c]/18 pb-6 text-center">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Saturday, July 25</p>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{LUXOR_GRAND_OPENING.dateLabel}</p>
+                    <p className="mt-2 font-mono text-sm font-black uppercase tracking-[0.2em] text-[#f1d27a]">{LUXOR_GRAND_OPENING.timeLabel}</p>
                     <h2 className="mt-3 font-serif text-4xl leading-none text-[#f7efe3] sm:text-5xl">Reserve your place.</h2>
                     <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-[#d7c29a]/68">
                       Tell us who is coming and what kind of future event you may be interested in hosting.

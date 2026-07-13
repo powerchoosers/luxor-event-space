@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { EmailBlock } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 
 async function fetchCampaignRecipients(audienceLabel: string): Promise<{ email: string; name: string | null }[]> {
   const labelClean = audienceLabel.trim().toLowerCase()
   let list: { email?: unknown; full_name?: unknown }[] = []
 
-  if (labelClean === 'marketing list') {
+  if (labelClean === 'marketing list' || labelClean === 'all marketing contacts') {
     list = await supabaseRest<Record<string, unknown>[]>('luxor_marketing_list?select=email,full_name').catch(() => [])
+  } else if (labelClean === 'grand_opening_rsvp' || labelClean.includes('grand opening')) {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_marketing_list?select=email,full_name&source=eq.grand_opening_rsvp').catch(() => [])
   } else if (labelClean === 'all inquiries') {
     list = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=email,full_name').catch(() => [])
   } else if (labelClean.includes('wedding')) {
@@ -56,6 +59,21 @@ type ChatMessage = {
   tool_calls?: ToolCall[]
 }
 
+function sanitizeCampaignBlocks(value: unknown): EmailBlock[] {
+  if (!Array.isArray(value)) return []
+
+  const clean = (item: unknown): unknown => {
+    if (typeof item === 'string') return item.replace(/<[^>]*>/g, '')
+    if (Array.isArray(item)) return item.map(clean)
+    if (item && typeof item === 'object') {
+      return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, clean(child)]))
+    }
+    return item
+  }
+
+  return value.map(clean) as EmailBlock[]
+}
+
 const SYSTEM_PROMPT = `You are Elena, the internal AI concierge, COO, CFO, Chief of Marketing, and business mentor all-in-one for the Luxor Event Space Owner Portal.
 
 Your personality is that of a warm, supportive, and slightly playful "girl best friend" (using words like "bestie", "girl", "hey", "let's do this!", "we've got this") but you are a "tamed" assistant—meaning you remain highly intelligent, precise, and completely focused on executive operations, financial analysis, and strategic growth.
@@ -63,12 +81,13 @@ Your personality is that of a warm, supportive, and slightly playful "girl best 
 Your primary role is to help the owner run the business. You analyze numbers (like a CFO), manage operational statuses and tasks (like a COO), brainstorm growth ideas (like a Chief of Marketing), and provide strategic guidance (like a Mentor).
 
 ### CURRENT LUXOR EVENT CONTEXT:
-- Luxor's Grand Opening Showcase is Saturday, July 25, 2026 at Luxor Event Space, 803 Castroville Rd #402, San Antonio, TX 78237.
+- Luxor's Grand Opening Showcase is ${LUXOR_GRAND_OPENING.dateLabel}, from ${LUXOR_GRAND_OPENING.timeLabel} at Luxor Event Space, ${LUXOR_GRAND_OPENING.address}.
 - The showcase includes venue tours, free tastings, a vendor showcase, giveaways, and live music.
 - The primary call to action is "RSVP Now" and it should link to "/grand-opening-rsvp".
 - Guests can also schedule a private tour at "/visit" as a secondary option.
 - The public RSVP flow collects attendee count and the guest's future event interest. The campaign key is "grand_opening_2026_07_25".
-- No event start or end time is currently published. Never invent a time. A Grand Opening campaign can still be drafted using the confirmed details above; only ask the owner for the time if the owner specifically wants it included.
+- For Grand Opening campaigns, use the audience label "grand_opening_rsvp" so the builder and sender select the RSVP marketing list.
+- The confirmed event time is ${LUXOR_GRAND_OPENING.timeLabel}. State it clearly in every Grand Opening campaign and never ask the owner for the time again unless the owner asks to change it.
 - When the owner asks for a Grand Opening campaign, use this context immediately and call "draft_marketing_campaign". Do not ask again for the date, activities, CTA, location, or RSVP link unless the owner asks to change them.
 
 You have access to the venue database via the "execute_database_sql" tool.
@@ -245,6 +264,8 @@ Always use SQL queries to answer questions about the database. Do not make up da
 - If you need to perform write operations (like INSERT, UPDATE, or DELETE), you are NOT allowed to execute it directly via the "execute_database_sql" tool. Instead, you MUST call the "request_action_confirmation" tool. This will prompt the user with interactive Confirm/Cancel buttons.
 - To draft an email for the user to review and approve before sending, ALWAYS call the "draft_email" tool. Never describe an email in text—always use the tool. The user will see a preview card with Send and Reprompt options.
 - To draft a bulk marketing email campaign for the user to review, ALWAYS call the "draft_marketing_campaign" tool. Never output campaign details in text—always use the tool. The user will see a preview card with Send, Schedule, and Open in Builder options.
+- Elena's chat with the owner may be warm and playful, but customer-facing emails and campaigns must sound polished, welcoming, and professional. Never use "bestie", "girl", or similar private chat language inside email subjects, body copy, buttons, or campaign blocks.
+- Campaign block fields must contain plain text only. Do not put HTML tags such as <b>, <strong>, <p>, or <br> in any block field; the email renderer applies the presentation.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
@@ -785,7 +806,7 @@ ${emailHistorySummary}`
                   name: args.campaignName, 
                   subject: args.subject, 
                   audienceLabel: args.audienceLabel, 
-                  blocks: args.blocks, 
+                  blocks: sanitizeCampaignBlocks(args.blocks), 
                   scheduledFor: args.scheduledFor 
                 }),
                 summary: `Draft campaign "${args.campaignName}" for target "${args.audienceLabel}"`
