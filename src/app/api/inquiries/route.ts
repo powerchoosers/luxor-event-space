@@ -4,6 +4,7 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
+import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -54,6 +55,12 @@ export async function POST(request: NextRequest) {
       } catch (mktError) {
         console.error('Inquiry created but failed to auto-add to marketing list:', mktError)
       }
+    }
+
+    if (inquiry) {
+      sendInquiryNotificationEmail(inquiry).catch((emailErr) => {
+        console.error('Inquiry created but failed to send internal notification email:', emailErr)
+      })
     }
 
     return NextResponse.json({ inquiry }, { status: 201 })

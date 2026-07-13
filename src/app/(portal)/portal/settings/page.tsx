@@ -60,14 +60,29 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('business')
   const [saving, setSaving] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [notificationEmails, setNotificationEmails] = useState('booking@luxoratlaspalmas.com')
 
   useEffect(() => {
+    // Try to load initial theme from local storage for fast render
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem('luxor-portal-theme')
       if (saved === 'light' || saved === 'dark') {
         setTheme(saved)
       }
     }
+
+    // Load full settings from database preferences
+    fetch('/api/portal/user-preferences')
+      .then(res => res.json())
+      .then(data => {
+        if (data.theme === 'light' || data.theme === 'dark') {
+          setTheme(data.theme)
+        }
+        if (data.notification_emails) {
+          setNotificationEmails(data.notification_emails)
+        }
+      })
+      .catch(err => console.error('Failed to sync settings from Supabase:', err))
   }, [])
 
   const handleUpdateTheme = (newTheme: 'light' | 'dark') => {
@@ -173,13 +188,30 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    setTimeout(() => {
-      setSaving(false)
+    try {
+      const res = await fetch('/api/portal/user-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme,
+          notification_emails: notificationEmails,
+        }),
+      })
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload.error || 'Failed to save settings.')
+      }
+
       notify({ title: 'Settings saved successfully.', variant: 'success' })
-    }, 800)
+    } catch (err) {
+      notify({ title: err instanceof Error ? err.message : 'Unable to save settings.', variant: 'error' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -462,27 +494,46 @@ export default function SettingsPage() {
 
           {/* NOTIFICATION PREFERENCES */}
           {activeTab === 'notifications' && (
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Automated Notifications</h3>
-              <div className="space-y-3">
-                {[
-                  { label: 'Notify on new lead form inquiry', desc: 'Email alerts to booking mailbox on new form entries.', checked: true },
-                  { label: 'Auto-send tour reminders', desc: 'SMS/Email reminders scheduled to prospects 24 hours before tour.', checked: true },
-                  { label: 'Contract signature event alerts', desc: 'Notify workspace coordinators immediately when a client signs.', checked: true },
-                  { label: 'Overdue bill utility spikes alerts', desc: 'Alert maintenance when utility sensor spikes or bills exceed average.', checked: false }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
-                    <input
-                      type="checkbox"
-                      defaultChecked={item.checked}
-                      className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer mt-0.5"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-white">{item.label}</p>
-                      <p className="text-[10px] text-zinc-500 mt-1 leading-normal">{item.desc}</p>
+            <div className="space-y-6">
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Automated Notifications</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Notify on new lead form inquiry', desc: 'Email alerts to booking mailbox on new form entries.', checked: true },
+                    { label: 'Auto-send tour reminders', desc: 'SMS/Email reminders scheduled to prospects 24 hours before tour.', checked: true },
+                    { label: 'Contract signature event alerts', desc: 'Notify workspace coordinators immediately when a client signs.', checked: true },
+                    { label: 'Overdue bill utility spikes alerts', desc: 'Alert maintenance when utility sensor spikes or bills exceed average.', checked: false }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
+                      <input
+                        type="checkbox"
+                        defaultChecked={item.checked}
+                        className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer mt-0.5"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-white">{item.label}</p>
+                        <p className="text-[10px] text-zinc-500 mt-1 leading-normal">{item.desc}</p>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Internal Notification Recipients</h3>
+                <div className="space-y-4">
+                  <p className="text-xs text-zinc-400">Configure target email addresses to receive branded alerts and AI-summarized dossiers when inquiries are submitted.</p>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] uppercase font-bold text-zinc-550">Recipient Emails (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={notificationEmails}
+                      onChange={e => setNotificationEmails(e.target.value)}
+                      placeholder="e.g. booking@luxoratlaspalmas.com, owner@luxoratlaspalmas.com"
+                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                    />
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           )}
