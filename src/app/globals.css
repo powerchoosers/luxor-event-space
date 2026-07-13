@@ -148,6 +148,21 @@ body[data-portal-theme='light'] .group:hover .group-hover\:text-\[\#f1d27a\] {
   color: #a8792f !important;
 }
 
+body[data-portal-theme='light'] .bg-blue-600,
+body[data-portal-theme='light'] .bg-blue-600 *,
+body[data-portal-theme='light'] .bg-blue-500,
+body[data-portal-theme='light'] .bg-blue-500 *,
+body[data-portal-theme='light'] .bg-indigo-600,
+body[data-portal-theme='light'] .bg-indigo-600 *,
+body[data-portal-theme='light'] .from-blue-600,
+body[data-portal-theme='light'] .from-blue-600 *,
+body[data-portal-theme='light'] .from-indigo-600,
+body[data-portal-theme='light'] .from-indigo-600 *,
+body[data-portal-theme='light'] .hover\:text-white:hover,
+body[data-portal-theme='light'] .group:hover .group-hover\:text-white {
+  color: #ffffff !important;
+}
+
 body[data-portal-theme='light'] .border-zinc-900,
 body[data-portal-theme='light'] .border-zinc-950,
 body[data-portal-theme='light'] .border-zinc-900\/85,
