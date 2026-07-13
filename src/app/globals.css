@@ -138,6 +138,16 @@ body[data-portal-theme='light'] select {
   border-color: var(--portal-border) !important;
 }
 
+body[data-portal-theme='light'] .text-\[\#f1d27a\],
+body[data-portal-theme='light'] .text-\[\#caa24c\] {
+  color: #a8792f !important;
+}
+
+body[data-portal-theme='light'] .group-hover\:text-\[\#f1d27a\]:hover,
+body[data-portal-theme='light'] .group:hover .group-hover\:text-\[\#f1d27a\] {
+  color: #a8792f !important;
+}
+
 body[data-portal-theme='light'] .border-zinc-900,
 body[data-portal-theme='light'] .border-zinc-950,
 body[data-portal-theme='light'] .border-zinc-900\/85,

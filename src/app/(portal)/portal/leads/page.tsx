@@ -571,7 +571,7 @@ export default function LeadsPage() {
                         className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
                       >
                         <div className="relative">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-950 border border-zinc-700/50 flex items-center justify-center text-zinc-400 text-xs font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
+                          <div className="w-8 h-8 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-xs font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
                             {getInitials(lead.full_name)}
                           </div>
                         </div>
@@ -657,7 +657,7 @@ export default function LeadsPage() {
                     }`} />
                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{col.short}</span>
                   </div>
-                  <span className="text-[9px] font-mono font-bold text-zinc-500 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-md">
+                  <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
                     {colLeads.length}
                   </span>
                 </div>
@@ -673,7 +673,7 @@ export default function LeadsPage() {
                       <div key={lead.id} className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-zinc-850 transition-all group relative">
                         <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
                           <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800/60 flex items-center justify-center text-zinc-500 text-[10px] font-bold group-hover:bg-[#caa24c]/10 group-hover:text-[#f1d27a] group-hover:border-[#caa24c]/20 transition-all duration-300">
+                            <div className="w-7 h-7 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-[10px] font-bold group-hover:bg-[#caa24c]/10 group-hover:text-[#f1d27a] group-hover:border-[#caa24c]/20 transition-all duration-300">
                               {getInitials(lead.full_name)}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -769,7 +769,7 @@ export default function LeadsPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shadow-[0_0_8px_rgba(113,113,122,0.5)]" />
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Closed Lost</span>
               </div>
-              <span className="text-[9px] font-mono font-bold text-zinc-650 bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded-md">
+              <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
                 {sortedLeads.filter(l => l.status === 'closed_lost').length}
               </span>
             </div>
@@ -781,10 +781,10 @@ export default function LeadsPage() {
                 </div>
               ) : (
                 sortedLeads.filter(l => l.status === 'closed_lost').map((lead) => (
-                  <div key={lead.id} className="bg-zinc-950/65 border border-zinc-900/60 p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800 transition-all group">
+                  <div key={lead.id} className="bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800/80 transition-all group">
                     <Link href={`/portal/leads/${lead.id}`} className="block">
                       <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-850/60 flex items-center justify-center text-zinc-600 text-[10px] font-bold">
+                        <div className="w-7 h-7 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-[10px] font-bold">
                           {getInitials(lead.full_name)}
                         </div>
                         <div className="min-w-0 flex-1">
