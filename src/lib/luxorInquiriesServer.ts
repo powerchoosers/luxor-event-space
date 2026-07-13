@@ -94,13 +94,22 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       await updateLuxorInquiry(created.id, { tour_response_token: token })
 
       const confirmation = buildTourEmail('tour_confirmation', created, token)
-      await createLuxorEmailJob({
+      const job = await createLuxorEmailJob({
         inquiryId: created.id,
         jobType: 'tour_confirmation',
         recipientEmail: created.email,
         subject: confirmation.subject,
         body: confirmation.body,
       })
+
+      // Process tour confirmation email immediately for faster feedback
+      try {
+        const { listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
+        const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
+        await processLuxorEmailJobs(jobs)
+      } catch (procErr) {
+        console.error('Failed to immediately process tour confirmation email:', procErr)
+      }
 
       const reminderAt = getTourReminderTime(created.preferred_tour_date)
       if (reminderAt) {
@@ -116,6 +125,29 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       }
     } catch (emailError) {
       console.error('Luxor tour email queue failed:', emailError)
+    }
+  } else if (created?.email && created.source !== 'grand_opening_rsvp') {
+    try {
+      const { buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
+      const emailHtml = buildStandardInquiryEmailHtml(created)
+
+      const job = await createLuxorEmailJob({
+        inquiryId: created.id,
+        jobType: 'marketing_campaign',
+        recipientEmail: created.email,
+        subject: 'We have received your Luxor inquiry',
+        body: emailHtml,
+      })
+
+      // Send standard confirmation immediately
+      try {
+        const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
+        await processLuxorEmailJobs(jobs)
+      } catch (procErr) {
+        console.error('Failed to immediately process standard confirmation email:', procErr)
+      }
+    } catch (emailError) {
+      console.error('Luxor standard inquiry confirmation email queue failed:', emailError)
     }
   }
 
