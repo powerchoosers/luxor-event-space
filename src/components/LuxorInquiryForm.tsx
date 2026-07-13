@@ -4,7 +4,7 @@ import { FormEvent, useState } from 'react'
 import { ArrowRight, CalendarDays, Check, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { LUXOR_EVENT_TYPES, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 
 type LuxorInquiryFormProps = {
@@ -31,6 +31,7 @@ export function LuxorInquiryForm({
   const [error, setError] = useState<string | null>(null)
 
   const [eventType, setEventType] = useState('')
+  const [targetDate, setTargetDate] = useState('')
   const [preferredTourSlotId, setPreferredTourSlotId] = useState('')
   const [preferredTourDate, setPreferredTourDate] = useState('')
   const [preferredTourTime, setPreferredTourTime] = useState('')
@@ -69,7 +70,7 @@ export function LuxorInquiryForm({
       email,
       phone,
       eventType: eventType,
-      targetDate: String(form.get('targetDate') ?? ''),
+      targetDate: targetDate,
       guestCount: String(form.get('guestCount') ?? ''),
       preferredTourDate: preferredTourDate,
       preferredTourTime: preferredTourTime,
@@ -139,7 +140,15 @@ export function LuxorInquiryForm({
               />
             </div>
 
-            <TextField name="targetDate" label="Target date" placeholder="Month or date" />
+            <div className="flex flex-col justify-end">
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Target date</span>
+              <PortalDatePicker
+                value={targetDate}
+                onChange={setTargetDate}
+                className="w-full text-left"
+                placeholder="Select date"
+              />
+            </div>
             <TextField name="guestCount" label="Guest count" placeholder="Estimated count" inputMode="numeric" />
             <TextField name="fullName" label="Full name" placeholder="Your name" required />
             <TextField name="email" label="Email" placeholder="you@example.com" type="email" describedBy="contact-method-help" />
