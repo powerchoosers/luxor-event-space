@@ -43,6 +43,24 @@ function cloneTemplateBlocks(blocks: EmailBlock[]) {
   return blocks.map((block) => ({ ...block, id: nanoid() }))
 }
 
+function cleanElenaDraftBlocks(blocks: EmailBlock[]) {
+  const clean = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return value
+        .replace(/<[^>]*>/g, '')
+        .replace(/\bbestie\b[!,]?/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+    }
+    if (Array.isArray(value)) return value.map(clean)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, clean(child)]))
+    }
+    return value
+  }
+  return blocks.map(clean) as unknown as EmailBlock[]
+}
+
 // ─── Template Picker ──────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -64,6 +82,7 @@ type SavedMarketingTemplate = {
   preview_color: string
   updated_at: string
   last_used_at: string | null
+  metadata: Record<string, unknown>
 }
 
 type BuilderTemplate = EmailTemplate & {
@@ -71,6 +90,8 @@ type BuilderTemplate = EmailTemplate & {
   savedId?: string
   subject?: string
   updatedAt?: string
+  audienceLabel?: string
+  recipientEmails?: string[]
 }
 
 function TemplatePicker({
@@ -184,12 +205,16 @@ function SaveTemplateModal({
   isOpen,
   subject,
   blocks,
+  audienceLabel,
+  recipientEmails,
   onClose,
   onSaved,
 }: {
   isOpen: boolean
   subject: string
   blocks: EmailBlock[]
+  audienceLabel: string
+  recipientEmails: string[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -212,6 +237,7 @@ function SaveTemplateModal({
           category: 'custom',
           blocks,
           previewColor: '#caa24c',
+          metadata: { audienceLabel, recipientEmails },
         }),
       })
       const payload = await response.json()
@@ -284,6 +310,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [subject, setSubject] = useState(initialBuilderState.subject)
   const [audienceLabel, setAudienceLabel] = useState('Manual list')
+  const [recipientEmails, setRecipientEmails] = useState<string[]>([])
   const [showPreview, setShowPreview] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
@@ -303,10 +330,12 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         try {
           const activeDraft = JSON.parse(storedDraft)
           if (activeDraft.blocks && activeDraft.blocks.length > 0) {
-            const cloned = cloneTemplateBlocks(activeDraft.blocks)
+            const sourceBlocks = activeDraftStr ? cleanElenaDraftBlocks(activeDraft.blocks) : activeDraft.blocks
+            const cloned = cloneTemplateBlocks(sourceBlocks)
             setBlocks(cloned)
             setSubject(activeDraft.subject || '')
             setAudienceLabel(activeDraft.audienceLabel || 'Manual list')
+            setRecipientEmails(Array.isArray(activeDraft.recipientEmails) ? activeDraft.recipientEmails : [])
             setHistory([cloned])
             setHistoryIdx(0)
           }
@@ -327,8 +356,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
 
   useEffect(() => {
     if (!draftHydrated) return
-    localStorage.setItem('luxor_email_builder_working_draft', JSON.stringify({ subject, blocks, audienceLabel }))
-  }, [audienceLabel, blocks, draftHydrated, subject])
+    localStorage.setItem('luxor_email_builder_working_draft', JSON.stringify({ subject, blocks, audienceLabel, recipientEmails }))
+  }, [audienceLabel, blocks, draftHydrated, recipientEmails, subject])
 
   // Brand Asset Picker States & Actions
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -364,6 +393,10 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         subject: tpl.subject,
         blocks: tpl.blocks,
         updatedAt: tpl.updated_at,
+        audienceLabel: typeof tpl.metadata?.audienceLabel === 'string' ? tpl.metadata.audienceLabel : 'Manual list',
+        recipientEmails: Array.isArray(tpl.metadata?.recipientEmails)
+          ? tpl.metadata.recipientEmails.filter((email): email is string => typeof email === 'string')
+          : [],
       }))
       setSavedTemplates(mapped)
     } catch {
@@ -428,6 +461,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     pushHistory(withNewIds)
     setSelectedId(null)
     if (!subject) setSubject(tpl.subject || tpl.name)
+    setAudienceLabel(tpl.audienceLabel || 'Manual list')
+    setRecipientEmails(tpl.recipientEmails || [])
     if (tpl.savedId) {
       fetch(`/api/marketing/templates/${tpl.savedId}`, {
         method: 'PATCH',
@@ -571,6 +606,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         isOpen={showSaveTemplate}
         subject={subject || 'Email from Luxor'}
         blocks={blocks}
+        audienceLabel={audienceLabel}
+        recipientEmails={recipientEmails}
         onClose={() => setShowSaveTemplate(false)}
         onSaved={loadSavedTemplates}
       />
@@ -579,7 +616,9 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         blocks={blocks}
         subject={subject || 'Email from Luxor'}
         initialAudienceLabel={audienceLabel}
+        initialSelectedEmails={recipientEmails}
         onAudienceLabelChange={setAudienceLabel}
+        onSelectedEmailsChange={setRecipientEmails}
         onClose={() => setShowPreview(false)}
       />
       <AnimatePresence>

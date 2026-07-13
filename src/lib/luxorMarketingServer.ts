@@ -48,6 +48,7 @@ export type MarketingTemplateInput = {
   blocks: Record<string, unknown>[]
   previewColor?: string | null
   createdBy?: string | null
+  metadata?: Record<string, unknown>
 }
 
 export type MarketingActivityEvent = LuxorMarketingEvent & {
@@ -216,7 +217,7 @@ export async function createMarketingTemplate(data: MarketingTemplateInput) {
       blocks: data.blocks,
       preview_color: data.previewColor || '#caa24c',
       created_by: data.createdBy || null,
-      metadata: {},
+      metadata: data.metadata || {},
     }),
   })
 
@@ -979,4 +980,3 @@ export async function bulkAddMarketingMembers(
     ),
   })
 }
-

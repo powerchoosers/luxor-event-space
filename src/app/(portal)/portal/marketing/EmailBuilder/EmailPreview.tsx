@@ -24,7 +24,9 @@ interface EmailPreviewProps {
   blocks: EmailBlock[]
   subject: string
   initialAudienceLabel?: string
+  initialSelectedEmails?: string[]
   onAudienceLabelChange?: (value: string) => void
+  onSelectedEmailsChange?: (emails: string[]) => void
   onClose: () => void
 }
 
@@ -36,9 +38,9 @@ type MarketingList = {
   members: { email: string; full_name: string | null }[]
 }
 
-export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', onAudienceLabelChange, onClose }: EmailPreviewProps) {
+export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
-  const [selectedEmails, setSelectedEmails] = useState<string[]>([])
+  const [selectedEmails, setSelectedEmails] = useState<string[]>(initialSelectedEmails)
   const [typedInput, setTypedInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [allContacts, setAllContacts] = useState<LuxorInquiry[]>([])
@@ -62,6 +64,12 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [iframeHeight, setIframeHeight] = useState(800)
   const [iframeLoading, setIframeLoading] = useState(true)
+
+  useEffect(() => {
+    if (!isOpen) return
+    setAudienceLabel(initialAudienceLabel)
+    setSelectedEmails(initialSelectedEmails)
+  }, [initialAudienceLabel, initialSelectedEmails, isOpen])
 
   const updateIframeHeight = () => {
     if (iframeRef.current?.contentWindow?.document?.body) {
@@ -109,6 +117,10 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
       setSelectedEmails(matchingList.members.map((member) => member.email))
     }
   }, [initialAudienceLabel, isOpen, marketingLists])
+
+  useEffect(() => {
+    onSelectedEmailsChange?.(selectedEmails)
+  }, [onSelectedEmailsChange, selectedEmails])
 
   const handleAudienceChange = (value: string) => {
     if (value === '__create_new__') {

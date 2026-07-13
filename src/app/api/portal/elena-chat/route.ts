@@ -63,7 +63,13 @@ function sanitizeCampaignBlocks(value: unknown): EmailBlock[] {
   if (!Array.isArray(value)) return []
 
   const clean = (item: unknown): unknown => {
-    if (typeof item === 'string') return item.replace(/<[^>]*>/g, '')
+    if (typeof item === 'string') {
+      return item
+        .replace(/<[^>]*>/g, '')
+        .replace(/\bbestie\b[!,]?/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+    }
     if (Array.isArray(item)) return item.map(clean)
     if (item && typeof item === 'object') {
       return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, clean(child)]))

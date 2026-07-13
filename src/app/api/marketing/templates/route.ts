@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       blocks: Array.isArray(body.blocks) ? body.blocks : [],
       previewColor: typeof body.previewColor === 'string' ? body.previewColor : '#caa24c',
       createdBy: session.email,
+      metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
     })
 
     return NextResponse.json({ template })
