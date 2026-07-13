@@ -14,9 +14,16 @@ import type {
   FooterBlock,
 } from '../emailTemplates'
 
-// Absolute base URL for hosted static assets (logo images, etc.)
-// In production this resolves to the deployed Vercel URL.
 const SITE_BASE_URL = 'https://luxor-event-space.vercel.app'
+
+function ensureAbsoluteUrl(url: string | null | undefined): string {
+  if (!url) return ''
+  const trimmed = url.trim()
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  const productionUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : SITE_BASE_URL)
+  return `${productionUrl.replace(/\/$/, '')}/${trimmed.replace(/^\//, '')}`
+}
 
 // ─── Brand tokens (mirroring globals.css) ─────────────────────────────────────
 const B = {
@@ -82,15 +89,17 @@ function wrapEmail(rows: string): string {
 // ─── Block renderers ──────────────────────────────────────────────────────────
 
 function renderHero(block: HeroBlock): string {
-  const bg = block.backgroundImage
-    ? `background-image:linear-gradient(rgba(5,5,5,${block.overlayOpacity}),rgba(5,5,5,${block.overlayOpacity + 0.1})),url('${block.backgroundImage}');background-size:cover;background-position:center;background-color:#0b0a08;`
+  const absBgImage = ensureAbsoluteUrl(block.backgroundImage)
+  const bg = absBgImage
+    ? `background-image:linear-gradient(rgba(5,5,5,${block.overlayOpacity}),rgba(5,5,5,${block.overlayOpacity + 0.1})),url('${absBgImage}');background-size:cover;background-position:center;background-color:#0b0a08;`
     : `background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);`
 
   const align = block.textAlign
 
+  const absCtaUrl = ensureAbsoluteUrl(block.ctaUrl)
   const cta = block.ctaVisible
     ? `<tr><td align="${align}" style="padding-top:28px;">
-        <a href="${block.ctaUrl}" target="_blank"
+        <a href="${absCtaUrl}" target="_blank"
           style="display:inline-block;background-color:#caa24c;color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);box-shadow:0 18px 36px -20px rgba(202,162,76,0.6);">
           ${block.ctaLabel}
         </a>
@@ -146,21 +155,22 @@ function renderText(block: TextBlock): string {
 }
 
 function renderImageText(block: ImageTextBlock): string {
-  const imgSrc = block.imageUrl || ''
+  const absImgSrc = ensureAbsoluteUrl(block.imageUrl)
   const imgCell = `<td width="220" style="width:220px;padding:0;vertical-align:top;">
-    ${imgSrc
-      ? `<img src="${imgSrc}" alt="${block.imageAlt}" width="220" style="display:block;width:220px;border-radius:3px;border:1px solid rgba(202,162,76,0.14);" />`
+    ${absImgSrc
+      ? `<img src="${absImgSrc}" alt="${block.imageAlt}" width="220" style="display:block;width:220px;border-radius:3px;border:1px solid rgba(202,162,76,0.14);" />`
       : `<div style="width:220px;height:160px;background:linear-gradient(135deg,#120d0a,#1e1409);border:1px solid rgba(202,162,76,0.14);border-radius:3px;display:table-cell;text-align:center;vertical-align:middle;">
           <span style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;color:rgba(202,162,76,0.4);letter-spacing:0.2em;">LUXOR</span>
          </div>`
     }
   </td>`
 
+  const absCtaUrl = ensureAbsoluteUrl(block.ctaUrl)
   const textCell = `<td style="padding-${block.imagePosition === 'left' ? 'left' : 'right'}:28px;vertical-align:top;">
     <p style="margin:0 0 10px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.38em;text-transform:uppercase;color:#caa24c;">FEATURED</p>
     <h2 style="margin:0 0 14px;font-family:'Cormorant Garamond',Georgia,serif;font-size:26px;font-weight:600;line-height:1.1;color:#f7efe3;">${block.headline}</h2>
     <p style="margin:0 0 24px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:14px;font-weight:400;line-height:1.8;color:rgba(215,194,154,0.78);">${block.body}</p>
-    <a href="${block.ctaUrl}" target="_blank"
+    <a href="${absCtaUrl}" target="_blank"
       style="display:inline-block;background-color:#caa24c;color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:11px 26px;border-radius:3px;border:1px solid rgba(241,210,122,0.45);">
       ${block.ctaLabel}
     </a>
@@ -189,12 +199,13 @@ function renderButton(block: ButtonBlock): string {
   const shadow = isGold ? 'box-shadow:0 18px 36px -20px rgba(202,162,76,0.5);' : ''
   const alignMap = { left: 'left', center: 'center', right: 'right' }
   const align = alignMap[block.align] ?? 'center'
+  const absUrl = ensureAbsoluteUrl(block.url)
 
   return `
   <!-- Button Block -->
   <tr>
     <td align="${align}" style="padding:16px 48px 28px;">
-      <a href="${block.url}" target="_blank"
+      <a href="${absUrl}" target="_blank"
         style="display:inline-block;background-color:${bg};color:${fg};font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:15px 42px;border-radius:3px;${border ? `border:${border};` : ''}${shadow}">
         ${block.label}
       </a>

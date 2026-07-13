@@ -7,8 +7,11 @@ import {
   Info,
   RefreshCw,
   Mail,
-  RotateCcw
+  RotateCcw,
+  Sparkles,
+  LayoutTemplate
 } from 'lucide-react'
+import { useToast } from '@/components/portal/ToastProvider'
 import Image from 'next/image'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
@@ -24,6 +27,14 @@ type EmailDraft = {
   recipient_name?: string
 }
 
+type CampaignDraft = {
+  name: string
+  subject: string
+  audienceLabel: string
+  blocks: { type: string; headline?: string; label?: string; content?: string }[]
+  scheduledFor?: string | null
+}
+
 type Message = {
   role: 'user' | 'assistant'
   content: string
@@ -33,6 +44,7 @@ type Message = {
     summary: string
   }
   emailDraft?: EmailDraft
+  campaignDraft?: CampaignDraft
   isConfirmed?: boolean
   isCancelled?: boolean
 }
@@ -101,6 +113,7 @@ function getQueryIndicatorText(sql: string) {
 
 export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
   const reduceMotion = useReducedMotion()
+  const { notify } = useToast()
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -132,6 +145,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     setMessages(updatedMessages)
     setIsLoading(true)
 
+    // Set campaign generation loading state in localStorage for other tabs
+    localStorage.setItem('elena_campaign_generation_state', JSON.stringify({ status: 'generating', prompt: userMessage, timestamp: Date.now() }))
+    window.dispatchEvent(new Event('elena-generation-state-change'))
+
     try {
       const apiMessages = updatedMessages.map(msg => ({
         role: msg.role,
@@ -155,8 +172,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
       const data = await response.json()
       
-      // Detect if the confirmation payload is actually an email draft
+      // Detect if the confirmation payload is actually an email draft or campaign draft
       let emailDraft: EmailDraft | undefined
+      let campaignDraft: CampaignDraft | undefined
       let rawConfirmation = data.confirmation
       if (rawConfirmation?.query) {
         try {
@@ -164,8 +182,28 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           if (parsed.__emailDraft) {
             emailDraft = { to: parsed.to, subject: parsed.subject, body: parsed.body, recipient_name: parsed.recipient_name }
             rawConfirmation = undefined
+          } else if (parsed.__campaignDraft) {
+            campaignDraft = { 
+              name: parsed.name, 
+              subject: parsed.subject, 
+              audienceLabel: parsed.audienceLabel, 
+              blocks: parsed.blocks, 
+              scheduledFor: parsed.scheduledFor 
+            }
+            rawConfirmation = undefined
           }
         } catch { /* not JSON, treat as SQL */ }
+      }
+
+      // If the chat widget is closed, trigger a toast notification
+      if (!isOpen && (campaignDraft || emailDraft || rawConfirmation)) {
+        notify({
+          title: 'Elena finished drafting! ✦',
+          description: campaignDraft 
+            ? `Campaign "${campaignDraft.name}" is ready for approval.` 
+            : 'A message is ready for your review in Elena Chat.',
+          variant: 'success'
+        })
       }
 
       setMessages(prev => [
@@ -175,7 +213,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           content: data.reply,
           executedQueries: data.executedQueries,
           confirmation: rawConfirmation,
-          emailDraft
+          emailDraft,
+          campaignDraft
         }
       ])
     } catch (err) {
@@ -188,6 +227,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         }
       ])
     } finally {
+      localStorage.removeItem('elena_campaign_generation_state')
+      window.dispatchEvent(new Event('elena-generation-state-change'))
       setIsLoading(false)
     }
   }, [activePath, isLoading, messages])
@@ -283,6 +324,51 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const handleRepromptEmail = useCallback((msgIndex: number, draft: EmailDraft) => {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
     const reprompt = `Please revise the email draft you just wrote to ${draft.recipient_name || draft.to}. Here is what needs to change: `
+    setInput(reprompt)
+  }, [])
+
+  const handleConfirmCampaign = useCallback(async (msgIndex: number, draft: CampaignDraft) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
+    setIsLoading(true)
+
+    localStorage.setItem('elena_campaign_generation_state', JSON.stringify({ status: 'executing', prompt: `Publishing campaign "${draft.name}"`, timestamp: Date.now() }))
+    window.dispatchEvent(new Event('elena-generation-state-change'))
+
+    try {
+      const apiMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+
+      const response = await fetch('/api/portal/elena-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages, activePath, confirmCampaign: draft }),
+      })
+
+      const data = await response.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      window.dispatchEvent(new Event('elena-campaign-published'))
+    } catch (err) {
+      console.error(err)
+      setMessages(prev => [...prev, { role: 'assistant', content: 'I had trouble creating that campaign bestie. Please check target recipients and try again.' }])
+    } finally {
+      localStorage.removeItem('elena_campaign_generation_state')
+      window.dispatchEvent(new Event('elena-generation-state-change'))
+      setIsLoading(false)
+    }
+  }, [activePath, messages])
+
+  const handleOpenInBuilder = useCallback((msgIndex: number, draft: CampaignDraft) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
+    localStorage.setItem('elena_active_campaign_draft', JSON.stringify(draft))
+    window.dispatchEvent(new Event('elena-campaign-draft-loaded'))
+    onClose()
+  }, [onClose])
+
+  const handleRepromptCampaign = useCallback((msgIndex: number, draft: CampaignDraft) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
+    const reprompt = `Please revise the campaign draft "${draft.name}" with subject "${draft.subject}". Here is what needs to change: `
     setInput(reprompt)
   }, [])
 
@@ -428,6 +514,93 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                 </div>
               )}
 
+              {/* Render Campaign Draft Preview Cards */}
+              {msg.campaignDraft && !msg.isConfirmed && !msg.isCancelled && (
+                <div className="w-[88%] mt-3 pl-8">
+                  <div className="rounded-xl border border-[#caa24c]/40 bg-[#0a0807] overflow-hidden">
+                    <div className="flex items-center gap-2 border-b border-[#caa24c]/20 bg-[#caa24c]/8 px-3.5 py-2.5">
+                      <Sparkles size={13} className="text-[#caa24c] shrink-0" />
+                      <p className="text-xs font-semibold text-[#f7efe3]">Campaign Draft — Review Details</p>
+                    </div>
+                    <div className="p-3.5 space-y-3">
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Campaign Name</p>
+                        <p className="text-xs text-[#f7efe3] font-semibold">{msg.campaignDraft.name}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Subject Line</p>
+                        <p className="text-xs text-zinc-300">{msg.campaignDraft.subject}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Audience Filter</p>
+                        <span className="inline-block rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-300 font-mono">
+                          {msg.campaignDraft.audienceLabel}
+                        </span>
+                      </div>
+                      {msg.campaignDraft.scheduledFor && (
+                        <div className="space-y-0.5">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Schedule For</p>
+                          <p className="text-xs text-zinc-400 font-mono">{new Date(msg.campaignDraft.scheduledFor).toLocaleString()}</p>
+                        </div>
+                      )}
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Blocks Preview</p>
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 text-[10px] max-h-32 overflow-y-auto portal-scrollbar space-y-1.5 text-zinc-400 font-mono">
+                          {msg.campaignDraft.blocks.map((b, idx: number) => (
+                            <div key={idx} className="flex gap-2 justify-between border-b border-zinc-900 pb-1">
+                              <span className="text-[#f1d27a] font-bold uppercase">{b.type}</span>
+                              <span className="truncate max-w-[150px]">{b.headline || b.label || b.content || ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 border-t border-[#caa24c]/10 px-3.5 py-2.5 bg-zinc-950/30">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRepromptCampaign(index, msg.campaignDraft!)}
+                          className="flex items-center gap-1 hover:border-[#caa24c]/30 rounded border border-zinc-700 bg-transparent text-zinc-400 hover:text-[#f1d27a] px-2.5 py-1 text-[9px] font-bold transition-colors cursor-pointer"
+                        >
+                          <RotateCcw size={10} />
+                          Reprompt
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenInBuilder(index, msg.campaignDraft!)}
+                          className="flex items-center gap-1 hover:border-[#caa24c]/30 rounded border border-zinc-700 bg-transparent text-zinc-400 hover:text-[#f1d27a] px-2.5 py-1 text-[9px] font-bold transition-colors cursor-pointer"
+                        >
+                          <LayoutTemplate size={10} />
+                          Open in Builder
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmCampaign(index, msg.campaignDraft!)}
+                        className="flex items-center justify-center gap-1.5 w-full rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] py-2 text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        <Send size={10} />
+                        {msg.campaignDraft.scheduledFor ? 'Approve & Schedule' : 'Approve & Send Now'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {msg.campaignDraft && msg.isConfirmed && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  Campaign Approved & Published ✦
+                </div>
+              )}
+
+              {msg.campaignDraft && msg.isCancelled && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-500 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                  Campaign Draft Dismissed — Reprompting...
+                </div>
+              )}
+
               {/* Render Direct Action Confirmation Cards */}
               {msg.confirmation && !msg.isConfirmed && !msg.isCancelled && (
                 <div className="w-[88%] mt-3 pl-8">
@@ -490,7 +663,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               </div>
               <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
                 <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
-                <span>Querying database...</span>
+                <span>Elena is thinking...</span>
               </div>
             </motion.div>
           )}

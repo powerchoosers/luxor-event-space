@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Send,
   X,
+  Sparkles,
 } from 'lucide-react'
 import { PortalEmptyState, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalModal, PortalAnimatedTabs, PortalTabTransition } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -89,6 +90,7 @@ export default function MarketingPage() {
   const [selectedDetail, setSelectedDetail] = useState<CampaignDetail | null>(null)
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
+  const [elenaState, setElenaState] = useState<{ status: string; prompt?: string } | null>(null)
   const latestActivityAtRef = useRef<string | null>(null)
   const seenActivityIdsRef = useRef<Set<string>>(new Set())
   const selectedCampaignIdRef = useRef<string | null>(null)
@@ -110,6 +112,41 @@ export default function MarketingPage() {
 
   useEffect(() => {
     loadCampaigns()
+  }, [loadCampaigns])
+
+  useEffect(() => {
+    const handleStateChange = () => {
+      const stored = localStorage.getItem('elena_campaign_generation_state')
+      if (stored) {
+        try {
+          setElenaState(JSON.parse(stored))
+        } catch {
+          setElenaState(null)
+        }
+      } else {
+        setElenaState(null)
+      }
+    }
+
+    const handleCampaignPublished = () => {
+      loadCampaigns()
+    }
+
+    const handleDraftLoaded = () => {
+      setActiveTab('builder')
+      setBuilderTemplate(null)
+    }
+
+    handleStateChange()
+    window.addEventListener('elena-generation-state-change', handleStateChange)
+    window.addEventListener('elena-campaign-published', handleCampaignPublished)
+    window.addEventListener('elena-campaign-draft-loaded', handleDraftLoaded)
+
+    return () => {
+      window.removeEventListener('elena-generation-state-change', handleStateChange)
+      window.removeEventListener('elena-campaign-published', handleCampaignPublished)
+      window.removeEventListener('elena-campaign-draft-loaded', handleDraftLoaded)
+    }
   }, [loadCampaigns])
 
   useEffect(() => {
@@ -362,6 +399,35 @@ export default function MarketingPage() {
                   </button>
                 </div>
 
+                {elenaState && (
+                  <div className="luxor-glass-card border border-[#caa24c]/30 bg-[#caa24c]/5 rounded-2xl p-6 shadow-xl relative overflow-hidden mb-5">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#caa24c]/10 to-transparent -translate-x-full animate-shimmer" style={{ animationDuration: '2.5s', animationIterationCount: 'infinite' }} />
+                    <div className="relative z-10 flex items-start justify-between gap-4 mb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-center rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 p-2 text-[#caa24c]">
+                          <Sparkles size={16} className="animate-spin" style={{ animationDuration: '4s' }} />
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#caa24c]">Elena AI Assistant</p>
+                          <h4 className="text-sm font-bold text-white/90">
+                            {elenaState.status === 'generating' ? 'Drafting New Campaign...' : 'Publishing Campaign...'}
+                          </h4>
+                          {elenaState.prompt && (
+                            <p className="mt-1 text-[11px] text-zinc-500 italic truncate max-w-md">&ldquo;{elenaState.prompt}&rdquo;</p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-[#caa24c]/15 border border-[#caa24c]/20 px-2.5 py-0.5 text-[8px] font-black uppercase text-[#f1d27a] tracking-widest animate-pulse">
+                        ✦ {elenaState.status === 'generating' ? 'Drafting' : 'Executing'}
+                      </span>
+                    </div>
+                    <div className="relative z-10 w-full h-1.5 rounded-full bg-zinc-950 overflow-hidden mb-2.5">
+                      <div className="h-full rounded-full bg-gradient-to-r from-[#caa24c]/40 to-[#caa24c] animate-pulse" style={{ width: '60%' }} />
+                    </div>
+                    <p className="relative z-10 text-[10px] text-zinc-500 italic">Elena is composing layout and assets in the background...</p>
+                  </div>
+                )}
+
                 {loading ? (
                   <div className="rounded-2xl border border-zinc-900 bg-black/30 p-8 text-sm text-zinc-500">Loading campaigns...</div>
                 ) : campaigns.length ? (
@@ -376,7 +442,7 @@ export default function MarketingPage() {
                       onSendNow={() => sendCampaignNow(campaign.id)}
                     />
                   ))
-                ) : (
+                ) : !elenaState ? (
                   <PortalEmptyState
                     icon={<Mail size={34} />}
                     title="No campaigns yet"
@@ -390,7 +456,7 @@ export default function MarketingPage() {
                       </button>
                     }
                   />
-                )}
+                ) : null}
               </div>
 
               <div className="space-y-6">

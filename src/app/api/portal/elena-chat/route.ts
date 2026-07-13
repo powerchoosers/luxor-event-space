@@ -2,6 +2,42 @@ import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
+async function fetchCampaignRecipients(audienceLabel: string): Promise<{ email: string; name: string | null }[]> {
+  const labelClean = audienceLabel.trim().toLowerCase()
+  let list: { email?: unknown; full_name?: unknown }[] = []
+
+  if (labelClean === 'marketing list') {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_marketing_list?select=email,full_name').catch(() => [])
+  } else if (labelClean === 'all inquiries') {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=email,full_name').catch(() => [])
+  } else if (labelClean.includes('wedding')) {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=email,full_name&event_type=ilike.*wedding*').catch(() => [])
+  } else if (labelClean.includes('quince') || labelClean.includes('quinceañera')) {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=email,full_name&event_type=ilike.*quince*').catch(() => [])
+  } else if (labelClean.includes('@')) {
+    return audienceLabel.split(/[,;\s]+/).map(email => ({
+      email: email.trim().toLowerCase(),
+      name: null
+    })).filter(r => r.email.includes('@'))
+  } else {
+    list = await supabaseRest<Record<string, unknown>[]>('luxor_marketing_list?select=email,full_name').catch(() => [])
+  }
+
+  const seen = new Set<string>()
+  const results: { email: string; name: string | null }[] = []
+  for (const item of list) {
+    const email = String(item.email || '').trim().toLowerCase()
+    if (email && !seen.has(email)) {
+      seen.add(email)
+      results.push({
+        email,
+        name: typeof item.full_name === 'string' ? item.full_name : null
+      })
+    }
+  }
+  return results
+}
+
 type ToolCall = {
   id: string
   type: string
@@ -198,10 +234,39 @@ Always use SQL queries to answer questions about the database. Do not make up da
 - Execute read-only SQL queries (using SELECT statements) to lookup info immediately using the "execute_database_sql" tool.
 - If you need to perform write operations (like INSERT, UPDATE, or DELETE), you are NOT allowed to execute it directly via the "execute_database_sql" tool. Instead, you MUST call the "request_action_confirmation" tool. This will prompt the user with interactive Confirm/Cancel buttons.
 - To draft an email for the user to review and approve before sending, ALWAYS call the "draft_email" tool. Never describe an email in text—always use the tool. The user will see a preview card with Send and Reprompt options.
+- To draft a bulk marketing email campaign for the user to review, ALWAYS call the "draft_marketing_campaign" tool. Never output campaign details in text—always use the tool. The user will see a preview card with Send, Schedule, and Open in Builder options.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
+
+### CAMPAIGN DRAFTING & IMAGES GUIDE:
+Available Email Blocks to use in your blocks array:
+1. "hero": headline, subheadline, backgroundImage, overlayOpacity, textAlign, ctaLabel, ctaUrl, ctaVisible.
+2. "text": content, fontSize, color, textAlign.
+3. "image_text": imageUrl, imageAlt, imagePosition, headline, body, ctaLabel, ctaUrl.
+4. "button": label, url, align, bgColor, textColor.
+5. "two_column": leftHeadline, leftBody, rightHeadline, rightBody.
+6. "divider": color, thickness, style.
+7. "spacer": height.
+8. "footer": companyName, address, phone, website.
+
+Exposing Venue Image Directory (use these relative paths in your imageUrl/backgroundImage properties):
+- Dining Hall:
+  - "/images/dining-hall/main-hall-wedding-wide.png" (weddings)
+  - "/images/dining-hall/main-hall-wedding-dance-candid.png" (wedding receptions)
+  - "/images/dining-hall/main-hall-quinceanera-angle.png" (quinceañeras)
+  - "/images/dining-hall/main-hall-dinner-service-candid.png" (dinner service)
+  - "/images/dining-hall/main-hall-corporate-cocktail.png" (corporate cocktail setup)
+  - "/images/dining-hall/main-hall-conversation-candid.png" (guests mingling/general)
+  - "/images/dining-hall/main-hall-table-toast-candid.png" (toast/celebrations)
+- Luxor Lounge:
+  - "/images/luxor-lounge/luxor-lounge-empty.png" (empty lounge view)
+  - "/images/luxor-lounge/luxor-lounge-wedding.png" (intimate wedding reception)
+  - "/images/luxor-lounge/luxor-lounge-quinceanera.png" (quinceañera lounge setup)
+  - "/images/luxor-lounge/luxor-lounge-baby-shower.png" (baby showers)
+  - "/images/luxor-lounge/luxor-lounge-corporate.png" (intimate corporate gatherings)
+
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
@@ -271,6 +336,75 @@ const TOOLS_DEFINITION = [
         required: ['to', 'subject', 'body']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'draft_marketing_campaign',
+      description: 'Draft a marketing campaign to send or schedule. The owner will see a preview card with blocks, subject, name, and schedule. They can approve to send/schedule it immediately, open it in the builder to edit, or ask you to revise.',
+      parameters: {
+        type: 'object',
+        properties: {
+          campaignName: {
+            type: 'string',
+            description: 'Internal campaign name for tracking (e.g. Quinceañera Booking Promotion)'
+          },
+          subject: {
+            type: 'string',
+            description: 'Subject line of the email'
+          },
+          audienceLabel: {
+            type: 'string',
+            description: 'Filter keyword for target audience: "Marketing List", "All Inquiries", "Weddings", "Quinceañeras", or a list of comma-separated email addresses'
+          },
+          blocks: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                type: {
+                  type: 'string',
+                  enum: ['hero', 'text', 'image_text', 'button', 'two_column', 'divider', 'spacer', 'footer']
+                },
+                headline: { type: 'string' },
+                subheadline: { type: 'string' },
+                backgroundImage: { type: 'string' },
+                overlayOpacity: { type: 'number' },
+                textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
+                ctaLabel: { type: 'string' },
+                ctaUrl: { type: 'string' },
+                ctaVisible: { type: 'boolean' },
+                content: { type: 'string' },
+                fontSize: { type: 'number' },
+                color: { type: 'string' },
+                imageUrl: { type: 'string' },
+                imageAlt: { type: 'string' },
+                imagePosition: { type: 'string', enum: ['left', 'right'] },
+                body: { type: 'string' },
+                label: { type: 'string' },
+                url: { type: 'string' },
+                align: { type: 'string', enum: ['left', 'center', 'right'] },
+                bgColor: { type: 'string' },
+                textColor: { type: 'string' },
+                thickness: { type: 'number' },
+                style: { type: 'string' },
+                height: { type: 'number' },
+                companyName: { type: 'string' },
+                address: { type: 'string' },
+                phone: { type: 'string' },
+                website: { type: 'string' }
+              },
+              required: ['type']
+            }
+          },
+          scheduledFor: {
+            type: 'string',
+            description: 'Optional ISO Date string to schedule the campaign (e.g. "2026-07-20T10:00:00Z"). Leave null to send immediately upon approval.'
+          }
+        },
+        required: ['campaignName', 'subject', 'audienceLabel', 'blocks']
+      }
+    }
   }
 ]
 
@@ -281,12 +415,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messages, activePath, confirmQuery, confirmSummary, confirmEmail } = (await request.json()) as { 
+    const { messages, activePath, confirmQuery, confirmSummary, confirmEmail, confirmCampaign } = (await request.json()) as { 
       messages?: ChatMessage[]
       activePath?: string
       confirmQuery?: string
       confirmSummary?: string
       confirmEmail?: { to: string; subject: string; body: string; recipient_name?: string }
+      confirmCampaign?: {
+        name: string
+        subject: string
+        audienceLabel: string
+        blocks: Record<string, unknown>[]
+        scheduledFor?: string | null
+      }
     }
 
     if (!Array.isArray(messages)) {
@@ -404,6 +545,73 @@ export async function POST(request: Request) {
       const feedbackData = emailFeedbackResponse.ok ? await emailFeedbackResponse.json() : null
       const feedbackReply = feedbackData?.choices?.[0]?.message?.content ||
         (emailResult.ok ? `Done bestie! ✉️ The email to ${confirmEmail.to} is sent!` : `I couldn\'t send that email. Error: ${emailResult.error}`)
+
+      return NextResponse.json({ reply: feedbackReply, executedQueries })
+    }
+
+    // 1c. If this is a campaign approval execute request
+    if (confirmCampaign) {
+      let campaignResult: { ok: boolean; error?: string; campaignId?: string; recipientCount?: number }
+      try {
+        const recipients = await fetchCampaignRecipients(confirmCampaign.audienceLabel)
+        if (recipients.length === 0) {
+          throw new Error(`No recipients found for target audience label: "${confirmCampaign.audienceLabel}".`)
+        }
+
+        const { renderEmailToHtml } = await import('@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer')
+        const html = renderEmailToHtml(confirmCampaign.subject, confirmCampaign.blocks)
+
+        const { createMarketingCampaign, sendMarketingCampaignNow } = await import('@/lib/luxorMarketingServer')
+        const detail = await createMarketingCampaign({
+          name: confirmCampaign.name,
+          subject: confirmCampaign.subject,
+          htmlBody: html,
+          recipients,
+          scheduledFor: confirmCampaign.scheduledFor || null,
+          audienceLabel: confirmCampaign.audienceLabel,
+          createdBy: session.email,
+        })
+
+        const campaignId = detail?.campaign?.id
+        if (!confirmCampaign.scheduledFor && campaignId) {
+          await sendMarketingCampaignNow(campaignId)
+        }
+
+        campaignResult = { ok: true, campaignId, recipientCount: recipients.length }
+      } catch (campErr: unknown) {
+        console.error('Elena campaign create failed:', campErr)
+        campaignResult = { ok: false, error: campErr instanceof Error ? campErr.message : 'Unknown error' }
+      }
+
+      const campaignFeedbackMessages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(-15),
+        {
+          role: 'system',
+          content: campaignResult.ok
+            ? `[CAMPAIGN_CREATED] The marketing campaign "${confirmCampaign.name}" with subject "${confirmCampaign.subject}" was successfully created and ${confirmCampaign.scheduledFor ? 'scheduled' : 'sent immediately'} to ${campaignResult.recipientCount} recipients. Let the owner know it's queued in your warm best-friend style.`
+            : `[CAMPAIGN_FAILED] The campaign could not be created/sent. Error: ${campaignResult.error}. Apologize and suggest checking recipient filters.`
+        }
+      ]
+
+      const campaignFeedbackResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://luxoreventspace.com',
+          'X-Title': 'Luxor Event Space Elena CRM',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          temperature: 0.2,
+          messages: campaignFeedbackMessages
+        })
+      })
+
+      const feedbackData = campaignFeedbackResponse.ok ? await campaignFeedbackResponse.json() : null
+      const feedbackReply = feedbackData?.choices?.[0]?.message?.content ||
+        (campaignResult.ok ? `Done bestie! ✦ The campaign is queued for ${campaignResult.recipientCount} recipients!` : `I couldn\'t create that campaign. Error: ${campaignResult.error}`)
 
       return NextResponse.json({ reply: feedbackReply, executedQueries })
     }
@@ -555,8 +763,30 @@ ${emailHistorySummary}`
         let confirmationInterrupted = false
 
         for (const toolCall of assistantMessage.tool_calls) {
+          // A1. Marketing campaign draft request
+          if (toolCall.function?.name === 'draft_marketing_campaign') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              confirmationPayload = {
+                query: JSON.stringify({ 
+                  __campaignDraft: true, 
+                  name: args.campaignName, 
+                  subject: args.subject, 
+                  audienceLabel: args.audienceLabel, 
+                  blocks: args.blocks, 
+                  scheduledFor: args.scheduledFor 
+                }),
+                summary: `Draft campaign "${args.campaignName}" for target "${args.audienceLabel}"`
+              }
+              confirmationInterrupted = true
+            } catch (err) {
+              console.error('Failed to parse draft_marketing_campaign args:', err)
+            }
+          }
           // A. Email draft request
-          if (toolCall.function?.name === 'draft_email') {
+          else if (toolCall.function?.name === 'draft_email') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
                 ? JSON.parse(toolCall.function.arguments)

@@ -929,3 +929,54 @@ export async function addRecipientToGrandOpeningCampaign(data: {
   const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
   await processLuxorEmailJobs(jobs)
 }
+
+export type MarketingList = {
+  name: string
+  memberCount: number
+  members: { email: string; full_name: string | null }[]
+}
+
+export async function getMarketingLists(): Promise<MarketingList[]> {
+  const members = await supabaseRest<MarketingListMember[]>('luxor_marketing_list?select=*')
+  if (!Array.isArray(members)) return []
+
+  const listsMap = new Map<string, { email: string; full_name: string | null }[]>()
+  
+  for (const m of members) {
+    const listName = m.source || 'Uncategorized'
+    if (!listsMap.has(listName)) {
+      listsMap.set(listName, [])
+    }
+    listsMap.get(listName)!.push({ email: m.email, full_name: m.full_name })
+  }
+  
+  return Array.from(listsMap.entries()).map(([name, membersList]) => ({
+    name,
+    memberCount: membersList.length,
+    members: membersList,
+  }))
+}
+
+export async function bulkAddMarketingMembers(
+  listName: string,
+  recipients: { email: string; name?: string | null }[]
+): Promise<void> {
+  const normalizedListName = listName.trim()
+  if (!normalizedListName) throw new Error('List name is required.')
+  if (!recipients.length) return
+
+  await supabaseRest('luxor_marketing_list', {
+    method: 'POST',
+    headers: {
+      'Prefer': 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(
+      recipients.map(r => ({
+        email: r.email.trim().toLowerCase(),
+        full_name: r.name || null,
+        source: normalizedListName,
+      }))
+    ),
+  })
+}
+
