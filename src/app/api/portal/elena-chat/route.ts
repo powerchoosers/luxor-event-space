@@ -426,7 +426,7 @@ export async function POST(request: Request) {
         name: string
         subject: string
         audienceLabel: string
-        blocks: Record<string, unknown>[]
+        blocks: EmailBlock[]
         scheduledFor?: string | null
       }
     }
@@ -560,7 +560,7 @@ export async function POST(request: Request) {
         }
 
         const { renderEmailToHtml } = await import('@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer')
-        const html = renderEmailToHtml(confirmCampaign.subject, confirmCampaign.blocks as EmailBlock[])
+        const html = renderEmailToHtml(confirmCampaign.subject, confirmCampaign.blocks)
 
         const { createMarketingCampaign, sendMarketingCampaignNow } = await import('@/lib/luxorMarketingServer')
         const detail = await createMarketingCampaign({
