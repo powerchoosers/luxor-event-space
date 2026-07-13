@@ -2771,7 +2771,7 @@ export default function LeadDetailPage({
                                         ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
                                         : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                                     }`}>
-                                      {isOutgoing ? 'Sent' : 'Received'}
+                                      {isOutgoing ? 'Outbound' : 'Inbound'}
                                     </span>
                                     <span className="text-[9px] font-mono text-zinc-500">
                                       {formatTimelineDate(email.receivedAt || '')}
@@ -3890,7 +3890,7 @@ export default function LeadDetailPage({
                                   ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
                                   : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                               }`}>
-                                {isOutgoing ? 'Zoho Sent' : 'Zoho Received'}
+                                {isOutgoing ? 'Outbound' : 'Inbound'}
                               </span>
                               <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
                             </div>
@@ -5783,8 +5783,10 @@ function normalizeTimelineDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()
 }
 
-function formatTimelineDate(value: string) {
-  const date = new Date(value)
+function formatTimelineDate(value: string | number) {
+  if (!value) return 'No date'
+  const numericValue = Number(value)
+  const date = Number.isFinite(numericValue) ? new Date(numericValue) : new Date(value)
   return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString()
 }
 

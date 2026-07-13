@@ -438,6 +438,32 @@ export async function POST(request: Request) {
               ? notesRaw.map((n, i) => `Note ${i + 1} (${n.created_at}): ${n.content}`).join('\n')
               : 'No notes on file.'
 
+            let emailHistorySummary = 'No recent emails found.'
+            if (leadRecord.email) {
+              try {
+                const { listLuxorZohoMessagesForAddress } = await import('@/lib/zohoMailServer')
+                const messages = await listLuxorZohoMessagesForAddress(leadRecord.email as string, 8)
+                if (messages.length > 0) {
+                  emailHistorySummary = messages.map((m, i) => {
+                    const dirLabel = m.direction === 'outgoing' ? 'Outbound (Sent by Luxor)' : 'Inbound (Received from Client)'
+                    let dateStr = 'Unknown Time'
+                    if (m.receivedAt) {
+                      const numericTime = Number(m.receivedAt)
+                      const dateObj = Number.isFinite(numericTime) ? new Date(numericTime) : new Date(m.receivedAt)
+                      if (!Number.isNaN(dateObj.getTime())) {
+                        dateStr = dateObj.toLocaleString()
+                      }
+                    }
+                    return `Email ${i + 1} [${dirLabel} - ${dateStr}]
+Subject: ${m.subject}
+Summary: ${m.summary || '(No content summary)'}`
+                  }).join('\n\n')
+                }
+              } catch (err) {
+                console.error('Failed to pre-fetch Zoho email thread for Elena context:', err)
+              }
+            }
+
             openrouterMessages.push({
               role: 'system',
               content: `ACTIVE LEAD CONTEXT — The user is viewing this lead. Use all details below as full context for any emails, tasks, or analysis you perform. Do not ask the user to re-supply information that is already here.
@@ -458,7 +484,10 @@ Preferred Tour Date: ${leadRecord.preferred_tour_date ?? 'None'}
 Preferred Tour Time: ${leadRecord.preferred_tour_time ?? 'None'}
 
 Internal Notes:
-${noteSummary}`
+${noteSummary}
+
+Email Communication History (Zoho Mail):
+${emailHistorySummary}`
             })
           } else {
             openrouterMessages.push({

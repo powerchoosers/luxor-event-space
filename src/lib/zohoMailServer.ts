@@ -263,15 +263,15 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
   }
 
   const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+  const { allowedSenders } = getZohoConfig()
 
   return (result.data || []).map((message) => {
     const from = message.fromAddress || message.sender || 'Unknown sender'
     const to = message.toAddress || ''
     const fromEmail = normalizeEmailAddress(from)
-    const toEmails = to
-      .split(/[,;]+/)
-      .map((item) => normalizeEmailAddress(item))
-      .filter(Boolean)
+
+    const isOurEmail = allowedSenders.includes(fromEmail)
+    const direction = isOurEmail ? 'outgoing' : 'incoming'
 
     return {
       id: message.messageId || message.message_id || '',
@@ -282,7 +282,7 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
       receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
       summary: message.summary || '',
       hasAttachment: Boolean(message.hasAttachment),
-      direction: fromEmail === clientEmail ? 'incoming' : toEmails.includes(clientEmail) ? 'outgoing' : 'matched',
+      direction,
     }
   })
 }
