@@ -423,10 +423,55 @@ export async function POST(request: Request) {
       const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
       if (leadMatch) {
         const activeLeadId = leadMatch[1]
-        openrouterMessages.push({
-          role: 'system',
-          content: `CONTEXT: The user is currently viewing the lead/inquiry record with ID: '${activeLeadId}'. If the user references 'this lead', 'them', 'this client', or asks you to create notes, tasks, or check details related to their screen, use this ID: '${activeLeadId}'.`
-        })
+
+        // Auto-fetch full lead record so Elena has all client details without needing a separate query
+        try {
+          const [leadRecord] = await supabaseRest<Record<string, unknown>[]>(
+            `luxor_inquiries?select=*&id=eq.${encodeURIComponent(activeLeadId)}&limit=1`
+          )
+          const notesRaw = await supabaseRest<Record<string, unknown>[]>(
+            `luxor_notes?select=id,content,created_at,author&inquiry_id=eq.${encodeURIComponent(activeLeadId)}&order=created_at.desc&limit=10`
+          ).catch(() => [] as Record<string, unknown>[])
+
+          if (leadRecord) {
+            const noteSummary = notesRaw.length > 0
+              ? notesRaw.map((n, i) => `Note ${i + 1} (${n.created_at}): ${n.content}`).join('\n')
+              : 'No notes on file.'
+
+            openrouterMessages.push({
+              role: 'system',
+              content: `ACTIVE LEAD CONTEXT — The user is viewing this lead. Use all details below as full context for any emails, tasks, or analysis you perform. Do not ask the user to re-supply information that is already here.
+
+Lead ID: ${activeLeadId}
+Name: ${leadRecord.full_name ?? 'Unknown'}
+Email: ${leadRecord.email ?? 'Not provided'}
+Phone: ${leadRecord.phone ?? 'Not provided'}
+Event Type: ${leadRecord.event_type ?? 'Not specified'}
+Target Date: ${leadRecord.target_date ?? 'Not specified'}
+Guest Count: ${leadRecord.guest_count ?? 'Not specified'}
+Package Interest: ${leadRecord.package_interest ?? 'Not specified'}
+Pipeline Stage: ${leadRecord.pipeline_stage ?? 'inquiry'}
+Status: ${leadRecord.status ?? 'new'}
+Source: ${leadRecord.source ?? 'Unknown'}
+Notes from client: ${leadRecord.message ?? 'None'}
+Preferred Tour Date: ${leadRecord.preferred_tour_date ?? 'None'}
+Preferred Tour Time: ${leadRecord.preferred_tour_time ?? 'None'}
+
+Internal Notes:
+${noteSummary}`
+            })
+          } else {
+            openrouterMessages.push({
+              role: 'system',
+              content: `CONTEXT: The user is currently viewing lead ID: '${activeLeadId}'. The record could not be pre-loaded — use execute_database_sql to look it up if needed.`
+            })
+          }
+        } catch {
+          openrouterMessages.push({
+            role: 'system',
+            content: `CONTEXT: The user is currently viewing lead ID: '${activeLeadId}'. Use this ID when the user references 'this lead', 'this client', or 'them'.`
+          })
+        }
       }
     }
 
