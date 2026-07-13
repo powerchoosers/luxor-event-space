@@ -5,7 +5,9 @@ import {
   X, 
   Send, 
   Info,
-  RefreshCw
+  RefreshCw,
+  Mail,
+  RotateCcw
 } from 'lucide-react'
 import Image from 'next/image'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -13,6 +15,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 type ExecutedQuery = {
   query: string
   result: unknown
+}
+
+type EmailDraft = {
+  to: string
+  subject: string
+  body: string
+  recipient_name?: string
 }
 
 type Message = {
@@ -23,6 +32,7 @@ type Message = {
     query: string
     summary: string
   }
+  emailDraft?: EmailDraft
   isConfirmed?: boolean
   isCancelled?: boolean
 }
@@ -145,13 +155,27 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
       const data = await response.json()
       
+      // Detect if the confirmation payload is actually an email draft
+      let emailDraft: EmailDraft | undefined
+      let rawConfirmation = data.confirmation
+      if (rawConfirmation?.query) {
+        try {
+          const parsed = JSON.parse(rawConfirmation.query)
+          if (parsed.__emailDraft) {
+            emailDraft = { to: parsed.to, subject: parsed.subject, body: parsed.body, recipient_name: parsed.recipient_name }
+            rawConfirmation = undefined
+          }
+        } catch { /* not JSON, treat as SQL */ }
+      }
+
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
           content: data.reply,
           executedQueries: data.executedQueries,
-          confirmation: data.confirmation
+          confirmation: rawConfirmation,
+          emailDraft
         }
       ])
     } catch (err) {
@@ -228,6 +252,38 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         content: 'No worries bestie! 💁‍♀️ I cancelled the action. Nothing was modified!'
       }
     ])
+  }, [])
+
+  const handleSendEmail = useCallback(async (msgIndex: number, draft: EmailDraft) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
+    setIsLoading(true)
+
+    try {
+      const apiMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+
+      const response = await fetch('/api/portal/elena-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages, activePath, confirmEmail: draft }),
+      })
+
+      const data = await response.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+    } catch (err) {
+      console.error(err)
+      setMessages(prev => [...prev, { role: 'assistant', content: 'I had trouble sending that email bestie. Please check the mail config and try again.' }])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [activePath, messages])
+
+  const handleRepromptEmail = useCallback((msgIndex: number, draft: EmailDraft) => {
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
+    const reprompt = `Please revise the email draft you just wrote to ${draft.recipient_name || draft.to}. Here is what needs to change: `
+    setInput(reprompt)
   }, [])
 
   const pathSuggestions = useMemo(() => getSuggestionsForPath(activePath), [activePath])
@@ -309,6 +365,66 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       {getQueryIndicatorText(eq.query)}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {/* Render Email Draft Preview Cards */}
+              {msg.emailDraft && !msg.isConfirmed && !msg.isCancelled && (
+                <div className="w-[88%] mt-3 pl-8">
+                  <div className="rounded-xl border border-[#caa24c]/40 bg-[#0a0807] overflow-hidden">
+                    <div className="flex items-center gap-2 border-b border-[#caa24c]/20 bg-[#caa24c]/8 px-3.5 py-2.5">
+                      <Mail size={13} className="text-[#caa24c] shrink-0" />
+                      <p className="text-xs font-semibold text-[#f7efe3]">Email Draft — Review Before Sending</p>
+                    </div>
+                    <div className="p-3.5 space-y-2.5">
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">To</p>
+                        <p className="text-xs text-zinc-300 font-mono">{msg.emailDraft.recipient_name ? `${msg.emailDraft.recipient_name} <${msg.emailDraft.to}>` : msg.emailDraft.to}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Subject</p>
+                        <p className="text-xs text-[#f7efe3] font-semibold">{msg.emailDraft.subject}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/60">Body</p>
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-300 whitespace-pre-wrap max-h-40 overflow-y-auto portal-scrollbar">
+                          {msg.emailDraft.body}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end border-t border-[#caa24c]/10 px-3.5 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRepromptEmail(index, msg.emailDraft!)}
+                        className="flex items-center gap-1.5 rounded border border-zinc-700 hover:border-[#caa24c]/30 bg-transparent hover:bg-[#caa24c]/5 text-zinc-400 hover:text-[#f1d27a] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        <RotateCcw size={11} />
+                        Reprompt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendEmail(index, msg.emailDraft!)}
+                        className="flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                      >
+                        <Send size={11} />
+                        Send Email
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {msg.emailDraft && msg.isConfirmed && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  Email Sent ✉️
+                </div>
+              )}
+
+              {msg.emailDraft && msg.isCancelled && (
+                <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-500 font-medium flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                  Email Draft Dismissed — Reprompting...
                 </div>
               )}
 

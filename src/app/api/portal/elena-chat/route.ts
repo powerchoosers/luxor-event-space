@@ -197,6 +197,7 @@ Always use SQL queries to answer questions about the database. Do not make up da
 ### GUIDELINES:
 - Execute read-only SQL queries (using SELECT statements) to lookup info immediately using the "execute_database_sql" tool.
 - If you need to perform write operations (like INSERT, UPDATE, or DELETE), you are NOT allowed to execute it directly via the "execute_database_sql" tool. Instead, you MUST call the "request_action_confirmation" tool. This will prompt the user with interactive Confirm/Cancel buttons.
+- To draft an email for the user to review and approve before sending, ALWAYS call the "draft_email" tool. Never describe an email in text—always use the tool. The user will see a preview card with Send and Reprompt options.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
@@ -241,6 +242,35 @@ const TOOLS_DEFINITION = [
         required: ['query', 'summary']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'draft_email',
+      description: 'Compose an email for the owner to review. The owner will see a preview card with To, Subject, and Body. They can approve to send it immediately or ask you to revise it. Use this any time you need to send an email on behalf of Luxor Event Space.',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: {
+            type: 'string',
+            description: 'Recipient email address (e.g. client@example.com)'
+          },
+          subject: {
+            type: 'string',
+            description: 'Email subject line'
+          },
+          body: {
+            type: 'string',
+            description: 'Plain-text email body. Write it in full — warm, professional, and on-brand for Luxor.'
+          },
+          recipient_name: {
+            type: 'string',
+            description: 'Display name of the recipient (optional, used for the preview card only)'
+          }
+        },
+        required: ['to', 'subject', 'body']
+      }
+    }
   }
 ]
 
@@ -251,11 +281,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messages, activePath, confirmQuery, confirmSummary } = (await request.json()) as { 
+    const { messages, activePath, confirmQuery, confirmSummary, confirmEmail } = (await request.json()) as { 
       messages?: ChatMessage[]
       activePath?: string
       confirmQuery?: string
       confirmSummary?: string
+      confirmEmail?: { to: string; subject: string; body: string; recipient_name?: string }
     }
 
     if (!Array.isArray(messages)) {
@@ -324,6 +355,57 @@ export async function POST(request: Request) {
         reply: replyText,
         executedQueries
       })
+    }
+
+    // 1b. If this is a direct email send confirmation
+    if (confirmEmail) {
+      let emailResult: { ok: boolean; error?: string }
+      try {
+        const { sendLuxorZohoEmail } = await import('@/lib/zohoMailServer')
+        await sendLuxorZohoEmail({
+          to: confirmEmail.to,
+          subject: confirmEmail.subject,
+          content: confirmEmail.body,
+          from: 'booking@luxoratlaspalmas.com',
+          fromName: 'Luxor Event Space',
+        })
+        emailResult = { ok: true }
+      } catch (sendErr: unknown) {
+        console.error('Elena email send failed:', sendErr)
+        emailResult = { ok: false, error: sendErr instanceof Error ? sendErr.message : 'Unknown error' }
+      }
+
+      const emailFeedbackMessages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(-15),
+        {
+          role: 'system',
+          content: emailResult.ok
+            ? `[EMAIL_SENT] The email to "${confirmEmail.to}" with subject "${confirmEmail.subject}" was successfully sent via Luxor's Zoho mailbox. Let the owner know it's sent in your warm best-friend style.`
+            : `[EMAIL_FAILED] The email to "${confirmEmail.to}" could not be sent. Error: ${emailResult.error}. Apologize and suggest checking the Zoho mail config.`
+        }
+      ]
+
+      const emailFeedbackResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://luxoreventspace.com',
+          'X-Title': 'Luxor Event Space Elena CRM',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          temperature: 0.2,
+          messages: emailFeedbackMessages
+        })
+      })
+
+      const feedbackData = emailFeedbackResponse.ok ? await emailFeedbackResponse.json() : null
+      const feedbackReply = feedbackData?.choices?.[0]?.message?.content ||
+        (emailResult.ok ? `Done bestie! ✉️ The email to ${confirmEmail.to} is sent!` : `I couldn\'t send that email. Error: ${emailResult.error}`)
+
+      return NextResponse.json({ reply: feedbackReply, executedQueries })
     }
 
     // 2. Normal assistant request
@@ -399,8 +481,23 @@ export async function POST(request: Request) {
         let confirmationInterrupted = false
 
         for (const toolCall of assistantMessage.tool_calls) {
-          // A. Confirmation request
-          if (toolCall.function?.name === 'request_action_confirmation') {
+          // A. Email draft request
+          if (toolCall.function?.name === 'draft_email') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              confirmationPayload = {
+                query: JSON.stringify({ __emailDraft: true, to: args.to, subject: args.subject, body: args.body, recipient_name: args.recipient_name }),
+                summary: `Send email to ${args.recipient_name || args.to}: "${args.subject}"`
+              }
+              confirmationInterrupted = true
+            } catch (err) {
+              console.error('Failed to parse draft_email args:', err)
+            }
+          }
+          // B. DB write confirmation request
+          else if (toolCall.function?.name === 'request_action_confirmation') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
                 ? JSON.parse(toolCall.function.arguments)
@@ -415,7 +512,7 @@ export async function POST(request: Request) {
               console.error('Failed to parse confirmation args:', err)
             }
           }
-          // B. Normal database query
+          // C. Normal database query
           else if (toolCall.function?.name === 'execute_database_sql') {
             let sqlQuery = ''
             try {
