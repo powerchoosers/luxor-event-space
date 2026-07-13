@@ -32,6 +32,7 @@ export function LuxorInquiryForm({
 
   const [eventType, setEventType] = useState('')
   const [targetDate, setTargetDate] = useState('')
+  const [packageInterest, setPackageInterest] = useState('')
   const [preferredTourSlotId, setPreferredTourSlotId] = useState('')
   const [preferredTourDate, setPreferredTourDate] = useState('')
   const [preferredTourTime, setPreferredTourTime] = useState('')
@@ -74,7 +75,7 @@ export function LuxorInquiryForm({
       guestCount: String(form.get('guestCount') ?? ''),
       preferredTourDate: preferredTourDate,
       preferredTourTime: preferredTourTime,
-      packageInterest: String(form.get('packageInterest') ?? ''),
+      packageInterest: packageInterest,
       message: String(form.get('message') ?? ''),
       source,
       flow,
@@ -183,15 +184,21 @@ export function LuxorInquiryForm({
             )}
           </div>
 
-          <label className="mt-5 block">
-            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Package interest</span>
-            <input
-              name="packageInterest"
-              type="text"
-              placeholder="Foundation, Signature, Showpiece, or not sure"
-              className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+          <div className="mt-5 flex flex-col justify-end">
+            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c] mb-2">Package interest</span>
+            <PortalSelect
+              value={packageInterest}
+              onChange={setPackageInterest}
+              className="w-full text-left"
+              placeholder="Select package interest"
+              options={[
+                { value: 'Foundation', label: 'Foundation' },
+                { value: 'Signature', label: 'Signature' },
+                { value: 'Showpiece', label: 'Showpiece' },
+                { value: 'Not Sure', label: 'Not Sure' }
+              ]}
             />
-          </label>
+          </div>
 
           <label className="mt-5 block">
             <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Notes</span>
