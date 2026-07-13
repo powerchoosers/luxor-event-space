@@ -50,6 +50,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [iframeHeight, setIframeHeight] = useState(800)
+  const [iframeLoading, setIframeLoading] = useState(true)
 
   const updateIframeHeight = () => {
     if (iframeRef.current?.contentWindow?.document?.body) {
@@ -57,6 +58,13 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
       setIframeHeight(height)
     }
   }
+
+  // Trigger loading state when switching tabs
+  useEffect(() => {
+    if (activeTab === 'preview') {
+      setIframeLoading(true)
+    }
+  }, [activeTab])
 
   useEffect(() => {
     const timer = setTimeout(updateIframeHeight, 150)
@@ -289,15 +297,27 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                 </div>
               </div>
               {/* iframe preview container with custom scrollbar */}
-              <div className="flex-1 bg-zinc-950 overflow-y-auto portal-scrollbar p-6 flex justify-center">
+              <div className="flex-1 bg-zinc-950 overflow-y-auto portal-scrollbar p-6 flex justify-center relative">
+                {iframeLoading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-sm z-10 transition-opacity duration-300">
+                    <Loader2 className="animate-spin text-[#caa24c] mb-3" size={28} />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-550">Generating Preview...</p>
+                  </div>
+                )}
                 <iframe
                   ref={iframeRef}
                   srcDoc={html}
                   title="Email Preview"
-                  className="w-[600px] border-0 bg-white shadow-2xl rounded-xl transition-all"
-                  style={{ height: `${iframeHeight}px` }}
+                  className={`w-[640px] border-0 bg-[#050505] shadow-2xl rounded-xl transition-all duration-300 ${
+                    iframeLoading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+                  }`}
+                  style={{ height: `${iframeHeight}px`, overflow: 'hidden' }}
+                  scrolling="no"
                   sandbox="allow-same-origin"
-                  onLoad={updateIframeHeight}
+                  onLoad={() => {
+                    updateIframeHeight()
+                    setTimeout(() => setIframeLoading(false), 200)
+                  }}
                 />
               </div>
             </div>
