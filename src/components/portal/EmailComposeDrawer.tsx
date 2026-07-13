@@ -604,7 +604,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     return inq.full_name.toLowerCase().includes(q) || (inq.email && inq.email.toLowerCase().includes(q))
                   }).length === 0 ? (
                     <div className="text-center py-4 text-xs text-zinc-600 italic">
-                      No contacts found matching "{directorySearch}"
+                      No contacts found matching &quot;{directorySearch}&quot;
                     </div>
                   ) : (
                     allInquiries.filter(inq => {

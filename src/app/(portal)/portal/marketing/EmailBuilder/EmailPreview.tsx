@@ -448,7 +448,7 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                           </div>
                         ) : filteredContacts.length === 0 ? (
                           <div className="text-center py-8 text-xs text-zinc-600 italic">
-                            No contacts found matching "{searchQuery}"
+                            No contacts found matching &quot;{searchQuery}&quot;
                           </div>
                         ) : (
                           filteredContacts.map((contact, index) => {
