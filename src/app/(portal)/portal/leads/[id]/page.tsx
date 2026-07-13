@@ -5126,7 +5126,7 @@ function LeadLifecycleRail({
                 ) : isCurrent ? (
                   <FileText size={13} className="stroke-[2.5]" />
                 ) : (
-                  <Circle size={6} className="fill-current text-zinc-300 dark:text-zinc-700 border-none" />
+                  <Circle size={6} className="fill-current text-[color:var(--portal-faint)] border-none" />
                 )}
               </div>
 

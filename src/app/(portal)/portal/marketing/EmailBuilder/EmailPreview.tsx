@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
-import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition } from '@/components/portal/PortalUI'
+import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -29,7 +30,11 @@ type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 
 export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
-  const [recipients, setRecipients] = useState('')
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([])
+  const [typedInput, setTypedInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [allContacts, setAllContacts] = useState<LuxorInquiry[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
   const [sendSubject, setSendSubject] = useState(subject)
   const [campaignName, setCampaignName] = useState(subject)
   const [audienceLabel, setAudienceLabel] = useState('Manual list')
@@ -43,11 +48,105 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
   const isScheduled = Boolean(scheduledFor)
 
+  // Load contacts
+  useEffect(() => {
+    if (isOpen) {
+      setContactsLoading(true)
+      fetch('/api/inquiries')
+        .then((res) => res.json())
+        .then((data) => {
+          setAllContacts(data || [])
+        })
+        .catch((err) => console.error(err))
+        .finally(() => setContactsLoading(false))
+    }
+  }, [isOpen])
+
+  // Filter contacts based on search query
+  const filteredContacts = allContacts.filter((c) => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return true
+    return (
+      c.full_name.toLowerCase().includes(query) ||
+      (c.email && c.email.toLowerCase().includes(query))
+    )
+  })
+
+  // Filter suggestions based on typed input
+  const filteredSuggestions = allContacts.filter((c) => {
+    const typed = typedInput.trim().toLowerCase()
+    if (!typed) return false
+    // Don't show already selected emails in suggestions
+    if (c.email && selectedEmails.includes(c.email)) return false
+    return (
+      c.full_name.toLowerCase().includes(typed) ||
+      (c.email && c.email.toLowerCase().includes(typed))
+    )
+  }).slice(0, 5)
+
+  // Add a specific contact
+  const handleAddContact = (contact: LuxorInquiry) => {
+    if (contact.email) {
+      const email = contact.email.trim()
+      if (!selectedEmails.includes(email)) {
+        setSelectedEmails(prev => [...prev, email])
+      }
+    }
+    setTypedInput('')
+  }
+
+  // Remove email tag
+  const handleRemoveEmail = (email: string) => {
+    setSelectedEmails(prev => prev.filter(e => e !== email))
+  }
+
+  // Toggle selection from directory
+  const handleToggleEmail = (email: string) => {
+    if (!email) return
+    setSelectedEmails(prev =>
+      prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
+    )
+  }
+
+  // Handle typing input keys (Enter / Comma to add custom email tag)
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      const val = typedInput.trim()
+      if (val) {
+        if (val.includes('@') && !selectedEmails.includes(val)) {
+          setSelectedEmails(prev => [...prev, val])
+        }
+      }
+      setTypedInput('')
+    }
+  }
+
+  // Bulk actions
+  const handleSelectAll = () => {
+    const filteredEmails = filteredContacts
+      .map((c) => c.email)
+      .filter((e): e is string => !!e)
+    setSelectedEmails((prev) => {
+      const next = [...prev]
+      filteredEmails.forEach((email) => {
+        if (!next.includes(email)) next.push(email)
+      })
+      return next
+    })
+  }
+
+  const handleClearAll = () => {
+    if (!searchQuery.trim()) {
+      setSelectedEmails([])
+    } else {
+      const filteredEmails = filteredContacts.map((c) => c.email).filter(Boolean)
+      setSelectedEmails(prev => prev.filter(e => !filteredEmails.includes(e)))
+    }
+  }
+
   async function handleSend() {
-    const emails = recipients
-      .split(',')
-      .map((e) => e.trim())
-      .filter(Boolean)
+    const emails = selectedEmails
 
     if (!emails.length) {
       setSendMessage('Please enter at least one recipient email address.')
@@ -235,18 +334,177 @@ export function EmailPreview({ isOpen, blocks, subject, onClose }: EmailPreviewP
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Recipients</label>
-                    <textarea
-                      className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors resize-none"
-                      rows={4}
-                      placeholder="email@example.com, another@example.com"
-                      value={recipients}
-                      onChange={(e) => setRecipients(e.target.value)}
-                    />
-                    <p className="text-[10px] text-zinc-600">
-                      {recipients.split(',').filter((e) => e.trim()).length} recipient(s)
-                    </p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-550">Recipients List</label>
+                      
+                      {/* Selected Tags Area */}
+                      <div className="flex flex-wrap gap-2 p-2.5 border border-zinc-800 bg-zinc-950/60 rounded-lg min-h-[46px] items-center">
+                        {selectedEmails.map((email) => {
+                          const contact = allContacts.find((c) => c.email?.toLowerCase() === email.toLowerCase())
+                          return (
+                            <span
+                              key={email}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[#f1d27a] text-xs font-semibold"
+                            >
+                              <span>{contact ? `${contact.full_name} (${email})` : email}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEmail(email)}
+                                className="hover:text-white transition-colors cursor-pointer"
+                              >
+                                <X size={11} className="stroke-[3]" />
+                              </button>
+                            </span>
+                          )
+                        })}
+                        {selectedEmails.length === 0 && !typedInput && (
+                          <span className="text-zinc-600 text-xs italic">No recipients selected yet. Type to add or select below.</span>
+                        )}
+                      </div>
+
+                      {/* Type & Add Input with suggestions */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={typedInput}
+                          onChange={(e) => setTypedInput(e.target.value)}
+                          onKeyDown={handleInputKeyDown}
+                          placeholder="Type email address or contact name and press Enter..."
+                          className="w-full rounded-md border border-zinc-800 bg-zinc-990 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-650 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
+                        />
+                        
+                        {/* Suggestions Dropdown */}
+                        {typedInput.trim().length > 0 && filteredSuggestions.length > 0 && (
+                          <div className="absolute left-0 right-0 top-12 z-50 rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl p-1.5 max-h-56 overflow-y-auto portal-scrollbar">
+                            {filteredSuggestions.map((contact) => (
+                              <button
+                                key={contact.id}
+                                type="button"
+                                onClick={() => handleAddContact(contact)}
+                                className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors cursor-pointer"
+                              >
+                                <div>
+                                  <p className="font-bold text-white/90">{contact.full_name}</p>
+                                  <p className="text-[10px] text-zinc-550 font-mono mt-0.5">{contact.email}</p>
+                                </div>
+                                {contact.event_type && (
+                                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-1.5 py-0.5 rounded">
+                                    {contact.event_type}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* All Contacts Scrollable List */}
+                    <div className="border border-zinc-850 bg-black/20 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Contacts Directory</h4>
+                          <p className="text-[9px] text-zinc-550 mt-0.5">Search and select contacts from your lead database.</p>
+                        </div>
+                        
+                        {/* Bulk Actions */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAll}
+                            className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-zinc-700">·</span>
+                          <button
+                            type="button"
+                            onClick={handleClearAll}
+                            className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Search Directory Input */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search contacts by name or email..."
+                          className="w-full rounded-lg border border-zinc-900 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 outline-none placeholder:text-zinc-650"
+                        />
+                      </div>
+
+                      {/* Contacts List Scroll Container */}
+                      <div className="max-h-60 overflow-y-auto portal-scrollbar border border-zinc-900/60 bg-zinc-950/20 rounded-lg p-1.5 divide-y divide-zinc-900/40">
+                        {contactsLoading ? (
+                          <div className="text-center py-8 text-xs text-zinc-550 flex items-center justify-center gap-2">
+                            <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+                            <span>Loading contacts...</span>
+                          </div>
+                        ) : filteredContacts.length === 0 ? (
+                          <div className="text-center py-8 text-xs text-zinc-600 italic">
+                            No contacts found matching "{searchQuery}"
+                          </div>
+                        ) : (
+                          filteredContacts.map((contact, index) => {
+                            const isSelected = selectedEmails.includes(contact.email || '')
+                            return (
+                              <div
+                                key={contact.id}
+                                onClick={() => handleToggleEmail(contact.email || '')}
+                                className="group flex items-center py-2 px-3 hover:bg-zinc-900/40 rounded-lg cursor-pointer transition-colors select-none"
+                              >
+                                {/* Spotify-style hover index / checkmark */}
+                                <div className="w-8 flex-shrink-0 flex items-center justify-center font-mono text-[10px] text-zinc-550">
+                                  {isSelected ? (
+                                    <CheckCircle size={13} className="text-[#caa24c] fill-[#caa24c]/10" />
+                                  ) : (
+                                    <>
+                                      <span className="group-hover:hidden">{index + 1}</span>
+                                      <span className="hidden group-hover:inline">
+                                        <Check size={11} className="text-[#caa24c] stroke-[2.5]" />
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0 ml-1">
+                                  <p className={`text-xs font-bold transition-colors leading-tight ${isSelected ? 'text-[#f1d27a]' : 'text-zinc-200 group-hover:text-white'}`}>
+                                    {contact.full_name}
+                                  </p>
+                                  <p className="text-[10px] text-zinc-550 font-mono mt-0.5 truncate">{contact.email || 'No email registered'}</p>
+                                </div>
+
+                                {/* Event Type Badge */}
+                                {contact.event_type && (
+                                  <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${
+                                    isSelected 
+                                      ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]' 
+                                      : 'border-zinc-900 bg-zinc-950 text-zinc-500'
+                                  }`}>
+                                    {contact.event_type}
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      {/* Selection Summary */}
+                      <div className="flex items-center justify-between text-[10px] text-zinc-550 font-bold uppercase tracking-wider px-1">
+                        <span>Total Selected</span>
+                        <span className="font-mono text-xs text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2.5 py-0.5 rounded">
+                          {selectedEmails.length} recipient{selectedEmails.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

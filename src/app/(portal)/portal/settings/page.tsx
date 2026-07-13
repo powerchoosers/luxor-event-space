@@ -16,8 +16,10 @@ import {
   AlertTriangle,
   Upload,
   Copy,
+  Loader2,
   Check,
-  Loader2
+  Sun,
+  Moon
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -57,6 +59,31 @@ export default function SettingsPage() {
   const { notify } = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('business')
   const [saving, setSaving] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('luxor-portal-theme')
+      if (saved === 'light' || saved === 'dark') {
+        setTheme(saved)
+      }
+    }
+  }, [])
+
+  const handleUpdateTheme = (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme)
+    window.localStorage.setItem('luxor-portal-theme', newTheme)
+    window.dispatchEvent(new Event('luxor-portal-theme'))
+
+    // Save to Supabase
+    fetch('/api/portal/user-preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: newTheme })
+    }).catch(err => console.error('Failed to sync theme to Supabase:', err))
+
+    notify({ title: `Switched to ${newTheme} theme.`, variant: 'success' })
+  }
 
   // Brand Assets Management States
   const [assets, setAssets] = useState<BrandAsset[]>([])
@@ -244,6 +271,42 @@ export default function SettingsPage() {
                       defaultValue="ELEGANT SPACES. UNFORGETTABLE EVENTS."
                       className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Appearance Settings */}
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Appearance Settings</h3>
+                <div className="space-y-3">
+                  <p className="text-xs text-zinc-400">Choose your preferred workspace theme color. This setting is synced to your profile and active across devices.</p>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateTheme('dark')}
+                      className={`flex-1 border rounded-xl p-4 flex flex-col items-center gap-2 transition-all cursor-pointer ${
+                        theme === 'dark'
+                          ? 'border-[#caa24c] bg-[#caa24c]/5 text-[#f1d27a]'
+                          : 'border-zinc-800 bg-black/20 text-zinc-400 hover:border-zinc-750'
+                      }`}
+                    >
+                      <Moon size={18} className={theme === 'dark' ? 'text-[#caa24c]' : 'text-zinc-600'} />
+                      <span className="text-xs font-bold">Dark Mode</span>
+                      <span className="text-[9px] text-zinc-550">Luxor forensic dashboard</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateTheme('light')}
+                      className={`flex-1 border rounded-xl p-4 flex flex-col items-center gap-2 transition-all cursor-pointer ${
+                        theme === 'light'
+                          ? 'border-[#caa24c] bg-[#caa24c]/5 text-[#f1d27a]'
+                          : 'border-zinc-800 bg-black/20 text-zinc-400 hover:border-zinc-750'
+                      }`}
+                    >
+                      <Sun size={18} className={theme === 'light' ? 'text-[#caa24c]' : 'text-zinc-650'} />
+                      <span className="text-xs font-bold">Light Mode</span>
+                      <span className="text-[9px] text-zinc-500">Refined gold and sand accents</span>
+                    </button>
                   </div>
                 </div>
               </div>

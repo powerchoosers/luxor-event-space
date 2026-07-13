@@ -24,7 +24,9 @@ import {
   AlignCenter,
   AlignRight,
   Link,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Check,
+  CheckCircle
 } from 'lucide-react'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
@@ -182,6 +184,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
   const [allInquiries, setAllInquiries] = useState<LuxorInquiry[]>([])
   const [showClientDropdown, setShowClientDropdown] = useState(false)
+  const [showDirectory, setShowDirectory] = useState(false)
+  const [directorySearch, setDirectorySearch] = useState('')
 
   // Fetch inquiries for global client selection
   const fetchInquiries = async () => {
@@ -218,6 +222,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     setTemplateBlocks([])
     setErrorMsg(null)
     setSuccessMsg(null)
+    setShowDirectory(false)
+    setDirectorySearch('')
   }, [lead, isOpen])
 
   // Fetch saved marketing templates
@@ -475,7 +481,18 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
             <div className="grid grid-cols-2 gap-3 shrink-0">
               <div className="space-y-1 relative">
-                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">To (Client)</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">To (Client)</label>
+                  {!lead && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDirectory(!showDirectory)}
+                      className="text-[9px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#d4b060] transition-colors cursor-pointer"
+                    >
+                      {showDirectory ? 'Hide Directory' : 'Browse Directory'}
+                    </button>
+                  )}
+                </div>
                 {lead ? (
                   <input
                     type="text"
@@ -484,7 +501,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 py-1.5 text-xs text-zinc-400 outline-none"
                   />
                 ) : (
-                  <div className="relative">
+                  <div className="relative font-sans">
                     <input
                       type="text"
                       placeholder="Search or enter email..."
@@ -494,19 +511,19 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                         setToAddress(e.target.value)
                         setShowClientDropdown(true)
                       }}
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs font-mono text-white outline-none focus:border-[#caa24c]/40"
+                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-white outline-none focus:border-[#caa24c]/40 placeholder:text-zinc-600"
                     />
-                    {showClientDropdown && (
+                    {showClientDropdown && toAddress.trim().length > 0 && (
                       <>
                         <div 
                           className="fixed inset-0 z-40" 
                           onClick={() => setShowClientDropdown(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-40 overflow-y-auto rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl portal-scrollbar">
+                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-2xl portal-scrollbar">
                           {allInquiries.filter(inq => 
                             inq.full_name.toLowerCase().includes(toAddress.toLowerCase()) ||
                             (inq.email && inq.email.toLowerCase().includes(toAddress.toLowerCase()))
-                          ).slice(0, 10).map(inq => (
+                          ).slice(0, 5).map(inq => (
                             <button
                               key={inq.id}
                               type="button"
@@ -514,18 +531,25 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                 setToAddress(inq.email || '')
                                 setShowClientDropdown(false)
                               }}
-                              className="w-full rounded-md px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-[#caa24c]/10 hover:text-white transition-colors cursor-pointer"
+                              className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors cursor-pointer"
                             >
-                              <div className="font-bold">{inq.full_name}</div>
-                              <div className="text-[10px] text-zinc-500 font-mono">{inq.email || 'No email'}</div>
+                              <div>
+                                <p className="font-bold text-white/90">{inq.full_name}</p>
+                                <p className="text-[10px] text-zinc-550 font-mono mt-0.5">{inq.email || 'No email'}</p>
+                              </div>
+                              {inq.event_type && (
+                                <span className="text-[8px] font-bold uppercase tracking-wider text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-1.5 py-0.5 rounded">
+                                  {inq.event_type}
+                                </span>
+                              )}
                             </button>
                           ))}
                           {allInquiries.filter(inq => 
                             inq.full_name.toLowerCase().includes(toAddress.toLowerCase()) ||
                             (inq.email && inq.email.toLowerCase().includes(toAddress.toLowerCase()))
                           ).length === 0 && (
-                            <div className="py-2 text-center text-xs text-zinc-650 italic">
-                              No matching clients found. Type to enter email manually.
+                            <div className="py-3 text-center text-xs text-zinc-650 italic">
+                              No matching clients found.
                             </div>
                           )}
                         </div>
@@ -543,6 +567,100 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 />
               </div>
             </div>
+
+            {/* Collapsible Contacts Directory */}
+            {!lead && showDirectory && (
+              <div className="border border-zinc-850 bg-black/25 rounded-xl p-3 space-y-2 shrink-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-[9px] font-black uppercase tracking-widest text-[#caa24c]">Contacts Directory</h4>
+                    <p className="text-[8px] text-zinc-550">Search and click a contact to set the recipient.</p>
+                  </div>
+                  {toAddress && (
+                    <button
+                      type="button"
+                      onClick={() => setToAddress('')}
+                      className="text-[8px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                    >
+                      Clear Recipient
+                    </button>
+                  )}
+                </div>
+
+                {/* Directory Search */}
+                <input
+                  type="text"
+                  value={directorySearch}
+                  onChange={(e) => setDirectorySearch(e.target.value)}
+                  placeholder="Search by name or email..."
+                  className="w-full rounded-lg border border-zinc-900 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300 outline-none placeholder:text-zinc-650"
+                />
+
+                {/* Directory Scroll List */}
+                <div className="max-h-36 overflow-y-auto portal-scrollbar border border-zinc-900/60 bg-zinc-950/20 rounded-lg p-1 divide-y divide-zinc-900/40">
+                  {allInquiries.filter(inq => {
+                    const q = directorySearch.trim().toLowerCase()
+                    if (!q) return true
+                    return inq.full_name.toLowerCase().includes(q) || (inq.email && inq.email.toLowerCase().includes(q))
+                  }).length === 0 ? (
+                    <div className="text-center py-4 text-xs text-zinc-600 italic">
+                      No contacts found matching "{directorySearch}"
+                    </div>
+                  ) : (
+                    allInquiries.filter(inq => {
+                      const q = directorySearch.trim().toLowerCase()
+                      if (!q) return true
+                      return inq.full_name.toLowerCase().includes(q) || (inq.email && inq.email.toLowerCase().includes(q))
+                    }).map((inq, idx) => {
+                      const isSelected = toAddress.trim().toLowerCase() === (inq.email || '').trim().toLowerCase()
+                      return (
+                        <div
+                          key={inq.id}
+                          onClick={() => {
+                            setToAddress(inq.email || '')
+                            setShowClientDropdown(false)
+                          }}
+                          className="group flex items-center py-1.5 px-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer transition-colors select-none"
+                        >
+                          {/* Spotify-style hover index / checkmark */}
+                          <div className="w-8 flex-shrink-0 flex items-center justify-center font-mono text-[9px] text-zinc-550">
+                            {isSelected ? (
+                              <CheckCircle size={12} className="text-[#caa24c] fill-[#caa24c]/10" />
+                            ) : (
+                              <>
+                                <span className="group-hover:hidden">{idx + 1}</span>
+                                <span className="hidden group-hover:inline">
+                                  <Check size={10} className="text-[#caa24c] stroke-[2.5]" />
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0 ml-1">
+                            <p className={`text-[11px] font-bold transition-colors leading-tight ${isSelected ? 'text-[#f1d27a]' : 'text-zinc-200 group-hover:text-white'}`}>
+                              {inq.full_name}
+                            </p>
+                            <p className="text-[9px] text-zinc-550 font-mono mt-0.5 truncate">{inq.email || 'No email registered'}</p>
+                          </div>
+
+                          {/* Event Type Badge */}
+                          {inq.event_type && (
+                            <span className={`text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0 ${
+                              isSelected 
+                                ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]' 
+                                : 'border-zinc-900 bg-zinc-950 text-zinc-500'
+                            }`}>
+                              {inq.event_type}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Subject */}
             <div className="space-y-1 shrink-0">

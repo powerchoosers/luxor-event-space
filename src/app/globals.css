@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+@variant dark (&:where([data-portal-theme="dark"], [data-portal-theme="dark"] *));
+
+
 :root {
   --background: #050505;
   --foreground: #f6efe8;
@@ -99,14 +102,22 @@ body[data-portal-theme='light'] .bg-zinc-950,
 body[data-portal-theme='light'] .bg-zinc-950\/60,
 body[data-portal-theme='light'] .bg-zinc-950\/50,
 body[data-portal-theme='light'] .bg-zinc-950\/40,
-body[data-portal-theme='light'] .bg-zinc-900\/50 {
+body[data-portal-theme='light'] .bg-zinc-950\/15,
+body[data-portal-theme='light'] .bg-zinc-950\/5,
+body[data-portal-theme='light'] .bg-zinc-900\/50,
+body[data-portal-theme='light'] .bg-zinc-900\/60,
+body[data-portal-theme='light'] .bg-\[\#070707\],
+body[data-portal-theme='light'] .bg-\[\#0c0c0c\]\/85 {
   background-color: var(--portal-soft) !important;
 }
 
 body[data-portal-theme='light'] .text-white,
+body[data-portal-theme='light'] .text-white\/95,
 body[data-portal-theme='light'] .text-white\/90,
+body[data-portal-theme='light'] .text-white\/80,
 body[data-portal-theme='light'] .text-zinc-200,
 body[data-portal-theme='light'] .text-zinc-300,
+body[data-portal-theme='light'] .text-zinc-355,
 body[data-portal-theme='light'] .text-zinc-350,
 body[data-portal-theme='light'] .text-zinc-400 {
   color: var(--portal-text) !important;
@@ -129,11 +140,19 @@ body[data-portal-theme='light'] select {
 
 body[data-portal-theme='light'] .border-zinc-900,
 body[data-portal-theme='light'] .border-zinc-950,
-body[data-portal-theme='light'] .border-zinc-900\/50,
-body[data-portal-theme='light'] .border-zinc-900\/30,
+body[data-portal-theme='light'] .border-zinc-900\/85,
+body[data-portal-theme='light'] .border-zinc-900\/80,
 body[data-portal-theme='light'] .border-zinc-900\/60,
+body[data-portal-theme='light'] .border-zinc-900\/50,
+body[data-portal-theme='light'] .border-zinc-900\/40,
+body[data-portal-theme='light'] .border-zinc-900\/30,
+body[data-portal-theme='light'] .border-zinc-850,
+body[data-portal-theme='light'] .border-zinc-850\/60,
+body[data-portal-theme='light'] .border-zinc-850\/50,
+body[data-portal-theme='light'] .border-zinc-850\/30,
 body[data-portal-theme='light'] .border-zinc-800,
-body[data-portal-theme='light'] .border-zinc-800\/60 {
+body[data-portal-theme='light'] .border-zinc-800\/60,
+body[data-portal-theme='light'] .border-zinc-700\/50 {
   border-color: var(--portal-border) !important;
 }
 
@@ -172,6 +191,27 @@ body[data-portal-theme='light'] .text-zinc-900 {
 *::-webkit-scrollbar-thumb:hover {
   background:
     linear-gradient(180deg, rgba(255, 230, 144, 0.96), rgba(202, 162, 76, 0.92));
+}
+
+body[data-portal-theme='light'] * {
+  scrollbar-color: rgba(202, 162, 76, 0.58) var(--portal-soft);
+}
+
+body[data-portal-theme='light'] *::-webkit-scrollbar-track {
+  background: var(--portal-soft);
+  border-left: 1px solid var(--portal-border);
+}
+
+body[data-portal-theme='light'] *::-webkit-scrollbar-thumb {
+  border: 0.18rem solid var(--portal-card);
+  background:
+    linear-gradient(180deg, rgba(202, 162, 76, 0.7), rgba(160, 120, 50, 0.7));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, rgba(202, 162, 76, 0.9), rgba(160, 120, 50, 0.9));
 }
 
 ::selection {

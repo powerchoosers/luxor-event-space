@@ -134,11 +134,6 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const [searchFocused, setSearchFocused] = useState(false)
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
-  const togglePortalTheme = useCallback(() => {
-    const next = portalTheme === 'dark' ? 'light' : 'dark'
-    window.localStorage.setItem('luxor-portal-theme', next)
-    window.dispatchEvent(new Event('luxor-portal-theme'))
-  }, [portalTheme])
 
   // Derived Search Results
   const searchResults = useMemo(() => {
@@ -183,6 +178,21 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
       active = false
       if (timeoutId) clearTimeout(timeoutId)
     }
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/portal/user-preferences')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.theme && (data.theme === 'light' || data.theme === 'dark')) {
+          const currentLocal = window.localStorage.getItem('luxor-portal-theme')
+          if (currentLocal !== data.theme) {
+            window.localStorage.setItem('luxor-portal-theme', data.theme)
+            window.dispatchEvent(new Event('luxor-portal-theme'))
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to sync theme preference:', err))
   }, [])
 
   const selectSearchResult = useCallback((id: string) => {
@@ -398,15 +408,6 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-5">
-              <button
-                type="button"
-                onClick={togglePortalTheme}
-                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#caa24c] transition-colors hover:text-[#f1d27a]"
-                aria-label="Toggle portal theme"
-              >
-                <Moon size={12} />
-                {portalTheme === 'dark' ? 'Light' : 'Dark'}
-              </button>
             
             {/* Bell Notifications */}
             <Link href="/portal/leads" prefetch className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
