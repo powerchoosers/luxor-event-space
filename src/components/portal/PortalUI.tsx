@@ -3,6 +3,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Calendar } from 'lucide-react'
 
 export function PortalPageFrame({
   children,
@@ -742,7 +743,7 @@ export function PortalDatePicker({
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30"
       >
         <span>{formattedDisplay}</span>
-        <span className="text-[10px] text-[color:var(--portal-muted)]">📅</span>
+        <Calendar size={13} className="text-[#caa24c]/80" />
       </button>
       
       <AnimatePresence>
