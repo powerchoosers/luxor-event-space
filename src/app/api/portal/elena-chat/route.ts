@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import type { EmailBlock } from '@/app/(portal)/portal/marketing/emailTemplates'
 
 async function fetchCampaignRecipients(audienceLabel: string): Promise<{ email: string; name: string | null }[]> {
   const labelClean = audienceLabel.trim().toLowerCase()
@@ -559,7 +560,7 @@ export async function POST(request: Request) {
         }
 
         const { renderEmailToHtml } = await import('@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer')
-        const html = renderEmailToHtml(confirmCampaign.subject, confirmCampaign.blocks)
+        const html = renderEmailToHtml(confirmCampaign.subject, confirmCampaign.blocks as EmailBlock[])
 
         const { createMarketingCampaign, sendMarketingCampaignNow } = await import('@/lib/luxorMarketingServer')
         const detail = await createMarketingCampaign({
