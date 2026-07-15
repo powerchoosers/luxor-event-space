@@ -23,7 +23,10 @@ import {
   Package,
   Handshake,
   Zap,
-  Brush
+  Brush,
+  BarChart3,
+  Phone,
+  TrendingUp
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -55,7 +58,7 @@ const navItems = [
   { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
   { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
-  { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing' },
+  { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing', isDropdown: true },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
 
@@ -68,6 +71,17 @@ const operationsSubItems = [
   { href: '/portal/operations?tab=utilities', label: 'Utilities', icon: Zap },
   { href: '/portal/operations?tab=cleaning', label: 'Cleaning', icon: Brush },
   { href: '/portal/operations?tab=staff', label: 'Staff', icon: Users },
+]
+
+const marketingSubItems = [
+  { href: '/portal/marketing?tab=overview', label: 'Marketing Overview', icon: BarChart3 },
+  { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
+  { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
+  { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
+  { href: '/portal/marketing?tab=builder-automation', label: 'Email Builder & Automation', icon: Sparkles },
+  { href: '/portal/marketing?tab=contact-lists', label: 'Contact Lists', icon: Users },
+  { href: '/portal/marketing?tab=call-center', label: 'Call Center', icon: Phone },
+  { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },
 ]
 
 export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
@@ -85,7 +99,17 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const searchParams = useSearchParams()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
+  const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing'))
   const [elenaOpen, setElenaOpen] = useState(false)
+
+  useEffect(() => {
+    if (pathname.startsWith('/portal/operations')) {
+      setOperationsExpanded(true)
+    }
+    if (pathname.startsWith('/portal/marketing')) {
+      setMarketingExpanded(true)
+    }
+  }, [pathname])
   const portalTheme = useSyncExternalStore(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -243,11 +267,18 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             {navItems.map((item) => {
               if (item.isDropdown) {
                 const isCurrentGroup = pathname.startsWith(item.href)
+                const isExpanded = item.href === '/portal/operations' ? operationsExpanded : marketingExpanded
                 return (
                   <div key={item.href} className="space-y-1">
                     <button
                       type="button"
-                      onClick={() => setOperationsExpanded(!operationsExpanded)}
+                      onClick={() => {
+                        if (item.href === '/portal/operations') {
+                          setOperationsExpanded(!operationsExpanded)
+                        } else if (item.href === '/portal/marketing') {
+                          setMarketingExpanded(!marketingExpanded)
+                        }
+                      }}
                       className={`group relative flex w-full items-center rounded-lg border text-sm font-medium transition-all cursor-pointer ${
                         sidebarCollapsed ? 'justify-center px-0 py-3' : 'justify-between px-3 py-2.5'
                       } ${
@@ -267,13 +298,13 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                       </div>
                       {!sidebarCollapsed && (
                         <span className="text-zinc-500 mr-1">
-                          <ChevronDown size={14} className={`transform transition-transform ${operationsExpanded ? '' : '-rotate-90'}`} />
+                          <ChevronDown size={14} className={`transform transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                         </span>
                       )}
                     </button>
                     
                     <AnimatePresence initial={false}>
-                      {operationsExpanded && !sidebarCollapsed && (
+                      {isExpanded && !sidebarCollapsed && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
@@ -281,10 +312,11 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                           transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                           className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1 overflow-hidden"
                         >
-                          {operationsSubItems.map((sub) => {
+                          {(item.href === '/portal/operations' ? operationsSubItems : marketingSubItems).map((sub) => {
                             const tabParam = searchParams?.get('tab')
-                            const isSubActive = pathname === '/portal/operations' && (
-                              (sub.href.includes('tab=dashboard') && !tabParam) ||
+                            const defaultTab = item.href === '/portal/operations' ? 'dashboard' : 'overview'
+                            const isSubActive = pathname === item.href && (
+                              (sub.href.includes(`tab=${defaultTab}`) && !tabParam) ||
                               (!!tabParam && sub.href.includes(`tab=${tabParam}`))
                             )
                             return (
