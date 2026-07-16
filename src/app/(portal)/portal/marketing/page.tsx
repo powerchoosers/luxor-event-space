@@ -94,6 +94,21 @@ type CampaignDetail = {
   events: CampaignEvent[]
 }
 
+export interface MarketingListMember {
+  id?: string
+  created_at?: string
+  email: string
+  full_name: string | null
+  source: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface MarketingList {
+  name: string
+  memberCount: number
+  members: MarketingListMember[]
+}
+
 export default function MarketingPage() {
   return (
     <Suspense fallback={
@@ -171,10 +186,30 @@ function MarketingPageContent() {
     }
   }, [])
 
+  // 2b. Fetch marketing subscriber lists
+  const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
+  const [loadingLists, setLoadingLists] = useState(true)
+
+  const loadMarketingLists = useCallback(async () => {
+    setLoadingLists(true)
+    try {
+      const res = await fetch('/api/marketing/lists', { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setMarketingLists(data.lists || [])
+      }
+    } catch (err) {
+      console.error('Failed loading marketing lists:', err)
+    } finally {
+      setLoadingLists(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadCampaigns()
     loadInquiries()
-  }, [loadCampaigns, loadInquiries])
+    loadMarketingLists()
+  }, [loadCampaigns, loadInquiries, loadMarketingLists])
 
   // Watchers for Elena AI drafts and changes
   useEffect(() => {
@@ -482,19 +517,49 @@ function MarketingPageContent() {
 
   const header = getHeaderInfo()
 
+  const isContainedTab = activeTab === 'builder-automation' || activeTab === 'call-center' || activeTab === 'contact-lists'
+
+  const headerActions = useMemo(() => {
+    if (activeTab === 'contact-lists') {
+      return (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-zinc-950/40 border border-zinc-900/60 px-3 py-1.5 rounded-xl font-mono text-[9px] text-zinc-500 font-bold shrink-0">
+          {[
+            { label: 'Contacts', value: '2,487' },
+            { label: 'Subscribers', value: '1,842' },
+            { label: 'Leads', value: '551' },
+            { label: 'Clients', value: '94' },
+            { label: 'Unsubs', value: '78' },
+            { label: 'SMS Subs', value: '1,276' }
+          ].map((stat, idx) => (
+            <React.Fragment key={idx}>
+              {idx > 0 && <span className="text-zinc-850 font-black">|</span>}
+              <div className="flex items-center gap-1.5">
+                <span className="uppercase tracking-widest">{stat.label}:</span>
+                <span className="text-white font-black">{stat.value}</span>
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+      )
+    }
+    return undefined
+  }, [activeTab])
+
   return (
-    <PortalPageFrame className={activeTab === 'builder-automation' ? '!h-full !min-h-0 overflow-hidden' : ''}>
+    <PortalPageFrame className={isContainedTab ? '!h-full !min-h-0 overflow-hidden flex flex-col gap-4' : ''}>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
         description={header.desc}
+        actions={headerActions}
       />
 
-      <div className="flex-grow flex flex-col min-h-0 overflow-visible mt-2">
+      <div className={`flex-grow flex flex-col min-h-0 mt-2 ${isContainedTab ? 'overflow-hidden' : 'overflow-visible'}`}>
         {activeTab === 'overview' && (
           <MarketingOverviewTab
             inquiries={inquiries}
             campaigns={campaigns}
+            marketingLists={marketingLists}
             onTabChange={handleTabChange}
             onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
           />
@@ -537,6 +602,7 @@ function MarketingPageContent() {
         {activeTab === 'contact-lists' && (
           <ContactListsTab
             inquiries={inquiries}
+            marketingLists={marketingLists}
             initialSourceFilter={initialSourceFilter}
             onAddContact={handleAddContact}
           />

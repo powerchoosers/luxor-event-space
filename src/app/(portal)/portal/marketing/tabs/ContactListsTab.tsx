@@ -26,8 +26,25 @@ import {
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
 
+import { MarketingList, MarketingListMember } from '../page'
+
+export interface ContactRecord {
+  id: string
+  full_name: string
+  email: string
+  phone: string
+  event_type: string
+  source: string
+  submittedForm: string
+  dateAdded: string
+  emailStatus: string
+  smsStatus: string
+  tags: string[]
+}
+
 interface ContactListsTabProps {
   inquiries: LuxorInquiry[]
+  marketingLists?: MarketingList[]
   initialSourceFilter?: string
   onAddContact: (contact: Partial<LuxorInquiry>) => Promise<void>
 }
@@ -36,6 +53,7 @@ type CategoryView = 'all' | 'subscribers' | 'leads' | 'clients' | 'archived'
 
 export function ContactListsTab({
   inquiries,
+  marketingLists = [],
   initialSourceFilter = '',
   onAddContact
 }: ContactListsTabProps) {
@@ -76,137 +94,16 @@ export function ContactListsTab({
     }
   }, [])
 
-  // Top KPI Card metrics from Rendering 5
-  const kpiStats = [
-    { label: 'Total Contacts', value: '2,487' },
-    { label: 'Subscribers', value: '1,842' },
-    { label: 'Leads', value: '551' },
-    { label: 'Clients', value: '94' },
-    { label: 'Unsubscribers', value: '78' },
-    { label: 'SMS Subscribers', value: '1,276' }
-  ]
-
-  // Left sidebar menu form counts from Rendering 5
-  const formMenuCounts = [
-    { label: 'All Forms', count: 2487, filterVal: 'all' },
-    { label: 'Wedding Inquiry', count: 842, filterVal: 'Wedding Inquiry' },
-    { label: 'Quinceañera Inquiry', count: 412, filterVal: 'Quinceañera Inquiry' },
-    { label: 'Venue Tour Request', count: 256, filterVal: 'Venue Tour Request' },
-    { label: 'Pricing Guide Download', count: 225, filterVal: 'Pricing Guide Download' },
-    { label: 'VIP Newsletter Signup', count: 375, filterVal: 'VIP Newsletter' },
-    { label: 'Grand Opening RSVP', count: 150, filterVal: 'Grand Opening RSVP' },
-    { label: 'Vendor Application', count: 45, filterVal: 'Vendor Application' },
-    { label: 'General Contact Form', count: 30, filterVal: 'General Contact Form' }
-  ]
-
-  const quickSegments = [
-    { label: 'Hot Leads', count: 184, filterTag: 'Hot Lead' },
-    { label: 'Tour Scheduled', count: 63, filterTag: 'Tour Scheduled' },
-    { label: 'Proposal Sent', count: 47, filterTag: 'Proposal Sent' },
-    { label: 'Booked', count: 59, filterTag: 'Client' }
-  ]
-
-  // Mock Contacts matching Rendering 5 exactly
-  const mockContacts = [
-    {
-      id: 'mock-c-1',
-      full_name: 'Sarah Johnson',
-      email: 'sarah.j@gmail.com',
-      phone: '(210) 555-4896',
-      event_type: 'Wedding',
-      source: 'Google Search (SEO)',
-      submittedForm: 'Wedding Inquiry',
-      dateAdded: 'May 15, 2026 1:45 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Hot Lead', 'Tour Scheduled']
-    },
-    {
-      id: 'mock-c-2',
-      full_name: 'Michael Garcia',
-      email: 'mgarcia@hotmail.com',
-      phone: '(210) 555-8947',
-      event_type: 'Corporate Event',
-      source: 'Google Business Profile',
-      submittedForm: 'Corporate Inquiry',
-      dateAdded: 'May 17, 2026 11:20 AM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Proposal Sent', 'Follow Up']
-    },
-    {
-      id: 'mock-c-3',
-      full_name: 'Emily Brown',
-      email: 'emily.b@yahoo.com',
-      phone: '(210) 555-3214',
-      event_type: 'Quinceañera',
-      source: 'Instagram',
-      submittedForm: 'Quinceañera Inquiry',
-      dateAdded: 'May 16, 2026 4:12 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Tour Scheduled']
-    },
-    {
-      id: 'mock-c-4',
-      full_name: 'Jason Davis',
-      email: 'jdavis@gmail.com',
-      phone: '(210) 555-9874',
-      event_type: 'Birthday Party',
-      source: 'Facebook / Meta Ads',
-      submittedForm: 'Birthday Inquiry',
-      dateAdded: 'May 16, 2026 9:38 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Unsubscribed',
-      tags: ['New Lead']
-    },
-    {
-      id: 'mock-c-5',
-      full_name: 'Ashley Martinez',
-      email: 'ashleym@live.com',
-      phone: '(210) 555-6547',
-      event_type: 'Wedding',
-      source: 'The Knot',
-      submittedForm: 'Venue Tour Request',
-      dateAdded: 'May 15, 2026 4:05 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Hot Lead', 'Follow Up']
-    },
-    {
-      id: 'mock-c-6',
-      full_name: 'Roberto Carlos',
-      email: 'rcarlos@outlook.com',
-      phone: '(210) 555-8965',
-      event_type: 'Corporate Event',
-      source: 'Referral',
-      submittedForm: 'Corporate Inquiry',
-      dateAdded: 'May 15, 2026 2:10 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Client']
-    },
-    {
-      id: 'mock-c-7',
-      full_name: 'Lisa White',
-      email: 'lisaw@gmail.com',
-      phone: '(210) 555-7841',
-      event_type: 'Baby Shower',
-      source: 'Website',
-      submittedForm: 'Pricing Guide Download',
-      dateAdded: 'May 15, 2026 12:47 PM',
-      emailStatus: 'Subscribed',
-      smsStatus: 'Subscribed',
-      tags: ['Newsletter']
-    }
-  ]
-
   // Map database inquiries to table contacts structure
   const dbContacts = useMemo(() => {
     return inquiries.map((inq, idx) => {
       const emailStatus = inq.status === 'closed_lost' ? 'Unsubscribed' : 'Subscribed'
-      const smsStatus = idx % 9 === 0 ? 'Unsubscribed' : 'Subscribed'
-      const submittedForm = inq.message?.includes('Pricing') ? 'Pricing Guide Download' : inq.event_type ? `${inq.event_type} Inquiry` : 'General Contact Form'
+      const smsStatus = inq.phone ? 'Subscribed' : 'Unsubscribed'
+      const submittedForm = inq.message?.includes('Pricing') 
+        ? 'Pricing Guide Download' 
+        : inq.event_type 
+        ? `${inq.event_type} Inquiry` 
+        : 'General Contact Form'
       
       const tagList = []
       if (inq.event_type) {
@@ -218,6 +115,7 @@ export function ContactListsTab({
       }
       if (inq.status === 'booked') tagList.push('Client')
       if (inq.status === 'new') tagList.push('New Lead')
+      else tagList.push('Hot Lead')
 
       return {
         id: inq.id,
@@ -235,10 +133,98 @@ export function ContactListsTab({
     })
   }, [inquiries])
 
-  // Merge lists
-  const allContacts = useMemo(() => {
-    return [...mockContacts, ...dbContacts]
-  }, [dbContacts])
+  // Extract contacts from marketing lists
+  const listContacts = useMemo<ContactRecord[]>(() => {
+    const listItems: ContactRecord[] = []
+    for (const list of marketingLists) {
+      for (const m of list.members || []) {
+        const phoneVal = m.metadata && typeof m.metadata.phone === 'string' ? m.metadata.phone : ''
+        const eventVal = m.metadata && typeof m.metadata.event_type === 'string' ? m.metadata.event_type : 'Newsletter'
+        listItems.push({
+          id: m.id || `list-${m.email}`,
+          full_name: m.full_name || m.email.split('@')[0],
+          email: m.email,
+          phone: phoneVal,
+          event_type: eventVal,
+          source: m.source || 'Website',
+          submittedForm: list.name || 'Newsletter Signup',
+          dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Recently',
+          emailStatus: 'Subscribed',
+          smsStatus: phoneVal ? 'Subscribed' : 'Unsubscribed',
+          tags: ['Subscriber']
+        })
+      }
+    }
+    return listItems
+  }, [marketingLists])
+
+  // Merge unique contacts by email
+  const allContacts = useMemo<ContactRecord[]>(() => {
+    const map = new Map<string, ContactRecord>()
+    
+    // First insert list members
+    listContacts.forEach(c => map.set(c.email.toLowerCase(), c))
+    
+    // Overwrite/merge with inquiry data (which is richer)
+    dbContacts.forEach(c => {
+      const emailKey = c.email.toLowerCase()
+      if (map.has(emailKey)) {
+        const existing = map.get(emailKey)
+        if (existing) {
+          map.set(emailKey, {
+            ...existing,
+            ...c,
+            tags: Array.from(new Set([...existing.tags, ...c.tags]))
+          })
+        }
+      } else {
+        map.set(emailKey, c)
+      }
+    })
+
+    const merged = Array.from(map.values())
+    if (merged.length > 0) return merged
+
+    // Fallbacks if both are empty
+    return [
+      { id: 'mock-c-1', full_name: 'Sarah Johnson', email: 'sarah.j@gmail.com', phone: '(210) 555-4896', event_type: 'Wedding', source: 'Google Search (SEO)', submittedForm: 'Wedding Inquiry', dateAdded: 'May 15, 2026 1:45 PM', emailStatus: 'Subscribed', smsStatus: 'Subscribed', tags: ['Hot Lead', 'Tour Scheduled'] },
+      { id: 'mock-c-2', full_name: 'Michael Garcia', email: 'mgarcia@hotmail.com', phone: '(210) 555-8947', event_type: 'Corporate Event', source: 'Google Business Profile', submittedForm: 'Corporate Inquiry', dateAdded: 'May 17, 2026 11:20 AM', emailStatus: 'Subscribed', smsStatus: 'Subscribed', tags: ['Proposal Sent', 'Follow Up'] }
+    ]
+  }, [dbContacts, listContacts])
+
+  // Compute Left sidebar counts dynamically
+  const formMenuCounts = useMemo(() => {
+    const countsMap = new Map<string, number>()
+    allContacts.forEach(c => {
+      countsMap.set(c.submittedForm, (countsMap.get(c.submittedForm) || 0) + 1)
+    })
+
+    return [
+      { label: 'All Forms', count: allContacts.length, filterVal: 'all' },
+      { label: 'Wedding Inquiry', count: countsMap.get('Wedding Inquiry') || 0, filterVal: 'Wedding Inquiry' },
+      { label: 'Quinceañera Inquiry', count: countsMap.get('Quinceañera Inquiry') || 0, filterVal: 'Quinceañera Inquiry' },
+      { label: 'Venue Tour Request', count: countsMap.get('Venue Tour Request') || 0, filterVal: 'Venue Tour Request' },
+      { label: 'Pricing Guide Download', count: countsMap.get('Pricing Guide Download') || 0, filterVal: 'Pricing Guide Download' },
+      { label: 'VIP Newsletter Signup', count: countsMap.get('VIP Newsletter Signup') || countsMap.get('VIP Newsletter') || 0, filterVal: 'VIP Newsletter' },
+      { label: 'Grand Opening RSVP', count: countsMap.get('Grand Opening RSVP') || 0, filterVal: 'Grand Opening RSVP' },
+      { label: 'Vendor Application', count: countsMap.get('Vendor Application') || 0, filterVal: 'Vendor Application' },
+      { label: 'General Contact Form', count: countsMap.get('General Contact Form') || 0, filterVal: 'General Contact Form' }
+    ]
+  }, [allContacts])
+
+  const quickSegments = useMemo(() => {
+    const hotLeads = allContacts.filter(c => c.tags.includes('Hot Lead')).length
+    const tourScheduled = allContacts.filter(c => c.tags.includes('Tour Scheduled')).length
+    const proposalSent = allContacts.filter(c => c.tags.includes('Proposal Sent')).length
+    const booked = allContacts.filter(c => c.tags.includes('Client')).length
+
+    return [
+      { label: 'Hot Leads', count: hotLeads, filterTag: 'Hot Lead' },
+      { label: 'Tour Scheduled', count: tourScheduled, filterTag: 'Tour Scheduled' },
+      { label: 'Proposal Sent', count: proposalSent, filterTag: 'Proposal Sent' },
+      { label: 'Booked', count: booked, filterTag: 'Client' }
+    ]
+  }, [allContacts])
 
   // Filter contacts
   const filteredContacts = useMemo(() => {
@@ -322,22 +308,12 @@ export function ContactListsTab({
   }
 
   return (
-    <div className="space-y-6">
-      {/* 6 stats cards row matching Rendering 5 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
-        {kpiStats.map((stat, idx) => (
-          <div key={idx} className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 relative group hover:border-zinc-800 transition-all">
-            <p className="text-[8.5px] font-black uppercase tracking-wider text-zinc-500 leading-none">{stat.label}</p>
-            <h3 className="font-mono text-base font-bold text-white mt-2.5 leading-none">{stat.value}</h3>
-          </div>
-        ))}
-      </div>
-
+    <div className="space-y-4 flex-grow flex flex-col min-h-0 overflow-hidden">
       {/* Main split dashboard (sidebar on the left, table on the right) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 min-h-0 flex-1">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 min-h-0 flex-grow overflow-hidden">
         
         {/* Left Column: Form count sidebar list */}
-        <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-6 min-h-0 flex flex-col justify-between">
+        <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-6 min-h-0 flex flex-col justify-between overflow-y-auto portal-scrollbar">
           <div>
             <h4 className="text-[9px] font-black uppercase tracking-wider text-zinc-500 border-b border-zinc-900 pb-2">Contact Forms</h4>
             <div className="space-y-1.5 pt-3">
@@ -382,7 +358,7 @@ export function ContactListsTab({
         </div>
 
         {/* Right Column: Search toolbar + table */}
-        <div className="lg:col-span-3 flex flex-col min-h-0">
+        <div className="lg:col-span-3 flex flex-col min-h-0 overflow-hidden">
           
           {/* Top toolbar */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-7 bg-zinc-950/20 border border-zinc-900 p-3 rounded-2xl mb-4 font-mono text-[9px]">
@@ -454,7 +430,7 @@ export function ContactListsTab({
               <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
                 {filteredContacts.length > 0 ? (
                   filteredContacts.map((contact, idx) => {
-                    const initials = contact.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                    const initials = contact.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
                     return (
                       <tr key={idx} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
                         <td className="px-6 py-4 flex items-center gap-3">
@@ -495,7 +471,7 @@ export function ContactListsTab({
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap gap-1 max-w-[180px]">
-                            {contact.tags.map((tag, tIdx) => (
+                            {contact.tags.map((tag: string, tIdx: number) => (
                               <span key={tIdx} className={`rounded px-1.5 py-0.5 text-[8.5px] font-bold ${
                                 tag === 'Hot Lead'
                                   ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'

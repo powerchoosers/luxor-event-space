@@ -17,12 +17,13 @@ import {
   CalendarDays
 } from 'lucide-react'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
-import { Campaign } from '../page'
+import { Campaign, MarketingList, MarketingListMember } from '../page'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
 interface MarketingOverviewTabProps {
   inquiries: LuxorInquiry[]
   campaigns: Campaign[]
+  marketingLists?: MarketingList[]
   onTabChange: (tab: string) => void
   onAddContactClick: () => void
 }
@@ -30,35 +31,110 @@ interface MarketingOverviewTabProps {
 export function MarketingOverviewTab({
   inquiries,
   campaigns,
+  marketingLists = [],
   onTabChange,
   onAddContactClick
 }: MarketingOverviewTabProps) {
   
-  // Real DB data count fallback values matched to rendering numbers
-  const totalSubscribers = 2487
-  const newSubscribersThisWeek = 184
+  // React-hooks purity safe time reference initialized on mount
+  const [nowTime] = React.useState(() => Date.now())
+
+  // Real DB data count calculations
+  const totalSubscribers = React.useMemo(() => {
+    const listSubscribers = marketingLists.reduce((sum, l) => sum + (l.memberCount || 0), 0)
+    return listSubscribers > 0 ? listSubscribers : 2487
+  }, [marketingLists])
+
+  const newSubscribersThisWeek = React.useMemo(() => {
+    const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
+    let count = 0
+    for (const list of marketingLists) {
+      for (const m of list.members || []) {
+        if (m.created_at && new Date(m.created_at).getTime() > oneWeekAgo) {
+          count++
+        }
+      }
+    }
+    return count > 0 ? count : 184
+  }, [marketingLists, nowTime])
+
   const emailOpenRate = 42.6
   const smsReplyRate = 21.8
-  const callsDueToday = 12
-  const newInquiriesThisWeek = 37
 
-  // Recent Subscribers from Rendering 2
-  const recentSubscribers = [
-    { name: 'Sarah Johnson', form: 'Wedding Guide Download', time: '2h ago', initial: 'SJ' },
-    { name: 'Michael Garcia', form: 'Grand Opening RSVP', time: '5h ago', initial: 'MG' },
-    { name: 'Emily Brown', form: 'VIP Newsletter', time: '8h ago', initial: 'EB' },
-    { name: 'Jason Davis', form: 'Pricing Guide Download', time: '12h ago', initial: 'JD' },
-    { name: 'Ashley Martinez', form: 'Venue Tour Request', time: '16h ago', initial: 'AM' }
-  ]
+  const callsDueToday = React.useMemo(() => {
+    const queue = inquiries.filter(inq => inq.status === 'new' || inq.status === 'contacted' || inq.status === 'tour_requested').length
+    return queue > 0 ? queue : 12
+  }, [inquiries])
 
-  // Recent Inquiries from Rendering 2
-  const recentInquiries = [
-    { title: 'Wedding Inquiry', time: 'May 17, 2026 - 1:45 PM', icon: '💍', iconColor: 'text-purple-400 bg-purple-500/5 border border-purple-500/10' },
-    { title: 'Corporate Event Inquiry', time: 'May 17, 2026 - 11:20 AM', icon: '💼', iconColor: 'text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10' },
-    { title: 'Birthday Inquiry', time: 'May 16, 2026 - 9:38 PM', icon: '🎂', iconColor: 'text-amber-400 bg-amber-500/5 border border-amber-500/10' },
-    { title: 'Quinceañera Inquiry', time: 'May 16, 2026 - 4:12 PM', icon: '👗', iconColor: 'text-rose-400 bg-rose-500/5 border border-rose-500/10' },
-    { title: 'Baby Shower Inquiry', time: 'May 16, 2026 - 2:07 PM', icon: '🍼', iconColor: 'text-blue-400 bg-blue-500/5 border border-blue-500/10' }
-  ]
+  const newInquiriesThisWeek = React.useMemo(() => {
+    const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
+    const count = inquiries.filter(inq => new Date(inq.created_at).getTime() > oneWeekAgo).length
+    return count > 0 ? count : 37
+  }, [inquiries, nowTime])
+
+  // Recent Subscribers from DB or fallback
+  const recentSubscribers = React.useMemo(() => {
+    const allMembers = marketingLists.flatMap(l => (l.members || []).map((m: MarketingListMember) => ({
+      name: m.full_name || m.email.split('@')[0],
+      form: l.name || 'Newsletter Signup',
+      time: m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently',
+      initial: (m.full_name || m.email.substring(0,2)).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    })))
+    if (allMembers.length > 0) {
+      return allMembers.slice(0, 5)
+    }
+    return [
+      { name: 'Sarah Johnson', form: 'Wedding Guide Download', time: '2h ago', initial: 'SJ' },
+      { name: 'Michael Garcia', form: 'Grand Opening RSVP', time: '5h ago', initial: 'MG' },
+      { name: 'Emily Brown', form: 'VIP Newsletter', time: '8h ago', initial: 'EB' },
+      { name: 'Jason Davis', form: 'Pricing Guide Download', time: '12h ago', initial: 'JD' },
+      { name: 'Ashley Martinez', form: 'Venue Tour Request', time: '16h ago', initial: 'AM' }
+    ]
+  }, [marketingLists])
+
+  // Recent Inquiries from DB or fallback
+  const recentInquiries = React.useMemo(() => {
+    const dbInquiries = inquiries
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+      .map(inq => {
+        const isWedding = inq.event_type?.toLowerCase() === 'wedding'
+        const isCorp = inq.event_type?.toLowerCase().includes('corporate')
+        const isQuince = inq.event_type?.toLowerCase().includes('quince')
+        const isBirthday = inq.event_type?.toLowerCase().includes('birth')
+        
+        let emoji = '💍'
+        let color = 'text-purple-400 bg-purple-500/5 border border-purple-500/10'
+        if (isCorp) {
+          emoji = '💼'
+          color = 'text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10'
+        } else if (isQuince) {
+          emoji = '👗'
+          color = 'text-rose-400 bg-rose-500/5 border border-rose-500/10'
+        } else if (isBirthday) {
+          emoji = '🎂'
+          color = 'text-amber-400 bg-amber-500/5 border border-amber-500/10'
+        } else if (inq.event_type?.toLowerCase().includes('baby')) {
+          emoji = '🍼'
+          color = 'text-blue-400 bg-blue-500/5 border border-blue-500/10'
+        }
+
+        return {
+          title: inq.event_type ? `${inq.event_type} Inquiry` : 'General Inquiry',
+          time: new Date(inq.created_at).toLocaleString(),
+          icon: emoji,
+          iconColor: color
+        }
+      })
+    if (dbInquiries.length > 0) return dbInquiries
+    return [
+      { title: 'Wedding Inquiry', time: 'May 17, 2026 - 1:45 PM', icon: '💍', iconColor: 'text-purple-400 bg-purple-500/5 border border-purple-500/10' },
+      { title: 'Corporate Event Inquiry', time: 'May 17, 2026 - 11:20 AM', icon: '💼', iconColor: 'text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10' },
+      { title: 'Birthday Inquiry', time: 'May 16, 2026 - 9:38 PM', icon: '🎂', iconColor: 'text-amber-400 bg-amber-500/5 border border-amber-500/10' },
+      { title: 'Quinceañera Inquiry', time: 'May 16, 2026 - 4:12 PM', icon: '👗', iconColor: 'text-rose-400 bg-rose-500/5 border border-rose-500/10' },
+      { title: 'Baby Shower Inquiry', time: 'May 16, 2026 - 2:07 PM', icon: '🍼', iconColor: 'text-blue-400 bg-blue-500/5 border border-blue-500/10' }
+    ]
+  }, [inquiries])
 
   // Automation status list with exact counts from mockup
   const automations = [
