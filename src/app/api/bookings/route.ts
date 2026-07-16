@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(bookings)
     }
 
-    const bookings = await listLuxorBookingsWithPayments(150)
+    const bookings = await listLuxorBookingsWithPayments(1000)
     return NextResponse.json(bookings)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch bookings.'

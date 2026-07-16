@@ -178,7 +178,7 @@ function summarizeCampaign(campaign: LuxorMarketingCampaign, recipients: LuxorMa
   }
 }
 
-export async function listMarketingCampaigns(limit = 25) {
+export async function listMarketingCampaigns(limit = 1000) {
   const campaigns = await supabaseRest<LuxorMarketingCampaign[]>(
     `luxor_marketing_campaigns?select=*&order=created_at.desc&limit=${encodeURIComponent(limit)}`,
   )
@@ -196,7 +196,7 @@ export async function listMarketingCampaigns(limit = 25) {
   ))
 }
 
-export async function listMarketingTemplates(limit = 100) {
+export async function listMarketingTemplates(limit = 1000) {
   return supabaseRest<LuxorMarketingTemplate[]>(
     `luxor_marketing_templates?select=*&order=updated_at.desc&limit=${encodeURIComponent(limit)}`,
   )

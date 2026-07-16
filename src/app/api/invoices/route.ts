@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(invoices)
     }
 
-    const invoices = await listInvoices(100)
+    const invoices = await listInvoices(1000)
     return NextResponse.json(invoices)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch invoices.'

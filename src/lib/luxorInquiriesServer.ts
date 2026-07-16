@@ -208,7 +208,7 @@ function getMissingColumnFromSchemaCacheError(message: string) {
   return match?.[1] ?? null
 }
 
-export async function listLuxorInquiries(limit = 50) {
+export async function listLuxorInquiries(limit = 1000) {
   return supabaseRest<LuxorInquiry[]>(
     `luxor_inquiries?select=*&order=created_at.desc&limit=${encodeURIComponent(limit)}`,
   )
@@ -230,7 +230,7 @@ export async function getLuxorInquiryByTourToken(token: string) {
   return inquiry ?? null
 }
 
-export async function listLuxorTourRequests(limit = 100) {
+export async function listLuxorTourRequests(limit = 1000) {
   return supabaseRest<LuxorInquiry[]>(
     `luxor_inquiries?select=*&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,
   )

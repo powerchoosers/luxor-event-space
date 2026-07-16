@@ -9,7 +9,7 @@ export type LuxorBookingWithPayments = LuxorBooking & {
   balance_due?: number
 }
 
-export async function listLuxorBookings(limit = 100) {
+export async function listLuxorBookings(limit = 1000) {
   return supabaseRest<LuxorBooking[]>(
     `luxor_bookings?select=*&order=event_date.asc,created_at.desc&limit=${encodeURIComponent(limit)}`,
   )
@@ -35,7 +35,7 @@ export async function listLuxorPaymentsByBooking(bookingId: string) {
   )
 }
 
-export async function listLuxorBookingsWithPayments(limit = 100): Promise<LuxorBookingWithPayments[]> {
+export async function listLuxorBookingsWithPayments(limit = 1000): Promise<LuxorBookingWithPayments[]> {
   const bookings = await listLuxorBookings(limit)
   if (bookings.length === 0) return []
 

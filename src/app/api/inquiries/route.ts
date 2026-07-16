@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = searchParams.get('limit')
-    const limit = limitParam ? parseInt(limitParam, 10) : 75
+    const limit = limitParam ? parseInt(limitParam, 10) : 1000
     const inquiries = await listLuxorInquiries(limit)
     return NextResponse.json(inquiries)
   } catch (error) {

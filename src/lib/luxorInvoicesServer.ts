@@ -41,7 +41,7 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}) {
   return (await response.json()) as T
 }
 
-export async function listInvoices(limit = 100) {
+export async function listInvoices(limit = 1000) {
   return supabaseRest<LuxorInvoice[]>(
     `luxor_invoices?select=*&order=created_at.desc&limit=${encodeURIComponent(limit)}`
   )

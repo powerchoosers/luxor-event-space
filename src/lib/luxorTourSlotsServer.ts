@@ -17,7 +17,7 @@ export async function listAvailableLuxorTourSlots(limit = 24): Promise<PublicLux
   return slots.filter((slot) => slot.capacity > slot.booked_count).map(toPublicTourSlot)
 }
 
-export async function listUpcomingLuxorTourSlots(limit = 100): Promise<LuxorTourSlot[]> {
+export async function listUpcomingLuxorTourSlots(limit = 1000): Promise<LuxorTourSlot[]> {
   return supabaseRest<LuxorTourSlot[]>(
     `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&slot_date=gte.${todayIsoDate()}&order=slot_date.asc,start_time.asc&limit=${encodeURIComponent(limit)}`,
   )
