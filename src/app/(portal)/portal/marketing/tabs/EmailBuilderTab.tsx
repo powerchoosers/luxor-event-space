@@ -111,29 +111,45 @@ export function EmailBuilderTab({
     }))
   }
 
-  function handleGenerateElenaDraft(e: React.FormEvent) {
+  async function handleGenerateElenaDraft(e: React.FormEvent) {
     e.preventDefault()
     if (!elenaPromptText.trim()) return
 
     setGeneratingElena(true)
-    setTimeout(() => {
-      const match = EMAIL_TEMPLATES[0]
+    try {
+      const response = await fetch('/api/portal/generate-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt: elenaPromptText })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate draft')
+      }
+
+      const data = await response.json() as {
+        subject: string
+        headline: string
+        body: string
+      }
+
       const elenaCustomTemplate: EmailTemplate & { subject?: string } = {
         id: `elena-generated-${Date.now()}`,
         name: `Elena: ${elenaPromptText.slice(0, 30)}...`,
-        subject: `Welcome to Luxor Event Space`,
+        subject: data.subject || `Welcome to Luxor Event Space`,
         description: `Elena AI Generated Email Draft`,
         category: `seasonal`,
         previewColor: `#a8792f`,
         blocks: [
-          { id: '1', type: 'hero', headline: 'Welcome to Luxor', subheadline: 'Your dream event awaits.', backgroundImage: '', overlayOpacity: 0.6, textAlign: 'center', ctaLabel: 'Book Tour', ctaUrl: 'https://luxoratlaspalmas.com/tour', ctaVisible: true },
-          { id: '2', type: 'text', content: `We received your request. ${elenaPromptText}. Let us guide you on a private venue walkthrough.`, fontSize: 15, textAlign: 'left', color: 'rgba(255, 255, 255, 0.85)' }
+          { id: '1', type: 'hero', headline: data.headline || 'Welcome to Luxor', subheadline: 'Your dream event awaits.', backgroundImage: '', overlayOpacity: 0.6, textAlign: 'center', ctaLabel: 'Book Tour', ctaUrl: 'https://luxoratlaspalmas.com/tour', ctaVisible: true },
+          { id: '2', type: 'text', content: data.body || `We received your request. ${elenaPromptText}. Let us guide you on a private venue walkthrough.`, fontSize: 15, textAlign: 'left', color: 'rgba(255, 255, 255, 0.85)' }
         ]
       }
 
       setBuilderTemplate(elenaCustomTemplate)
       setBuilderSession(curr => curr + 1)
-      setGeneratingElena(false)
       setShowCanvas(true)
 
       notify({
@@ -141,7 +157,16 @@ export function EmailBuilderTab({
         description: 'Template loaded in email editor.',
         variant: 'success'
       })
-    }, 2000)
+    } catch (err) {
+      console.error(err)
+      notify({
+        title: 'Draft Generation Failed',
+        description: 'Sorry bestie, I could not generate the draft email right now.',
+        variant: 'error'
+      })
+    } finally {
+      setGeneratingElena(false)
+    }
   }
 
   // If live email builder canvas is activated
