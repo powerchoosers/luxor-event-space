@@ -2046,6 +2046,14 @@ export default function LeadDetailPage({
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
             {lead.email && (
+              <a 
+                href={`/portal/marketing?tab=builder-automation&leadId=${lead.id}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 cursor-pointer"
+              >
+                <Sparkles size={13} /> Draft Campaign with Elena
+              </a>
+            )}
+            {lead.email && (
               <button 
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}

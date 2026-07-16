@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   PenSquare,
   Sparkles,
@@ -21,8 +22,9 @@ import {
   Trash2
 } from 'lucide-react'
 import { EmailBuilderShell } from '../EmailBuilder/EmailBuilderShell'
-import { EMAIL_TEMPLATES, type EmailTemplate } from '../emailTemplates'
+import { EMAIL_TEMPLATES, type EmailBlock, type EmailTemplate } from '../emailTemplates'
 import { useToast } from '@/components/portal/ToastProvider'
+import { type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 interface EmailBuilderTabProps {
   initialTemplate: EmailTemplate | null
@@ -38,6 +40,8 @@ export function EmailBuilderTab({
   onOpenTemplateInBuilder
 }: EmailBuilderTabProps) {
   const { notify } = useToast()
+  const searchParams = useSearchParams()
+  const leadId = searchParams?.get('leadId')
   
   // Track active subtab (Builder is selected in Rendering 4)
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('builder')
@@ -48,6 +52,26 @@ export function EmailBuilderTab({
   // Elena AI Assistant state
   const [elenaPromptText, setElenaPromptText] = useState('')
   const [generatingElena, setGeneratingElena] = useState(false)
+  const [tone, setTone] = useState<'friendly' | 'professional' | 'urgent' | 'elegant'>('friendly')
+  const [activeLead, setActiveLead] = useState<LuxorInquiry | null>(null)
+
+  useEffect(() => {
+    if (leadId) {
+      fetch('/api/inquiries')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const found = data.find((i: LuxorInquiry) => i.id === leadId)
+            if (found) {
+              setActiveLead(found)
+              setElenaPromptText(`Write a personalized follow-up email to ${found.full_name} regarding their upcoming ${found.event_type || 'event'} on ${found.target_date || 'their requested date'}. Thank them for reaching out and invite them to book a private tour.`)
+              setActiveSubTab('elena-ai')
+            }
+          }
+        })
+        .catch(err => console.error('Failed to load lead context:', err))
+    }
+  }, [leadId])
 
   // Workflows from Rendering 4
   const [automations, setAutomations] = useState([
@@ -122,7 +146,11 @@ export function EmailBuilderTab({
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ prompt: elenaPromptText })
+        body: JSON.stringify({ 
+          prompt: elenaPromptText,
+          tone,
+          leadContext: activeLead
+        })
       })
 
       if (!response.ok) {
@@ -131,21 +159,46 @@ export function EmailBuilderTab({
 
       const data = await response.json() as {
         subject: string
-        headline: string
-        body: string
+        name: string
+        blocks: Record<string, unknown>[]
+      }
+
+      const mappedBlocks: EmailBlock[] = Array.isArray(data.blocks)
+        ? (data.blocks.map((block, idx) => ({
+            ...block,
+            id: (block.id as string) || `${block.type as string}-${idx}-${Date.now()}`
+          })) as unknown as EmailBlock[])
+        : [
+            { id: `hero-${Date.now()}`, type: 'hero', headline: 'Welcome to Luxor', subheadline: 'Your dream event awaits.', backgroundImage: '', overlayOpacity: 0.6, textAlign: 'center', ctaLabel: 'Book Tour', ctaUrl: 'https://luxoratlaspalmas.com/tour', ctaVisible: true },
+            { id: `text-${Date.now()}`, type: 'text', content: `We received your request. Let us guide you on a private venue walkthrough.`, fontSize: 15, textAlign: 'left', color: 'rgba(255, 255, 255, 0.85)' }
+          ]
+
+      // Append default footer if not present
+      if (!mappedBlocks.some(b => b.type === 'footer')) {
+        const defaultFooter = EMAIL_TEMPLATES[0].blocks.find(b => b.type === 'footer') || {
+          id: 'footer-default',
+          type: 'footer',
+          companyName: 'Luxor Event Space',
+          address: '803 Castroville Rd #402, San Antonio, TX 78237',
+          phone: 'Private venue tours by appointment.',
+          website: 'luxoratlaspalmas.com',
+          unsubscribeUrl: '#unsubscribe',
+          showSocial: true,
+          instagramUrl: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr',
+          facebookUrl: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr',
+          tiktokUrl: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM',
+        }
+        mappedBlocks.push(defaultFooter)
       }
 
       const elenaCustomTemplate: EmailTemplate & { subject?: string } = {
         id: `elena-generated-${Date.now()}`,
-        name: `Elena: ${elenaPromptText.slice(0, 30)}...`,
+        name: data.name || `Elena: ${elenaPromptText.slice(0, 30)}...`,
         subject: data.subject || `Welcome to Luxor Event Space`,
         description: `Elena AI Generated Email Draft`,
         category: `seasonal`,
         previewColor: `#a8792f`,
-        blocks: [
-          { id: '1', type: 'hero', headline: data.headline || 'Welcome to Luxor', subheadline: 'Your dream event awaits.', backgroundImage: '', overlayOpacity: 0.6, textAlign: 'center', ctaLabel: 'Book Tour', ctaUrl: 'https://luxoratlaspalmas.com/tour', ctaVisible: true },
-          { id: '2', type: 'text', content: data.body || `We received your request. ${elenaPromptText}. Let us guide you on a private venue walkthrough.`, fontSize: 15, textAlign: 'left', color: 'rgba(255, 255, 255, 0.85)' }
-        ]
+        blocks: mappedBlocks
       }
 
       setBuilderTemplate(elenaCustomTemplate)
@@ -422,21 +475,53 @@ export function EmailBuilderTab({
         {activeSubTab === 'elena-ai' && (
           <div className="max-w-3xl luxor-glass-card rounded-2xl p-6 border border-zinc-900 bg-zinc-950/20 space-y-4">
             <h3 className="text-xs font-black uppercase tracking-wider text-white">Generate with Elena AI</h3>
+            
+            {activeLead && (
+              <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3 flex items-start gap-2.5">
+                <Sparkles size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
+                <div className="text-xs leading-normal">
+                  <span className="font-bold text-[#f7efe3]">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleGenerateElenaDraft} className="space-y-4">
-              <textarea
-                required
-                rows={4}
-                value={elenaPromptText}
-                onChange={(e) => setElenaPromptText(e.target.value)}
-                placeholder="Describe what you want Elena to draft..."
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40"
-              />
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-550 mb-1.5">
+                  Email Tone of Voice
+                </label>
+                <select
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
+                  className="w-full sm:w-64 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40 cursor-pointer"
+                >
+                  <option value="friendly">💅 Warm & Friendly</option>
+                  <option value="professional">💼 Corporate & Professional</option>
+                  <option value="urgent">🔥 Urgent (FOMO)</option>
+                  <option value="elegant">✨ Luxurious & Elegant</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-550 mb-1.5">
+                  Your Instructions
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={elenaPromptText}
+                  onChange={(e) => setElenaPromptText(e.target.value)}
+                  placeholder="Describe what you want Elena to draft..."
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={generatingElena}
                 className="rounded-lg bg-[#caa24c] px-5 py-2 text-xs font-black uppercase tracking-wider text-black flex items-center gap-2"
               >
-                {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Draft'}
+                {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
               </button>
             </form>
           </div>
