@@ -2,17 +2,34 @@ create or replace function public.luxor_claim_due_email_jobs(job_limit integer d
 returns setof public.luxor_email_jobs
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
   job_limit := greatest(1, least(coalesce(job_limit, 25), 100));
+
+  -- Recover work claimed by an Edge Function that stopped before it could
+  -- record a result. Three attempted deliveries become a visible failure.
+  update public.luxor_email_jobs
+  set
+    status = case when attempts >= 3 then 'failed' else 'queued' end,
+    scheduled_for = case
+      when attempts >= 3 then scheduled_for
+      else now() + interval '5 minutes'
+    end,
+    last_error = case
+      when attempts >= 3 then coalesce(last_error, 'Delivery worker stopped before completing the job.')
+      else coalesce(last_error, 'Delivery worker interrupted; automatically queued for retry.')
+    end,
+    updated_at = now()
+  where status = 'sending'
+    and updated_at < now() - interval '15 minutes';
 
   return query
   with due as (
     select id
     from public.luxor_email_jobs
     where status = 'queued'
-      and scheduled_for <= timezone('utc'::text, now())
+      and scheduled_for <= now()
     order by scheduled_for asc, created_at asc
     for update skip locked
     limit job_limit
@@ -22,7 +39,7 @@ begin
     set
       status = 'sending',
       attempts = coalesce(job.attempts, 0) + 1,
-      updated_at = timezone('utc'::text, now())
+      updated_at = now()
     from due
     where job.id = due.id
     returning job.*
