@@ -2294,24 +2294,25 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 flex-wrap items-center gap-2 xl:max-w-[340px] xl:justify-end">
+                        <div className="flex shrink-0 items-center gap-2 xl:justify-end">
                           <button
                             type="button"
                             onClick={openTourScheduleModal}
                             disabled={!lead.email}
                             title={lead.email ? 'Schedule the tour and send the Zoho invite' : 'Add an email address before sending an invite'}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 xl:flex-none"
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            <Calendar size={13} /> Schedule Tour & Invite
+                            <Calendar size={13} /> Schedule Invite
                           </button>
                           <button
                             type="button"
                             onClick={() => handleGuidedStatusChange('tour_confirmed')}
                             disabled={updatingStatus}
-                            title="Advance the lead when the tour was arranged outside Luxor"
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.11em] text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40 xl:flex-none"
+                            aria-label="Move to the next step without sending an invite"
+                            title="Tour already scheduled — move to the next step without sending an invite"
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            <CheckCircle2 size={13} /> {updatingStatus ? 'Saving...' : 'Tour Scheduled Offline'}
+                            <CheckCircle2 size={15} className={updatingStatus ? 'animate-pulse' : ''} />
                           </button>
                         </div>
                       </div>

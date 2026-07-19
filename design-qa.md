@@ -1,8 +1,8 @@
 # Design QA — Lead next step and tour invite modal
 
 - Source visual truth:
-  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-ef12a9b9-73fc-45cb-ab08-9b0dd05fa63d.png`
-  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-378b30cc-60a4-47cb-a760-7917018f8301.png`
+  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-fad6d731-c4b5-477b-8efa-1fef1d9c9f84.png`
+  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-932766f4-d3cd-4c9e-a2e7-5444aff5ff8f.png`
 - Implementation route: `/portal/leads/[id]`
 - Intended viewport: desktop, matching the supplied captures
 - State: inquiry-stage next-step bar and open tour-scheduling modal
@@ -13,7 +13,7 @@ The supplied source captures were opened at original resolution. The implementat
 
 ## Focused comparison evidence
 
-Focused rendered comparison is unavailable for the same browser-runtime blocker. Code inspection confirms the requested structural changes: the Contract action is removed from the inquiry next-step bar, the two tour actions are present, and the modal uses a constrained scroll region plus a fixed footer inside the dialog.
+Focused rendered comparison is unavailable for the same browser-runtime blocker. Code inspection confirms the compact structure: the primary action reads “Schedule Invite,” and the adjacent 40px checkmark button advances the lead without sending an invitation.
 
 ## Findings
 
@@ -29,12 +29,12 @@ Focused rendered comparison is unavailable for the same browser-runtime blocker.
 - Spacing and layout rhythm: existing card/modal tokens were preserved; rendered comparison blocked.
 - Colors and visual tokens: existing Luxor gold, portal borders, and dark surfaces were reused.
 - Image quality and asset fidelity: the existing event-type image selector and image rendering were preserved.
-- Copy and content: updated to “Schedule Tour & Invite,” “Tour Scheduled Offline,” and a persistent “Send Invite & Schedule” footer action.
+- Copy and content: the next-step actions are reduced to “Schedule Invite” and an accessible checkmark-only advance action. The modal retains its persistent “Send Invite & Schedule” footer action.
 
 ## Comparison history
 
-- Initial source finding: Contract was offered too early and the modal footer/send action was clipped below the viewport.
-- Fixes made: replaced Contract with the two requested tour paths; split the modal into fixed header, scrollable body, and fixed action footer; added disabled-state guidance.
+- Initial source finding: the two labeled tour buttons consumed too much horizontal space and squeezed the Next Step copy into a narrow column.
+- Fixes made: shortened the primary label to “Schedule Invite” and reduced the manual advancement control to a 40px checkmark button with tooltip and accessible label.
 - Post-fix visual evidence: blocked by the in-app browser runtime connection failure.
 
 ## Implementation checklist
