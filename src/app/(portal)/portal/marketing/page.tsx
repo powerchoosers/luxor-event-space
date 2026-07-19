@@ -639,7 +639,6 @@ function MarketingPageContent() {
           <MarketingCalendarTab
             campaigns={campaigns}
             loading={loadingCampaigns}
-            onCreateCampaign={openBlankBuilder}
           />
         )}
       </div>

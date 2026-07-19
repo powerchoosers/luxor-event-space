@@ -83,7 +83,7 @@ export function TwilioNumberManager() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to save call routing.')
       setRouting(data)
-      notify({ title: 'Call routing saved', description: 'Luxor will use these choices for incoming and outgoing calls.', variant: 'success' })
+      notify({ title: 'Phone and text settings saved', description: 'Luxor will use these choices for calls and text automations.', variant: 'success' })
     } catch (error) {
       notify({ title: 'Could not save routing', description: error instanceof Error ? error.message : 'Unable to save settings.', variant: 'error' })
     } finally { setSavingRouting(false) }
@@ -154,7 +154,7 @@ export function TwilioNumberManager() {
           <div className="mt-2 flex items-center justify-between gap-3"><p className="text-[9px] text-zinc-600">Do not repeat for the same person for</p><div className="flex items-center gap-2"><input type="number" min={1} max={168} value={routing.inbound_text_reply_cooldown_hours} onChange={(event) => setRouting((current) => ({ ...current, inbound_text_reply_cooldown_hours: Number(event.target.value) || 12 }))} disabled={!routing.inbound_text_reply_enabled} className="h-9 w-16 rounded-lg border border-zinc-800 bg-black/40 px-2 text-center font-mono text-xs text-white outline-none disabled:opacity-45"/><span className="text-[9px] text-zinc-600">hours</span></div></div>
           <p className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2 text-[9px] leading-relaxed text-amber-200/75">Luxor blocks CRM texts after STOP and allows them again only after START. Keep the business name and “Reply STOP to opt out” in automated first-contact messages.</p>
         </div>
-        <button type="button" onClick={() => void saveRouting()} disabled={savingRouting} className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50">{savingRouting ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} {savingRouting ? 'Saving' : 'Save call routing'}</button>
+        <button type="button" onClick={() => void saveRouting()} disabled={savingRouting} className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50">{savingRouting ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} {savingRouting ? 'Saving' : 'Save phone & text settings'}</button>
       </>}
     </div>
     <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-4"><div className="flex gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#caa24c]"/><div><p className="text-xs font-black text-white">Purchase protection</p><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Twilio charges the full monthly price as soon as you buy a number. The site requires you to type the exact number before the purchase can happen. Voice and SMS usage cost extra.</p></div></div></div>
