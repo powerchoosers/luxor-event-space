@@ -1,50 +1,48 @@
-# Design QA — Lead next step and tour invite modal
+# Design QA — Messages new-conversation pane
 
-- Source visual truth:
-  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-fad6d731-c4b5-477b-8efa-1fef1d9c9f84.png`
-  - `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-932766f4-d3cd-4c9e-a2e7-5444aff5ff8f.png`
-- Implementation route: `/portal/leads/[id]`
-- Intended viewport: desktop, matching the supplied captures
-- State: inquiry-stage next-step bar and open tour-scheduling modal
+- Source visual truth: `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-df6cd7c1-4c36-4229-82ed-2df08dc8591f.png`
+- Implementation route: `/portal/messages`
+- Intended viewport: desktop, 1828 × 874 reference
+- State: New conversation recipient search open
 
 ## Full-view comparison evidence
 
-The supplied source captures were opened at original resolution. The implementation could not be captured because the in-app browser runtime failed to connect before page navigation. The failure occurred in the browser-control runtime itself, not in the Luxor application.
+The Google Messages reference was opened at original resolution. The Luxor implementation could not be captured because the in-app browser runtime failed before navigation. This was a browser-control runtime failure rather than an application error.
 
 ## Focused comparison evidence
 
-Focused rendered comparison is unavailable for the same browser-runtime blocker. Code inspection confirms the compact structure: the primary action reads “Schedule Invite,” and the adjacent 40px checkmark button advances the lead without sending an invitation.
+Rendered comparison is unavailable for the same browser-runtime blocker. Code inspection confirms the requested interaction: the left conversation rail remains present while recipient search replaces the right thread pane; line selection is housed in a separate overflow menu beside New.
 
 ## Findings
 
-- [P1] Browser-rendered modal and button-state verification unavailable.
-  - Location: inquiry next-step bar and tour scheduling modal.
+- [P1] Browser-rendered interaction verification unavailable.
+  - Location: `/portal/messages`, New button, both overflow menus, and right-side recipient search.
   - Evidence: no post-change implementation screenshot could be captured.
-  - Impact: scrolling, sticky footer placement, and responsive wrapping cannot be visually certified from code alone.
-  - Fix: reconnect the in-app browser and capture the open modal at the supplied desktop viewport, then test the disabled and ready-to-send states.
+  - Impact: exact responsive sizing and hover brightness cannot be visually certified from code alone.
+  - Fix: reconnect the in-app browser and capture the New conversation state plus both overflow-menu hover/open states.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: existing portal typography classes were preserved; rendered comparison blocked.
-- Spacing and layout rhythm: existing card/modal tokens were preserved; rendered comparison blocked.
-- Colors and visual tokens: existing Luxor gold, portal borders, and dark surfaces were reused.
-- Image quality and asset fidelity: the existing event-type image selector and image rendering were preserved.
-- Copy and content: the next-step actions are reduced to “Schedule Invite” and an accessible checkmark-only advance action. The modal retains its persistent “Send Invite & Schedule” footer action.
+- Fonts and typography: existing Luxor portal typography is intentionally preserved rather than copying Google branding; rendered comparison blocked.
+- Spacing and layout rhythm: the reference's persistent left rail/right compose pane structure is implemented; rendered comparison blocked.
+- Colors and visual tokens: existing Luxor black, zinc, and gold tokens are preserved.
+- Image quality and asset fidelity: no new raster assets are required; existing contact avatars remain in use.
+- Copy and content: the right pane uses “New conversation,” a “To:” field, contact search, and matching-contact results.
 
 ## Comparison history
 
-- Initial source finding: the two labeled tour buttons consumed too much horizontal space and squeezed the Next Step copy into a narrow column.
-- Fixes made: shortened the primary label to “Schedule Invite” and reduced the manual advancement control to a 40px checkmark button with tooltip and accessible label.
+- Initial mismatch: New Message appeared as a centered modal and the number selector occupied permanent rail space.
+- Fixes made: replaced the modal with the right-side compose pane, moved line selection into an overflow menu, and removed idle borders from both three-dot triggers while adding brighter hover containers.
 - Post-fix visual evidence: blocked by the in-app browser runtime connection failure.
 
 ## Implementation checklist
 
-- [x] Remove Contract from the inquiry-stage next-step bar.
-- [x] Open the calendar modal from the next-step bar.
-- [x] Provide a no-invite manual advancement path.
-- [x] Keep modal actions visible while the content scrolls.
-- [x] Disable sending until client email, tour date, and start time exist.
-- [x] Pass TypeScript and lint validation.
+- [x] Keep the conversation rail visible while starting a message on desktop.
+- [x] Render recipient search in the thread pane.
+- [x] Move business-number selection beside New in an overflow menu.
+- [x] Remove idle borders from both overflow buttons.
+- [x] Add brighter hover backgrounds and icon colors.
+- [x] Pass TypeScript, lint, and whitespace validation.
 - [ ] Capture and compare the rendered implementation when browser control is available.
 
 final result: blocked
