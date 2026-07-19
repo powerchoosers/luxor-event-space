@@ -8,6 +8,9 @@ const DEFAULT_SCOPES = [
   'ZohoMail.messages.READ',
   'ZohoMail.accounts.READ',
   'ZohoMail.folders.READ',
+  'ZohoCalendar.calendar.READ',
+  'ZohoCalendar.event.CREATE',
+  'ZohoCalendar.event.UPDATE',
 ]
 
 export function getZohoRedirectUri(request: Request) {
@@ -115,10 +118,29 @@ export async function exchangeZohoCodeForSetup(request: Request, code: string) {
     throw new Error('Zoho did not return a Mail account ID.')
   }
 
+  const calendarsResponse = await fetch('https://calendar.zoho.com/api/v1/calendars?category=own', {
+    headers: { Authorization: `Zoho-oauthtoken ${tokenData.access_token}` },
+  })
+  const calendarsText = await calendarsResponse.text()
+  const calendarsData = calendarsText
+    ? JSON.parse(calendarsText) as { calendars?: Array<{ uid?: string; name?: string; isdefault?: boolean }> }
+    : {}
+
+  if (!calendarsResponse.ok) {
+    throw new Error(`Zoho calendar lookup failed with ${calendarsResponse.status}: ${calendarsText}`)
+  }
+
+  const calendar = calendarsData.calendars?.find((item) => item.isdefault) || calendarsData.calendars?.[0]
+  if (!calendar?.uid) {
+    throw new Error('Zoho did not return a writable Calendar ID.')
+  }
+
   return {
     redirectUri,
     refreshToken: tokenData.refresh_token || '',
     accountId,
+    calendarUid: calendar.uid,
+    calendarName: calendar.name || 'Default calendar',
     mailboxAddress: account.mailboxAddress || account.emailAddress || null,
     userEmail,
   }

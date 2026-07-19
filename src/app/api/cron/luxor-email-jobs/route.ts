@@ -1,21 +1,10 @@
-import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { processDueLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_EMAIL_JOBS_SHARED_SECRET = '7d96ffc48d44f4d10c5d8ca92c398ae32f2c586e9f292715c1962ed4eca30a83'
-
 async function handleCronRequest(request: NextRequest) {
-  const serviceRoleFingerprint = process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? crypto.createHash('sha256').update(process.env.SUPABASE_SERVICE_ROLE_KEY).digest('hex')
-    : null
-  const configuredSecret =
-    SUPABASE_EMAIL_JOBS_SHARED_SECRET ||
-    process.env.LUXOR_CRON_SECRET ||
-    process.env.CRON_SECRET ||
-    process.env.LUXOR_PORTAL_SESSION_SECRET ||
-    serviceRoleFingerprint
+  const configuredSecret = process.env.LUXOR_CRON_SECRET || process.env.LUXOR_PORTAL_SESSION_SECRET
   const authHeader = request.headers.get('authorization')
   const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
   const providedSecret = bearerSecret || request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret')

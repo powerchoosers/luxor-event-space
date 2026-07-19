@@ -36,6 +36,7 @@ export async function GET(request: Request) {
         : 'ZOHO_REFRESH_TOKEN=Zoho did not return one. Reopen /api/auth/zoho/login?setup=1 and approve again.'
       const envBlock = [
         `ZOHO_ACCOUNT_ID=${setup.accountId}`,
+        `LUXOR_ZOHO_CALENDAR_UID=${setup.calendarUid}`,
         refreshTokenLine,
         'LUXOR_ZOHO_LOGIN_EMAIL=booking@luxoratlaspalmas.com',
         'LUXOR_ZOHO_ALLOWED_SENDERS=booking@luxoratlaspalmas.com,hello@luxoratlaspalmas.com',
@@ -57,10 +58,10 @@ export async function GET(request: Request) {
           </head>
           <body>
             <main>
-              <h1>Luxor Zoho Mail connected</h1>
+              <h1>Luxor Zoho Mail + Calendar connected</h1>
               <p>Copy these values into Vercel and your local <strong>.env.local</strong> if they are missing or outdated.</p>
               <pre>${escapeHtml(envBlock)}</pre>
-              <p class="small">Redirect URI used: ${escapeHtml(setup.redirectUri)}${setup.mailboxAddress ? ` | Mailbox: ${escapeHtml(setup.mailboxAddress)}` : ''}</p>
+              <p class="small">Redirect URI used: ${escapeHtml(setup.redirectUri)}${setup.mailboxAddress ? ` | Mailbox: ${escapeHtml(setup.mailboxAddress)}` : ''} | Calendar: ${escapeHtml(setup.calendarName)}</p>
             </main>
           </body>
         </html>`, {

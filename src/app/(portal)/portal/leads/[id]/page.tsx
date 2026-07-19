@@ -43,7 +43,7 @@ import {
   Heart,
   PartyPopper,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
@@ -157,6 +157,7 @@ export default function LeadDetailPage({
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
   const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
@@ -197,6 +198,15 @@ export default function LeadDetailPage({
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
   const [submittingBooking, setSubmittingBooking] = useState(false)
+
+  // Tour scheduling + Zoho invite state
+  const [isTourScheduleModalOpen, setIsTourScheduleModalOpen] = useState(false)
+  const [tourScheduleDate, setTourScheduleDate] = useState('')
+  const [tourScheduleTime, setTourScheduleTime] = useState('')
+  const [tourScheduleDuration, setTourScheduleDuration] = useState('60')
+  const [tourMeetingType, setTourMeetingType] = useState('Private Venue Tour')
+  const [tourClientFacingNotes, setTourClientFacingNotes] = useState('')
+  const [schedulingTour, setSchedulingTour] = useState(false)
 
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -790,7 +800,7 @@ export default function LeadDetailPage({
 
       void fetchClientEmailThread(leadData.email || '')
 
-      const [notesData, tasksData, invoicesData, bookingsData, paymentsData] = await Promise.all([
+      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -806,6 +816,9 @@ export default function LeadDetailPage({
         fetch(`/api/payments?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
+        fetch(`/api/tour-actions?inquiryId=${id}`)
+          .then(async (res) => res.ok ? ((await res.json()).jobs || []) : [])
+          .catch(() => []),
       ])
 
       setNotes(notesData)
@@ -813,6 +826,7 @@ export default function LeadDetailPage({
       setInvoices(invoicesData)
       setBookings(bookingsData)
       setPayments(paymentsData)
+      setTourEmailJobs(tourJobsData)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
@@ -1218,6 +1232,54 @@ export default function LeadDetailPage({
       }
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const openTourScheduleModal = () => {
+    if (!lead) return
+    setTourScheduleDate(lead.preferred_tour_date || '')
+    setTourScheduleTime(normalizeTimeInputValue(lead.preferred_tour_time))
+    setTourScheduleDuration(String(lead.metadata?.tourDurationMinutes || 60))
+    setTourMeetingType(String(lead.metadata?.tourMeetingType || 'Private Venue Tour'))
+    setTourClientFacingNotes(String(lead.metadata?.tourClientFacingNotes || lead.message || ''))
+    setIsTourScheduleModalOpen(true)
+  }
+
+  const handleScheduleTour = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!lead) return
+
+    try {
+      setSchedulingTour(true)
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: id,
+          action: 'schedule-tour',
+          tourDate: tourScheduleDate,
+          tourTime: tourScheduleTime,
+          durationMinutes: Number(tourScheduleDuration),
+          meetingType: tourMeetingType,
+          clientFacingNotes: tourClientFacingNotes,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'The tour could not be scheduled.')
+
+      setLead(payload.inquiry as LuxorInquiry)
+      setTourEmailJobs([payload.confirmationJob, ...(payload.reminderJobs || [])].filter(Boolean) as LuxorEmailJob[])
+      setIsTourScheduleModalOpen(false)
+      await fetchAllData(false)
+      notify({
+        title: 'Tour scheduled and invite sent',
+        description: `${payload.reminderJobs?.length || 0} reminder email${payload.reminderJobs?.length === 1 ? '' : 's'} queued automatically.`,
+        variant: 'success',
+      })
+    } catch (err) {
+      notify({ title: 'Tour not scheduled', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSchedulingTour(false)
     }
   }
 
@@ -1672,11 +1734,10 @@ export default function LeadDetailPage({
   } else if (lead.status === 'contacted' || lead.status === 'tour_requested') {
     pushRecommendedAction({
       icon: <Calendar size={15} />,
-      label: 'Confirm tour scheduled',
-      detail: 'Move lifecycle to tour confirmed',
-      onClick: () => handleGuidedStatusChange('tour_confirmed'),
-      disabled: updatingStatus,
-      loading: updatingStatus,
+      label: 'Schedule tour & send invite',
+      detail: 'Create the Zoho invite, AI email, and reminders',
+      onClick: openTourScheduleModal,
+      disabled: !lead.email,
     })
   } else if (lead.status === 'tour_confirmed') {
     pushRecommendedAction({
@@ -1713,6 +1774,16 @@ export default function LeadDetailPage({
         : openBookingModal,
       disabled: updatingStatus,
       loading: updatingStatus,
+    })
+  }
+
+  if (lead.status === 'new') {
+    pushRecommendedAction({
+      icon: <Calendar size={15} />,
+      label: 'Schedule tour & send invite',
+      detail: lead.email ? 'Create the Zoho invite, AI email, and reminders' : 'Add an email address first',
+      onClick: openTourScheduleModal,
+      disabled: !lead.email,
     })
   }
 
@@ -3893,6 +3964,43 @@ export default function LeadDetailPage({
                 </form>
               ) : null}
 
+              {activeLeadTab === 'messages' ? (
+                <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Email Delivery</p>
+                      <p className="mt-1 text-[10px] text-zinc-600">Saved confirmations, reminders, delivery status, and scheduled send times</p>
+                    </div>
+                    <button type="button" onClick={openTourScheduleModal} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
+                      Schedule Tour
+                    </button>
+                  </div>
+                  {tourEmailJobs.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-zinc-850 px-4 py-6 text-center text-xs text-zinc-600">No tour emails have been saved for this client yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {tourEmailJobs.map((job) => (
+                        <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-black/20 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-bold text-zinc-200">{job.subject}</p>
+                            <p className="mt-1 text-[9px] uppercase tracking-wider text-zinc-600">
+                              {job.job_type.replaceAll('_', ' ')} · {job.sent_at ? `Sent ${formatTimelineDate(job.sent_at)}` : `Scheduled ${formatTimelineDate(job.scheduled_for)}`}
+                            </p>
+                            {job.last_error ? <p className="mt-1 text-[10px] text-red-400">{job.last_error}</p> : null}
+                          </div>
+                          <span className={`rounded border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${
+                            job.status === 'sent' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' :
+                            job.status === 'failed' ? 'border-red-500/20 bg-red-500/10 text-red-400' :
+                            job.status === 'cancelled' ? 'border-zinc-700 bg-zinc-800/40 text-zinc-500' :
+                            'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                          }`}>{job.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
               {activityEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
                   <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
@@ -4416,6 +4524,65 @@ export default function LeadDetailPage({
           <ChevronRight size={14} /> Next
         </button>
       </div>
+
+      <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
+        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Schedule Tour & Send Invite</h3>
+            <p className="mt-1 text-[11px] text-zinc-500">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase queues the reminders.</p>
+          </div>
+          <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
+        </div>
+        <form onSubmit={handleScheduleTour} className="space-y-5 bg-[#080706] p-6">
+          <div className="overflow-hidden rounded-xl border border-[#caa24c]/20 bg-black">
+            <img src={getEventPreviewImage(lead.event_type)} alt={`${lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-75" />
+            <div className="px-4 py-3">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email image selected from event type</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-200">{lead.event_type || 'Private Event'} inspiration</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Tour date</label>
+              <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full" placeholder="Choose tour date" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Start time</label>
+              <PortalSelect value={tourScheduleTime} onChange={setTourScheduleTime} options={EVENT_TIME_OPTIONS} className="w-full" placeholder="Choose tour time" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Meeting type</label>
+              <PortalSelect value={tourMeetingType} onChange={setTourMeetingType} options={[
+                { value: 'Private Venue Tour', label: 'Private Venue Tour' },
+                { value: 'Wedding Walkthrough', label: 'Wedding Walkthrough' },
+                { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
+                { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
+                { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
+              ]} className="w-full" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Duration</label>
+              <PortalSelect value={tourScheduleDuration} onChange={setTourScheduleDuration} options={[
+                { value: '30', label: '30 minutes' },
+                { value: '45', label: '45 minutes' },
+                { value: '60', label: '60 minutes' },
+                { value: '90', label: '90 minutes' },
+              ]} className="w-full" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Details Elena AI may mention to the client</label>
+            <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-zinc-800 bg-black/40 px-3 py-3 text-xs leading-5 text-zinc-200 outline-none focus:border-[#caa24c]/40" />
+            <p className="mt-2 text-[10px] leading-4 text-zinc-600">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
+          </div>
+          <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3 text-[10px] leading-5 text-blue-200/80">
+            This sends one native Zoho calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
+          </div>
+          <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="w-full rounded-xl bg-[#b98a3e] py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-[#b98a3e]/15 disabled:opacity-40">
+            {schedulingTour ? 'Creating invite and emails...' : 'Schedule Tour & Send Invite'}
+          </button>
+        </form>
+      </PortalModal>
 
       {/* Vendor picker modal */}
       <PortalModal isOpen={isVendorModalOpen} onClose={() => setIsVendorModalOpen(false)} maxWidth="max-w-2xl">
@@ -5521,6 +5688,15 @@ function normalizeLeadFieldValue(field: EditableLeadField, value: string): strin
 
 function normalizeComparableValue(value: unknown) {
   return value === null || value === undefined ? '' : String(value).trim()
+}
+
+function getEventPreviewImage(eventType: string | null) {
+  const value = (eventType || '').toLowerCase()
+  if (value.includes('wedding')) return '/images/dining-hall/main-hall-wedding-wide.png'
+  if (value.includes('quince') || value.includes('birthday')) return '/images/dining-hall/main-hall-quinceanera-angle.png'
+  if (value.includes('baby')) return '/images/luxor-lounge/luxor-lounge-baby-shower.png'
+  if (value.includes('corporate')) return '/images/dining-hall/main-hall-corporate-cocktail.png'
+  return '/images/dining-hall/main-hall-dinner-service-candid.png'
 }
 
 function SignalMetric({

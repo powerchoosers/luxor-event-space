@@ -364,6 +364,22 @@ export async function listDueLuxorEmailJobs(limit = 25) {
   )
 }
 
+export async function listLuxorEmailJobsForInquiry(inquiryId: string, limit = 100) {
+  return supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=${encodeURIComponent(Math.min(Math.max(limit, 1), 200))}`,
+  )
+}
+
+export async function cancelQueuedTourEmailJobs(inquiryId: string) {
+  await supabaseRest(
+    `luxor_email_jobs?inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&job_type=in.(tour_confirmation,tour_reminder)`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'cancelled', updated_at: new Date().toISOString() }),
+    },
+  )
+}
+
 export async function claimDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_email_jobs', {
     method: 'POST',

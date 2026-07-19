@@ -14,6 +14,14 @@ type ZohoSendResponse = {
   }
 }
 
+type ZohoCalendarEventResponse = {
+  events?: Array<{
+    id?: string
+    uid?: string
+    viewEventURL?: string
+  }>
+}
+
 type ZohoMessageSummary = {
   messageId?: string
   message_id?: string
@@ -41,6 +49,8 @@ function getZohoConfig() {
   const accountId = process.env.ZOHO_ACCOUNT_ID
   const accountsServer = (process.env.ZOHO_ACCOUNTS_SERVER || 'https://accounts.zoho.com').replace(/\/$/, '')
   const baseUrl = (process.env.ZOHO_BASE_URL || 'https://mail.zoho.com/api/v1').replace(/\/$/, '')
+  const calendarBaseUrl = (process.env.ZOHO_CALENDAR_BASE_URL || 'https://calendar.zoho.com/api/v1').replace(/\/$/, '')
+  const calendarUid = (process.env.LUXOR_ZOHO_CALENDAR_UID || '').trim()
   const loginEmail = (process.env.LUXOR_ZOHO_LOGIN_EMAIL || DEFAULT_LOGIN_EMAIL).toLowerCase()
   const allowedSenders = (process.env.LUXOR_ZOHO_ALLOWED_SENDERS || DEFAULT_ALLOWED_SENDERS.join(','))
     .split(',')
@@ -51,7 +61,7 @@ function getZohoConfig() {
     throw new Error('Missing Zoho email credentials. Check ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN, and ZOHO_ACCOUNT_ID.')
   }
 
-  return { clientId, clientSecret, refreshToken, accountId, accountsServer, baseUrl, loginEmail, allowedSenders }
+  return { clientId, clientSecret, refreshToken, accountId, accountsServer, baseUrl, calendarBaseUrl, calendarUid, loginEmail, allowedSenders }
 }
 
 export function normalizeEmailAddress(value: unknown) {
@@ -192,6 +202,80 @@ export async function sendLuxorZohoEmail(input: {
     from,
     to,
   }
+}
+
+export async function createLuxorZohoCalendarEvent(input: {
+  attendeeEmail: string
+  title: string
+  description: string
+  location: string
+  startUtc: string
+  endUtc: string
+  timezone?: string
+  existingEventUid?: string | null
+}) {
+  const attendeeEmail = normalizeEmailAddress(input.attendeeEmail)
+  if (!attendeeEmail) throw new Error('Please add a valid attendee email address.')
+
+  const { calendarBaseUrl, calendarUid } = getZohoConfig()
+  if (!calendarUid) {
+    throw new Error('Missing LUXOR_ZOHO_CALENDAR_UID. Reconnect Zoho from the setup login to capture the Luxor calendar ID.')
+  }
+
+  const accessToken = await getZohoAccessToken()
+  const eventData = {
+    title: input.title.trim(),
+    dateandtime: {
+      start: formatZohoUtcDateTime(input.startUtc),
+      end: formatZohoUtcDateTime(input.endUtc),
+      timezone: input.timezone || 'America/Chicago',
+    },
+    isallday: false,
+    isprivate: true,
+    location: input.location.trim(),
+    description: input.description.trim().slice(0, 10_000),
+    attendees: [{ email: attendeeEmail, permission: 1, attendance: 1 }],
+    notify_attendee: 2,
+    allowForwarding: true,
+    transparency: 0,
+  }
+
+  const eventPath = input.existingEventUid
+    ? `/calendars/${encodeURIComponent(calendarUid)}/events/${encodeURIComponent(input.existingEventUid)}`
+    : `/calendars/${encodeURIComponent(calendarUid)}/events`
+  const response = await fetch(
+    `${calendarBaseUrl}${eventPath}?eventdata=${encodeURIComponent(JSON.stringify(eventData))}`,
+    {
+      method: input.existingEventUid ? 'PATCH' : 'POST',
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    },
+  )
+  const resultText = await response.text()
+
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho calendar invite failed with ${response.status}: ${resultText}`)
+  }
+
+  const result = resultText ? JSON.parse(resultText) as ZohoCalendarEventResponse : {}
+  const event = result.events?.[0]
+  if (!event?.uid && !event?.id) throw new Error('Zoho Calendar did not return an event ID.')
+
+  return {
+    eventId: event.id || null,
+    eventUid: event.uid || null,
+    viewEventUrl: event.viewEventURL || null,
+  }
+}
+
+function formatZohoUtcDateTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw new Error('The tour date or time is invalid.')
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
 }
 
 export async function listLuxorZohoInbox(limit = 25) {
