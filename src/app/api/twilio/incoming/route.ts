@@ -8,6 +8,7 @@ import {
   twimlResponse,
   validateTwilioWebhook,
 } from '@/lib/luxorTwilioServer'
+import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
 
 export const runtime = 'nodejs'
 
@@ -56,20 +57,27 @@ export async function POST(request: Request) {
       method: 'POST',
       timeout: 30,
     })
-    const client = dial.client({
-      statusCallback,
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-      statusCallbackMethod: 'POST',
-    }, config.clientIdentity)
-    client.parameter({ name: 'CallerName', value: callerName })
-    client.parameter({ name: 'CallerNumber', value: callerNumber })
-    client.parameter({ name: 'InquiryId', value: inquiry?.id || '' })
-    client.parameter({ name: 'ParentCallSid', value: params.CallSid })
-    client.parameter({ name: 'Direction', value: 'inbound' })
+    const routing = await getLuxorPhoneRoutingSettings()
+    if (routing.ring_browser) {
+      const client = dial.client({
+        statusCallback,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+      }, config.clientIdentity)
+      client.parameter({ name: 'CallerName', value: callerName })
+      client.parameter({ name: 'CallerNumber', value: callerNumber })
+      client.parameter({ name: 'InquiryId', value: inquiry?.id || '' })
+      client.parameter({ name: 'ParentCallSid', value: params.CallSid })
+      client.parameter({ name: 'Direction', value: 'inbound' })
+    }
 
-    const fallbackNumber = normalizePhoneNumber(config.fallbackNumber)
-    if (fallbackNumber && fallbackNumber !== normalizePhoneNumber(params.To || config.phoneNumber)) {
-      dial.number(fallbackNumber)
+    const ringToNumber = normalizePhoneNumber(routing.ring_to_number)
+    if (routing.ring_phone && ringToNumber && ringToNumber !== normalizePhoneNumber(params.To || config.phoneNumber)) {
+      dial.number({
+        statusCallback,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+      }, ringToNumber)
     }
   } catch (error) {
     console.error('Luxor inbound TwiML failed:', error)

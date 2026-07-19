@@ -63,6 +63,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   const deviceRef = useRef<Device | null>(null)
   const currentCallRef = useRef<Call | null>(null)
   const initializingRef = useRef<Promise<Device> | null>(null)
+  const bridgeStartingRef = useRef(false)
 
   const loadUnreadCount = useCallback(async () => {
     try {
@@ -232,12 +233,34 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   }, [initializeDevice, notify])
 
   const startCall = useCallback(async (target: DialTarget) => {
-    if (currentCallRef.current) {
+    if (currentCallRef.current || bridgeStartingRef.current) {
       notify({ title: 'Call already active', description: 'End the current call before starting another.', variant: 'error' })
       return
     }
 
     try {
+      const settingsResponse = await fetch('/api/twilio/phone-settings', { cache: 'no-store' })
+      const settings = await settingsResponse.json().catch(() => ({})) as { outbound_mode?: 'browser' | 'ring_phone'; ring_to_number?: string | null; error?: string }
+      if (!settingsResponse.ok) throw new Error(settings.error || 'Unable to load the Luxor dialing preference.')
+
+      if (settings.outbound_mode === 'ring_phone') {
+        bridgeStartingRef.current = true
+        const response = await fetch('/api/twilio/calls/bridge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(target),
+        })
+        const payload = await response.json().catch(() => ({})) as { error?: string; ringToNumber?: string }
+        if (!response.ok) throw new Error(payload.error || 'Twilio could not ring your phone.')
+        notify({
+          title: 'Answer your phone',
+          description: `Twilio is ringing ${formatPhone(payload.ringToNumber || settings.ring_to_number || 'your saved phone')}. Answer it to connect the customer.`,
+          variant: 'success',
+        })
+        window.dispatchEvent(new Event('luxor-call-history-refresh'))
+        return
+      }
+
       const device = await initializeDevice()
       const call = await device.connect({
         params: {
@@ -260,6 +283,8 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The call could not be started.'
       notify({ title: 'Unable to call', description: message, variant: 'error' })
+    } finally {
+      bridgeStartingRef.current = false
     }
   }, [attachCallEvents, initializeDevice, notify])
 

@@ -44,6 +44,11 @@ export async function getActiveLuxorPhoneNumber() {
   return getLuxorTwilioConfig().phoneNumber
 }
 
+export async function getSelectedLuxorPhoneNumber() {
+  const [active] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?select=*&is_active=eq.true&limit=1')
+  return active?.phone_number || null
+}
+
 export async function searchAvailableLuxorNumbers(areaCode: string) {
   if (!/^\d{3}$/.test(areaCode)) throw new Error('Enter a three-digit US area code.')
   const { client } = twilioClient()
