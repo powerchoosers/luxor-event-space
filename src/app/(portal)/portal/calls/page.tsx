@@ -20,6 +20,7 @@ import { PortalButton, PortalPageFrame, PortalPageHeader, PortalSelect } from '@
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 
 type DirectionFilter = 'all' | 'inbound' | 'outbound' | 'voicemail' | 'missed'
 
@@ -189,7 +190,7 @@ export default function CallsPage() {
                     <p className={`truncate text-xs font-black ${!call.is_read && call.direction === 'inbound' ? 'text-white' : 'text-zinc-300'}`}>{call.contact_name || 'Unknown caller'}</p>
                     {!call.is_read && call.direction === 'inbound' && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#caa24c]" />}
                   </div>
-                  <p className="mt-1 truncate font-mono text-[10px] text-zinc-600">{formatPhone(call.direction === 'inbound' ? call.caller_number : call.callee_number)}</p>
+                  <p className="mt-1 truncate font-mono text-[10px] text-zinc-600">{formatPhoneDisplay(call.direction === 'inbound' ? call.caller_number : call.callee_number)}</p>
                   <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-zinc-600">
                     <span className="capitalize">{call.status.replace('-', ' ')}</span>
                     <span>{formatRelativeDate(call.created_at)}</span>
@@ -207,7 +208,7 @@ export default function CallsPage() {
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{selectedCall.direction} call</p>
                   <h2 className="mt-2 text-xl font-black text-white">{selectedCall.contact_name || 'Unknown caller'}</h2>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhone(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}</p>
+                  <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhoneDisplay(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}</p>
                 </div>
                 <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wider ${isMissed(selectedCall) ? 'border-red-500/20 bg-red-500/8 text-red-400' : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'}`}>{selectedCall.status.replace('-', ' ')}</span>
               </div>
@@ -264,12 +265,6 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function isMissed(call: LuxorCall) {
   return call.direction === 'inbound' && ['busy', 'failed', 'no-answer', 'canceled'].includes(call.status)
-}
-
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, '')
-  const local = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
-  return local.length === 10 ? `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}` : value
 }
 
 function formatDateTime(value: string) {

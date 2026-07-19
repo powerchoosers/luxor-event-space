@@ -19,6 +19,11 @@ export function formatUsDialInput(value: string) {
   return formatted
 }
 
+export function formatPhoneDisplay(value: string | null | undefined) {
+  if (!value) return ''
+  return toUsE164(value) ? formatUsDialInput(value) : value
+}
+
 export function toUsE164(value: string) {
   const digits = getUsDialDigits(value)
   return digits.length === 10 ? `+1${digits}` : null

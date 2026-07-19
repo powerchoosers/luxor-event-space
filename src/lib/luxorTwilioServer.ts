@@ -45,7 +45,14 @@ export function getLuxorTwilioMessagingConfig() {
   const phoneNumber = process.env.LUXOR_TWILIO_PHONE_NUMBER?.trim()
   const missing = [['LUXOR_TWILIO_ACCOUNT_SID', accountSid], ['LUXOR_TWILIO_AUTH_TOKEN', authToken], ['LUXOR_TWILIO_PHONE_NUMBER', phoneNumber]].filter(([, value]) => !value)
   if (missing.length) throw new Error(`Missing Twilio configuration: ${missing.map(([name]) => name).join(', ')}`)
-  return { accountSid: accountSid!, authToken: authToken!, phoneNumber: phoneNumber!, publicBaseUrl: getLuxorPublicBaseUrl() }
+  return {
+    accountSid: accountSid!,
+    authToken: authToken!,
+    phoneNumber: phoneNumber!,
+    messagingServiceSid: process.env.LUXOR_TWILIO_MESSAGING_SERVICE_SID?.trim() || null,
+    rcsSenderId: process.env.LUXOR_TWILIO_RCS_SENDER_ID?.trim() || null,
+    publicBaseUrl: getLuxorPublicBaseUrl(),
+  }
 }
 
 export function getLuxorPublicBaseUrl() {

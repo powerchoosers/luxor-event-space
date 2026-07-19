@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ExternalLink,
   Mail,
+  MessageSquare,
   Phone,
   Calendar,
   MoreHorizontal,
@@ -23,6 +24,7 @@ import {
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -583,7 +585,7 @@ export default function LeadsPage() {
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
-                              {lead.email ?? lead.phone ?? `ID: ${lead.id.slice(0, 8)}`}
+                              {lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : `ID: ${lead.id.slice(0, 8)}`)}
                             </p>
                             {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
                           </div>
@@ -623,6 +625,21 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-8 py-3 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
+                        {lead.phone ? (
+                          <button
+                            type="button"
+                            onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
+                            className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/25 transition-all hover:bg-zinc-800"
+                            title={`Call ${formatPhoneDisplay(lead.phone)}`}
+                          >
+                            <Phone size={14} />
+                          </button>
+                        ) : null}
+                        {lead.phone ? (
+                          <Link href={`/portal/leads/${lead.id}?tab=messages`} className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-[#caa24c] hover:border-[#caa24c]/25 transition-all hover:bg-zinc-800" title="Text client">
+                            <MessageSquare size={14} />
+                          </Link>
+                        ) : null}
                         <Link
                           href={`/portal/leads/${lead.id}`}
                           className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800"
@@ -685,7 +702,7 @@ export default function LeadsPage() {
                                 {lead.full_name}
                               </span>
                               <p className="text-[9px] text-zinc-500 truncate font-mono">
-                                {lead.email ?? lead.phone ?? 'No contact'}
+                                {lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
                               </p>
                             </div>
                           </div>
@@ -722,6 +739,11 @@ export default function LeadsPage() {
                               <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Call from Luxor browser phone">
                                 <Phone size={11} />
                               </button>
+                            )}
+                            {lead.phone && (
+                              <Link href={`/portal/leads/${lead.id}?tab=messages`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-[#caa24c] transition-colors" title="Text client">
+                                <MessageSquare size={11} />
+                              </Link>
                             )}
                           </div>
 
@@ -797,7 +819,7 @@ export default function LeadsPage() {
                           <span className="text-xs font-bold text-zinc-400 group-hover:text-blue-500 block truncate leading-none mb-1">
                             {lead.full_name}
                           </span>
-                          <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? lead.phone ?? 'No contact'}</p>
+                          <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}</p>
                         </div>
                       </div>
                       <p className="text-[10px] text-zinc-650 mt-2 font-medium">

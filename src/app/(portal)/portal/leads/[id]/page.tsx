@@ -48,8 +48,10 @@ import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, Por
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
+import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
 import { catalogItemToLineItem, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
 type ZohoEmailMessage = {
@@ -233,6 +235,7 @@ export default function LeadDetailPage({
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [showCallMenu, setShowCallMenu] = useState(false)
+  const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -1786,7 +1789,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Phone',
-      value: lead.phone || 'None',
+      value: lead.phone ? formatPhoneDisplay(lead.phone) : 'None',
       editValue: lead.phone || '',
       copyValue: lead.phone || '',
       field: 'phone',
@@ -2266,11 +2269,20 @@ export default function LeadDetailPage({
                 {showCallMenu ? (
                   <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-48 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
                     <button type="button" onClick={() => { setNoteType('call_log'); setShowCallMenu(false); scrollToSection('lead-activity') }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Log call notes</button>
-                    <a href={`sms:${lead.phone}`} onClick={() => setShowCallMenu(false)} className="block rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Send text message</a>
+                    <button type="button" onClick={() => { setShowCallMenu(false); setTextPopupOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Open Twilio texts</button>
                     <button type="button" onClick={async () => { await navigator.clipboard.writeText(lead.phone || ''); setShowCallMenu(false); notify({ title: 'Phone number copied', variant: 'success' }) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Copy phone number</button>
                   </div>
                 ) : null}
               </div>
+            )}
+            {lead.phone && (
+              <button
+                type="button"
+                onClick={() => setTextPopupOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+              >
+                <MessageSquare size={13} /> Text Client
+              </button>
             )}
             <div className="relative inline-flex items-center rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] shadow-lg shadow-[#b98a3e]/20 transition-all active:scale-95">
               <button
@@ -4689,13 +4701,17 @@ export default function LeadDetailPage({
         <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40">
           <Phone size={14} /> Call
         </button>
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))} disabled={!lead.email} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
-          <Mail size={14} /> Email
+        <button type="button" onClick={() => setTextPopupOpen(true)} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
+          <MessageSquare size={14} /> Text
         </button>
         <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
           <ChevronRight size={14} /> Next
         </button>
       </div>
+
+      <AnimatePresence>
+        {textPopupOpen && lead.phone ? <LuxorThreadPopup inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} onClose={() => setTextPopupOpen(false)} /> : null}
+      </AnimatePresence>
 
       <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
         <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#080706]">
@@ -5384,9 +5400,10 @@ function ClientSummaryCard({
     options?: { value: string; label: string }[]
     isMono?: boolean
     onCompose?: () => void
+    onCall?: () => void
   }> = [
     { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
-    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone || 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true },
+    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
     { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
     { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
     { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'select', options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
@@ -5664,6 +5681,7 @@ function DetailItem({
   options = [],
   compact = false,
   onCompose,
+  onCall,
 }: {
   icon?: React.ReactNode
   label: string
@@ -5679,6 +5697,7 @@ function DetailItem({
   options?: { value: string; label: string }[]
   compact?: boolean
   onCompose?: () => void
+  onCall?: () => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
@@ -5707,6 +5726,10 @@ function DetailItem({
   const startEditing = () => {
     if (onCompose) {
       onCompose()
+      return
+    }
+    if (onCall) {
+      onCall()
       return
     }
     if (!canEdit || isSaving) return
@@ -5860,6 +5883,19 @@ function DetailItem({
                   className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#a8792f]"
                 >
                   <Mail size={13} />
+                </button>
+              ) : null}
+              {onCall ? (
+                <button
+                  type="button"
+                  aria-label="Call client"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onCall()
+                  }}
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-emerald-500/25 hover:text-emerald-400"
+                >
+                  <Phone size={13} />
                 </button>
               ) : null}
               {canEdit ? (

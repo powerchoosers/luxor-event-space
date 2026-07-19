@@ -75,7 +75,7 @@ export async function sendLuxorAutomatedText(input: {
     const client = twilio(config.accountSid, config.authToken)
     const sent = await client.messages.create({
       to: destination,
-      from,
+      ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid } : { from }),
       body: input.body,
       statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
     })

@@ -18,6 +18,7 @@ import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 
 interface CallCenterTabProps {
   inquiries: LuxorInquiry[]
@@ -177,11 +178,7 @@ export function CallCenterTab({
 
   function sendFollowUpText() {
     if (!selectedLead) return
-    notify({
-      title: 'Follow-up Text Queued',
-      description: `SMS reminder sent to ${selectedLead.full_name}: "Luxor Event Space: Great speaking with you! Ready to book your tour..."`,
-      variant: 'success'
-    })
+    window.location.assign(`/portal/leads/${selectedLead.id}?tab=messages`)
   }
 
   return (
@@ -247,7 +244,7 @@ export function CallCenterTab({
                 <h2 className="text-base font-black text-white">{selectedLead.full_name}</h2>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-zinc-500 mt-1 font-semibold">
                   <span className="font-mono">{selectedLead.email}</span>
-                  {selectedLead.phone && <span className="font-mono">{selectedLead.phone}</span>}
+                  {selectedLead.phone && <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedLead.phone!, contactName: selectedLead.full_name, inquiryId: selectedLead.id })} className="font-mono transition-colors hover:text-emerald-400" title="Call from Luxor">{formatPhoneDisplay(selectedLead.phone)}</button>}
                   <span>Source: <strong className="text-zinc-400">{selectedLead.source}</strong></span>
                 </div>
               </div>

@@ -19,7 +19,7 @@ import Link from 'next/link'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
-import { formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
+import { formatPhoneDisplay, formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
 
 type PhoneState = 'disabled' | 'starting' | 'ready' | 'error'
 type CallPhase = 'dialing' | 'ringing' | 'active'
@@ -300,7 +300,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         if (!response.ok) throw new Error(payload.error || 'Twilio could not ring your phone.')
         notify({
           title: 'Answer your phone',
-          description: `Twilio is ringing ${formatPhone(payload.ringToNumber || settings.ring_to_number || 'your saved phone')}. Answer it to connect the customer.`,
+          description: `Twilio is ringing ${formatPhoneDisplay(payload.ringToNumber || settings.ring_to_number || 'your saved phone')}. Answer it to connect the customer.`,
           variant: 'success',
         })
         window.dispatchEvent(new Event('luxor-call-history-refresh'))
@@ -498,12 +498,6 @@ function PortalPhonePanel({
   const validDialNumber = toUsE164(dialNumber)
 
   useEffect(() => {
-    if (!activeCall) {
-      setShowKeypad(false)
-    }
-  }, [activeCall])
-
-  useEffect(() => {
     if (activeCall?.phase !== 'active') return
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(intervalId)
@@ -528,7 +522,7 @@ function PortalPhonePanel({
           ) : (
             <h2 className="mt-3 font-serif text-3xl font-semibold text-white">{incomingCall.contactName}</h2>
           )}
-          <p className="mt-2 font-mono text-sm text-zinc-400">{formatPhone(incomingCall.phoneNumber)}</p>
+          <p className="mt-2 font-mono text-sm text-zinc-400">{formatPhoneDisplay(incomingCall.phoneNumber)}</p>
           <div className="mt-8 grid grid-cols-2 gap-3">
             <button type="button" onClick={onReject} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-black uppercase tracking-wider text-red-300 hover:bg-red-500/15">
               <PhoneOff size={17} /> Decline
@@ -584,7 +578,7 @@ function PortalPhonePanel({
           ) : (
             <p className="mt-4 text-lg font-black text-white">{activeCall.contactName}</p>
           )}
-          <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhone(activeCall.phoneNumber)}</p>
+          <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhoneDisplay(activeCall.phoneNumber)}</p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-400">
             {activeCall.phase === 'active' ? formatDuration(Math.floor((Math.max(now, activeCall.startedAt) - activeCall.startedAt) / 1000)) : activeCall.phase}
           </p>
@@ -700,13 +694,6 @@ function PortalPhonePanel({
     </motion.aside>}
     </AnimatePresence>
   )
-}
-
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, '')
-  const local = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
-  if (local.length !== 10) return value
-  return `+1 (${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`
 }
 
 function formatDuration(totalSeconds: number) {

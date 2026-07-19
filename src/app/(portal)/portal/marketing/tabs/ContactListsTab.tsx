@@ -26,6 +26,7 @@ import {
   PortalContactAvatar
 } from '@/components/portal/PortalUI'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from '@/components/portal/ToastProvider'
 
 import { MarketingList, MarketingListMember } from '../page'
@@ -498,7 +499,7 @@ export function ContactListsTab({
                           <div>
                             <p className="font-bold text-white leading-tight">{contact.full_name}</p>
                             <p className="text-[10px] text-zinc-550 truncate mt-0.5">{contact.email}</p>
-                            {contact.phone && <p className="text-[9px] text-zinc-650 font-mono mt-0.5">{contact.phone}</p>}
+                            {contact.phone && <p className="text-[9px] text-zinc-650 font-mono mt-0.5">{formatPhoneDisplay(contact.phone)}</p>}
                           </div>
                         </td>
                         <td className="px-4 py-4">

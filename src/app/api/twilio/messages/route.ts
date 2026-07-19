@@ -26,7 +26,12 @@ export async function POST(request: NextRequest) {
     const config = getLuxorTwilioMessagingConfig()
     const activePhoneNumber = await getActiveLuxorPhoneNumber()
     const client = twilio(config.accountSid, config.authToken)
-    const sent = await client.messages.create({ to: destination, from: activePhoneNumber, body: text, statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status') })
+    const sent = await client.messages.create({
+      to: destination,
+      ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid } : { from: activePhoneNumber }),
+      body: text,
+      statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
+    })
     const message = await createOrUpdateLuxorMessage({ sid: sent.sid, direction: 'outbound', status: normalizeMessageStatus(sent.status), from: activePhoneNumber, to: destination, body: text, inquiryId, contactName, ownerEmail: session.email, isRead: true })
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
@@ -43,5 +48,5 @@ export async function PATCH(request: NextRequest) {
 }
 
 function normalizeMessageStatus(value: string | undefined) {
-  return ['accepted', 'queued', 'sending', 'sent', 'delivered', 'undelivered', 'failed', 'received'].includes(value || '') ? value as import('@/lib/luxorMessageTypes').LuxorMessageStatus : 'queued'
+  return ['accepted', 'queued', 'sending', 'sent', 'delivered', 'read', 'undelivered', 'failed', 'received'].includes(value || '') ? value as import('@/lib/luxorMessageTypes').LuxorMessageStatus : 'queued'
 }

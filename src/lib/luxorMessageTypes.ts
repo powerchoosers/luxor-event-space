@@ -1,5 +1,5 @@
 export type LuxorMessageDirection = 'inbound' | 'outbound'
-export type LuxorMessageStatus = 'accepted' | 'queued' | 'sending' | 'sent' | 'delivered' | 'undelivered' | 'failed' | 'received'
+export type LuxorMessageStatus = 'accepted' | 'queued' | 'sending' | 'sent' | 'delivered' | 'read' | 'undelivered' | 'failed' | 'received'
 
 export type LuxorMessage = {
   id: string

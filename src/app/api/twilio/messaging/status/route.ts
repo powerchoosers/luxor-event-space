@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 export async function POST(request: NextRequest) {
   const params = await readTwilioForm(request)
   if (!validateTwilioWebhook(request, params)) return NextResponse.json({ error: 'Invalid Twilio signature.' }, { status: 403 })
-  const status = params.MessageStatus as LuxorMessageStatus
-  if (params.MessageSid && ['accepted', 'queued', 'sending', 'sent', 'delivered', 'undelivered', 'failed', 'received'].includes(status)) await updateLuxorMessageStatus(params.MessageSid, status, params.ErrorCode || null, params.ErrorMessage || null)
+  const status = (params.EventType === 'READ' ? 'read' : params.MessageStatus) as LuxorMessageStatus
+  if (params.MessageSid && ['accepted', 'queued', 'sending', 'sent', 'delivered', 'read', 'undelivered', 'failed', 'received'].includes(status)) await updateLuxorMessageStatus(params.MessageSid, status, params.ErrorCode || null, params.ErrorMessage || params.ChannelStatusMessage || null)
   return NextResponse.json({ ok: true })
 }
