@@ -44,7 +44,7 @@ import {
   PartyPopper,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -2146,9 +2146,10 @@ export default function LeadDetailPage({
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif text-2xl text-[#caa24c] shadow-xl shadow-black/10">
-                {getInitials(lead.full_name)}
-              </div>
+              <PortalContactAvatar
+                name={lead.full_name}
+                className="h-20 w-20 text-2xl shadow-xl shadow-black/10"
+              />
               <div
                 className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
                 title={`${lead.event_type || 'Other'} event`}
@@ -2222,14 +2223,6 @@ export default function LeadDetailPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            {lead.email && (
-              <a 
-                href={`/portal/marketing?tab=builder-automation&leadId=${lead.id}`}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 cursor-pointer"
-              >
-                <Sparkles size={13} /> Draft Campaign with Elena
-              </a>
-            )}
             {lead.email && (
               <button 
                 type="button"
@@ -5371,9 +5364,7 @@ function ClientSummaryCard({
     <section className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/10 font-serif text-sm text-[#caa24c]">
-            {getInitials(lead.full_name)}
-          </span>
+          <PortalContactAvatar name={lead.full_name} size="lg" />
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Client Summary</p>
             <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>

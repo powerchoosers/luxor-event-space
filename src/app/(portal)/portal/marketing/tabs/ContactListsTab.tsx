@@ -22,7 +22,8 @@ import {
   PortalModal,
   PortalSelect,
   PortalAnimatedTabs,
-  PortalButton
+  PortalButton,
+  PortalContactAvatar
 } from '@/components/portal/PortalUI'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -487,13 +488,10 @@ export function ContactListsTab({
               <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
                 {paginatedContacts.length > 0 ? (
                   paginatedContacts.map((contact) => {
-                    const initials = contact.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
                     return (
                       <tr key={contact.id} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
                         <td className="px-6 py-4 flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-[10px] font-black text-[#caa24c] border border-zinc-800">
-                            {initials}
-                          </div>
+                          <PortalContactAvatar name={contact.full_name} size="md" />
                           <div>
                             <p className="font-bold text-white leading-tight">{contact.full_name}</p>
                             <p className="text-[10px] text-zinc-550 truncate mt-0.5">{contact.email}</p>

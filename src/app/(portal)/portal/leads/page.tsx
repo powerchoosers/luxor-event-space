@@ -33,7 +33,8 @@ import {
   PortalTableCard,
   PortalModal,
   PortalSelect,
-  PortalButton
+  PortalButton,
+  PortalContactAvatar
 } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -569,9 +570,11 @@ export default function LeadsPage() {
                         className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
                       >
                         <div className="relative">
-                          <div className="w-8 h-8 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-xs font-bold group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:border-blue-500/50 transition-all duration-300">
-                            {getInitials(lead.full_name)}
-                          </div>
+                          <PortalContactAvatar
+                            name={lead.full_name}
+                            size="md"
+                            className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
+                          />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-white/90 leading-tight mb-0.5 group-hover:translate-x-0.5 transition-transform">
@@ -671,9 +674,10 @@ export default function LeadsPage() {
                       <div key={lead.id} className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-zinc-850 transition-all group relative">
                         <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
                           <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-[10px] font-bold group-hover:bg-[#caa24c]/10 group-hover:text-[#f1d27a] group-hover:border-[#caa24c]/20 transition-all duration-300">
-                              {getInitials(lead.full_name)}
-                            </div>
+                            <PortalContactAvatar
+                              name={lead.full_name}
+                              className="w-7 h-7 text-[10px] group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/25 transition-all duration-300"
+                            />
                             <div className="min-w-0 flex-1">
                               <span className="text-xs font-bold text-white/90 group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
                                 {lead.full_name}
@@ -782,9 +786,10 @@ export default function LeadsPage() {
                   <div key={lead.id} className="bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800/80 transition-all group">
                     <Link href={`/portal/leads/${lead.id}`} className="block">
                       <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] flex items-center justify-center text-[color:var(--portal-muted)] text-[10px] font-bold">
-                          {getInitials(lead.full_name)}
-                        </div>
+                        <PortalContactAvatar
+                          name={lead.full_name}
+                          className="w-7 h-7 text-[10px]"
+                        />
                         <div className="min-w-0 flex-1">
                           <span className="text-xs font-bold text-zinc-400 group-hover:text-blue-500 block truncate leading-none mb-1">
                             {lead.full_name}

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -364,9 +364,7 @@ export default function CommunicationsPage() {
               {/* Header */}
               <div className="bg-[#0c0c0c] rounded-t-xl py-3.5 px-6 border-b border-zinc-900 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-full bg-[#caa24c]/10 border border-[#caa24c]/20 flex items-center justify-center text-[#f1d27a] font-bold text-xs uppercase">
-                    {selectedInquiry.full_name[0]}
-                  </div>
+                  <PortalContactAvatar name={selectedInquiry.full_name} size="md" />
                   <div>
                     <Link
                       href={`/portal/leads/${selectedInquiry.id}`}

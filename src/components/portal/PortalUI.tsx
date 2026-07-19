@@ -959,3 +959,37 @@ export function PortalDatePicker({
     </div>
   )
 }
+
+export function PortalContactAvatar({
+  name,
+  size = 'md',
+  className = '',
+}: {
+  name: string
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  className?: string
+}) {
+  const initials = React.useMemo(() => {
+    if (!name) return '?'
+    const parts = name.trim().split(/\s+/)
+    if (parts.length === 0) return '?'
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }, [name])
+
+  const sizeClasses = {
+    sm: 'w-6 h-6 text-[10px]',
+    md: 'w-8 h-8 text-xs',
+    lg: 'w-10 h-10 text-sm',
+    xl: 'w-16 h-16 text-xl',
+  }
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif font-semibold text-[#caa24c] shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] transition-all duration-300 ${sizeClasses[size]} ${className}`}
+    >
+      {initials}
+    </div>
+  )
+}
+

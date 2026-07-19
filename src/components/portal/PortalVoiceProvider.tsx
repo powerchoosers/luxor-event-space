@@ -4,6 +4,7 @@ import { Call, Device } from '@twilio/voice-sdk'
 import {
   BellRing,
   Delete,
+  Grid,
   Loader2,
   Mic,
   MicOff,
@@ -14,8 +15,10 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import Link from 'next/link'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
+import { PortalContactAvatar } from '@/components/portal/PortalUI'
 import { formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
 
 type PhoneState = 'disabled' | 'starting' | 'ready' | 'error'
@@ -490,8 +493,15 @@ function PortalPhonePanel({
   onToggleMute: () => void
 }) {
   const [now, setNow] = useState(0)
+  const [showKeypad, setShowKeypad] = useState(false)
   const reduceMotion = useReducedMotion()
   const validDialNumber = toUsE164(dialNumber)
+
+  useEffect(() => {
+    if (!activeCall) {
+      setShowKeypad(false)
+    }
+  }, [activeCall])
 
   useEffect(() => {
     if (activeCall?.phase !== 'active') return
@@ -503,11 +513,21 @@ function PortalPhonePanel({
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
         <motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.92, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }} className="w-full max-w-md rounded-3xl border border-[#caa24c]/30 bg-[#090806] p-7 text-center shadow-[0_30px_100px_rgba(0,0,0,0.75)]">
-          <div className="mx-auto flex h-16 w-16 animate-pulse items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#f1d27a]">
-            <PhoneIncoming size={28} />
+          <div className="mx-auto flex items-center justify-center">
+            <PortalContactAvatar name={incomingCall.contactName} size="xl" className="animate-pulse shadow-[0_0_30px_rgba(202,162,76,0.18)]" />
           </div>
           <p className="mt-5 text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Incoming Luxor Call</p>
-          <h2 className="mt-3 font-serif text-3xl font-semibold text-white">{incomingCall.contactName}</h2>
+          {incomingCall.inquiryId ? (
+            <Link
+              href={`/portal/leads/${incomingCall.inquiryId}`}
+              onClick={onClose}
+              className="mt-3 inline-block font-serif text-3xl font-semibold text-white hover:text-[#caa24c] hover:underline transition-colors"
+            >
+              {incomingCall.contactName}
+            </Link>
+          ) : (
+            <h2 className="mt-3 font-serif text-3xl font-semibold text-white">{incomingCall.contactName}</h2>
+          )}
           <p className="mt-2 font-mono text-sm text-zinc-400">{formatPhone(incomingCall.phoneNumber)}</p>
           <div className="mt-8 grid grid-cols-2 gap-3">
             <button type="button" onClick={onReject} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-black uppercase tracking-wider text-red-300 hover:bg-red-500/15">
@@ -525,6 +545,7 @@ function PortalPhonePanel({
   return (
     <AnimatePresence>
     {isOpen && <motion.aside
+      layout={reduceMotion ? undefined : true}
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.96 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 22, scale: 0.97 }}
@@ -546,10 +567,23 @@ function PortalPhonePanel({
 
       {activeCall ? (
         <div className="py-6 text-center">
-          <motion.div animate={reduceMotion ? undefined : { scale: activeCall.phase === 'active' ? [1, 1.06, 1] : [1, 1.12, 1] }} transition={{ duration: activeCall.phase === 'active' ? 1.8 : 1, repeat: Infinity }} className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.14)]">
-            <PhoneCall size={24} />
+          <motion.div
+            animate={reduceMotion ? undefined : { scale: activeCall.phase === 'active' ? [1, 1.06, 1] : [1, 1.12, 1] }}
+            transition={{ duration: activeCall.phase === 'active' ? 1.8 : 1, repeat: Infinity }}
+            className="mx-auto flex items-center justify-center"
+          >
+            <PortalContactAvatar name={activeCall.contactName} size="xl" className="shadow-[0_0_24px_rgba(202,162,76,0.15)]" />
           </motion.div>
-          <p className="mt-4 text-lg font-black text-white">{activeCall.contactName}</p>
+          {activeCall.inquiryId ? (
+            <Link
+              href={`/portal/leads/${activeCall.inquiryId}`}
+              className="mt-4 inline-block text-lg font-black text-white hover:text-[#caa24c] hover:underline transition-colors"
+            >
+              {activeCall.contactName}
+            </Link>
+          ) : (
+            <p className="mt-4 text-lg font-black text-white">{activeCall.contactName}</p>
+          )}
           <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhone(activeCall.phoneNumber)}</p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-400">
             {activeCall.phase === 'active' ? formatDuration(Math.floor((Math.max(now, activeCall.startedAt) - activeCall.startedAt) / 1000)) : activeCall.phase}
@@ -560,7 +594,7 @@ function PortalPhonePanel({
             </div>
           )}
 
-          {activeCall.phase === 'active' && (
+          {activeCall.phase === 'active' && showKeypad && (
             <div className="mt-5 grid grid-cols-3 gap-2">
               {['1','2','3','4','5','6','7','8','9','*','0','#'].map((digit) => (
                 <button key={digit} type="button" onClick={() => onSendDigit(digit)} className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 text-sm font-bold text-zinc-300 hover:border-[#caa24c]/30 hover:text-white">
@@ -574,6 +608,23 @@ function PortalPhonePanel({
             <button type="button" onClick={onToggleMute} className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white" aria-label={isMuted ? 'Unmute' : 'Mute'}>
               {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
+            
+            {activeCall.phase === 'active' && (
+              <button
+                type="button"
+                onClick={() => setShowKeypad(prev => !prev)}
+                className={`flex h-11 w-11 items-center justify-center rounded-full border transition-all ${
+                  showKeypad
+                    ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#caa24c]'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:border-zinc-700'
+                }`}
+                aria-label={showKeypad ? 'Hide keypad' : 'Show keypad'}
+                title={showKeypad ? 'Hide keypad' : 'Show keypad'}
+              >
+                <Grid size={18} />
+              </button>
+            )}
+
             <button type="button" onClick={onHangUp} className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-400" aria-label="Hang up">
               <PhoneOff size={19} />
             </button>
@@ -620,7 +671,24 @@ function PortalPhonePanel({
           <AnimatePresence mode="wait">
             {(dialMatch || isLookingUpNumber) && (
               <motion.div key={dialMatch?.id || 'looking'} initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-2 rounded-lg border border-[#caa24c]/15 bg-[#caa24c]/5 px-3 py-2">
-                {dialMatch ? <><p className="text-xs font-bold text-white">{dialMatch.fullName}</p><p className="mt-0.5 text-[9px] uppercase tracking-wider text-[#caa24c]">{dialMatch.eventType || 'Luxor inquiry'}</p></> : <p className="flex items-center gap-2 text-[10px] text-zinc-500"><Loader2 size={11} className="animate-spin" /> Checking Luxor contacts...</p>}
+                {dialMatch ? (
+                  <div className="flex items-center gap-3 text-left">
+                    <PortalContactAvatar name={dialMatch.fullName} size="sm" />
+                    <div>
+                      <Link
+                        href={`/portal/leads/${dialMatch.id}`}
+                        className="block text-xs font-bold text-white hover:text-[#caa24c] hover:underline transition-colors"
+                      >
+                        {dialMatch.fullName}
+                      </Link>
+                      <p className="mt-0.5 text-[9px] uppercase tracking-wider text-[#caa24c]">{dialMatch.eventType || 'Luxor inquiry'}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="flex items-center gap-2 text-[10px] text-zinc-550">
+                    <Loader2 size={11} className="animate-spin" /> Checking Luxor contacts...
+                  </p>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
