@@ -24,22 +24,23 @@ function FrozenRoute({ children }: { children: React.ReactNode }) {
 export function RouteTransition({
   children,
   surface = 'site',
+  fillAvailableHeight = false,
 }: {
   children: React.ReactNode
   surface?: 'site' | 'portal'
+  fillAvailableHeight?: boolean
 }) {
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
+  const isPortal = surface === 'portal'
+  const portalClass = fillAvailableHeight
+    ? 'flex-1 min-h-0 flex flex-col transform-gpu'
+    : 'w-full transform-gpu'
 
   if (reduceMotion) {
-    return <>{children}</>
+    return isPortal ? <div className={portalClass}>{children}</div> : <>{children}</>
   }
 
-  const isPortal = surface === 'portal'
-  const isLeadsListPage = pathname === '/portal/leads'
-  const portalClass = isLeadsListPage 
-    ? 'flex-1 min-h-0 flex flex-col transform-gpu' 
-    : 'w-full transform-gpu'
   const initialState = isPortal
     ? { opacity: 0, y: 8 }
     : { opacity: 0, y: 16, filter: 'blur(6px)' }

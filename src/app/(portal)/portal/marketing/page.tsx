@@ -561,7 +561,7 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame>
+    <PortalPageFrame className={activeTab === 'contact-lists' ? 'flex-1 min-h-0 overflow-hidden' : ''}>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}

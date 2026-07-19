@@ -358,11 +358,10 @@ export function ContactListsTab({
       </div>
 
       <PortalTableCard
-            className="min-h-[32rem]"
             controls={
               <div className="space-y-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="relative w-full md:max-w-md">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="relative min-w-0 flex-1 md:max-w-md">
                     <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
                     <input
                       type="text"
@@ -372,12 +371,12 @@ export function ContactListsTab({
                       className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] py-2.5 pl-10 pr-4 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/40"
                     />
                   </div>
-                  <span className="shrink-0 font-mono text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                  <span className="hidden shrink-0 font-mono text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] sm:block">
                     {totalCount.toLocaleString()} contacts found
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
                   <PortalSelect
                     value={tagFilter}
                     onChange={setTagFilter}
@@ -471,7 +470,6 @@ export function ContactListsTab({
               </div>
             }
           >
-            <div className="overflow-x-auto">
             <PortalStickyTable minWidth="1050px">
               <PortalStickyThead>
                 <tr className="bg-zinc-950/80 text-[9px] font-black uppercase tracking-wider text-zinc-400">
@@ -574,7 +572,6 @@ export function ContactListsTab({
                 )}
               </tbody>
             </PortalStickyTable>
-            </div>
           </PortalTableCard>
 
       {/* Add Contact Modal */}
