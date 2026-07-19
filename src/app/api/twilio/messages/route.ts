@@ -5,6 +5,7 @@ import { assertAllowedOutboundNumber } from '@/lib/luxorCallsServer'
 import { createOrUpdateLuxorMessage, listLuxorMessages, markLuxorMessageRead } from '@/lib/luxorMessagesServer'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from '@/lib/luxorTwilioServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { assertLuxorSmsAllowed } from '@/lib/luxorTextAutomationsServer'
 
 export const runtime = 'nodejs'
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
   try {
     const { to, body, inquiryId, contactName } = await request.json() as { to?: string; body?: string; inquiryId?: string; contactName?: string }
-    const destination = assertAllowedOutboundNumber(to)
+    const destination = await assertLuxorSmsAllowed(assertAllowedOutboundNumber(to))
     const text = String(body || '').trim()
     if (!text) return NextResponse.json({ error: 'Write a message before sending.' }, { status: 400 })
     if (text.length > 1600) return NextResponse.json({ error: 'Keep messages to 1,600 characters or fewer.' }, { status: 400 })

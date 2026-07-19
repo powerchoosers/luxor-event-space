@@ -31,7 +31,7 @@ import {
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore, Suspense } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
@@ -131,6 +131,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
 
   // Notification State
   const [notificationCount, setNotificationCount] = useState(0)
+  const knownUnreadTextIds = useRef<Set<string> | null>(null)
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
   // Global Email Compose State & Event Listener
@@ -192,9 +193,26 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           
           // Count 'new' or 'tour_requested' inquiries as unhandled notifications
           const unhandled = data.filter((i: LuxorInquiry) => i.status === 'new' || i.status === 'tour_requested').length
-          const messages = messageRes.ok ? await messageRes.json() as Array<{ direction: string; is_read: boolean }> : []
+          const messages = messageRes.ok ? await messageRes.json() as Array<{ id: string; direction: string; is_read: boolean; body: string; contact_name: string | null; from_number: string }> : []
           const unreadTexts = messages.filter((message) => message.direction === 'inbound' && !message.is_read).length
           setNotificationCount(unhandled + unreadTexts)
+          const unreadMessages = messages.filter((message) => message.direction === 'inbound' && !message.is_read)
+          if (knownUnreadTextIds.current) {
+            const newMessages = unreadMessages.filter((message) => !knownUnreadTextIds.current?.has(message.id))
+            if ('Notification' in window && Notification.permission === 'granted') {
+              newMessages.forEach((message) => {
+                const notification = new Notification(`New Luxor text: ${message.contact_name || message.from_number}`, {
+                  body: message.body || 'Media message',
+                  icon: '/favicon.ico',
+                  tag: `luxor-text-${message.id}`,
+                })
+                notification.onclick = () => { window.focus(); router.push('/portal/messages'); notification.close() }
+              })
+            }
+            unreadMessages.forEach((message) => knownUnreadTextIds.current?.add(message.id))
+          } else {
+            knownUnreadTextIds.current = new Set(unreadMessages.map((message) => message.id))
+          }
         }
       } catch (err) {
         console.error('Failed to sync notification counter:', err)

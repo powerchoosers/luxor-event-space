@@ -25,7 +25,7 @@ import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
 import { LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
-import { PortalPageFrame } from "@/components/portal/PortalUI";
+import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 
@@ -289,11 +289,11 @@ export default async function PortalOverview() {
 
   return (
     <PortalPageFrame className="min-h-full pb-10 group/portal space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-[color:var(--portal-text)]">Luxor Operations Hub</h1>
-        <p className="text-[color:var(--portal-muted)] font-medium text-sm">Live bookings, inquiries, tours, and owner operations for Luxor Event Space.</p>
-      </div>
+      <PortalPageHeader
+        icon={<Activity size={18} />}
+        title="Luxor Operations Hub"
+        description="Live bookings, inquiries, tours, and owner operations for Luxor Event Space."
+      />
 
       {loadError && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400">

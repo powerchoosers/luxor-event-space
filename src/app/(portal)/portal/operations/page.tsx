@@ -33,7 +33,8 @@ import {
   PortalStickyThead,
   PortalModal,
   PortalDatePicker,
-  PortalSelect
+  PortalSelect,
+  PortalButton
 } from '@/components/portal/PortalUI'
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog } from '@/app/api/operations/route'
 import type { LuxorTask } from '@/lib/luxorInquiryTypes'
@@ -379,6 +380,17 @@ function OperationsPageContent() {
         icon={<Wrench size={18} />}
         title="Venue Operations"
         description="Core logistics command: Monitor maintenance, track facility bills, manage supply counts, and verify venue event readiness."
+        actions={
+          activeTab === 'bills' ? (
+            <PortalButton variant="primary" onClick={() => setIsBillModalOpen(true)}><Plus size={14} /> Log Bill</PortalButton>
+          ) : activeTab === 'maintenance' ? (
+            <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
+          ) : activeTab === 'inventory' ? (
+            <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
+          ) : activeTab === 'vendors' ? (
+            <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
+          ) : undefined
+        }
       />
 
       {/* Sub-tab navigation */}
@@ -478,13 +490,6 @@ function OperationsPageContent() {
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Operational Bills</h3>
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsBillModalOpen(true)}
-                  className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
-                >
-                  <Plus size={14} /> Log Bill
-                </button>
                 <span className="text-[10px] font-mono text-zinc-550 border border-zinc-900 bg-zinc-950 px-3 py-1 rounded">Next due: Rent on Jul 15</span>
               </div>
             </div>
@@ -529,13 +534,6 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Maintenance Task Log</h3>
-              <button
-                type="button"
-                onClick={() => setIsTaskModalOpen(true)}
-                className="flex items-center gap-2 bg-[#caa24c]/10 hover:bg-[#caa24c]/20 border border-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
-              >
-                <Plus size={14} /> New Maintenance Ticket
-              </button>
             </div>
 
             <PortalTableCard>
@@ -615,13 +613,6 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Venue Stock & Asset Audits</h3>
-            <button
-              type="button"
-              onClick={() => setIsInventoryModalOpen(true)}
-              className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
-            >
-              <Plus size={14} /> Audit Stock Item
-            </button>
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
@@ -691,13 +682,6 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Preferred Vendor Roster</h3>
-            <button
-              type="button"
-              onClick={() => setIsVendorModalOpen(true)}
-              className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/25 hover:bg-[#caa24c]/25 text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest cursor-pointer transition-all"
-            >
-              <Plus size={14} /> Add Preferred Vendor
-            </button>
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">

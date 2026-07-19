@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
 import {
   X,
   Search,
@@ -14,7 +13,7 @@ import {
   Copy
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 
 type BrandAsset = {
   id: string
@@ -174,20 +173,8 @@ export function BrandAssetPicker({
   })
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-        className="flex h-[600px] w-full max-w-4xl flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl overflow-hidden"
-      >
+    <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-4xl" ariaLabel={title}>
+      <div className="flex h-[min(600px,calc(100dvh-2rem))] w-full flex-col overflow-hidden bg-[color:var(--portal-card)]">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-6 py-4">
@@ -205,10 +192,10 @@ export function BrandAssetPicker({
         </div>
 
         {/* Content Area */}
-        <div className="flex flex-1 min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto portal-scrollbar md:flex-row md:overflow-hidden">
           
           {/* Library Gallery Panel */}
-          <div className="flex-[2] flex flex-col min-w-0 border-r border-[color:var(--portal-border)] p-6">
+          <div className="flex min-h-[24rem] min-w-0 flex-[2] flex-col border-b border-[color:var(--portal-border)] p-5 md:border-b-0 md:border-r md:p-6">
             
             {/* Search & Tabs */}
             <div className="space-y-4 shrink-0">
@@ -304,7 +291,7 @@ export function BrandAssetPicker({
           </div>
 
           {/* Upload Sidebar Panel */}
-          <div className="flex-1 bg-[#030303]/40 p-6 flex flex-col justify-between">
+          <div className="flex min-h-[24rem] flex-1 flex-col justify-between bg-[#030303]/40 p-5 md:overflow-y-auto md:p-6 md:portal-scrollbar">
             <form onSubmit={handleUploadSubmit} className="space-y-4 flex flex-col h-full justify-between">
               
               <div className="space-y-4">
@@ -395,7 +382,7 @@ export function BrandAssetPicker({
 
         </div>
 
-      </motion.div>
-    </motion.div>
+      </div>
+    </PortalModal>
   )
 }

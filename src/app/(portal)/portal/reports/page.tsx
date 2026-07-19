@@ -14,6 +14,7 @@ import {
   FileText
 } from 'lucide-react'
 import {
+  PortalButton,
   PortalPageFrame,
   PortalPageHeader
 } from '@/components/portal/PortalUI'
@@ -28,16 +29,14 @@ export default function ReportsPage() {
         title="Business Analytics & Reports"
         description="Core metrics, performance logs, and business trends for Luxor Event Space."
         actions={
-          <button
-            type="button"
+          <PortalButton
             onClick={() => {
               setLoading(true)
               setTimeout(() => setLoading(false), 500)
             }}
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh Reports
-          </button>
+          </PortalButton>
         }
       />
 

@@ -17,7 +17,11 @@ export async function POST(request: Request) {
   const session = await getLuxorPortalSession()
   if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
   try {
-    const body = await request.json() as { ringToNumber?: string | null; outboundMode?: string; ringBrowser?: boolean; ringPhone?: boolean }
+    const body = await request.json() as {
+      ringToNumber?: string | null; outboundMode?: string; ringBrowser?: boolean; ringPhone?: boolean
+      missedCallTextEnabled?: boolean; missedCallTextBody?: string
+      inboundTextReplyEnabled?: boolean; inboundTextReplyBody?: string; inboundTextReplyCooldownHours?: number
+    }
     return NextResponse.json(await saveLuxorPhoneRoutingSettings({ ...body, ownerEmail: session.email }))
   } catch (error) {
     return NextResponse.json({ error: message(error) }, { status: 400 })

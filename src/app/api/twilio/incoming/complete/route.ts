@@ -1,4 +1,6 @@
-import { updateLuxorCallStatus } from '@/lib/luxorCallsServer'
+import { getLuxorCallBySid, updateLuxorCallStatus } from '@/lib/luxorCallsServer'
+import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
+import { sendLuxorAutomatedText } from '@/lib/luxorTextAutomationsServer'
 import {
   buildTwilioCallbackUrl,
   createTwilioVoiceResponse,
@@ -25,6 +27,23 @@ export async function POST(request: Request) {
       childCallSid: params.DialCallSid || null,
       durationSeconds: parseTwilioInteger(params.DialCallDuration),
     })
+    if (dialStatus !== 'completed') {
+      const [call, settings] = await Promise.all([getLuxorCallBySid(recordCallSid), getLuxorPhoneRoutingSettings()])
+      if (call && settings.missed_call_text_enabled) {
+        try {
+          await sendLuxorAutomatedText({
+            type: 'missed_call',
+            sourceId: recordCallSid,
+            to: call.caller_number,
+            body: settings.missed_call_text_body,
+            inquiryId: call.inquiry_id,
+            contactName: call.contact_name,
+          })
+        } catch (error) {
+          console.error('Luxor missed-call text failed:', error)
+        }
+      }
+    }
   } catch (error) {
     console.error('Luxor inbound call completion update failed:', error)
   }
@@ -51,4 +70,3 @@ export async function POST(request: Request) {
   response.hangup()
   return twimlResponse(response)
 }
-

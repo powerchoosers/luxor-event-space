@@ -32,7 +32,8 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalModal,
-  PortalSelect
+  PortalSelect,
+  PortalButton
 } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -358,13 +359,9 @@ export default function LeadsPage() {
                 )}
               </>
             )}
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
-            >
+            <PortalButton variant="primary" onClick={() => setIsModalOpen(true)}>
               <Plus size={14} /> New Lead
-            </button>
+            </PortalButton>
           </div>
         }
       />

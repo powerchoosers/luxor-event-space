@@ -1,12 +1,16 @@
 'use client'
 
-import { Check, Laptop, Loader2, MapPin, Phone, RefreshCw, Save, Search, ShieldCheck, Smartphone } from 'lucide-react'
+import { Check, Laptop, Loader2, MapPin, MessageSquare, Phone, RefreshCw, Save, Search, ShieldCheck, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from './ToastProvider'
 
 type AvailableNumber = { phoneNumber: string; friendlyName: string; locality: string | null; region: string | null; postalCode: string | null; capabilities: { voice?: boolean; sms?: boolean; mms?: boolean }; addressRequirements: string }
 type OwnedNumber = { sid: string; phoneNumber: string; friendlyName: string; capabilities: { voice?: boolean; sms?: boolean; mms?: boolean }; isActive: boolean; webhooksConfigured: boolean }
-type RoutingSettings = { ring_to_number: string | null; outbound_mode: 'browser' | 'ring_phone'; ring_browser: boolean; ring_phone: boolean }
+type RoutingSettings = {
+  ring_to_number: string | null; outbound_mode: 'browser' | 'ring_phone'; ring_browser: boolean; ring_phone: boolean
+  missed_call_text_enabled: boolean; missed_call_text_body: string
+  inbound_text_reply_enabled: boolean; inbound_text_reply_body: string; inbound_text_reply_cooldown_hours: number
+}
 
 export function TwilioNumberManager() {
   const { notify } = useToast()
@@ -20,7 +24,14 @@ export function TwilioNumberManager() {
   const [selected, setSelected] = useState<AvailableNumber | null>(null)
   const [confirmation, setConfirmation] = useState('')
   const [workingSid, setWorkingSid] = useState<string | null>(null)
-  const [routing, setRouting] = useState<RoutingSettings>({ ring_to_number: null, outbound_mode: 'browser', ring_browser: true, ring_phone: false })
+  const [routing, setRouting] = useState<RoutingSettings>({
+    ring_to_number: null, outbound_mode: 'browser', ring_browser: true, ring_phone: false,
+    missed_call_text_enabled: false,
+    missed_call_text_body: 'Luxor Event Space: Sorry we missed your call. Reply with your name, event date, and event type, and we will get back to you. Reply STOP to opt out.',
+    inbound_text_reply_enabled: false,
+    inbound_text_reply_body: 'Luxor Event Space: Thanks for your message. We received it and will respond as soon as possible. Reply STOP to opt out.',
+    inbound_text_reply_cooldown_hours: 12,
+  })
   const [loadingRouting, setLoadingRouting] = useState(true)
   const [savingRouting, setSavingRouting] = useState(false)
 
@@ -62,6 +73,11 @@ export function TwilioNumberManager() {
           outboundMode: routing.outbound_mode,
           ringBrowser: routing.ring_browser,
           ringPhone: routing.ring_phone,
+          missedCallTextEnabled: routing.missed_call_text_enabled,
+          missedCallTextBody: routing.missed_call_text_body,
+          inboundTextReplyEnabled: routing.inbound_text_reply_enabled,
+          inboundTextReplyBody: routing.inbound_text_reply_body,
+          inboundTextReplyCooldownHours: routing.inbound_text_reply_cooldown_hours,
         }),
       })
       const data = await response.json()
@@ -124,6 +140,19 @@ export function TwilioNumberManager() {
         <div className="mt-2 space-y-2">
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-900 bg-black/20 p-3"><input type="checkbox" checked={routing.ring_browser} onChange={(event) => setRouting((current) => ({ ...current, ring_browser: event.target.checked }))} className="accent-[#caa24c]"/><span><span className="block text-[10px] font-bold text-white">Ring the browser</span><span className="block text-[9px] text-zinc-600">Works while the portal phone is enabled and open.</span></span></label>
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-900 bg-black/20 p-3"><input type="checkbox" checked={routing.ring_phone} onChange={(event) => setRouting((current) => ({ ...current, ring_phone: event.target.checked }))} className="accent-[#caa24c]"/><span><span className="block text-[10px] font-bold text-white">Ring my real phone</span><span className="block text-[9px] text-zinc-600">Keeps working even when the portal is closed.</span></span></label>
+        </div>
+
+        <div className="mt-5 border-t border-zinc-900 pt-5">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Text automations</p><p className="mt-1 text-[9px] leading-relaxed text-zinc-600">Both are off until you enable them. Every automated text is saved in message history and protected against duplicates.</p></div><MessageSquare size={15} className="text-[#caa24c]"/></div>
+
+          <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-900 bg-black/20 p-3"><input type="checkbox" checked={routing.missed_call_text_enabled} onChange={(event) => setRouting((current) => ({ ...current, missed_call_text_enabled: event.target.checked }))} className="accent-[#caa24c]"/><span><span className="block text-[10px] font-bold text-white">Text after a missed call</span><span className="block text-[9px] text-zinc-600">Sent only when nobody answers. Voicemail still works.</span></span></label>
+          <textarea value={routing.missed_call_text_body} onChange={(event) => setRouting((current) => ({ ...current, missed_call_text_body: event.target.value.slice(0, 480) }))} rows={4} disabled={!routing.missed_call_text_enabled} className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 text-xs leading-relaxed text-white outline-none disabled:opacity-45"/>
+          <p className="mt-1 text-right font-mono text-[8px] text-zinc-700">{routing.missed_call_text_body.length}/480</p>
+
+          <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-900 bg-black/20 p-3"><input type="checkbox" checked={routing.inbound_text_reply_enabled} onChange={(event) => setRouting((current) => ({ ...current, inbound_text_reply_enabled: event.target.checked }))} className="accent-[#caa24c]"/><span><span className="block text-[10px] font-bold text-white">Acknowledge incoming texts</span><span className="block text-[9px] text-zinc-600">Confirms receipt once per customer during the cooldown.</span></span></label>
+          <textarea value={routing.inbound_text_reply_body} onChange={(event) => setRouting((current) => ({ ...current, inbound_text_reply_body: event.target.value.slice(0, 480) }))} rows={4} disabled={!routing.inbound_text_reply_enabled} className="mt-2 w-full rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 text-xs leading-relaxed text-white outline-none disabled:opacity-45"/>
+          <div className="mt-2 flex items-center justify-between gap-3"><p className="text-[9px] text-zinc-600">Do not repeat for the same person for</p><div className="flex items-center gap-2"><input type="number" min={1} max={168} value={routing.inbound_text_reply_cooldown_hours} onChange={(event) => setRouting((current) => ({ ...current, inbound_text_reply_cooldown_hours: Number(event.target.value) || 12 }))} disabled={!routing.inbound_text_reply_enabled} className="h-9 w-16 rounded-lg border border-zinc-800 bg-black/40 px-2 text-center font-mono text-xs text-white outline-none disabled:opacity-45"/><span className="text-[9px] text-zinc-600">hours</span></div></div>
+          <p className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2 text-[9px] leading-relaxed text-amber-200/75">Luxor blocks CRM texts after STOP and allows them again only after START. Keep the business name and “Reply STOP to opt out” in automated first-contact messages.</p>
         </div>
         <button type="button" onClick={() => void saveRouting()} disabled={savingRouting} className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50">{savingRouting ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} {savingRouting ? 'Saving' : 'Save call routing'}</button>
       </>}

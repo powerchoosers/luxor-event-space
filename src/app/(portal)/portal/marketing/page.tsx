@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Mail,
@@ -20,7 +20,8 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalModal,
-  PortalStatusBadge
+  PortalStatusBadge,
+  PortalButton
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -54,6 +55,7 @@ export type Campaign = {
   click_count: number
   unique_opens: number
   unique_clicks: number
+  unsubscribe_count: number
   open_rate: number
   click_rate: number
 }
@@ -79,7 +81,7 @@ type CampaignEvent = {
   device_type: string | null
 }
 
-type MarketingActivityEvent = CampaignEvent & {
+export type MarketingActivityEvent = CampaignEvent & {
   campaign_id: string
   recipient_id: string
   recipient_email: string | null
@@ -136,6 +138,7 @@ function MarketingPageContent() {
   // Campaign & Inquiries lists database states
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
+  const [marketingActivity, setMarketingActivity] = useState<MarketingActivityEvent[]>([])
   
   // Loaders
   const [loadingCampaigns, setLoadingCampaigns] = useState(true)
@@ -148,6 +151,7 @@ function MarketingPageContent() {
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
   const [builderSession, setBuilderSession] = useState(0)
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
 
   // Watchers & References
   const latestActivityAtRef = useRef<string | null>(null)
@@ -330,6 +334,7 @@ function MarketingPageContent() {
 
         if (initial) {
           events.forEach((event) => seenActivityIdsRef.current.add(event.id))
+          setMarketingActivity(events)
           return
         }
 
@@ -339,11 +344,17 @@ function MarketingPageContent() {
 
         if (!newEvents.length) return
 
+        setMarketingActivity((current) => mergeMarketingActivity(newEvents, current))
+
         newEvents.forEach((event) => {
           seenActivityIdsRef.current.add(event.id)
           const recipient = event.recipient_name || event.recipient_email || 'Unknown recipient'
           const campaign = event.campaign_name || event.campaign_subject || 'Unknown campaign'
-          const title = event.event_type === 'click' ? 'Marketing link clicked' : 'Marketing email opened'
+          const title = event.event_type === 'click'
+            ? 'Marketing link clicked'
+            : event.event_type === 'unsubscribe'
+              ? 'Marketing recipient unsubscribed'
+              : 'Marketing email opened'
           const target = event.event_type === 'click' && event.url ? ` -> ${shortenUrl(event.url)}` : ''
 
           notify({
@@ -478,13 +489,13 @@ function MarketingPageContent() {
       case 'text-campaigns':
         return {
           title: 'Text Campaigns',
-          desc: 'Draft and schedule text broadcasts, templates, and track subscriber reply activity.',
+          desc: 'SMS campaign reporting appears here only after a campaign is stored and tracked in Supabase.',
           icon: <MessageSquare size={18} />
         }
       case 'builder-automation':
         return {
-          title: 'Email Builder & Automation Center',
-          desc: 'Construct responsive layouts, customize templates, and activate automated email responders.',
+          title: 'Email Builder',
+          desc: 'Build email campaigns and review real campaign tracking from Supabase.',
           icon: <Sparkles size={18} />
         }
       case 'contact-lists':
@@ -502,7 +513,7 @@ function MarketingPageContent() {
       case 'calendar':
         return {
           title: 'Marketing Calendar',
-          desc: 'Plan, schedule, and align holidays with upcoming email and SMS campaigns.',
+          desc: 'Review real campaign send dates and upcoming scheduled email deliveries.',
           icon: <Calendar size={18} />
         }
       case 'overview':
@@ -517,32 +528,37 @@ function MarketingPageContent() {
 
   const header = getHeaderInfo()
 
-
-  const headerActions = useMemo(() => {
-    if (activeTab === 'contact-lists') {
-      return (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-zinc-950/40 border border-zinc-900/60 px-3 py-1.5 rounded-xl font-mono text-[9px] text-zinc-500 font-bold shrink-0">
-          {[
-            { label: 'Contacts', value: '2,487' },
-            { label: 'Subscribers', value: '1,842' },
-            { label: 'Leads', value: '551' },
-            { label: 'Clients', value: '94' },
-            { label: 'Unsubs', value: '78' },
-            { label: 'SMS Subs', value: '1,276' }
-          ].map((stat, idx) => (
-            <React.Fragment key={idx}>
-              {idx > 0 && <span className="text-zinc-850 font-black">|</span>}
-              <div className="flex items-center gap-1.5">
-                <span className="uppercase tracking-widest">{stat.label}:</span>
-                <span className="text-white font-black">{stat.value}</span>
-              </div>
-            </React.Fragment>
-          ))}
-        </div>
-      )
-    }
-    return undefined
-  }, [activeTab])
+  let headerActions: React.ReactNode
+  if (activeTab === 'email-campaigns') {
+    headerActions = (
+      <>
+        <PortalButton onClick={() => loadCampaigns()} disabled={loadingCampaigns}>
+          <RefreshCw size={13} className={loadingCampaigns ? 'animate-spin' : ''} /> Refresh
+        </PortalButton>
+        <PortalButton variant="primary" onClick={openBlankBuilder}>
+          <Plus size={13} /> Create Campaign
+        </PortalButton>
+      </>
+    )
+  } else if (activeTab === 'builder-automation') {
+    headerActions = (
+      <PortalButton variant="primary" onClick={openBlankBuilder}>
+        <Plus size={13} /> New Email
+      </PortalButton>
+    )
+  } else if (activeTab === 'contact-lists') {
+    headerActions = (
+      <PortalButton variant="primary" onClick={() => setIsAddContactModalOpen(true)}>
+        <Plus size={13} /> Add Contact
+      </PortalButton>
+    )
+  } else if (activeTab === 'calendar') {
+    headerActions = (
+      <PortalButton variant="primary" onClick={openBlankBuilder}>
+        <Plus size={13} /> Create Campaign
+      </PortalButton>
+    )
+  }
 
   return (
     <PortalPageFrame>
@@ -558,7 +574,9 @@ function MarketingPageContent() {
           <MarketingOverviewTab
             inquiries={inquiries}
             campaigns={campaigns}
+            activityEvents={marketingActivity}
             marketingLists={marketingLists}
+            loading={loadingCampaigns || loadingInquiries || loadingLists}
             onTabChange={handleTabChange}
             onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
           />
@@ -581,8 +599,6 @@ function MarketingPageContent() {
             onReport={openCampaignReport}
             onCancel={cancelCampaign}
             onSendNow={sendCampaignNow}
-            onNewCampaignClick={openBlankBuilder}
-            onRefreshClick={() => loadCampaigns()}
           />
         )}
 
@@ -593,6 +609,8 @@ function MarketingPageContent() {
         {activeTab === 'builder-automation' && (
           <EmailBuilderTab
             initialTemplate={builderTemplate}
+            campaigns={campaigns}
+            activityEvents={marketingActivity}
             onOpenBlankBuilder={openBlankBuilder}
             onOpenTemplateInBuilder={openTemplateInBuilder}
           />
@@ -604,6 +622,8 @@ function MarketingPageContent() {
             marketingLists={marketingLists}
             initialSourceFilter={initialSourceFilter}
             onAddContact={handleAddContact}
+            isAddModalOpen={isAddContactModalOpen}
+            onAddModalOpenChange={setIsAddContactModalOpen}
           />
         )}
 
@@ -616,7 +636,11 @@ function MarketingPageContent() {
         )}
 
         {activeTab === 'calendar' && (
-          <MarketingCalendarTab />
+          <MarketingCalendarTab
+            campaigns={campaigns}
+            loading={loadingCampaigns}
+            onCreateCampaign={openBlankBuilder}
+          />
         )}
       </div>
 
@@ -645,10 +669,11 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
       </div>
 
       <div className="portal-scrollbar overflow-y-auto p-6 max-h-[500px]">
-        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-6">
           <ReportMetric label="Recipients" value={campaign.recipient_count.toLocaleString()} />
           <ReportMetric label="Sent" value={campaign.sent_count.toLocaleString()} />
           <ReportMetric label="Engaged" value={engaged.toLocaleString()} />
+          <ReportMetric label="Unsubscribes" value={campaign.unsubscribe_count.toLocaleString()} />
           <ReportMetric label="Open Rate" value={`${campaign.open_rate}%`} />
           <ReportMetric label="Click Rate" value={`${campaign.click_rate}%`} />
         </div>
@@ -722,6 +747,23 @@ function ReportMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-2 font-mono text-base font-bold text-white">{value}</p>
     </div>
   )
+}
+
+function mergeMarketingActivity(
+  incoming: MarketingActivityEvent[],
+  current: MarketingActivityEvent[],
+) {
+  const byId = new Map<string, MarketingActivityEvent>()
+  ;[...incoming, ...current].forEach((event) => byId.set(event.id, event))
+  return Array.from(byId.values())
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 25)
+}
+
+function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
+  return inquiry.campaign_key === 'grand_opening_2026_07_25'
+    || inquiry.flow === 'grand_opening_rsvp'
+    || inquiry.source === 'grand_opening_rsvp'
 }
 
 function shortenUrl(url: string) {

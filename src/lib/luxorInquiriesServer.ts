@@ -2,7 +2,7 @@ import 'server-only'
 
 import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
-import { addRecipientToGrandOpeningCampaign } from './luxorMarketingServer'
+import { addRecipientToGrandOpeningCampaign, addRecipientToGrandOpeningReminderCampaigns } from './luxorMarketingServer'
 import { supabaseRest } from './supabaseRestServer'
 import {
   applyTourSlotToInquiry,
@@ -166,6 +166,11 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
           campaign_key: created.campaign_key,
           source: created.source,
         },
+      })
+      await addRecipientToGrandOpeningReminderCampaigns({
+        inquiryId: created.id,
+        email: created.email,
+        name: created.full_name,
       })
     } catch (emailError) {
       console.error('Luxor grand opening RSVP email queue failed:', emailError)

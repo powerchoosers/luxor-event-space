@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { PortalPageFrame, PortalPageHeader, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalButton, PortalPageFrame, PortalPageHeader, PortalSelect } from '@/components/portal/PortalUI'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
@@ -140,12 +140,12 @@ export default function CallsPage() {
         description="Every inbound and outbound Luxor call, matched to the lead whenever the phone number is known."
         actions={(
           <>
-            <button type="button" onClick={() => void loadCalls()} className="flex h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white">
+            <PortalButton onClick={() => void loadCalls()}>
               <RefreshCw size={14} /> Refresh
-            </button>
-            <button type="button" onClick={openPanel} className="flex h-10 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-black hover:bg-[#dfbd68]">
+            </PortalButton>
+            <PortalButton variant="primary" onClick={openPanel}>
               <Phone size={14} /> New Call
-            </button>
+            </PortalButton>
           </>
         )}
       />
@@ -293,4 +293,3 @@ function formatDuration(seconds: number | null) {
   const remainder = seconds % 60
   return `${minutes}:${String(remainder).padStart(2, '0')}`
 }
-

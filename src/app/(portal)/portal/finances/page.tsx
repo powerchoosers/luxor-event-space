@@ -23,7 +23,8 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
-  PortalSelect
+  PortalSelect,
+  PortalButton
 } from '@/components/portal/PortalUI'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
 
@@ -206,13 +207,9 @@ type LuxorBookingExpense = {
         title="Finances"
         description="Luxor Event Space financial overview, bookkeeping ledgers, invoices, and expense tracking."
         actions={
-          <button
-            type="button"
-            onClick={fetchFinanceData}
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
-          >
+          <PortalButton onClick={fetchFinanceData}>
             <RefreshCw size={13} /> Refresh Ledger
-          </button>
+          </PortalButton>
         }
       />
 

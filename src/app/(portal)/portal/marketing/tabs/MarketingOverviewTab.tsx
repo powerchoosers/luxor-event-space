@@ -2,28 +2,26 @@
 
 import React from 'react'
 import {
-  Users,
-  UserPlus,
-  Mail,
-  MessageSquare,
-  Phone,
-  Sparkles,
   ArrowUpRight,
-  Plus,
-  Briefcase,
-  Gift,
-  Search,
+  CalendarClock,
   CheckCircle2,
-  CalendarDays
+  Mail,
+  MailOpen,
+  MousePointerClick,
+  Plus,
+  UserPlus,
+  Users,
 } from 'lucide-react'
-import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
-import { Campaign, MarketingList, MarketingListMember } from '../page'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalStatusBadge } from '@/components/portal/PortalUI'
+import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import type { Campaign, MarketingActivityEvent, MarketingList } from '../page'
 
 interface MarketingOverviewTabProps {
   inquiries: LuxorInquiry[]
   campaigns: Campaign[]
+  activityEvents: MarketingActivityEvent[]
   marketingLists?: MarketingList[]
+  loading: boolean
   onTabChange: (tab: string) => void
   onAddContactClick: () => void
 }
@@ -31,445 +29,286 @@ interface MarketingOverviewTabProps {
 export function MarketingOverviewTab({
   inquiries,
   campaigns,
+  activityEvents,
   marketingLists = [],
+  loading,
   onTabChange,
-  onAddContactClick
+  onAddContactClick,
 }: MarketingOverviewTabProps) {
-  
-  // React-hooks purity safe time reference initialized on mount
   const [nowTime] = React.useState(() => Date.now())
+  const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
 
-  // Real DB data count calculations
-  const totalSubscribers = React.useMemo(() => {
-    const listSubscribers = marketingLists.reduce((sum, l) => sum + (l.memberCount || 0), 0)
-    return listSubscribers > 0 ? listSubscribers : 2487
-  }, [marketingLists])
+  const allMembers = React.useMemo(
+    () => marketingLists.flatMap((list) => list.members.map((member) => ({ ...member, listName: list.name }))),
+    [marketingLists],
+  )
+  const totalSubscribers = React.useMemo(
+    () => new Set(allMembers.map((member) => member.email.trim().toLowerCase()).filter(Boolean)).size,
+    [allMembers],
+  )
+  const newSubscribersThisWeek = React.useMemo(
+    () => new Set(
+      allMembers
+        .filter((member) => member.created_at && new Date(member.created_at).getTime() >= oneWeekAgo)
+        .map((member) => member.email.trim().toLowerCase()),
+    ).size,
+    [allMembers, oneWeekAgo],
+  )
+  const recentSubscribers = React.useMemo(
+    () => [...allMembers]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 5),
+    [allMembers],
+  )
 
-  const newSubscribersThisWeek = React.useMemo(() => {
-    const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
-    let count = 0
-    for (const list of marketingLists) {
-      for (const m of list.members || []) {
-        if (m.created_at && new Date(m.created_at).getTime() > oneWeekAgo) {
-          count++
-        }
-      }
-    }
-    return count > 0 ? count : 184
-  }, [marketingLists, nowTime])
+  const grandOpeningRsvps = React.useMemo(
+    () => inquiries
+      .filter(isGrandOpeningRsvp)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [inquiries],
+  )
+  const attendingRsvps = grandOpeningRsvps.filter((inquiry) => inquiry.rsvp_status === 'attending').length
+  const recordedGuests = grandOpeningRsvps.reduce((sum, inquiry) => sum + Number(inquiry.attendee_count || 0), 0)
+  const newInquiriesThisWeek = inquiries.filter((inquiry) => new Date(inquiry.created_at).getTime() >= oneWeekAgo).length
+  const followUpQueue = inquiries.filter((inquiry) => ['new', 'contacted', 'tour_requested'].includes(inquiry.status)).length
 
-  const emailOpenRate = 42.6
-  const smsReplyRate = 21.8
+  const totalSent = campaigns.reduce((sum, campaign) => sum + Number(campaign.sent_count || 0), 0)
+  const totalUniqueOpens = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_opens || 0), 0)
+  const totalUniqueClicks = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_clicks || 0), 0)
+  const overallOpenRate = totalSent ? Math.round((totalUniqueOpens / totalSent) * 1000) / 10 : 0
 
-  const callsDueToday = React.useMemo(() => {
-    const queue = inquiries.filter(inq => inq.status === 'new' || inq.status === 'contacted' || inq.status === 'tour_requested').length
-    return queue > 0 ? queue : 12
-  }, [inquiries])
+  const topCampaign = React.useMemo(
+    () => [...campaigns]
+      .filter((campaign) => campaign.recipient_count > 0 || campaign.sent_count > 0)
+      .sort((a, b) => {
+        const engagementDifference = (b.unique_clicks * 3 + b.unique_opens) - (a.unique_clicks * 3 + a.unique_opens)
+        return engagementDifference || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })[0] ?? null,
+    [campaigns],
+  )
 
-  const newInquiriesThisWeek = React.useMemo(() => {
-    const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
-    const count = inquiries.filter(inq => new Date(inq.created_at).getTime() > oneWeekAgo).length
-    return count > 0 ? count : 37
-  }, [inquiries, nowTime])
+  const scheduledCampaigns = React.useMemo(
+    () => campaigns
+      .filter((campaign) => campaign.status === 'scheduled' || campaign.status === 'sending' || campaign.queued_count > 0)
+      .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime()),
+    [campaigns],
+  )
 
-  // Recent Subscribers from DB or fallback
-  const recentSubscribers = React.useMemo(() => {
-    const allMembers = marketingLists.flatMap(l => (l.members || []).map((m: MarketingListMember) => ({
-      name: m.full_name || m.email.split('@')[0],
-      form: l.name || 'Newsletter Signup',
-      time: m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently',
-      initial: (m.full_name || m.email.substring(0,2)).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-    })))
-    return allMembers.slice(0, 5)
-  }, [marketingLists])
-
-  // Recent Inquiries from DB or fallback
-  const recentInquiries = React.useMemo(() => {
-    const dbInquiries = inquiries
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 5)
-      .map(inq => {
-        const isWedding = inq.event_type?.toLowerCase() === 'wedding'
-        const isCorp = inq.event_type?.toLowerCase().includes('corporate')
-        const isQuince = inq.event_type?.toLowerCase().includes('quince')
-        const isBirthday = inq.event_type?.toLowerCase().includes('birth')
-        
-        let emoji = '💍'
-        let color = 'text-purple-400 bg-purple-500/5 border border-purple-500/10'
-        if (isCorp) {
-          emoji = '💼'
-          color = 'text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10'
-        } else if (isQuince) {
-          emoji = '👗'
-          color = 'text-rose-400 bg-rose-500/5 border border-rose-500/10'
-        } else if (isBirthday) {
-          emoji = '🎂'
-          color = 'text-amber-400 bg-amber-500/5 border border-amber-500/10'
-        } else if (inq.event_type?.toLowerCase().includes('baby')) {
-          emoji = '🍼'
-          color = 'text-blue-400 bg-blue-500/5 border border-blue-500/10'
-        }
-
-        return {
-          title: inq.event_type ? `${inq.event_type} Inquiry` : 'General Inquiry',
-          time: new Date(inq.created_at).toLocaleString(),
-          icon: emoji,
-          iconColor: color
-        }
-      })
-    return dbInquiries
-  }, [inquiries])
-
-  // Automation status list with exact counts from mockup
-  const automations = [
-    { name: 'Welcome Series', enrolled: 132 },
-    { name: 'Tour Reminder', enrolled: 18 },
-    { name: 'Review Request', enrolled: 6 },
-    { name: 'Birthday Campaign', enrolled: 42 }
-  ]
+  const audienceRows = React.useMemo(
+    () => [...marketingLists].sort((a, b) => b.memberCount - a.memberCount),
+    [marketingLists],
+  )
 
   return (
     <div className="space-y-6">
-      {/* 6 Stats KPI grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6">
-        <StatsCard
-          label="Total Subscribers"
-          value={totalSubscribers.toLocaleString()}
-          icon={<Users size={15} />}
-          change="7.3% vs last 7 days"
-          positive={true}
-        />
-        <StatsCard
-          label="New Subscribers (This Week)"
-          value={String(newSubscribersThisWeek)}
-          icon={<UserPlus size={15} />}
-          change="18.6% vs last 7 days"
-          positive={true}
-        />
-        <StatsCard
-          label="Email Open Rate"
-          value={`${emailOpenRate}%`}
-          icon={<Mail size={15} />}
-          change="6.4% vs last 7 days"
-          positive={true}
-        />
-        <StatsCard
-          label="SMS Reply Rate"
-          value={`${smsReplyRate}%`}
-          icon={<MessageSquare size={15} />}
-          change="3.2% vs last 7 days"
-          positive={true}
-        />
-        <StatsCard
-          label="Calls Due Today"
-          value={String(callsDueToday)}
-          icon={<Phone size={15} />}
-          change="4 overdue"
-          positive={false}
-          isOverdue={true}
-        />
-        <StatsCard
-          label="New Inquiries (This Week)"
-          value={String(newInquiriesThisWeek)}
-          icon={<ArrowUpRight size={15} />}
-          change="23.3% vs last 7 days"
-          positive={true}
-        />
+        <StatsCard label="Subscribers" value={loading ? '…' : totalSubscribers.toLocaleString()} icon={<Users size={15} />} detail="Saved marketing-list emails" />
+        <StatsCard label="New This Week" value={loading ? '…' : newSubscribersThisWeek.toLocaleString()} icon={<UserPlus size={15} />} detail="Added in the last 7 days" />
+        <StatsCard label="Emails Sent" value={loading ? '…' : totalSent.toLocaleString()} icon={<Mail size={15} />} detail="Tracked campaign recipients" />
+        <StatsCard label="Open Rate" value={loading ? '…' : `${overallOpenRate}%`} icon={<MailOpen size={15} />} detail={`${totalUniqueOpens.toLocaleString()} unique opens`} />
+        <StatsCard label="Needs Follow-up" value={loading ? '…' : followUpQueue.toLocaleString()} icon={<ArrowUpRight size={15} />} detail="New, contacted, or tour requested" />
+        <StatsCard label="New Inquiries" value={loading ? '…' : newInquiriesThisWeek.toLocaleString()} icon={<CheckCircle2 size={15} />} detail="Submitted in the last 7 days" />
       </div>
 
-      {/* Row 2: Graph, Subscribers list, Inquiries list */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Audience Growth Line Graph */}
-        <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
+        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2">
+          <div className="flex items-start justify-between gap-4 border-b border-zinc-900 pb-4">
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Audience Growth</h3>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Audience by List</h3>
+              <p className="mt-1 text-[10px] text-zinc-500">Current Supabase marketing-list membership, grouped by saved source.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <PortalSelect
-                value="last-30"
-                onChange={() => {}}
-                options={[{ value: 'last-30', label: 'Last 30 Days' }]}
-              />
-            </div>
+            <span className="font-mono text-xs font-bold text-[#caa24c]">{loading ? '…' : totalSubscribers.toLocaleString()} total</span>
           </div>
 
-          <div className="relative h-64 w-full pt-4">
-            <svg className="h-full w-full" viewBox="0 0 500 220" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="emailGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#caa24c" stopOpacity={0.12} />
-                  <stop offset="100%" stopColor="#caa24c" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="smsGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#a8792f" stopOpacity={0.08} />
-                  <stop offset="100%" stopColor="#a8792f" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-
-              {/* Grid Lines */}
-              <line x1="0" y1="35" x2="480" y2="35" stroke="#18181b" strokeWidth="1" />
-              <line x1="0" y1="75" x2="480" y2="75" stroke="#18181b" strokeWidth="1" />
-              <line x1="0" y1="115" x2="480" y2="115" stroke="#18181b" strokeWidth="1" />
-              <line x1="0" y1="155" x2="480" y2="155" stroke="#18181b" strokeWidth="1" />
-              <line x1="0" y1="195" x2="480" y2="195" stroke="#18181b" strokeWidth="1" />
-
-              {/* Email Subscribers Line & Area */}
-              <path d="M 0 170 Q 120 150 240 115 T 480 50" fill="none" stroke="#caa24c" strokeWidth="2.5" />
-              <path d="M 0 170 Q 120 150 240 115 T 480 50 L 480 210 L 0 210 Z" fill="url(#emailGrad)" />
-
-              {/* SMS Subscribers Line & Area */}
-              <path d="M 0 195 Q 120 185 240 160 T 480 110" fill="none" stroke="#a8792f" strokeWidth="2.0" />
-              <path d="M 0 195 Q 120 185 240 160 T 480 110 L 480 210 L 0 210 Z" fill="url(#smsGrad)" />
-
-              {/* Unsubscribes Line (gray, low) */}
-              <path d="M 0 205 Q 120 205 240 200 T 480 195" fill="none" stroke="#52525b" strokeWidth="1.5" strokeDasharray="3,3" />
-
-              {/* End points markers */}
-              <circle cx="480" cy="50" r="3" fill="#caa24c" />
-              <circle cx="480" cy="110" r="3" fill="#a8792f" />
-              <circle cx="480" cy="195" r="3" fill="#52525b" />
-            </svg>
-
-            {/* End Point value labels */}
-            <div className="absolute right-0 top-[40px] font-mono text-[9px] font-bold text-white">2,487</div>
-            <div className="absolute right-0 top-[102px] font-mono text-[9px] font-bold text-white">1,248</div>
-            <div className="absolute right-0 top-[188px] font-mono text-[9px] font-bold text-zinc-550">153</div>
-
-            {/* Axis labels */}
-            <div className="absolute bottom-[-10px] left-0 right-8 flex justify-between font-mono text-[8px] text-zinc-600 font-bold">
-              <span>Apr 18</span>
-              <span>Apr 25</span>
-              <span>May 2</span>
-              <span>May 9</span>
-              <span>May 16</span>
+          {audienceRows.length ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {audienceRows.map((list) => {
+                const share = totalSubscribers ? Math.min(100, (list.memberCount / totalSubscribers) * 100) : 0
+                return (
+                  <div key={list.name} className="rounded-xl border border-zinc-900/70 bg-zinc-950/30 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-xs font-bold text-white">{list.name}</p>
+                      <span className="font-mono text-xs font-black text-[#caa24c]">{list.memberCount.toLocaleString()}</span>
+                    </div>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-900">
+                      <div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${share}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          </div>
+          ) : (
+            <DataEmptyState loading={loading} message="No subscribers are saved in Supabase yet." />
+          )}
+        </section>
 
-          {/* Graph Legend overlay */}
-          <div className="flex items-center gap-4 text-[9px] font-bold text-zinc-500 pt-3 border-t border-zinc-900/60">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded bg-[#caa24c]" />
-              <span>Email Subscribers</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded bg-[#a8792f]" />
-              <span>SMS Subscribers</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded border border-dashed border-zinc-650" />
-              <span>Unsubscribes</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Columns: Recent Subscribers List */}
-        <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 flex flex-col justify-between min-h-[300px]">
-          <div className="flex items-center justify-between">
+        <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Recent Subscribers</h3>
-            <button
-              onClick={() => onTabChange('contact-lists')}
-              className="text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#dfbd68]"
-            >
-              View all
-            </button>
+            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#dfbd68]">View all</button>
           </div>
-
-          <div className="divide-y divide-zinc-900/60 mt-4 flex-grow">
-            {recentSubscribers.map((sub, idx) => (
-              <div key={idx} className="flex items-center justify-between py-3 first:pt-0 last:pb-0 gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-[10px] font-black text-[#caa24c] border border-zinc-800">
-                    {sub.initial}
-                  </div>
+          {recentSubscribers.length ? (
+            <div className="mt-3 divide-y divide-zinc-900/60">
+              {recentSubscribers.map((subscriber) => (
+                <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-white/95">{sub.name}</p>
-                    <p className="truncate text-[10px] text-zinc-500 mt-0.5 font-medium">{sub.form}</p>
+                    <p className="truncate text-xs font-bold text-white">{subscriber.full_name || subscriber.email}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-zinc-500">{subscriber.listName}</p>
                   </div>
-                </div>
-                <span className="shrink-0 text-[9px] font-mono text-zinc-600 font-bold">{sub.time}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 3: Recent Inquiries, Top performing campaign, Comm Performance, Automations */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Inquiries List */}
-        <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-3.5 mb-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Recent Inquiries</h3>
-            <button
-              onClick={() => onTabChange('call-center')}
-              className="text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#dfbd68]"
-            >
-              View all
-            </button>
-          </div>
-
-          <div className="space-y-3 flex-grow">
-            {recentInquiries.map((inq, idx) => (
-              <div
-                key={idx}
-                onClick={() => onTabChange('call-center')}
-                className="group flex cursor-pointer items-center justify-between rounded-xl border border-zinc-900/60 bg-zinc-950/20 p-3 hover:border-zinc-850 hover:bg-zinc-900/10 transition-all"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg text-sm ${inq.iconColor}`}>
-                    {inq.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-white group-hover:text-[#caa24c] transition-colors">{inq.title}</p>
-                    <p className="truncate text-[9.5px] text-zinc-500 font-mono mt-0.5">{inq.time}</p>
-                  </div>
-                </div>
-                <ArrowUpRight size={13} className="text-zinc-650 shrink-0 group-hover:text-white transition-colors" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Top Performing Campaign & Comm Performance */}
-        <div className="space-y-6 lg:col-span-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Top Performing Campaign */}
-            <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-white">Top Performing Campaign</h4>
-                <span className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View all</span>
-              </div>
-              
-              <div className="flex items-center gap-4 border-b border-zinc-900 pb-3">
-                {/* Simulated Campaign Flyer Asset representation */}
-                <div className="h-16 w-16 rounded-xl border border-zinc-800 bg-zinc-900 flex flex-col justify-center items-center text-center p-2 text-zinc-400 font-bold shrink-0">
-                  <span className="text-[8px] tracking-widest uppercase font-mono text-[#caa24c]">Luxor</span>
-                  <span className="text-[6px] uppercase leading-none mt-1">Invitation</span>
-                </div>
-                <div className="min-w-0">
-                  <span className="rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider text-emerald-400">
-                    Completed
-                  </span>
-                  <h5 className="text-xs font-bold text-white mt-1.5 truncate">Grand Opening Invitation</h5>
-                  <p className="text-[9px] text-zinc-550 font-mono mt-0.5">Sent May 9, 2026</p>
-                </div>
-              </div>
-
-              {/* Stats grid */}
-              <div className="grid grid-cols-4 gap-2 text-center font-mono">
-                <MetricBlock label="Sent" value="2,306" />
-                <MetricBlock label="Open Rate" value="42.6%" />
-                <MetricBlock label="Click Rate" value="8.7%" />
-                <MetricBlock label="Bookings" value="31" />
-              </div>
-
-              <button
-                onClick={() => onTabChange('email-campaigns')}
-                className="rounded-lg border border-zinc-900 hover:border-zinc-800 py-1.5 w-full text-[9px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
-              >
-                View Campaign Report
-              </button>
-            </div>
-
-            {/* Communication Performance */}
-            <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-white">Communication Performance (Today)</h4>
-              
-              <div className="space-y-3.5">
-                <CommRow label="Emails Sent" value="15" detail="Open Rate" rate="48.3%" />
-                <CommRow label="Texts Sent" value="27" detail="Reply Rate" rate="22.2%" />
-                <CommRow label="Calls Completed" value="9" detail="Connect Rate" rate="66.7%" />
-              </div>
-            </div>
-          </div>
-
-          {/* Automation Status row */}
-          <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-white">Automation Status</h4>
-              <span className="text-[9px] font-bold text-zinc-550 uppercase tracking-widest hover:text-[#caa24c] cursor-pointer">View all</span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              {automations.map((aut, idx) => (
-                <div key={idx} className="flex justify-between items-center rounded-xl border border-zinc-900/60 bg-zinc-950/40 p-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-white truncate">{aut.name}</p>
-                    <p className="text-[8.5px] font-mono text-zinc-500 mt-1 font-bold">Active • {aut.enrolled} contacts</p>
-                  </div>
-                  {/* Styled toggler */}
-                  <span className="flex h-5 w-8 items-center rounded-full bg-emerald-500/10 border border-emerald-500/30 p-0.5 justify-end">
-                    <span className="h-3.5 w-3.5 rounded-full bg-emerald-500" />
-                  </span>
+                  <span className="shrink-0 font-mono text-[9px] text-zinc-600">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span>
                 </div>
               ))}
             </div>
+          ) : (
+            <DataEmptyState loading={loading} message="No subscriber records are available." />
+          )}
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
+          <div className="flex items-start justify-between gap-3 border-b border-zinc-900 pb-4">
+            <div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Grand Opening RSVP Activity</h3>
+              <p className="mt-1 text-[9px] text-zinc-500">Real RSVP submissions from Supabase.</p>
+            </div>
+            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View RSVPs</button>
           </div>
+
+          {grandOpeningRsvps.length ? (
+            <>
+              <div className="grid grid-cols-3 gap-2 border-b border-zinc-900 py-4 text-center font-mono">
+                <MetricBlock label="RSVPs" value={grandOpeningRsvps.length.toLocaleString()} />
+                <MetricBlock label="Attending" value={attendingRsvps.toLocaleString()} />
+                <MetricBlock label="Guests Listed" value={recordedGuests.toLocaleString()} />
+              </div>
+              <div className="mt-2 divide-y divide-zinc-900/60">
+                {grandOpeningRsvps.slice(0, 4).map((rsvp) => (
+                  <div key={rsvp.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-white">{rsvp.full_name}</p>
+                      <p className="mt-0.5 text-[9px] text-zinc-500">
+                        {rsvp.rsvp_status ? formatStatus(rsvp.rsvp_status) : 'RSVP status not recorded'}
+                        {' · '}
+                        {rsvp.attendee_count == null ? 'Guest count not provided' : `${rsvp.attendee_count} guest${rsvp.attendee_count === 1 ? '' : 's'}`}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-[9px] text-zinc-600">{formatDate(rsvp.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <DataEmptyState loading={loading} message="No Grand Opening RSVPs have been submitted." />
+          )}
+        </section>
+
+        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Highest Engagement</h3>
+            <button type="button" onClick={() => onTabChange('email-campaigns')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View campaigns</button>
+          </div>
+
+          {topCampaign ? (
+            <div className="pt-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-[#caa24c]"><Mail size={18} /></div>
+                <div className="min-w-0">
+                  <PortalStatusBadge status={topCampaign.status} />
+                  <h4 className="mt-2 truncate text-xs font-bold text-white">{topCampaign.name}</h4>
+                  <p className="mt-0.5 truncate text-[9px] text-zinc-550">{topCampaign.subject}</p>
+                  <p className="mt-1 font-mono text-[9px] text-zinc-600">{formatCampaignDate(topCampaign)}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-4 gap-2 border-t border-zinc-900 pt-4 text-center font-mono">
+                <MetricBlock label="Sent" value={topCampaign.sent_count.toLocaleString()} />
+                <MetricBlock label="Open" value={`${topCampaign.open_rate}%`} />
+                <MetricBlock label="Click" value={`${topCampaign.click_rate}%`} />
+                <MetricBlock label="Unsubs" value={topCampaign.unsubscribe_count.toLocaleString()} />
+              </div>
+            </div>
+          ) : (
+            <DataEmptyState loading={loading} message="No campaign has recipients or sends yet." />
+          )}
+        </section>
+
+        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Recent Email Activity</h3>
+            <span className="font-mono text-[9px] text-zinc-600">{activityEvents.length} tracked</span>
+          </div>
+          {activityEvents.length ? (
+            <div className="mt-2 divide-y divide-zinc-900/60">
+              {activityEvents.slice(0, 5).map((event) => (
+                <div key={event.id} className="flex items-start justify-between gap-3 py-2.5">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span className="mt-0.5 text-[#caa24c]">{event.event_type === 'click' ? <MousePointerClick size={13} /> : <MailOpen size={13} />}</span>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-white">{event.recipient_name || event.recipient_email || 'Recipient name unavailable'}</p>
+                      <p className="mt-0.5 truncate text-[9px] text-zinc-500">{formatStatus(event.event_type)} · {event.campaign_name || event.campaign_subject || 'Campaign name unavailable'}</p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-mono text-[9px] text-zinc-600">{formatDate(event.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <DataEmptyState loading={loading} message="No tracked opens, clicks, or unsubscribes yet." />
+          )}
+        </section>
+      </div>
+
+      <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
+        <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+          <div>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Scheduled Sends</h3>
+            <p className="mt-1 text-[9px] text-zinc-500">Campaigns with queued recipients or a scheduled/sending status in Supabase.</p>
+          </div>
+          <button type="button" onClick={() => onTabChange('calendar')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open calendar</button>
+        </div>
+        {scheduledCampaigns.length ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {scheduledCampaigns.slice(0, 4).map((campaign) => (
+              <div key={campaign.id} className="rounded-xl border border-zinc-900 bg-zinc-950/30 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <CalendarClock size={15} className="shrink-0 text-[#caa24c]" />
+                  <PortalStatusBadge status={campaign.status} />
+                </div>
+                <p className="mt-3 truncate text-xs font-bold text-white">{campaign.name}</p>
+                <p className="mt-1 font-mono text-[9px] text-zinc-500">{campaign.scheduled_for ? formatDateTime(campaign.scheduled_for) : 'Send date not set'}</p>
+                <p className="mt-2 text-[9px] text-zinc-600">{campaign.queued_count.toLocaleString()} queued recipient{campaign.queued_count === 1 ? '' : 's'}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <DataEmptyState loading={loading} message="No campaigns are currently scheduled or queued." />
+        )}
+      </section>
+
+      <div className="rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
+        <h4 className="mb-3.5 px-1 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-650">Quick Actions</h4>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <ActionButton onClick={onAddContactClick} icon={<Plus size={14} className="text-[#caa24c]" />} label="Add Contact" />
+          <ActionButton onClick={() => onTabChange('builder-automation')} icon={<Mail size={14} className="text-[#caa24c]" />} label="Build Email" />
+          <ActionButton onClick={() => onTabChange('email-campaigns')} icon={<MailOpen size={14} className="text-[#caa24c]" />} label="View Campaigns" />
+          <ActionButton onClick={() => onTabChange('calendar')} icon={<CalendarClock size={14} className="text-[#caa24c]" />} label="View Schedule" />
         </div>
       </div>
 
-      {/* Quick Actions Panel */}
-      <div className="rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-650 mb-3.5 px-1 font-bold">Quick Actions</h4>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <ActionButton
-            onClick={onAddContactClick}
-            icon={<Plus size={14} className="text-[#caa24c]" />}
-            label="Add Contact"
-          />
-          <ActionButton
-            onClick={() => onTabChange('email-campaigns')}
-            icon={<Mail size={14} className="text-[#caa24c]" />}
-            label="Create Email Campaign"
-          />
-          <ActionButton
-            onClick={() => onTabChange('text-campaigns')}
-            icon={<MessageSquare size={14} className="text-[#caa24c]" />}
-            label="Create SMS Campaign"
-          />
-          <ActionButton
-            onClick={() => onTabChange('builder-automation')}
-            icon={<Sparkles size={14} className="text-[#caa24c]" />}
-            label="Build Email"
-          />
-          <ActionButton
-            onClick={() => onTabChange('call-center')}
-            icon={<Phone size={14} className="text-[#caa24c]" />}
-            label="Open Call Center"
-          />
-        </div>
-      </div>
+      <span className="sr-only">{totalUniqueClicks.toLocaleString()} unique campaign clicks</span>
     </div>
   )
 }
 
-function StatsCard({
-  label,
-  value,
-  icon,
-  change,
-  positive,
-  isOverdue
-}: {
-  label: string
-  value: string
-  icon: React.ReactNode
-  change: string
-  positive: boolean
-  isOverdue?: boolean
-}) {
+function StatsCard({ label, value, icon, detail }: { label: string; value: string; icon: React.ReactNode; detail: string }) {
   return (
-    <div className="luxor-glass-card rounded-2xl border border-zinc-900/80 bg-zinc-950/20 p-5 relative group hover:border-zinc-800 transition-all">
+    <div className="luxor-glass-card rounded-2xl border border-zinc-900/80 bg-zinc-950/20 p-5 transition-all hover:border-zinc-800">
       <div className="flex items-center justify-between text-zinc-500">
         <span className="text-[8.5px] font-black uppercase tracking-wider leading-none">{label}</span>
-        <span className="group-hover:text-[#caa24c] transition-colors">{icon}</span>
+        <span className="text-[#caa24c]">{icon}</span>
       </div>
-      <h3 className="font-mono text-xl font-bold text-white mt-3.5 leading-none">{value}</h3>
-      <span className={`inline-block text-[8px] font-bold mt-2.5 ${
-        isOverdue ? 'text-rose-500' : 'text-emerald-400'
-      }`}>
-        {!isOverdue && (positive ? '↑' : '↓')} {change}
-      </span>
+      <h3 className="mt-3.5 font-mono text-xl font-bold leading-none text-white">{value}</h3>
+      <p className="mt-2.5 text-[8px] font-bold leading-4 text-zinc-600">{detail}</p>
     </div>
   )
 }
@@ -477,40 +316,54 @@ function StatsCard({
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-r border-zinc-900 last:border-r-0">
-      <p className="text-[8px] font-bold text-zinc-550 uppercase tracking-widest leading-none">{label}</p>
-      <p className="text-xs font-bold text-white mt-1.5 leading-none">{value}</p>
+      <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-550">{label}</p>
+      <p className="mt-1.5 text-xs font-bold text-white">{value}</p>
     </div>
   )
 }
 
-function CommRow({ label, value, detail, rate }: { label: string; value: string; detail: string; rate: string }) {
+function DataEmptyState({ loading, message }: { loading: boolean; message: string }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-zinc-900/60 last:border-b-0">
-      <div className="min-w-0">
-        <p className="text-xs font-bold text-white">{label}</p>
-        <p className="text-[9px] text-zinc-550 font-mono mt-0.5">{detail}: <strong className="text-emerald-400 font-bold">{rate}</strong></p>
-      </div>
-      <span className="font-mono text-base font-black text-[#caa24c]">{value}</span>
+    <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-zinc-850 bg-zinc-950/20 p-5 text-center text-xs leading-5 text-zinc-600">
+      {loading ? 'Loading Supabase data…' : message}
     </div>
   )
 }
 
-function ActionButton({
-  onClick,
-  icon,
-  label
-}: {
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-}) {
+function ActionButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center justify-center gap-2 rounded-xl border border-zinc-900 bg-zinc-900/40 py-2.5 px-3 text-center text-xs font-bold text-zinc-350 hover:border-zinc-800 hover:bg-zinc-900/80 hover:text-white transition-all active:scale-95 cursor-pointer"
-    >
+    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-900 bg-zinc-900/40 px-3 py-2.5 text-center text-xs font-bold text-zinc-350 transition-all hover:border-zinc-800 hover:bg-zinc-900/80 hover:text-white active:scale-95">
       {icon}
       <span>{label}</span>
     </button>
   )
+}
+
+function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
+  return inquiry.campaign_key === 'grand_opening_2026_07_25'
+    || inquiry.flow === 'grand_opening_rsvp'
+    || inquiry.source === 'grand_opening_rsvp'
+}
+
+function formatStatus(value: string) {
+  return value.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function formatCampaignDate(campaign: Campaign) {
+  if (campaign.sent_at) return `Sent ${formatDateTime(campaign.sent_at)}`
+  if (campaign.scheduled_for) return `Scheduled ${formatDateTime(campaign.scheduled_for)}`
+  return `Created ${formatDateTime(campaign.created_at)}`
 }

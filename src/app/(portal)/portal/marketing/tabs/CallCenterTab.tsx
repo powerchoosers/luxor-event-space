@@ -49,20 +49,18 @@ export function CallCenterTab({
   const queueLeads = useMemo(() => {
     return inquiries
       .filter((inq) => inq.status === 'new' || inq.status === 'contacted' || inq.status === 'tour_requested')
-      .map((inq, idx) => {
-        // Calculate dynamic wait time for demo visual depth
+      .map((inq) => {
         const created = new Date(inq.created_at)
         const diffMs = Date.now() - created.getTime()
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+        const diffMinutes = Math.max(0, Math.floor(diffMs / (1000 * 60)))
+        const diffHours = Math.floor(diffMinutes / 60)
         
-        let waitStr = '2 Hours'
+        let waitStr = diffMinutes <= 0 ? 'Just now' : `${diffMinutes} Min${diffMinutes === 1 ? '' : 's'}`
         if (diffHours >= 24) {
           const days = Math.floor(diffHours / 24)
           waitStr = `${days} Day${days > 1 ? 's' : ''}`
         } else if (diffHours > 0) {
           waitStr = `${diffHours} Hour${diffHours > 1 ? 's' : ''}`
-        } else {
-          waitStr = '30 Mins'
         }
 
         return {
@@ -355,8 +353,7 @@ export function CallCenterTab({
                     onChange={setAssignedStaff}
                     options={[
                       { value: 'Elena AI Coordinator', label: 'Elena AI Coordinator' },
-                      { value: 'Alfonso Patterson', label: 'Alfonso Patterson (Owner)' },
-                      { value: 'Maria Gonzalez', label: 'Maria Gonzalez (Planners Team)' }
+                      { value: 'Portal Owner', label: 'Portal Owner' }
                     ]}
                   />
                 </div>

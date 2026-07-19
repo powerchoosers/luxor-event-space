@@ -18,6 +18,8 @@ These instructions apply to this entire repository.
 - `src/lib/zohoMailServer.ts` for Zoho config, sender restrictions, and message delivery.
 - `src/lib/luxorEmailJobsServer.ts` for email job queue processing and marketing updates.
 - `src/lib/luxorBookingsServer.ts` and `src/lib/luxorInquiryTypes.ts` for booking and inquiry data flow.
+- `src/lib/luxorTwilioServer.ts`, `src/lib/luxorPhoneNumbersServer.ts`, and `src/lib/luxorPhoneRoutingServer.ts` for Twilio credentials, the selected public number, call routing, and phone settings.
+- `src/lib/luxorCallsServer.ts`, `src/lib/luxorMessagesServer.ts`, and `src/lib/luxorTextAutomationsServer.ts` for communication history, SMS consent, and deduplicated text automations.
 - `src/components/Header.tsx` and `src/components/Footer.tsx` for public navigation.
 - `src/components/Reveal.tsx` for animation policy on the public site.
 
@@ -42,6 +44,13 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 - The owner portal is protected by the signed `luxor_portal_session` cookie. Logout uses `/api/auth/logout` and must clear that cookie before redirecting to `/portal/login`.
 - Zoho sender access is limited by `LUXOR_ZOHO_LOGIN_EMAIL` and `LUXOR_ZOHO_ALLOWED_SENDERS`. The intended Luxor mailbox is `booking@luxoratlaspalmas.com`, with `hello@luxoratlaspalmas.com` as an allowed alias.
 - Zoho mail env var names are allowed in docs, but never write real values into tracked files or chat summaries: `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_ACCOUNT_ID`, `ZOHO_REFRESH_TOKEN`, `ZOHO_ACCOUNTS_SERVER`, `ZOHO_BASE_URL`, `LUXOR_PORTAL_SESSION_SECRET`.
+- Twilio credentials are server-only. Never expose or commit `LUXOR_TWILIO_ACCOUNT_SID`, `LUXOR_TWILIO_AUTH_TOKEN`, `LUXOR_TWILIO_API_KEY_SID`, or `LUXOR_TWILIO_API_KEY_SECRET`, and never prefix them with `NEXT_PUBLIC_`.
+- The selected row in `luxor_phone_numbers` is the source of truth for the public business number and outgoing caller ID. Activating a number must configure its voice, voice fallback, SMS, and SMS fallback webhooks together.
+- Voice supports two outgoing modes: the persistent browser softphone and a PSTN bridge that rings the saved physical phone first. Incoming calls may ring the browser and physical phone simultaneously; preserve status callbacks and `luxor_calls` history for both legs.
+- Twilio webhook routes must validate `X-Twilio-Signature`. Portal-only Twilio routes must validate `luxor_portal_session`. Do not trust caller IDs, destinations, or webhook form values without normalization and validation.
+- Automated texts are opt-in features configured in portal Settings and must remain disabled by default. Missed-call and inbound-acknowledgment texts must be deduplicated through `luxor_text_automation_events`, written to `luxor_messages`, and include clear Luxor identification and STOP instructions when appropriate.
+- Respect SMS consent. An inbound STOP-family keyword records `opted_out` in `luxor_sms_consents` and blocks manual and automated CRM texts; only a START/UNSTOP event may restore sending. Do not send a second application reply when Twilio has already handled an opt-out keyword.
+- Do not place paid calls, send real texts, purchase phone numbers, or activate a public number during testing unless Lewis explicitly authorizes that real-world action.
 - Desktop heroes should feel balanced as one composition. Use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page intentionally uses a split hero with a strong visual on the other side.
 - Do not wrap above-the-fold hero content in scroll-triggered `Reveal`; first viewport content must render immediately.
 - Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
@@ -69,4 +78,4 @@ The GitHub repository is ready for a standard Vercel Next.js deployment:
 - Root directory: repository root
 - Build command: `npm run build`
 - Output/framework detection: Next.js defaults
-- The public website can run without secrets, but portal and Zoho mail features require the server-only env vars listed above in Vercel. Do not expose them with `NEXT_PUBLIC_`.
+- The public website can run without secrets, but portal, Zoho mail, and Twilio features require their server-only env vars in Vercel. Do not expose them with `NEXT_PUBLIC_`.

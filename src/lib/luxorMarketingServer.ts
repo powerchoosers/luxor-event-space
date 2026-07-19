@@ -36,6 +36,7 @@ export type MarketingCampaignSummary = LuxorMarketingCampaign & {
   click_count: number
   unique_opens: number
   unique_clicks: number
+  unsubscribe_count: number
   open_rate: number
   click_rate: number
 }
@@ -154,7 +155,11 @@ export function instrumentMarketingHtml(html: string, trackingToken: string) {
   return `${tracked}${pixel}`
 }
 
-function summarizeCampaign(campaign: LuxorMarketingCampaign, recipients: LuxorMarketingRecipient[]): MarketingCampaignSummary {
+function summarizeCampaign(
+  campaign: LuxorMarketingCampaign,
+  recipients: LuxorMarketingRecipient[],
+  events: LuxorMarketingEvent[] = [],
+): MarketingCampaignSummary {
   const sentCount = recipients.filter((recipient) => recipient.status === 'sent').length
   const queuedCount = recipients.filter((recipient) => recipient.status === 'queued').length
   const failedCount = recipients.filter((recipient) => recipient.status === 'failed').length
@@ -162,6 +167,11 @@ function summarizeCampaign(campaign: LuxorMarketingCampaign, recipients: LuxorMa
   const clickCount = recipients.reduce((sum, recipient) => sum + Number(recipient.click_count || 0), 0)
   const uniqueOpens = recipients.filter((recipient) => Number(recipient.open_count || 0) > 0).length
   const uniqueClicks = recipients.filter((recipient) => Number(recipient.click_count || 0) > 0).length
+  const unsubscribeCount = new Set(
+    events
+      .filter((event) => event.event_type === 'unsubscribe')
+      .map((event) => event.recipient_id),
+  ).size
   const denominator = Math.max(sentCount, campaign.recipient_count || recipients.length || 0)
 
   return {
@@ -173,6 +183,7 @@ function summarizeCampaign(campaign: LuxorMarketingCampaign, recipients: LuxorMa
     click_count: clickCount,
     unique_opens: uniqueOpens,
     unique_clicks: uniqueClicks,
+    unsubscribe_count: unsubscribeCount,
     open_rate: denominator ? Math.round((uniqueOpens / denominator) * 1000) / 10 : 0,
     click_rate: denominator ? Math.round((uniqueClicks / denominator) * 1000) / 10 : 0,
   }
@@ -186,13 +197,19 @@ export async function listMarketingCampaigns(limit = 1000) {
   if (!campaigns.length) return []
 
   const campaignIds = campaigns.map((campaign) => campaign.id).join(',')
-  const recipients = await supabaseRest<LuxorMarketingRecipient[]>(
-    `luxor_marketing_recipients?select=*&campaign_id=in.(${campaignIds})`,
-  )
+  const [recipients, events] = await Promise.all([
+    supabaseRest<LuxorMarketingRecipient[]>(
+      `luxor_marketing_recipients?select=*&campaign_id=in.(${campaignIds})`,
+    ),
+    supabaseRest<LuxorMarketingEvent[]>(
+      `luxor_marketing_events?select=*&campaign_id=in.(${campaignIds})&event_type=eq.unsubscribe`,
+    ),
+  ])
 
   return campaigns.map((campaign) => summarizeCampaign(
     campaign,
     recipients.filter((recipient) => recipient.campaign_id === campaign.id),
+    events.filter((event) => event.campaign_id === campaign.id),
   ))
 }
 
@@ -254,7 +271,7 @@ export async function getMarketingCampaignDetail(id: string) {
   ])
 
   return {
-    campaign: summarizeCampaign(campaign, recipients),
+    campaign: summarizeCampaign(campaign, recipients, events),
     recipients,
     events,
   }
@@ -264,7 +281,7 @@ export async function listMarketingActivityEvents(options: { since?: string | nu
   const limit = Math.min(Math.max(options.limit ?? 25, 1), 100)
   const sinceFilter = options.since ? `&created_at=gt.${encodeURIComponent(options.since)}` : ''
   const events = await supabaseRest<LuxorMarketingEvent[]>(
-    `luxor_marketing_events?select=*&event_type=in.(open,click)&order=created_at.desc&limit=${encodeURIComponent(limit)}${sinceFilter}`,
+    `luxor_marketing_events?select=*&event_type=in.(open,click,unsubscribe)&order=created_at.desc&limit=${encodeURIComponent(limit)}${sinceFilter}`,
   )
 
   if (!events.length) return []
@@ -931,24 +948,93 @@ export async function addRecipientToGrandOpeningCampaign(data: {
   await processLuxorEmailJobs(jobs)
 }
 
+/**
+ * Adds a newly confirmed Grand Opening RSVP to every still-pending reminder
+ * campaign. The campaigns themselves are created in the portal/Supabase so
+ * Lewis can review or cancel them without a deployment.
+ */
+export async function addRecipientToGrandOpeningReminderCampaigns(data: {
+  inquiryId: string
+  email: string
+  name: string | null
+}): Promise<void> {
+  const now = new Date().toISOString()
+  const campaigns = await supabaseRest<LuxorMarketingCampaign[]>(
+    `luxor_marketing_campaigns?select=*&status=eq.scheduled&scheduled_for=gt.${encodeURIComponent(now)}&metadata->>campaign_key=eq.grand_opening_2026_07_25&metadata->>automation_type=eq.grand_opening_rsvp_reminder&order=scheduled_for.asc`,
+  )
+
+  for (const campaign of campaigns) {
+    const existing = await supabaseRest<LuxorMarketingRecipient[]>(
+      `luxor_marketing_recipients?select=id&campaign_id=eq.${encodeURIComponent(campaign.id)}&email=eq.${encodeURIComponent(data.email.toLowerCase())}&limit=1`,
+    )
+    if (existing.length) continue
+
+    const trackingToken = createTrackingToken()
+    const [recipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        campaign_id: campaign.id,
+        email: data.email.toLowerCase(),
+        name: data.name,
+        status: 'queued',
+        tracking_token: trackingToken,
+        metadata: { inquiry_id: data.inquiryId, rsvp_status: 'attending' },
+      }),
+    })
+    if (!recipient || !campaign.scheduled_for) continue
+
+    const job = await createLuxorEmailJob({
+      inquiryId: data.inquiryId,
+      jobType: 'marketing_campaign',
+      recipientEmail: data.email.toLowerCase(),
+      subject: campaign.subject,
+      body: instrumentMarketingHtml(campaign.html_body, trackingToken),
+      scheduledFor: campaign.scheduled_for,
+      metadata: {
+        campaign_id: campaign.id,
+        marketing_recipient_id: recipient.id,
+        tracking_token: trackingToken,
+        sender_from: campaign.metadata?.sender_from || 'hello@luxoratlaspalmas.com',
+        sender_name: campaign.metadata?.sender_name || 'Luxor Event Space',
+        inquiry_id: data.inquiryId,
+        rsvp_status: 'attending',
+      },
+    })
+
+    await supabaseRest(
+      `luxor_marketing_recipients?id=eq.${encodeURIComponent(recipient.id)}`,
+      { method: 'PATCH', body: JSON.stringify({ email_job_id: job.id }) },
+    )
+
+    const recipients = await supabaseRest<{ id: string }[]>(
+      `luxor_marketing_recipients?select=id&campaign_id=eq.${encodeURIComponent(campaign.id)}`,
+    )
+    await supabaseRest(
+      `luxor_marketing_campaigns?id=eq.${encodeURIComponent(campaign.id)}`,
+      { method: 'PATCH', body: JSON.stringify({ recipient_count: recipients.length, updated_at: now }) },
+    )
+  }
+}
+
 export type MarketingList = {
   name: string
   memberCount: number
-  members: { email: string; full_name: string | null }[]
+  members: MarketingListMember[]
 }
 
 export async function getMarketingLists(): Promise<MarketingList[]> {
   const members = await supabaseRest<MarketingListMember[]>('luxor_marketing_list?select=*')
   if (!Array.isArray(members)) return []
 
-  const listsMap = new Map<string, { email: string; full_name: string | null }[]>()
+  const listsMap = new Map<string, MarketingListMember[]>()
   
   for (const m of members) {
     const listName = m.source || 'Uncategorized'
     if (!listsMap.has(listName)) {
       listsMap.set(listName, [])
     }
-    listsMap.get(listName)!.push({ email: m.email, full_name: m.full_name })
+    listsMap.get(listName)!.push(m)
   }
   
   return Array.from(listsMap.entries()).map(([name, membersList]) => ({

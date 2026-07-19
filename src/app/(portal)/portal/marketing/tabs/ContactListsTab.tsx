@@ -21,7 +21,8 @@ import {
   PortalStickyThead,
   PortalModal,
   PortalSelect,
-  PortalStatusBadge
+  PortalAnimatedTabs,
+  PortalButton
 } from '@/components/portal/PortalUI'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -47,6 +48,8 @@ interface ContactListsTabProps {
   marketingLists?: MarketingList[]
   initialSourceFilter?: string
   onAddContact: (contact: Partial<LuxorInquiry>) => Promise<void>
+  isAddModalOpen: boolean
+  onAddModalOpenChange: (isOpen: boolean) => void
 }
 
 type CategoryView = 'all' | 'subscribers' | 'leads' | 'clients' | 'archived'
@@ -61,7 +64,9 @@ export function ContactListsTab({
   inquiries,
   marketingLists = [],
   initialSourceFilter = '',
-  onAddContact
+  onAddContact,
+  isAddModalOpen,
+  onAddModalOpenChange
 }: ContactListsTabProps) {
   const { notify } = useToast()
   
@@ -76,7 +81,6 @@ export function ContactListsTab({
   const [currentPage, setCurrentPage] = useState<number>(1)
   const PAGE_SIZE = 25
 
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [submittingContact, setSubmittingContact] = useState(false)
 
   // Add Contact Form State
@@ -92,7 +96,7 @@ export function ContactListsTab({
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('add') === 'true') {
-        setIsAddModalOpen(true)
+        onAddModalOpenChange(true)
         // Clean the query parameter from URL
         params.delete('add')
         const remainingStr = params.toString()
@@ -100,7 +104,7 @@ export function ContactListsTab({
         window.history.replaceState({}, '', newUrl)
       }
     }
-  }, [])
+  }, [onAddModalOpenChange])
 
   // Map database inquiries to table contacts structure
   const dbContacts = useMemo(() => {
@@ -217,19 +221,21 @@ export function ContactListsTab({
     ]
   }, [allContacts])
 
-  const quickSegments = useMemo(() => {
-    const hotLeads = allContacts.filter(c => c.tags.includes('Hot Lead')).length
-    const tourScheduled = allContacts.filter(c => c.tags.includes('Tour Scheduled')).length
-    const proposalSent = allContacts.filter(c => c.tags.includes('Proposal Sent')).length
-    const booked = allContacts.filter(c => c.tags.includes('Client')).length
-
+  const sourceOptions = useMemo(() => {
+    const sources = Array.from(new Set(allContacts.map((contact) => contact.source).filter(Boolean))).sort()
     return [
-      { label: 'Hot Leads', count: hotLeads, filterTag: 'Hot Lead' },
-      { label: 'Tour Scheduled', count: tourScheduled, filterTag: 'Tour Scheduled' },
-      { label: 'Proposal Sent', count: proposalSent, filterTag: 'Proposal Sent' },
-      { label: 'Booked', count: booked, filterTag: 'Client' }
+      { value: 'all', label: 'Lead Source: All' },
+      ...sources.map((source) => ({ value: source, label: source })),
     ]
   }, [allContacts])
+
+  const categoryTabs: { id: CategoryView; label: string; count: number }[] = [
+    { id: 'all', label: 'All Contacts', count: allContacts.length },
+    { id: 'subscribers', label: 'Subscribers', count: allContacts.filter((contact) => contact.emailStatus === 'Subscribed').length },
+    { id: 'leads', label: 'Leads', count: allContacts.filter((contact) => !contact.tags.includes('Client')).length },
+    { id: 'clients', label: 'Clients', count: allContacts.filter((contact) => contact.tags.includes('Client')).length },
+    { id: 'archived', label: 'Archived', count: allContacts.filter((contact) => contact.emailStatus === 'Unsubscribed').length },
+  ]
 
   // Filter contacts
   const filteredContacts = useMemo(() => {
@@ -316,7 +322,7 @@ export function ContactListsTab({
         message: `Submitted Form: ${newFormSubmitted}. Tags: ${newTags}`
       })
 
-      setIsAddModalOpen(false)
+      onAddModalOpenChange(false)
       setNewFullName('')
       setNewEmail('')
       setNewPhone('')
@@ -331,111 +337,79 @@ export function ContactListsTab({
   }
 
   return (
-    <div className="flex flex-col min-h-0 overflow-hidden h-[calc(100dvh-13rem)]">
-      {/* Main split dashboard (sidebar on the left, table on the right) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 min-h-0 h-full overflow-hidden">
-        
-        {/* Left Column: Form count sidebar list */}
-        <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-6 min-h-0 flex flex-col justify-between overflow-y-auto portal-scrollbar">
-          <div>
-            <h4 className="text-[9px] font-black uppercase tracking-wider text-zinc-500 border-b border-zinc-900 pb-2">Contact Forms</h4>
-            <div className="space-y-1.5 pt-3">
-              {formMenuCounts.map((f, idx) => {
-                const active = formFilter === f.filterVal
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setFormFilter(f.filterVal)}
-                    className={`flex items-center justify-between py-1.5 w-full text-left text-xs font-semibold rounded px-2 transition-colors ${
-                      active ? 'bg-[#caa24c]/10 text-[#caa24c]' : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="truncate pr-2">{f.label}</span>
-                    <span className="font-mono text-[9px] opacity-75">{f.count}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
+      <div className="flex shrink-0 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
+        <PortalAnimatedTabs
+          tabs={categoryTabs}
+          activeTab={view}
+          onTabChange={setView}
+          ariaLabel="Contact categories"
+        />
+      </div>
 
-          <div className="pt-4 border-t border-zinc-900/60">
-            <h4 className="text-[9px] font-black uppercase tracking-wider text-zinc-500 border-b border-zinc-900 pb-2">Quick Segments</h4>
-            <div className="space-y-1.5 pt-3">
-              {quickSegments.map((q, idx) => {
-                const active = tagFilter === q.filterTag
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setTagFilter(q.filterTag)}
-                    className={`flex items-center justify-between py-1.5 w-full text-left text-xs font-semibold rounded px-2 transition-colors ${
-                      active ? 'bg-[#caa24c]/10 text-[#caa24c]' : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <span>{q.label}</span>
-                    <span className="font-mono text-[9px] opacity-75">{q.count}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Search toolbar + table */}
-        <div className="lg:col-span-3 flex flex-col min-h-0 overflow-hidden">
-          
-          {/* Top toolbar */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-7 bg-zinc-950/20 border border-zinc-900 p-3 rounded-2xl mb-4 font-mono text-[9px]">
-            <div className="relative flex items-center rounded-lg border border-zinc-900 bg-zinc-950 px-2.5 py-1.5 sm:col-span-2">
-              <Search size={12} className="shrink-0 text-zinc-600" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search contacts..."
-                className="w-full bg-transparent px-2 text-[9px] font-bold text-zinc-300 outline-none placeholder:text-zinc-650"
-              />
-            </div>
-
-            <PortalSelect
-              value={tagFilter}
-              onChange={setTagFilter}
-              options={[{ value: 'all', label: 'Event Type: All' }, { value: 'Weddings', label: 'Weddings' }, { value: 'Quinceañeras', label: 'Quinceañeras' }]}
-            />
-            <PortalSelect
-              value={sourceFilter || 'all'}
-              onChange={(val) => setSourceFilter(val === 'all' ? '' : val)}
-              options={[{ value: 'all', label: 'Lead Source: All' }, { value: 'Instagram', label: 'Instagram' }, { value: 'The Knot', label: 'The Knot' }]}
-            />
-            <PortalSelect
-              value={formFilter}
-              onChange={setFormFilter}
-              options={formMenuCounts.map((form) => ({
-                value: form.filterVal,
-                label: form.filterVal === 'all' ? 'Form: All' : form.label,
-              }))}
-            />
-            <PortalSelect
-              value={emailStatusFilter}
-              onChange={setEmailStatusFilter}
-              options={[{ value: 'all', label: 'Email Status: All' }, { value: 'Subscribed', label: 'Subscribed' }, { value: 'Unsubscribed', label: 'Unsubscribed' }]}
-            />
-            <PortalSelect
-              value={smsStatusFilter}
-              onChange={setSmsStatusFilter}
-              options={[{ value: 'all', label: 'SMS Status: All' }, { value: 'Subscribed', label: 'Subscribed' }, { value: 'Unsubscribed', label: 'Unsubscribed' }]}
-            />
-          </div>
-
-          <PortalTableCard
+      <PortalTableCard
+            className="min-h-[32rem]"
             controls={
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Contact list directory</span>
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="rounded bg-[#caa24c] px-3.5 py-1.5 text-[9px] font-black uppercase text-black"
-                >
-                  + Add Contact
-                </button>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="relative w-full md:max-w-md">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name, email, or phone..."
+                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] py-2.5 pl-10 pr-4 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/40"
+                    />
+                  </div>
+                  <span className="shrink-0 font-mono text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    {totalCount.toLocaleString()} contacts found
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  <PortalSelect
+                    value={tagFilter}
+                    onChange={setTagFilter}
+                    className="w-full"
+                    options={[
+                      { value: 'all', label: 'Segment: All' },
+                      { value: 'Weddings', label: 'Weddings' },
+                      { value: 'Quinceañeras', label: 'Quinceañeras' },
+                      { value: 'Hot Lead', label: 'Hot Leads' },
+                      { value: 'Tour Scheduled', label: 'Tour Scheduled' },
+                      { value: 'Proposal Sent', label: 'Proposal Sent' },
+                      { value: 'Client', label: 'Booked Clients' },
+                    ]}
+                  />
+                  <PortalSelect
+                    value={sourceFilter || 'all'}
+                    onChange={(val) => setSourceFilter(val === 'all' ? '' : val)}
+                    className="w-full"
+                    options={sourceOptions}
+                  />
+                  <PortalSelect
+                    value={formFilter}
+                    onChange={setFormFilter}
+                    className="w-full"
+                    options={formMenuCounts.map((form) => ({
+                      value: form.filterVal,
+                      label: form.filterVal === 'all' ? 'Form: All' : form.label,
+                    }))}
+                  />
+                  <PortalSelect
+                    value={emailStatusFilter}
+                    onChange={setEmailStatusFilter}
+                    className="w-full"
+                    options={[{ value: 'all', label: 'Email: All' }, { value: 'Subscribed', label: 'Email: Subscribed' }, { value: 'Unsubscribed', label: 'Email: Unsubscribed' }]}
+                  />
+                  <PortalSelect
+                    value={smsStatusFilter}
+                    onChange={setSmsStatusFilter}
+                    className="w-full"
+                    options={[{ value: 'all', label: 'SMS: All' }, { value: 'Subscribed', label: 'SMS: Subscribed' }, { value: 'Unsubscribed', label: 'SMS: Unsubscribed' }]}
+                  />
+                </div>
               </div>
             }
             footer={
@@ -503,10 +477,10 @@ export function ContactListsTab({
               </PortalStickyThead>
               <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
                 {paginatedContacts.length > 0 ? (
-                  paginatedContacts.map((contact, idx) => {
+                  paginatedContacts.map((contact) => {
                     const initials = contact.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
                     return (
-                      <tr key={idx} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
+                      <tr key={contact.id} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
                         <td className="px-6 py-4 flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-[10px] font-black text-[#caa24c] border border-zinc-800">
                             {initials}
@@ -589,13 +563,16 @@ export function ContactListsTab({
                 )}
               </tbody>
             </PortalStickyTable>
-          </PortalTableCard>
-        </div>
-      </div>
+      </PortalTableCard>
 
       {/* Add Contact Modal */}
-      <PortalModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Create Marketing Contact">
-        <form onSubmit={handleSubmitContact} className="p-6 space-y-4">
+      <PortalModal
+        isOpen={isAddModalOpen}
+        onClose={() => onAddModalOpenChange(false)}
+        title="Create Marketing Contact"
+        description="Add a contact to the marketing directory without creating a full sales opportunity."
+      >
+        <form onSubmit={handleSubmitContact} className="space-y-4">
           <div className="space-y-1">
             <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Full Name</label>
             <input
@@ -608,7 +585,7 @@ export function ContactListsTab({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Email Address</label>
               <input
@@ -632,21 +609,80 @@ export function ContactListsTab({
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Event Type</label>
+              <PortalSelect
+                value={newEventType}
+                onChange={setNewEventType}
+                className="w-full"
+                options={[
+                  { value: 'wedding', label: 'Wedding' },
+                  { value: 'quinceañera', label: 'Quinceañera' },
+                  { value: 'corporate', label: 'Corporate Event' },
+                  { value: 'private celebration', label: 'Private Celebration' },
+                  { value: 'other', label: 'Other Event' },
+                ]}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Lead Source</label>
+              <PortalSelect
+                value={newSource}
+                onChange={setNewSource}
+                className="w-full"
+                options={[
+                  { value: 'Website', label: 'Website' },
+                  { value: 'Instagram', label: 'Instagram' },
+                  { value: 'Facebook', label: 'Facebook' },
+                  { value: 'The Knot', label: 'The Knot' },
+                  { value: 'Referral', label: 'Referral' },
+                  { value: 'Manual Entry', label: 'Manual Entry' },
+                ]}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Submitted Form</label>
+              <PortalSelect
+                value={newFormSubmitted}
+                onChange={setNewFormSubmitted}
+                className="w-full"
+                options={[
+                  { value: 'General Contact Form', label: 'General Contact Form' },
+                  { value: 'Wedding Inquiry', label: 'Wedding Inquiry' },
+                  { value: 'Quinceañera Inquiry', label: 'Quinceañera Inquiry' },
+                  { value: 'Venue Tour Request', label: 'Venue Tour Request' },
+                  { value: 'Newsletter Signup', label: 'Newsletter Signup' },
+                  { value: 'Manual Entry', label: 'Manual Entry' },
+                ]}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Tags</label>
+              <input
+                type="text"
+                value={newTags}
+                onChange={(e) => setNewTags(e.target.value)}
+                placeholder="VIP, planner, referral"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40"
+              />
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 border-t border-zinc-900 pt-4 mt-6">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-black uppercase tracking-wider text-zinc-400 hover:text-white"
-            >
+            <PortalButton onClick={() => onAddModalOpenChange(false)}>
               Cancel
-            </button>
-            <button
+            </PortalButton>
+            <PortalButton
               type="submit"
+              variant="primary"
               disabled={submittingContact}
-              className="flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-5 py-2 text-xs font-black uppercase tracking-wider text-black shadow-xl shadow-[#caa24c]/10 hover:bg-[#dfbd68]"
             >
               {submittingContact ? 'Saving...' : 'Add Contact'}
-            </button>
+            </PortalButton>
           </div>
         </form>
       </PortalModal>

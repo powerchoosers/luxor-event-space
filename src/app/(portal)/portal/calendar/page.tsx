@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
-import { PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 
@@ -188,9 +188,9 @@ export default function CalendarPage() {
                 Booked Events
               </button>
             </div>
-            <button type="button" onClick={loadData} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+            <PortalButton onClick={loadData}>
               <RefreshCw size={13} /> Refresh
-            </button>
+            </PortalButton>
           </div>
         }
       />

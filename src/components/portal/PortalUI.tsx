@@ -3,7 +3,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar } from 'lucide-react'
+import { Calendar, X } from 'lucide-react'
 
 export function PortalPageFrame({
   children,
@@ -41,6 +41,42 @@ export function PortalPageHeader({
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
     </div>
+  )
+}
+
+type PortalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type PortalButtonSize = 'sm' | 'md'
+
+export function PortalButton({
+  children,
+  className = '',
+  variant = 'secondary',
+  size = 'md',
+  type = 'button',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: PortalButtonVariant
+  size?: PortalButtonSize
+}) {
+  const variantClasses: Record<PortalButtonVariant, string> = {
+    primary: 'border-[#caa24c] bg-[#caa24c] text-black shadow-lg shadow-[#caa24c]/15 hover:border-[#dfbd68] hover:bg-[#dfbd68]',
+    secondary: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[color:var(--portal-text)]',
+    ghost: 'border-transparent bg-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]',
+    danger: 'border-red-500/25 bg-red-500/10 text-red-300 hover:border-red-500/40 hover:bg-red-500/15',
+  }
+  const sizeClasses: Record<PortalButtonSize, string> = {
+    sm: 'min-h-9 px-3 py-2 text-[9px]',
+    md: 'min-h-10 px-4 py-2.5 text-[10px]',
+  }
+
+  return (
+    <button
+      type={type}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg border font-black uppercase tracking-[0.12em] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -360,16 +396,28 @@ export function PortalModal({
   isOpen,
   onClose,
   title,
+  description,
+  ariaLabel,
   children,
   maxWidth = 'max-w-lg',
 }: {
   isOpen: boolean
   onClose: () => void
   title?: string
+  description?: string
+  ariaLabel?: string
   children: React.ReactNode
   maxWidth?: string
 }) {
   const [mounted, setMounted] = React.useState(false)
+  const dialogRef = React.useRef<HTMLDivElement>(null)
+  const previouslyFocusedRef = React.useRef<HTMLElement | null>(null)
+  const onCloseRef = React.useRef(onClose)
+  const titleId = React.useId()
+
+  React.useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   React.useEffect(() => {
     setMounted(true)
@@ -379,6 +427,7 @@ export function PortalModal({
   React.useEffect(() => {
     if (!isOpen) return
 
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const originalOverflow = document.body.style.overflow
     const originalPaddingRight = document.body.style.paddingRight
 
@@ -388,9 +437,53 @@ export function PortalModal({
       document.body.style.paddingRight = `${scrollbarWidth}px`
     }
 
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      ;(firstFocusable ?? dialogRef.current)?.focus()
+    })
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (document.querySelector('[data-portal-popover="true"]')) return
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+
+      if (event.key !== 'Tab' || !dialogRef.current) return
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      )
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialogRef.current.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
     return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = originalOverflow
       document.body.style.paddingRight = originalPaddingRight
+      previouslyFocusedRef.current?.focus()
     }
   }, [isOpen])
 
@@ -412,21 +505,30 @@ export function PortalModal({
             onClick={onClose}
           />
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
+            aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.95, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 w-full ${maxWidth} flex max-h-[90vh] transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl`}
+            className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
           >
             {title ? (
               <>
-                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
-                  <h3 className="text-sm font-bold text-white/90 uppercase tracking-widest">{title}</h3>
-                  <button onClick={onClose} className="rounded-lg p-1 text-[color:var(--portal-muted)] transition-all hover:bg-black/5 hover:text-[color:var(--portal-text)]">
-                    <span className="text-xs font-bold">Close</span>
+                <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+                  <div className="min-w-0">
+                    <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
+                    {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+                  </div>
+                  <button type="button" onClick={onClose} aria-label={`Close ${title}`} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-[color:var(--portal-muted)] transition-all hover:border-[color:var(--portal-border)] hover:bg-black/5 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                    <X size={16} />
                   </button>
                 </div>
-                <div className="p-6 overflow-y-auto portal-scrollbar">{children}</div>
+                <div className="overflow-y-auto p-5 portal-scrollbar sm:p-6">{children}</div>
               </>
             ) : (
               children
@@ -564,6 +666,7 @@ export function PortalSelect({
                 <motion.div
                   ref={dropdownRef}
                   role="listbox"
+                  data-portal-popover="true"
                   initial={{ opacity: 0, y: -8, scale: 0.985 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.985 }}
@@ -666,6 +769,20 @@ export function PortalDatePicker({
       }
     }
   }, [isOpen, updateCoords])
+
+  React.useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopImmediatePropagation()
+        setIsOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen])
   
   // Current navigation view month and year
   const [viewDate, setViewDate] = React.useState(() => {
@@ -763,6 +880,7 @@ export function PortalDatePicker({
                 <motion.div
                   ref={dropdownRef}
                   role="dialog"
+                  data-portal-popover="true"
                   initial={{ opacity: 0, y: -8, scale: 0.985 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.985 }}

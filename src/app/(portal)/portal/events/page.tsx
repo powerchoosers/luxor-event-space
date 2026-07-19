@@ -32,7 +32,8 @@ import {
   PortalStatusBadge,
   PortalTableCard,
   PortalStickyTable,
-  PortalStickyThead
+  PortalStickyThead,
+  PortalButton
 } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
 
@@ -95,13 +96,9 @@ export default function EventsPage() {
         title="Event Operations"
         description="Detail-level event planner and production readiness center for booked venue agreements."
         actions={
-          <button
-            type="button"
-            onClick={fetchBookings}
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
-          >
+          <PortalButton onClick={fetchBookings}>
             <RefreshCw size={13} /> Reload Events
-          </button>
+          </PortalButton>
         }
       />
 
