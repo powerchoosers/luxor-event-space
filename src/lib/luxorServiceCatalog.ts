@@ -6,6 +6,8 @@ export type LuxorCatalogItem = {
   name: string
   unitPrice: number | null
   note?: string
+  minimumCharge?: number
+  requiresCustomPrice?: boolean
 }
 
 // Transcribed from Packages.xlsx. Null prices are intentionally left editable
@@ -33,7 +35,7 @@ export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
   { id: 'decor-full', category: 'Decor', name: 'Full decor package', unitPrice: 4350 },
   { id: 'catering-buffet', category: 'Catering', name: 'Buffet catering - up to 100 guests', unitPrice: 2150 },
   { id: 'catering-plated', category: 'Catering', name: 'Plated dinner service - up to 100 guests', unitPrice: 2650 },
-  { id: 'catering-extra', category: 'Catering', name: 'Catering guests over 100', unitPrice: null, note: 'Enter the agreed per-person price and quantity.' },
+  { id: 'catering-extra', category: 'Catering', name: 'Catering guests over 100', unitPrice: null, note: 'Enter the agreed per-person price and quantity.', requiresCustomPrice: true },
   { id: 'dj', category: 'Entertainment', name: 'DJ package', unitPrice: 1000, note: 'Workbook lists this as an approximate price.' },
   { id: 'booth-signature', category: 'Photo booth', name: 'The Signature Experience', unitPrice: 450 },
   { id: 'booth-celebration', category: 'Photo booth', name: 'The Celebration Experience', unitPrice: 650 },
@@ -41,13 +43,18 @@ export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
   { id: 'bar-service-1-75', category: 'Bar', name: 'Bartender service only - 1-75 guests / up to 5 hours', unitPrice: 450 },
   { id: 'bar-service-76-150', category: 'Bar', name: 'Bartender service only - 76-150 guests / up to 5 hours', unitPrice: 800 },
   { id: 'bar-service-151-200', category: 'Bar', name: 'Bartender service only - 151-200 guests / up to 5 hours', unitPrice: 1150 },
-  { id: 'bar-signature', category: 'Bar', name: 'Signature BYOB bar - per guest / up to 5 hours', unitPrice: 10, note: '$750 minimum.' },
-  { id: 'bar-premium', category: 'Bar', name: 'Premium BYOB bar - per guest / up to 5 hours', unitPrice: 14, note: '$1,000 minimum.' },
-  { id: 'bar-nonalcoholic', category: 'Bar', name: 'Non-alcoholic package - per guest / up to 5 hours', unitPrice: 7, note: '$500 minimum.' },
+  { id: 'bar-signature', category: 'Bar', name: 'Signature BYOB bar - per guest / up to 5 hours', unitPrice: 10, note: '$750 minimum.', minimumCharge: 750 },
+  { id: 'bar-premium', category: 'Bar', name: 'Premium BYOB bar - per guest / up to 5 hours', unitPrice: 14, note: '$1,000 minimum.', minimumCharge: 1000 },
+  { id: 'bar-nonalcoholic', category: 'Bar', name: 'Non-alcoholic package - per guest / up to 5 hours', unitPrice: 7, note: '$500 minimum.', minimumCharge: 500 },
   { id: 'bar-extra-hour', category: 'Bar', name: 'Additional bartender hour', unitPrice: 75, note: 'Per bartender.' },
 ]
 
 export function catalogItemToLineItem(item: LuxorCatalogItem): LuxorInvoiceLineItem {
   const unitPrice = item.unitPrice ?? 0
-  return { catalogId: item.id, category: item.category, description: item.name, quantity: 1, unitPrice, total: unitPrice }
+  const quantity = item.minimumCharge && unitPrice > 0 ? Math.ceil(item.minimumCharge / unitPrice) : 1
+  return { catalogId: item.id, category: item.category, description: item.name, quantity, unitPrice, total: quantity * unitPrice }
+}
+
+export function getLuxorCatalogItem(id: string | undefined) {
+  return id ? LUXOR_SERVICE_CATALOG.find((item) => item.id === id) : undefined
 }

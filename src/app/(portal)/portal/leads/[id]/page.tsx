@@ -195,6 +195,9 @@ export default function LeadDetailPage({
   const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
+  const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
+  const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
+  const [customPaymentAmount, setCustomPaymentAmount] = useState('')
 
   // Booking creation state
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
@@ -1286,14 +1289,46 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleSendInvoice = async (invoiceId: string) => {
+  const getInvoicePaidTotal = (invoiceId: string) => payments
+    .filter((payment) => payment.invoice_id === invoiceId && payment.status === 'paid')
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+
+  const getInvoiceBalance = (invoice: LuxorInvoice) => Math.max(0, Math.round((Number(invoice.total) - getInvoicePaidTotal(invoice.id)) * 100) / 100)
+
+  const openPaymentRequest = (invoice: LuxorInvoice) => {
+    const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
+    const balance = getInvoiceBalance(invoice)
+    const suggestedDeposit = booking?.deposit_required ? Math.min(Number(booking.deposit_required), balance) : Math.min(Math.round(Number(invoice.total) * 0.25 * 100) / 100, balance)
+    setPaymentRequestInvoice(invoice)
+    setPaymentRequestKind(getInvoicePaidTotal(invoice.id) > 0 ? 'balance' : 'deposit')
+    setCustomPaymentAmount(String(suggestedDeposit || balance))
+  }
+
+  const handleSendInvoice = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!paymentRequestInvoice) return
+    const invoiceId = paymentRequestInvoice.id
+    const balance = getInvoiceBalance(paymentRequestInvoice)
+    const booking = bookings.find((item) => item.invoice_id === invoiceId) || latestBooking
+    const suggestedDeposit = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(paymentRequestInvoice.total) * 0.25 * 100) / 100
+    const paymentAmount = paymentRequestKind === 'balance'
+      ? balance
+      : paymentRequestKind === 'deposit'
+        ? Math.min(suggestedDeposit, balance)
+        : Number(customPaymentAmount)
+    const paymentLabel = paymentRequestKind === 'deposit' ? 'Event deposit' : paymentRequestKind === 'balance' ? 'Remaining event balance' : 'Event payment installment'
     try {
       setSendingInvoiceId(invoiceId)
-      const response = await fetch(`/api/invoices/${invoiceId}/send`, { method: 'POST' })
+      const response = await fetch(`/api/invoices/${invoiceId}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentAmount, paymentLabel }),
+      })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'The proposal could not be sent.')
       if (payload.invoice) setInvoices((current) => current.map((item) => item.id === invoiceId ? payload.invoice : item))
-      notify({ title: 'Proposal sent', description: 'The PDF and secure Stripe payment link were emailed to the client.', variant: 'success' })
+      setPaymentRequestInvoice(null)
+      notify({ title: 'Payment request sent', description: `${formatMoney(paymentAmount)} and the proposal PDF were emailed to the client.`, variant: 'success' })
     } catch (err) {
       notify({ title: 'Proposal not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
@@ -4605,12 +4640,16 @@ export default function LeadDetailPage({
                       <PortalStatusBadge status={inv.status} />
                     </div>
                     {index === 0 && inv.description ? <p className="mt-3 text-xs leading-5 text-zinc-400">{inv.description}</p> : null}
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-zinc-900 bg-black/20 p-3 text-[10px]">
+                      <div><span className="block text-zinc-600">Paid</span><span className="font-mono text-emerald-400">{formatMoney(getInvoicePaidTotal(inv.id))}</span></div>
+                      <div><span className="block text-zinc-600">Balance due</span><span className="font-mono text-zinc-200">{formatMoney(getInvoiceBalance(inv))}</span></div>
+                    </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
                         <FileText size={12} /> Download PDF
                       </a>
-                      <button type="button" onClick={() => handleSendInvoice(inv.id)} disabled={sendingInvoiceId === inv.id || !lead.email} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
-                        <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : inv.status === 'draft' ? 'Email PDF + Pay Link' : 'Resend PDF + Pay Link'}
+                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
+                        <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
                       </button>
                     </div>
                   </div>
@@ -4812,6 +4851,49 @@ export default function LeadDetailPage({
             {timelineEditIndex === null ? 'Add Step' : 'Save Step'}
           </button>
         </form>
+      </PortalModal>
+
+      {/* Payment request modal */}
+      <PortalModal isOpen={Boolean(paymentRequestInvoice)} onClose={() => setPaymentRequestInvoice(null)} maxWidth="max-w-lg">
+        {paymentRequestInvoice ? (
+          <form onSubmit={handleSendInvoice} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#080706]">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Send Payment Request</h3>
+                <p className="mt-1 text-[11px] text-zinc-500">The client receives the full proposal PDF and a Stripe link for only the amount selected here.</p>
+              </div>
+              <button type="button" onClick={() => setPaymentRequestInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
+            </div>
+            <div className="space-y-5 p-6">
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-zinc-900 bg-zinc-950/70 p-4 text-[10px]">
+                <div><span className="block text-zinc-600">Invoice</span><span className="font-mono text-zinc-200">{formatMoney(paymentRequestInvoice.total)}</span></div>
+                <div><span className="block text-zinc-600">Paid</span><span className="font-mono text-emerald-400">{formatMoney(getInvoicePaidTotal(paymentRequestInvoice.id))}</span></div>
+                <div><span className="block text-zinc-600">Balance</span><span className="font-mono text-[#f1d27a]">{formatMoney(getInvoiceBalance(paymentRequestInvoice))}</span></div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Payment to request</label>
+                <PortalSelect
+                  value={paymentRequestKind}
+                  onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
+                  options={[
+                    { value: 'deposit', label: 'Deposit payment' },
+                    { value: 'balance', label: 'Entire remaining balance' },
+                    { value: 'custom', label: 'Custom installment amount' },
+                  ]}
+                />
+              </div>
+              {paymentRequestKind === 'custom' ? (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Custom amount</label>
+                  <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-sm text-zinc-200 outline-none focus:border-[#caa24c]/50" />
+                </div>
+              ) : null}
+              <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#b98a3e] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f] disabled:opacity-40">
+                {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email PDF + Payment Link'}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </PortalModal>
 
       {/* Invoice drafting modal */}

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill } from './luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment } from './luxorInquiryTypes'
 
 type SupabaseError = {
   message?: string
@@ -58,6 +58,12 @@ export async function getInvoice(id: string) {
     `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
   )
   return invoice ?? null
+}
+
+export async function listPaidPaymentsByInvoice(invoiceId: string) {
+  return supabaseRest<LuxorPayment[]>(
+    `luxor_payments?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}&status=eq.paid&order=created_at.desc`,
+  )
 }
 
 export async function createInvoice(data: {

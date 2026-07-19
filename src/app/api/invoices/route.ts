@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listInvoices, listInvoicesByInquiry, createInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,6 +53,15 @@ export async function POST(request: NextRequest) {
       }
     }).filter((item) => item.description)
     if (!normalizedItems.length) return NextResponse.json({ error: 'At least one line item is required.' }, { status: 400 })
+    for (const item of normalizedItems) {
+      const catalogItem = getLuxorCatalogItem(item.catalogId)
+      if (catalogItem?.requiresCustomPrice && item.unitPrice <= 0) {
+        return NextResponse.json({ error: `${item.description} needs an agreed price before the proposal can be created.` }, { status: 400 })
+      }
+      if (catalogItem?.minimumCharge && item.total + 0.005 < catalogItem.minimumCharge) {
+        return NextResponse.json({ error: `${item.description} has a ${catalogItem.minimumCharge.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} minimum.` }, { status: 400 })
+      }
+    }
     const normalizedTaxRate = Math.min(1, Math.max(0, Number(tax_rate) || 0))
     const subtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.total, 0) * 100) / 100
     const total = Math.round(subtotal * (1 + normalizedTaxRate) * 100) / 100
