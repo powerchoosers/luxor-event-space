@@ -517,7 +517,6 @@ function MarketingPageContent() {
 
   const header = getHeaderInfo()
 
-  const isContainedTab = activeTab === 'builder-automation' || activeTab === 'call-center' || activeTab === 'contact-lists'
 
   const headerActions = useMemo(() => {
     if (activeTab === 'contact-lists') {
@@ -546,7 +545,7 @@ function MarketingPageContent() {
   }, [activeTab])
 
   return (
-    <PortalPageFrame className="!h-full !min-h-0 overflow-hidden flex flex-col gap-4">
+    <PortalPageFrame>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
@@ -554,7 +553,7 @@ function MarketingPageContent() {
         actions={headerActions}
       />
 
-      <div className={`flex-grow flex flex-col min-h-0 mt-2 ${isContainedTab ? 'overflow-hidden' : 'overflow-y-auto portal-scrollbar pr-1'}`}>
+      <div className="flex-grow flex flex-col min-h-0 mt-2">
         {activeTab === 'overview' && (
           <MarketingOverviewTab
             inquiries={inquiries}
