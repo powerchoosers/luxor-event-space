@@ -13,8 +13,10 @@ import {
   PhoneOff,
   X,
 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
+import { formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
 
 type PhoneState = 'disabled' | 'starting' | 'ready' | 'error'
 type CallPhase = 'dialing' | 'ringing' | 'active'
@@ -36,6 +38,13 @@ type ActiveCall = {
 }
 
 type IncomingCall = ActiveCall & { call: Call }
+
+type DialMatch = {
+  id: string
+  fullName: string
+  eventType: string | null
+  phoneNumber: string | null
+}
 
 type VoiceContextValue = {
   phoneState: PhoneState
@@ -59,6 +68,8 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null)
   const [isMuted, setIsMuted] = useState(false)
   const [dialNumber, setDialNumber] = useState('')
+  const [dialMatch, setDialMatch] = useState<DialMatch | null>(null)
+  const [isLookingUpNumber, setIsLookingUpNumber] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const deviceRef = useRef<Device | null>(null)
   const currentCallRef = useRef<Call | null>(null)
@@ -78,6 +89,38 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
       // A temporary call-history failure should not take the phone offline.
     }
   }, [])
+
+  useEffect(() => {
+    const normalized = toUsE164(dialNumber)
+    if (!normalized) {
+      setDialMatch(null)
+      setIsLookingUpNumber(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      setIsLookingUpNumber(true)
+      try {
+        const response = await fetch(`/api/twilio/phone-lookup?phone=${encodeURIComponent(normalized)}`, {
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const payload = await response.json().catch(() => ({})) as { match?: DialMatch | null }
+        if (response.ok) setDialMatch(payload.match ?? null)
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setDialMatch(null)
+      } finally {
+        if (!controller.signal.aborted) setIsLookingUpNumber(false)
+      }
+    }, 300)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [dialNumber])
 
   useEffect(() => {
     void loadUnreadCount()
@@ -292,7 +335,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     const handleStartCall = (event: Event) => {
       const detail = (event as CustomEvent<DialTarget>).detail
       if (!detail?.phoneNumber) return
-      setDialNumber(detail.phoneNumber)
+      setDialNumber(formatUsDialInput(detail.phoneNumber))
       setIsPanelOpen(true)
       void startCall(detail)
     }
@@ -359,8 +402,14 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         phoneState={phoneState}
         onAnswer={answerIncoming}
         onClose={() => setIsPanelOpen(false)}
-        onDial={() => void startCall({ phoneNumber: dialNumber })}
-        onDialNumberChange={setDialNumber}
+        dialMatch={dialMatch}
+        isLookingUpNumber={isLookingUpNumber}
+        onDial={() => {
+          const phoneNumber = toUsE164(dialNumber)
+          if (!phoneNumber) return
+          void startCall({ phoneNumber, contactName: dialMatch?.fullName, inquiryId: dialMatch?.id })
+        }}
+        onDialNumberChange={(value) => setDialNumber(formatUsDialInput(value))}
         onEnable={() => void enablePhone()}
         onHangUp={hangUp}
         onReject={rejectIncoming}
@@ -403,10 +452,12 @@ export function PortalPhoneButton() {
 
 function PortalPhonePanel({
   activeCall,
+  dialMatch,
   dialNumber,
   incomingCall,
   isMuted,
   isOpen,
+  isLookingUpNumber,
   phoneError,
   phoneState,
   onAnswer,
@@ -420,10 +471,12 @@ function PortalPhonePanel({
   onToggleMute,
 }: {
   activeCall: ActiveCall | null
+  dialMatch: DialMatch | null
   dialNumber: string
   incomingCall: IncomingCall | null
   isMuted: boolean
   isOpen: boolean
+  isLookingUpNumber: boolean
   phoneError: string | null
   phoneState: PhoneState
   onAnswer: () => void
@@ -437,6 +490,8 @@ function PortalPhonePanel({
   onToggleMute: () => void
 }) {
   const [now, setNow] = useState(0)
+  const reduceMotion = useReducedMotion()
+  const validDialNumber = toUsE164(dialNumber)
 
   useEffect(() => {
     if (activeCall?.phase !== 'active') return
@@ -446,8 +501,8 @@ function PortalPhonePanel({
 
   if (incomingCall) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
-        <div className="w-full max-w-md rounded-3xl border border-[#caa24c]/30 bg-[#090806] p-7 text-center shadow-[0_30px_100px_rgba(0,0,0,0.75)]">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+        <motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.92, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }} className="w-full max-w-md rounded-3xl border border-[#caa24c]/30 bg-[#090806] p-7 text-center shadow-[0_30px_100px_rgba(0,0,0,0.75)]">
           <div className="mx-auto flex h-16 w-16 animate-pulse items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#f1d27a]">
             <PhoneIncoming size={28} />
           </div>
@@ -462,15 +517,20 @@ function PortalPhonePanel({
               <PhoneCall size={17} /> Answer
             </button>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     )
   }
 
-  if (!isOpen) return null
-
   return (
-    <aside className="fixed right-4 top-20 z-[80] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[#caa24c]/20 bg-[#080807]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.7)] backdrop-blur-xl">
+    <AnimatePresence>
+    {isOpen && <motion.aside
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.96 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 22, scale: 0.97 }}
+      transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+      className="fixed right-4 top-20 z-[80] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[#caa24c]/20 bg-[#080807]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.7)] backdrop-blur-xl"
+    >
       <div className="flex items-center justify-between border-b border-[#caa24c]/10 pb-4">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Luxor Browser Phone</p>
@@ -486,14 +546,19 @@ function PortalPhonePanel({
 
       {activeCall ? (
         <div className="py-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
+          <motion.div animate={reduceMotion ? undefined : { scale: activeCall.phase === 'active' ? [1, 1.06, 1] : [1, 1.12, 1] }} transition={{ duration: activeCall.phase === 'active' ? 1.8 : 1, repeat: Infinity }} className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.14)]">
             <PhoneCall size={24} />
-          </div>
+          </motion.div>
           <p className="mt-4 text-lg font-black text-white">{activeCall.contactName}</p>
           <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhone(activeCall.phoneNumber)}</p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-400">
             {activeCall.phase === 'active' ? formatDuration(Math.floor((Math.max(now, activeCall.startedAt) - activeCall.startedAt) / 1000)) : activeCall.phase}
           </p>
+          {activeCall.phase === 'active' && !reduceMotion && (
+            <div className="mt-3 flex h-4 items-end justify-center gap-1" aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((bar) => <motion.span key={bar} className="w-1 rounded-full bg-emerald-400/70" animate={{ height: [4, 14 - Math.abs(2 - bar) * 2, 5] }} transition={{ duration: 0.7, repeat: Infinity, delay: bar * 0.08 }} />)}
+            </div>
+          )}
 
           {activeCall.phase === 'active' && (
             <div className="mt-5 grid grid-cols-3 gap-2">
@@ -541,23 +606,31 @@ function PortalPhonePanel({
               value={dialNumber}
               onChange={(event) => onDialNumberChange(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && dialNumber.trim()) onDial()
+                if (event.key === 'Enter' && validDialNumber) onDial()
               }}
-              placeholder="(210) 555-0123"
+              placeholder="+1 (210) 555-0123"
               className="h-12 min-w-0 flex-1 bg-transparent font-mono text-sm text-white outline-none placeholder:text-zinc-700"
             />
             {dialNumber && (
-              <button type="button" onClick={() => onDialNumberChange(dialNumber.slice(0, -1))} className="p-1 text-zinc-600 hover:text-white" aria-label="Delete digit">
+              <button type="button" onClick={() => onDialNumberChange(removeLastDialDigit(dialNumber))} className="p-1 text-zinc-600 hover:text-white" aria-label="Delete digit">
                 <Delete size={15} />
               </button>
             )}
           </div>
-          <button type="button" onClick={onDial} disabled={!dialNumber.trim() || phoneState === 'starting'} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600">
+          <AnimatePresence mode="wait">
+            {(dialMatch || isLookingUpNumber) && (
+              <motion.div key={dialMatch?.id || 'looking'} initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-2 rounded-lg border border-[#caa24c]/15 bg-[#caa24c]/5 px-3 py-2">
+                {dialMatch ? <><p className="text-xs font-bold text-white">{dialMatch.fullName}</p><p className="mt-0.5 text-[9px] uppercase tracking-wider text-[#caa24c]">{dialMatch.eventType || 'Luxor inquiry'}</p></> : <p className="flex items-center gap-2 text-[10px] text-zinc-500"><Loader2 size={11} className="animate-spin" /> Checking Luxor contacts...</p>}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-emerald-400 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none">
             <PhoneCall size={16} /> Call from Luxor
           </button>
         </div>
       )}
-    </aside>
+    </motion.aside>}
+    </AnimatePresence>
   )
 }
 
@@ -565,7 +638,7 @@ function formatPhone(value: string) {
   const digits = value.replace(/\D/g, '')
   const local = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
   if (local.length !== 10) return value
-  return `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`
+  return `+1 (${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`
 }
 
 function formatDuration(totalSeconds: number) {
