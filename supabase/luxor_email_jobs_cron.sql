@@ -67,7 +67,7 @@ select cron.schedule(
   '* * * * *',
   $cron$
     select net.http_post(
-      url := 'https://luxoratlaspalmas.com/api/cron/luxor-email-jobs',
+      url := 'https://www.luxoratlaspalmas.com/api/cron/luxor-email-jobs',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
         'x-cron-secret', coalesce(

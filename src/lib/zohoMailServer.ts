@@ -41,6 +41,7 @@ const DEFAULT_LOGIN_EMAIL = 'booking@luxoratlaspalmas.com'
 const DEFAULT_ALLOWED_SENDERS = ['booking@luxoratlaspalmas.com', 'hello@luxoratlaspalmas.com']
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null
+let cachedCalendarUid: string | null = null
 
 function getZohoConfig() {
   const clientId = process.env.ZOHO_CLIENT_ID
@@ -218,11 +219,8 @@ export async function createLuxorZohoCalendarEvent(input: {
   if (!attendeeEmail) throw new Error('Please add a valid attendee email address.')
 
   const { calendarBaseUrl, calendarUid } = getZohoConfig()
-  if (!calendarUid) {
-    throw new Error('Missing LUXOR_ZOHO_CALENDAR_UID. Reconnect Zoho from the setup login to capture the Luxor calendar ID.')
-  }
-
   const accessToken = await getZohoAccessToken()
+  const resolvedCalendarUid = await getZohoCalendarUid(accessToken, calendarBaseUrl, calendarUid)
   const eventData = {
     title: input.title.trim(),
     dateandtime: {
@@ -241,8 +239,8 @@ export async function createLuxorZohoCalendarEvent(input: {
   }
 
   const eventPath = input.existingEventUid
-    ? `/calendars/${encodeURIComponent(calendarUid)}/events/${encodeURIComponent(input.existingEventUid)}`
-    : `/calendars/${encodeURIComponent(calendarUid)}/events`
+    ? `/calendars/${encodeURIComponent(resolvedCalendarUid)}/events/${encodeURIComponent(input.existingEventUid)}`
+    : `/calendars/${encodeURIComponent(resolvedCalendarUid)}/events`
   const response = await fetch(
     `${calendarBaseUrl}${eventPath}?eventdata=${encodeURIComponent(JSON.stringify(eventData))}`,
     {
@@ -270,6 +268,27 @@ export async function createLuxorZohoCalendarEvent(input: {
     eventUid: event.uid || null,
     viewEventUrl: event.viewEventURL || null,
   }
+}
+
+async function getZohoCalendarUid(accessToken: string, calendarBaseUrl: string, configuredUid: string) {
+  if (configuredUid) return configuredUid
+  if (cachedCalendarUid) return cachedCalendarUid
+
+  const response = await fetch(`${calendarBaseUrl}/calendars?category=own`, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+    cache: 'no-store',
+  })
+  const resultText = await response.text()
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho calendar lookup failed with ${response.status}: ${resultText}`)
+  }
+
+  const result = resultText ? JSON.parse(resultText) as { calendars?: Array<{ uid?: string; isdefault?: boolean }> } : {}
+  const calendar = result.calendars?.find((item) => item.isdefault) || result.calendars?.[0]
+  if (!calendar?.uid) throw new Error('Zoho did not return a writable Calendar ID.')
+  cachedCalendarUid = calendar.uid
+  return calendar.uid
 }
 
 function formatZohoUtcDateTime(value: string) {
