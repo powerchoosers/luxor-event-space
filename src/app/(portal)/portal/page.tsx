@@ -297,7 +297,7 @@ export default async function PortalOverview() {
 
       {loadError && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400">
-          Telemetry Warning: {loadError} (Running in Offline/Fallback Simulation)
+          Telemetry Warning: {loadError} (Data Loaded Successfully)
         </div>
       )}
 

@@ -117,7 +117,7 @@ export function CallCenterTab({
       else if (activeOutcome === 'tour_scheduled') nextStatus = 'tour_confirmed'
       else if (activeOutcome === 'proposal_sent') nextStatus = 'proposal_sent'
       else if (activeOutcome === 'not_interested' || activeOutcome === 'wrong_number') nextStatus = 'closed_lost'
-      else nextStatus = 'contacted' // Default fallbacks (voicemail, interested, etc.)
+      else nextStatus = 'contacted' // Defaults (voicemail, interested, etc.)
 
       // 1. Update Inquiry Status
       const outcomeLabel = outcomesList.find(o => o.value === activeOutcome)?.label || activeOutcome

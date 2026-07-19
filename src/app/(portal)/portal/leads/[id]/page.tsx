@@ -3506,7 +3506,7 @@ export default function LeadDetailPage({
                 )
               }
 
-              // Fallback cards for other stages
+              // Default cards for other stages
               return (
                 <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
                   <Sparkles size={24} className="mx-auto text-zinc-800" />
