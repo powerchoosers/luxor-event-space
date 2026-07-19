@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { PortalContactAvatar } from './PortalUI'
+import { PortalContactAvatar, PortalSelect } from './PortalUI'
 import { useToast } from './ToastProvider'
 
 type Conversation = {
@@ -22,6 +22,7 @@ type Conversation = {
 }
 
 type ContactResult = { id: string; fullName: string; phoneNumber: string; eventType: string | null }
+type BusinessLine = { phoneNumber: string; friendlyName: string | null; isActive: boolean; capabilities: { sms?: boolean } }
 
 type MessageFilter = 'all' | 'unread'
 
@@ -29,6 +30,8 @@ export function LuxorMessenger() {
   const { notify } = useToast()
   const searchParams = useSearchParams()
   const [messages, setMessages] = useState<LuxorMessage[]>([])
+  const [businessLines, setBusinessLines] = useState<BusinessLine[]>([])
+  const [selectedLine, setSelectedLine] = useState('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(() => searchParams?.get('inquiryId') || null)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<MessageFilter>('all')
@@ -60,12 +63,21 @@ export function LuxorMessenger() {
   }, [notify])
 
   useEffect(() => {
-    void loadMessages()
+    void Promise.all([
+      loadMessages(),
+      fetch('/api/twilio/phone-numbers?mode=owned', { cache: 'no-store' })
+        .then(async (response) => ({ response, payload: await response.json().catch(() => ({ numbers: [] })) as { numbers?: BusinessLine[] } }))
+        .then(({ response, payload }) => { if (response.ok) setBusinessLines((payload.numbers || []).filter((line) => line.capabilities.sms)) }),
+    ])
     const intervalId = window.setInterval(() => void loadMessages(true), 15_000)
     return () => window.clearInterval(intervalId)
   }, [loadMessages])
 
-  const conversations = useMemo(() => buildConversations(messages), [messages])
+  const lineMessages = useMemo(() => selectedLine === 'all' ? messages : messages.filter((message) => {
+    const businessSide = message.direction === 'inbound' ? message.to_number : message.from_number
+    return businessSide === selectedLine
+  }), [messages, selectedLine])
+  const conversations = useMemo(() => buildConversations(lineMessages), [lineMessages])
   const visibleConversations = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return conversations.filter((conversation) => {
@@ -141,6 +153,7 @@ export function LuxorMessenger() {
           body: body.trim(),
           inquiryId: selectedConversation.inquiryId,
           contactName: selectedConversation.contactName,
+          fromNumber: selectedLine === 'all' ? businessLines.find((line) => line.isActive)?.phoneNumber : selectedLine,
         }),
       })
       const payload = await response.json() as LuxorMessage | { error?: string }
@@ -179,6 +192,18 @@ export function LuxorMessenger() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="font-serif text-2xl font-semibold text-white">Text Messages</h1>
             <button type="button" onClick={() => setNewMessageOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-black hover:bg-[#dfbd68]"><Plus size={13}/> New</button>
+          </div>
+          <div className="mt-3">
+            <PortalSelect
+              value={selectedLine}
+              onChange={(value) => { setSelectedLine(value); setSelectedKey(null); setDraftConversation(null) }}
+              options={[
+                { value: 'all', label: 'All Luxor numbers' },
+                ...businessLines.map((line) => ({ value: line.phoneNumber, label: `${line.isActive ? 'Main · ' : ''}${formatPhoneDisplay(line.phoneNumber)}` })),
+              ]}
+              className="w-full"
+              placeholder="Choose a Luxor number"
+            />
           </div>
           <label className="mt-4 flex h-10 items-center gap-2 rounded-lg border border-zinc-800 bg-black/35 px-3 focus-within:border-[#caa24c]/45">
             <Search size={14} className="text-zinc-600" />
@@ -283,7 +308,7 @@ function MessageBubble({ message }: { message: LuxorMessage }) {
   return <motion.div layout initial={{ opacity: 0, y: 34, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
     <div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
       <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] text-black' : 'rounded-bl-md border border-zinc-800 bg-zinc-900 text-zinc-200'}`}>{message.body || '(Media message)'}</div>
-      <p className={`mt-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-zinc-650 ${outbound ? 'justify-end' : 'justify-start'}`}>{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span>{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={11} className={message.status === 'read' ? 'text-emerald-400' : 'text-[#caa24c]'}/> : null}</> : null}</p>
+      <p className={`mt-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-zinc-650 ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span>{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={11} className={message.status === 'read' ? 'text-emerald-400' : 'text-[#caa24c]'}/> : null}</> : null}</p>
       {message.error_message ? <p className="mt-1 text-[9px] text-red-400">{message.error_message}</p> : null}
     </div>
   </motion.div>

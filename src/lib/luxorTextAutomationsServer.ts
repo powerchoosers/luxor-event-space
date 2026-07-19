@@ -75,7 +75,7 @@ export async function sendLuxorAutomatedText(input: {
     const client = twilio(config.accountSid, config.authToken)
     const sent = await client.messages.create({
       to: destination,
-      ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid } : { from }),
+      ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid, fallbackFrom: from } : { from }),
       body: input.body,
       statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
     })
@@ -84,6 +84,8 @@ export async function sendLuxorAutomatedText(input: {
         sid: sent.sid,
         direction: 'outbound',
         status: normalizeStatus(sent.status),
+        // Keep the selected business line as the CRM conversation line. Twilio may
+        // return the branded RCS sender here even though this number owns fallback.
         from,
         to: destination,
         body: input.body,

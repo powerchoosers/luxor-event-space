@@ -4,7 +4,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { assertAllowedOutboundNumber } from '@/lib/luxorCallsServer'
 import { createOrUpdateLuxorMessage, listLuxorMessages, markLuxorMessageRead } from '@/lib/luxorMessagesServer'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from '@/lib/luxorTwilioServer'
-import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { assertOwnedLuxorMessagingNumber, getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { assertLuxorSmsAllowed } from '@/lib/luxorTextAutomationsServer'
 
 export const runtime = 'nodejs'
@@ -18,21 +18,24 @@ export async function POST(request: NextRequest) {
   const session = await getLuxorPortalSession()
   if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
   try {
-    const { to, body, inquiryId, contactName } = await request.json() as { to?: string; body?: string; inquiryId?: string; contactName?: string }
+    const { to, body, inquiryId, contactName, fromNumber } = await request.json() as { to?: string; body?: string; inquiryId?: string; contactName?: string; fromNumber?: string }
     const destination = await assertLuxorSmsAllowed(assertAllowedOutboundNumber(to))
     const text = String(body || '').trim()
     if (!text) return NextResponse.json({ error: 'Write a message before sending.' }, { status: 400 })
     if (text.length > 1600) return NextResponse.json({ error: 'Keep messages to 1,600 characters or fewer.' }, { status: 400 })
     const config = getLuxorTwilioMessagingConfig()
     const activePhoneNumber = await getActiveLuxorPhoneNumber()
+    const selectedPhoneNumber = fromNumber ? await assertOwnedLuxorMessagingNumber(fromNumber) : activePhoneNumber
     const client = twilio(config.accountSid, config.authToken)
     const sent = await client.messages.create({
       to: destination,
-      ...(config.messagingServiceSid ? { messagingServiceSid: config.messagingServiceSid } : { from: activePhoneNumber }),
+      ...(config.messagingServiceSid
+        ? { messagingServiceSid: config.messagingServiceSid, fallbackFrom: selectedPhoneNumber }
+        : { from: selectedPhoneNumber }),
       body: text,
       statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
     })
-    const message = await createOrUpdateLuxorMessage({ sid: sent.sid, direction: 'outbound', status: normalizeMessageStatus(sent.status), from: activePhoneNumber, to: destination, body: text, inquiryId, contactName, ownerEmail: session.email, isRead: true })
+    const message = await createOrUpdateLuxorMessage({ sid: sent.sid, direction: 'outbound', status: normalizeMessageStatus(sent.status), from: selectedPhoneNumber, to: destination, body: text, inquiryId, contactName, ownerEmail: session.email, isRead: true })
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to send text message.' }, { status: 500 })

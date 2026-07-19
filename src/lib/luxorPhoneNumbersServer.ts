@@ -95,6 +95,15 @@ export async function listOwnedLuxorNumbers() {
   })
 }
 
+export async function assertOwnedLuxorMessagingNumber(value: unknown) {
+  const phoneNumber = String(value || '').trim()
+  if (!/^\+1\d{10}$/.test(phoneNumber)) throw new Error('Choose a valid Luxor sending number.')
+  const owned = await listOwnedLuxorNumbers()
+  const match = owned.find((number) => number.phoneNumber === phoneNumber && number.capabilities.sms)
+  if (!match) throw new Error('That number is not an SMS-capable number owned by this Luxor Twilio account.')
+  return match.phoneNumber
+}
+
 async function configureTwilioNumber(sid: string) {
   const { client } = twilioClient()
   return client.incomingPhoneNumbers(sid).update({
