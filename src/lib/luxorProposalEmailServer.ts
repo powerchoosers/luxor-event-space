@@ -1,5 +1,3 @@
-import 'server-only'
-
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
