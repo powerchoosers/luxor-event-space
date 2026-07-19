@@ -80,16 +80,7 @@ export function MarketingOverviewTab({
       time: m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Recently',
       initial: (m.full_name || m.email.substring(0,2)).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     })))
-    if (allMembers.length > 0) {
-      return allMembers.slice(0, 5)
-    }
-    return [
-      { name: 'Sarah Johnson', form: 'Wedding Guide Download', time: '2h ago', initial: 'SJ' },
-      { name: 'Michael Garcia', form: 'Grand Opening RSVP', time: '5h ago', initial: 'MG' },
-      { name: 'Emily Brown', form: 'VIP Newsletter', time: '8h ago', initial: 'EB' },
-      { name: 'Jason Davis', form: 'Pricing Guide Download', time: '12h ago', initial: 'JD' },
-      { name: 'Ashley Martinez', form: 'Venue Tour Request', time: '16h ago', initial: 'AM' }
-    ]
+    return allMembers.slice(0, 5)
   }, [marketingLists])
 
   // Recent Inquiries from DB or fallback
@@ -126,14 +117,7 @@ export function MarketingOverviewTab({
           iconColor: color
         }
       })
-    if (dbInquiries.length > 0) return dbInquiries
-    return [
-      { title: 'Wedding Inquiry', time: 'May 17, 2026 - 1:45 PM', icon: '💍', iconColor: 'text-purple-400 bg-purple-500/5 border border-purple-500/10' },
-      { title: 'Corporate Event Inquiry', time: 'May 17, 2026 - 11:20 AM', icon: '💼', iconColor: 'text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10' },
-      { title: 'Birthday Inquiry', time: 'May 16, 2026 - 9:38 PM', icon: '🎂', iconColor: 'text-amber-400 bg-amber-500/5 border border-amber-500/10' },
-      { title: 'Quinceañera Inquiry', time: 'May 16, 2026 - 4:12 PM', icon: '👗', iconColor: 'text-rose-400 bg-rose-500/5 border border-rose-500/10' },
-      { title: 'Baby Shower Inquiry', time: 'May 16, 2026 - 2:07 PM', icon: '🍼', iconColor: 'text-blue-400 bg-blue-500/5 border border-blue-500/10' }
-    ]
+    return dbInquiries
   }, [inquiries])
 
   // Automation status list with exact counts from mockup

@@ -45,6 +45,7 @@ type Tab =
   | 'team'
   | 'integrations'
   | 'hours'
+  | 'content'
 
 type BrandAsset = {
   id: string
@@ -231,7 +232,8 @@ export default function SettingsPage() {
             { id: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
             { id: 'team', label: 'Team & Permissions', icon: <Lock size={15} /> },
             { id: 'integrations', label: 'Integrations', icon: <Cpu size={15} /> },
-            { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> }
+            { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> },
+            { id: 'content', label: 'Site Content', icon: <Building size={15} /> }
           ]}
           activeTab={activeTab}
           onTabChange={(tab) => setActiveTab(tab as Tab)}
@@ -579,6 +581,48 @@ export default function SettingsPage() {
                     }`}>
                       {api.status}
                     </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+
+          {/* SITE CONTENT */}
+          {activeTab === 'content' && (
+            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Manage Website Content</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Update the text, data, and layout definitions that power the public-facing pages of the Luxor event space site.
+              </p>
+              <div className="space-y-4">
+                {['home', 'events', 'gallery', 'pricing', 'spaces', 'visit'].map(pageName => (
+                  <div key={pageName} className="border border-zinc-900 rounded p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <p className="font-bold text-white capitalize">{pageName} Page</p>
+                      <p className="text-[10px] text-zinc-550 mt-0.5">Edit JSON schema powering /public/{pageName}</p>
+                    </div>
+                    <button type="button" onClick={() => {
+                        fetch('/api/public/content?page=' + pageName)
+                        .then(res => res.json())
+                        .then(json => {
+                            const newContent = prompt(`Edit JSON for ${pageName}`, JSON.stringify(json, null, 2));
+                            if(newContent) {
+                                try {
+                                    const parsed = JSON.parse(newContent);
+                                    fetch('/api/portal/content', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ page_name: pageName, content: parsed })
+                                    }).then(res => res.json()).then(() => notify({ title: 'Content updated', variant: 'success' }));
+                                } catch(e) {
+                                    notify({ title: 'Invalid JSON format', variant: 'error' });
+                                }
+                            }
+                        })
+                    }} className="px-3 py-1.5 border border-[#caa24c]/40 text-[#caa24c] rounded hover:bg-[#caa24c]/10 text-xs font-bold transition-colors">
+                      Edit Data Map
+                    </button>
                   </div>
                 ))}
               </div>

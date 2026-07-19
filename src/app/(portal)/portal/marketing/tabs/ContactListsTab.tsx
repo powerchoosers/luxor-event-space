@@ -185,14 +185,9 @@ export function ContactListsTab({
     })
 
     const merged = Array.from(map.values())
-    if (merged.length > 0) return merged
-
-    // Fallbacks if both are empty
-    return [
-      { id: 'mock-c-1', full_name: 'Sarah Johnson', email: 'sarah.j@gmail.com', phone: '(210) 555-4896', event_type: 'Wedding', source: 'Google Search (SEO)', submittedForm: 'Wedding Inquiry', dateAdded: 'May 15, 2026 1:45 PM', emailStatus: 'Subscribed', smsStatus: 'Subscribed', tags: ['Hot Lead', 'Tour Scheduled'] },
-      { id: 'mock-c-2', full_name: 'Michael Garcia', email: 'mgarcia@hotmail.com', phone: '(210) 555-8947', event_type: 'Corporate Event', source: 'Google Business Profile', submittedForm: 'Corporate Inquiry', dateAdded: 'May 17, 2026 11:20 AM', emailStatus: 'Subscribed', smsStatus: 'Subscribed', tags: ['Proposal Sent', 'Follow Up'] }
-    ]
+    return merged
   }, [dbContacts, listContacts])
+
 
   // Compute Left sidebar counts dynamically
   const formMenuCounts = useMemo(() => {

@@ -78,86 +78,6 @@ export function EmailCampaignsTab({
     ]
   }, [campaigns])
 
-  // Mock campaigns from Rendering 3
-  const mockCampaigns = [
-    {
-      id: 'mock-1',
-      name: 'Grand Opening Invitation',
-      subject: 'Grand Opening Event Invitation',
-      category: 'Promotional',
-      status: 'sent',
-      recipients: 2306,
-      sentDate: 'May 9, 2026 10:00 AM',
-      openRate: '42.6%',
-      clickRate: '8.7%',
-      replyRate: '2.3%',
-      unsubs: 18,
-      bookings: 31,
-      revenue: '$13,400'
-    },
-    {
-      id: 'mock-2',
-      name: 'Venue Tour Guide',
-      subject: 'Download our comprehensive tour guide',
-      category: 'Newsletter',
-      status: 'sent',
-      recipients: 4120,
-      sentDate: 'May 6, 2026 9:15 AM',
-      openRate: '29.3%',
-      clickRate: '5.4%',
-      replyRate: '1.1%',
-      unsubs: 35,
-      bookings: 15,
-      revenue: '$6,250'
-    },
-    {
-      id: 'mock-3',
-      name: 'Memorial Day Special',
-      subject: 'Special offer for Memorial Day weekend booking',
-      category: 'Promotional',
-      status: 'scheduled',
-      recipients: 2874,
-      sentDate: 'May 23, 2026 10:00 AM',
-      openRate: '-',
-      clickRate: '-',
-      replyRate: '-',
-      unsubs: '-',
-      bookings: '-',
-      revenue: '-'
-    },
-    {
-      id: 'mock-4',
-      name: 'Real Wedding Inspiration',
-      subject: 'See how others celebrated their special day',
-      category: 'Newsletter',
-      status: 'sent',
-      recipients: 4512,
-      sentDate: 'Apr 28, 2026 3:30 PM',
-      openRate: '44.1%',
-      clickRate: '9.2%',
-      replyRate: '1.8%',
-      unsubs: 22,
-      bookings: 19,
-      revenue: '$7,800'
-    },
-    {
-      id: 'mock-5',
-      name: 'Last Chance - Reserve Your Date',
-      subject: 'Locked dates are expiring soon',
-      category: 'Follow-Up',
-      status: 'draft',
-      recipients: 1800,
-      sentDate: '-',
-      openRate: '-',
-      clickRate: '-',
-      replyRate: '-',
-      unsubs: '-',
-      bookings: '-',
-      revenue: '-'
-    }
-  ]
-
-  // Map database campaigns to table format
   const dbCampaigns = useMemo(() => {
     return campaigns.map(c => ({
       id: c.id,
@@ -178,7 +98,7 @@ export function EmailCampaignsTab({
 
   // Merge lists
   const allCampaignsList = useMemo(() => {
-    return [...mockCampaigns, ...dbCampaigns]
+    return [...dbCampaigns]
   }, [dbCampaigns])
 
   // Filter lists
@@ -297,7 +217,7 @@ export function EmailCampaignsTab({
                 <td className="px-4 py-4 text-right font-mono text-emerald-400 font-bold">{camp.revenue}</td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    {!camp.id.startsWith('mock-') && (
+                    {true && (
                       <button
                         onClick={() => onReport(camp.id)}
                         className="rounded p-1 text-zinc-500 hover:text-white transition-colors"
