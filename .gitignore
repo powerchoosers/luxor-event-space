@@ -46,6 +46,7 @@ next-env.d.ts
 /.codex/
 /.playwright-cli/
 /output/
+/tmp/
 *.code-workspace
 
 # Local Twilio setup notes

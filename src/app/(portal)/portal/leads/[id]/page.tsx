@@ -50,6 +50,7 @@ import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
+import { catalogItemToLineItem, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
 type ZohoEmailMessage = {
   id: string
@@ -190,7 +191,10 @@ export default function LeadDetailPage({
     { description: '', quantity: 1, unitPrice: 0, total: 0 },
   ])
   const [invoiceNotes, setInvoiceNotes] = useState('')
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState('8.25')
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
 
   // Booking creation state
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
@@ -810,6 +814,13 @@ export default function LeadDetailPage({
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
+      const savedProposalItems = leadData.metadata?.proposalLineItems
+      if (Array.isArray(savedProposalItems) && savedProposalItems.length) {
+        setInvoiceItems(savedProposalItems as LuxorInvoiceLineItem[])
+      }
+      if (typeof leadData.metadata?.proposalTaxRate === 'number') {
+        setInvoiceTaxRate(String(leadData.metadata.proposalTaxRate * 100))
+      }
 
       void fetchClientEmailThread(leadData.email || '')
 
@@ -1121,13 +1132,24 @@ export default function LeadDetailPage({
     setInvoiceItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0, total: 0 }])
   }
 
+  const addCatalogItem = () => {
+    const catalogItem = LUXOR_SERVICE_CATALOG.find((item) => item.id === selectedCatalogItem)
+    if (!catalogItem) return
+    const nextItem = catalogItemToLineItem(catalogItem)
+    setInvoiceItems((current) => {
+      const replaceBlank = current.length === 1 && !current[0].description.trim() && current[0].unitPrice === 0
+      return replaceBlank ? [nextItem] : [...current, nextItem]
+    })
+    setSelectedCatalogItem('')
+  }
+
   const removeInvoiceItem = (index: number) => {
     if (invoiceItems.length === 1) return
     setInvoiceItems((prev) => prev.filter((_, i) => i !== index))
   }
 
   const getInvoiceSubtotal = () => invoiceItems.reduce((acc, item) => acc + item.total, 0)
-  const getInvoiceTax = () => getInvoiceSubtotal() * 0.0825
+  const getInvoiceTax = () => getInvoiceSubtotal() * (Math.max(0, Number(invoiceTaxRate) || 0) / 100)
   const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
@@ -1137,7 +1159,7 @@ export default function LeadDetailPage({
     try {
       setSubmittingInvoice(true)
       const subtotal = getInvoiceSubtotal()
-      const taxRate = 0.0825
+      const taxRate = Math.max(0, Number(invoiceTaxRate) || 0) / 100
       const total = getInvoiceTotal()
 
       const res = await fetch('/api/invoices', {
@@ -1160,6 +1182,7 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error('Failed to create invoice.')
       const invoice = await res.json()
       setInvoices((prev) => [invoice, ...prev])
+      await handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
       setIsInvoiceModalOpen(false)
       
       // Reset invoice form
@@ -1260,6 +1283,21 @@ export default function LeadDetailPage({
       }
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const handleSendInvoice = async (invoiceId: string) => {
+    try {
+      setSendingInvoiceId(invoiceId)
+      const response = await fetch(`/api/invoices/${invoiceId}/send`, { method: 'POST' })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'The proposal could not be sent.')
+      if (payload.invoice) setInvoices((current) => current.map((item) => item.id === invoiceId ? payload.invoice : item))
+      notify({ title: 'Proposal sent', description: 'The PDF and secure Stripe payment link were emailed to the client.', variant: 'success' })
+    } catch (err) {
+      notify({ title: 'Proposal not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSendingInvoiceId(null)
     }
   }
 
@@ -1439,11 +1477,16 @@ export default function LeadDetailPage({
           start_time: bookingStartTime || null,
           end_time: bookingEndTime || null,
           package_name: bookingPackageName || null,
+          invoice_id: invoices[0]?.id || null,
           guest_count: lead.guest_count,
           status: bookingStatus,
           contract_total: contractTotal,
           deposit_required: depositRequired,
           notes: bookingNotes.trim() || lead.message,
+          metadata: {
+            proposalLineItems: invoiceItems,
+            proposalTaxRate: Math.max(0, Number(invoiceTaxRate) || 0) / 100,
+          },
         }),
       })
 
@@ -4562,6 +4605,14 @@ export default function LeadDetailPage({
                       <PortalStatusBadge status={inv.status} />
                     </div>
                     {index === 0 && inv.description ? <p className="mt-3 text-xs leading-5 text-zinc-400">{inv.description}</p> : null}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
+                        <FileText size={12} /> Download PDF
+                      </a>
+                      <button type="button" onClick={() => handleSendInvoice(inv.id)} disabled={sendingInvoiceId === inv.id || !lead.email} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
+                        <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : inv.status === 'draft' ? 'Email PDF + Pay Link' : 'Resend PDF + Pay Link'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4808,6 +4859,26 @@ export default function LeadDetailPage({
 
               {/* Line Items builder */}
               <div className="space-y-3 pt-2">
+                <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-3">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Add from Packages.xlsx</label>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <PortalSelect
+                        value={selectedCatalogItem}
+                        onChange={setSelectedCatalogItem}
+                        placeholder="Choose a service"
+                        options={LUXOR_SERVICE_CATALOG.map((item) => ({
+                          value: item.id,
+                          label: `${item.category} - ${item.name}${item.unitPrice === null ? ' (set price)' : ` - ${formatMoney(item.unitPrice)}`}`,
+                        }))}
+                      />
+                    </div>
+                    <button type="button" onClick={addCatalogItem} disabled={!selectedCatalogItem} className="rounded-lg bg-[#b98a3e] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-40">
+                      Add
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-zinc-500">Prices remain editable. Custom-priced and approximate workbook items must be confirmed before sending.</p>
+                </div>
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Line Items</label>
                   <button
@@ -4868,8 +4939,10 @@ export default function LeadDetailPage({
                   <span>Subtotal:</span>
                   <span className="font-mono text-zinc-300">${getInvoiceSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex justify-between text-xs text-zinc-500 border-b border-zinc-900/50 pb-2">
-                  <span>Sales Tax (8.25%):</span>
+                <div className="flex items-center justify-between gap-3 text-xs text-zinc-500 border-b border-zinc-900/50 pb-2">
+                  <label className="flex items-center gap-2">Tax rate
+                    <input type="number" min="0" step="0.01" value={invoiceTaxRate} onChange={(event) => setInvoiceTaxRate(event.target.value)} className="w-20 rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-right font-mono text-zinc-300" />%
+                  </label>
                   <span className="font-mono text-zinc-300">${getInvoiceTax().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-white pt-1">

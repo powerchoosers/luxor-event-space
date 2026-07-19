@@ -108,6 +108,8 @@ export function parseGuestCount(value: unknown) {
 export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
 
 export type LuxorInvoiceLineItem = {
+  catalogId?: string
+  category?: string
   description: string
   quantity: number
   unitPrice: number

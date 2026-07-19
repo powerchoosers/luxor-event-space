@@ -18,8 +18,10 @@
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.562.0",
     "next": "16.1.4",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "stripe": "^22.3.2",
     "twilio": "6.0.2"
   },
   "devDependencies": {

@@ -151,6 +151,7 @@ export async function sendLuxorZohoEmail(input: {
   content: string
   from?: string
   fromName?: string
+  attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
 }) {
   const { accountId, baseUrl, allowedSenders, loginEmail } = getZohoConfig()
   const to = normalizeEmailAddress(input.to)
@@ -169,12 +170,36 @@ export async function sendLuxorZohoEmail(input: {
   const accessToken = await getZohoAccessToken()
   const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content)
   const senderName = fromName.replace(/"/g, '')
+  const uploadedAttachments = []
+  for (const attachment of input.attachments || []) {
+    const uploadResponse = await fetch(
+      `${baseUrl}/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(attachment.filename)}&isInline=false`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': attachment.contentType || 'application/octet-stream',
+        },
+        body: Buffer.from(attachment.content),
+      },
+    )
+    const uploadText = await uploadResponse.text()
+    if (!uploadResponse.ok) throw new Error(`Zoho attachment upload failed with ${uploadResponse.status}: ${uploadText}`)
+    const upload = uploadText ? JSON.parse(uploadText) as { data?: { storeName?: string; attachmentName?: string; attachmentPath?: string } } : {}
+    if (!upload.data?.storeName || !upload.data.attachmentName || !upload.data.attachmentPath) {
+      throw new Error('Zoho did not return attachment details.')
+    }
+    uploadedAttachments.push(upload.data)
+  }
+
   const payload = {
     fromAddress: `"${senderName}" <${from}>`,
     toAddress: to,
     subject,
     content: looksLikeHtml ? content : plainTextToHtml(content),
     mailFormat: 'html',
+    ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
   }
 
   const response = await fetch(`${baseUrl}/accounts/${accountId}/messages`, {

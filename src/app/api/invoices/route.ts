@@ -33,19 +33,36 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { client_name, event_type, description, line_items, subtotal, tax_rate, total, due_date, inquiry_id, notes } = body
+    const { client_name, event_type, description, line_items, tax_rate, due_date, inquiry_id, notes } = body
 
     if (!client_name || !line_items) {
       return NextResponse.json({ error: 'client_name and line_items are required.' }, { status: 400 })
     }
 
+    const normalizedItems = (Array.isArray(line_items) ? line_items : []).map((item) => {
+      const quantity = Math.max(1, Number(item.quantity) || 1)
+      const unitPrice = Math.max(0, Number(item.unitPrice) || 0)
+      return {
+        ...(typeof item.catalogId === 'string' ? { catalogId: item.catalogId } : {}),
+        ...(typeof item.category === 'string' ? { category: item.category } : {}),
+        description: String(item.description || '').trim(),
+        quantity,
+        unitPrice,
+        total: Math.round(quantity * unitPrice * 100) / 100,
+      }
+    }).filter((item) => item.description)
+    if (!normalizedItems.length) return NextResponse.json({ error: 'At least one line item is required.' }, { status: 400 })
+    const normalizedTaxRate = Math.min(1, Math.max(0, Number(tax_rate) || 0))
+    const subtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.total, 0) * 100) / 100
+    const total = Math.round(subtotal * (1 + normalizedTaxRate) * 100) / 100
+
     const invoice = await createInvoice({
       client_name,
       event_type,
       description,
-      line_items,
+      line_items: normalizedItems,
       subtotal,
-      tax_rate,
+      tax_rate: normalizedTaxRate,
       total,
       due_date,
       inquiry_id,

@@ -53,6 +53,13 @@ export async function listInvoicesByInquiry(inquiryId: string) {
   )
 }
 
+export async function getInvoice(id: string) {
+  const [invoice] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
+  )
+  return invoice ?? null
+}
+
 export async function createInvoice(data: {
   client_name: string
   event_type?: string | null

@@ -6,6 +6,12 @@ import { createPublicToken } from './luxorEmailJobsServer'
 import { updateLuxorBooking } from './luxorBookingsServer'
 
 function defaultContractBody(booking: LuxorBooking) {
+  const proposalItems = Array.isArray(booking.metadata?.proposalLineItems)
+    ? booking.metadata.proposalLineItems as Array<{ description?: string; quantity?: number; total?: number }>
+    : []
+  const serviceSummary = proposalItems.length
+    ? ['Included services:', ...proposalItems.map((item) => `- ${item.description || 'Service'} x ${Number(item.quantity || 1)}: $${Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)].join('\n')
+    : ''
   return [
     `This agreement reserves Luxor Event Space for ${booking.client_name}.`,
     `Event type: ${booking.event_type || 'Private event'}.`,
@@ -13,6 +19,7 @@ function defaultContractBody(booking: LuxorBooking) {
     booking.guest_count ? `Estimated guest count: ${booking.guest_count}.` : '',
     `Contract total: $${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     `Deposit required: $${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+    serviceSummary,
     'By signing, the client confirms the reservation details and agrees to continue with Luxor Event Space booking requirements. Final legal language should be reviewed by the business owner.',
   ].filter(Boolean).join('\n\n')
 }
