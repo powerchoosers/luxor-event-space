@@ -133,7 +133,7 @@ export function PortalCalendar({
             return (
               <div
                 key={iso}
-                className={`flex h-[15rem] min-h-[15rem] flex-col rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 ${outsideMonth ? 'opacity-45' : ''}`}
+                className={`flex h-[15rem] min-h-[15rem] flex-col rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 hover:border-[#caa24c]/40 transition-colors duration-150 ${outsideMonth ? 'opacity-45' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div>

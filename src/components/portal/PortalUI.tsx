@@ -936,12 +936,12 @@ export function PortalDatePicker({
                           key={day.getTime()}
                           type="button"
                           onClick={() => handleSelectDay(day)}
-                          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all ${
+                          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all border ${
                             isSelected
-                              ? 'border border-[#caa24c]/40 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
+                              ? 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                               : isToday
-                              ? 'border border-blue-500/30 font-bold text-blue-500 hover:bg-black/5'
-                              : 'text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                              ? 'border-blue-500/30 hover:border-[#caa24c]/50 font-bold text-blue-500 hover:bg-black/5'
+                              : 'border-transparent hover:border-[#caa24c]/50 text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
                         >
                           {day.getDate()}

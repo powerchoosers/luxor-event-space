@@ -88,7 +88,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
                 className={`flex flex-col justify-between w-28 h-40 shrink-0 p-3 rounded-xl border transition-all snap-center ${
                   day.isToday
                     ? 'bg-[#fcf8f2] dark:bg-[#caa24c]/10 border-[#caa24c] shadow-[0_0_12px_rgba(202,162,76,0.15)] scale-[1.02]'
-                    : 'bg-white/40 dark:bg-black/10 border-[color:var(--portal-border)]/40 hover:border-[color:var(--portal-border)]'
+                    : 'bg-white/40 dark:bg-black/10 border-[color:var(--portal-border)]/40 hover:border-[#caa24c]/50'
                 }`}
               >
                 <div>

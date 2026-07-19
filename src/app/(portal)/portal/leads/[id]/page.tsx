@@ -5653,6 +5653,10 @@ function DetailItem({
     if (!isEditing || inputType !== 'date') return
 
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest('[data-portal-popover="true"]')) {
+        return
+      }
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsEditing(false)
       }
