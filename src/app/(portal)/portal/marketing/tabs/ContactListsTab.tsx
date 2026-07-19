@@ -328,9 +328,9 @@ export function ContactListsTab({
   }
 
   return (
-    <div className="space-y-4 flex-grow flex flex-col min-h-0 overflow-hidden">
+    <div className="flex flex-col min-h-0 overflow-hidden h-[calc(100dvh-13rem)]">
       {/* Main split dashboard (sidebar on the left, table on the right) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 min-h-0 flex-grow overflow-hidden">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 min-h-0 h-full overflow-hidden">
         
         {/* Left Column: Form count sidebar list */}
         <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 space-y-6 min-h-0 flex flex-col justify-between overflow-y-auto portal-scrollbar">
