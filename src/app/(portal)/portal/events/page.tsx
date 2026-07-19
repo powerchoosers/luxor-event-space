@@ -6,7 +6,6 @@ import {
   Clock,
   DollarSign,
   FileText,
-  Grid3X3,
   Mail,
   MapPin,
   Phone,
@@ -19,7 +18,6 @@ import {
   CheckSquare,
   ClipboardList,
   Building,
-  CheckCircle2,
   AlertCircle,
   ChevronRight
 } from 'lucide-react'
@@ -222,56 +220,15 @@ export default function EventsPage() {
                 {activeDetailTab === 'timeline' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Event Day Timeline</h3>
-                    <div className="relative pl-6 border-l border-zinc-900 space-y-6">
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500" />
-                        <p className="text-xs font-bold text-white uppercase tracking-wider">12:00 PM — Load-In & Vendor Setup</p>
-                        <p className="text-[10px] text-zinc-500 mt-1">Caterer, Decorators, and DJ arrive for load-in.</p>
-                      </div>
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-purple-500" />
-                        <p className="text-xs font-bold text-white uppercase tracking-wider">3:30 PM — Venue Prep Check</p>
-                        <p className="text-[10px] text-zinc-550 mt-1">Elena concierge checklist verification (HVAC, bathroom stock).</p>
-                      </div>
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-[#caa24c]" />
-                        <p className="text-xs font-bold text-white uppercase tracking-wider">5:00 PM — Doors Open & Reception Start</p>
-                        <p className="text-[10px] text-zinc-555 mt-1">Guest arrival, cocktail service begins in main lobby.</p>
-                      </div>
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                        <p className="text-xs font-bold text-white uppercase tracking-wider">6:30 PM — Main Banquet / Dinner Served</p>
-                        <p className="text-[10px] text-zinc-550 mt-1">Grand entrance followed by dinner service.</p>
-                      </div>
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-rose-500" />
-                        <p className="text-xs font-bold text-white uppercase tracking-wider">10:00 PM — Last Call & Departures</p>
-                        <p className="text-[10px] text-zinc-550 mt-1">Bar service closes, cleanup crew starts load-out.</p>
-                      </div>
-                    </div>
+                    <IncompleteState booking={selectedEvent} title="No event timeline is attached here yet" description="Build the real event timeline in the client dossier. Sample event times are no longer shown as completed plans." tab="timeline" />
                   </div>
                 )}
 
                 {/* Floor Plan */}
                 {activeDetailTab === 'layout' && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Floor Plan Layout</h3>
-                      <span className="text-[9px] font-mono bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded text-zinc-400">
-                        {selectedEvent.guest_count || 150} Guests Banquet
-                      </span>
-                    </div>
-                    
-                    <div className="border border-zinc-900 bg-[#050505] rounded-xl p-4 flex flex-col items-center justify-center min-h-[220px]">
-                      <Grid3X3 className="text-zinc-700 mb-4" size={48} strokeWidth={1} />
-                      <p className="text-xs font-bold text-zinc-300">Round Tables Setup (A-Lockup)</p>
-                      <p className="text-[10px] text-zinc-500 text-center max-w-sm mt-1.5 leading-relaxed">
-                        18 Round Tables arranged symmetrically around the central axis. Head table aligned near the ballroom mirror backdrop.
-                      </p>
-                      <button className="mt-4 bg-[#caa24c]/10 hover:bg-[#caa24c]/20 border border-[#caa24c]/25 rounded-md px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-[#caa24c] transition-all cursor-pointer">
-                        Upload Layout PDF
-                      </button>
-                    </div>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Floor Plan Layout</h3>
+                    <IncompleteState booking={selectedEvent} title="No floor plan is attached" description="Layout uploads are not connected yet. Store the confirmed table count and layout details in the client dossier notes until document storage is added." tab="notes" />
                   </div>
                 )}
 
@@ -279,28 +236,7 @@ export default function EventsPage() {
                 {activeDetailTab === 'vendors' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Assigned Vendors</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-zinc-950/40 border border-zinc-900/60 p-4 rounded-xl">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Catering Services</p>
-                        <p className="text-xs font-bold text-white mt-1">Palace Fine Catering</p>
-                        <p className="text-[10px] text-[#caa24c] mt-0.5 font-medium">Insurance Uploaded (COI Valid)</p>
-                      </div>
-                      <div className="bg-zinc-950/40 border border-zinc-900/60 p-4 rounded-xl">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Entertainment / DJ</p>
-                        <p className="text-xs font-bold text-white mt-1">Dallas Sound Masters</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Setup: 1:30 PM</p>
-                      </div>
-                      <div className="bg-zinc-950/40 border border-zinc-900/60 p-4 rounded-xl">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Security Service</p>
-                        <p className="text-xs font-bold text-white mt-1">Atlas Executive Security</p>
-                        <p className="text-[10px] text-emerald-400 mt-0.5 font-medium">2 Guards Allocated</p>
-                      </div>
-                      <div className="bg-zinc-950/40 border border-zinc-900/60 p-4 rounded-xl">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Florals / Decor</p>
-                        <p className="text-xs font-bold text-white mt-1">Golden Rose Florist</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Load-in at 11:30 AM</p>
-                      </div>
-                    </div>
+                    <IncompleteState booking={selectedEvent} title="No vendors are displayed until they are linked" description="Add real caterers, DJs, decorators, security, and vendor notes in the client dossier." tab="vendors" />
                   </div>
                 )}
 
@@ -358,30 +294,7 @@ export default function EventsPage() {
                 {activeDetailTab === 'checklist' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Venue Preparedness</h3>
-                    <div className="space-y-3">
-                      {[
-                        { label: 'Ballroom Flooring Buffed', checked: true },
-                        { label: 'Chairs & Round Tables Count Verified', checked: true },
-                        { label: 'HVAC Temperature Calibrated', checked: true },
-                        { label: 'Bathrooms Stocked (Soap & Towels)', checked: false, critical: true },
-                        { label: 'Emergency Exit Lighting Checked', checked: false }
-                      ].map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer"
-                            checked={item.checked}
-                            readOnly
-                          />
-                          <span className={`text-xs font-medium ${item.checked ? 'line-through text-zinc-600 font-normal' : 'text-white'}`}>
-                            {item.label}
-                          </span>
-                          {!item.checked && item.critical && (
-                            <span className="ml-auto text-[8px] font-bold bg-rose-500/10 border border-rose-500/25 text-rose-400 px-2 py-0.5 rounded uppercase tracking-wider">Critical</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <IncompleteState booking={selectedEvent} title="Event-specific checklist not configured" description="Use tasks in the client dossier for required work. A checked sample list is no longer presented as real venue readiness." tab="tasks" />
                   </div>
                 )}
 
@@ -389,24 +302,7 @@ export default function EventsPage() {
                 {activeDetailTab === 'walkthrough' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Final Walkthrough Verification</h3>
-                    <div className="bg-[#050505] border border-zinc-900 rounded-xl p-6 flex flex-col items-center justify-center text-center">
-                      <CheckCircle2 size={36} className="text-emerald-400 mb-3" />
-                      <p className="text-xs font-bold text-white uppercase tracking-wider">Final Walkthrough Confirmed</p>
-                      <p className="text-[10px] text-zinc-500 mt-1 max-w-sm">
-                        Walkthrough with event coordinator completed on schedule. Layout, vendors, and timeline locked in.
-                      </p>
-                      <div className="mt-4 flex gap-4 text-xs font-mono">
-                        <div>
-                          <p className="text-[9px] uppercase font-bold text-zinc-600">Date Verified</p>
-                          <p className="text-zinc-300 font-semibold mt-1">July 01, 2026</p>
-                        </div>
-                        <div className="w-px bg-zinc-900" />
-                        <div>
-                          <p className="text-[9px] uppercase font-bold text-zinc-600">Sign-Off Owner</p>
-                          <p className="text-zinc-300 font-semibold mt-1">Elena Concierge</p>
-                        </div>
-                      </div>
-                    </div>
+                    <IncompleteState booking={selectedEvent} title="Walkthrough not recorded" description="Record the walkthrough as a dated task or note in the client dossier. The portal will not claim completion without saved evidence." tab="tasks" />
                   </div>
                 )}
               </PortalTabTransition>
@@ -423,5 +319,16 @@ export default function EventsPage() {
         </div>
       </div>
     </PortalPageFrame>
+  )
+}
+
+function IncompleteState({ booking, title, description, tab }: { booking: BookingWithPayments; title: string; description: string; tab: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-800 bg-black/20 p-6 text-center">
+      <AlertCircle size={28} className="mx-auto text-amber-400" />
+      <p className="mt-3 text-xs font-bold text-white">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-[10px] leading-relaxed text-zinc-500">{description}</p>
+      {booking.inquiry_id && <Link href={`/portal/leads/${booking.inquiry_id}?tab=${tab}`} className="mt-4 inline-flex items-center gap-1 rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#f1d27a]">Open client dossier <ChevronRight size={12} /></Link>}
+    </div>
   )
 }

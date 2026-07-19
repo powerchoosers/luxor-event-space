@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLuxorBooking, listLuxorBookingsByInquiry, listLuxorBookingsWithPayments, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLuxorBookingsByInquiry, listLuxorBookingsWithPayments, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 export async function GET(request: NextRequest) {
@@ -37,6 +37,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'client_name is required.' }, { status: 400 })
     }
 
+    if (body.event_date && (body.status === 'tentative' || body.status === 'confirmed')) {
+      const conflicts = await findLuxorBookingConflicts(body.event_date)
+      if (conflicts.length > 0) {
+        return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
+      }
+    }
+
     const booking = await createLuxorBooking(body)
     return NextResponse.json(booking, { status: 201 })
   } catch (error) {
@@ -55,6 +62,18 @@ export async function PATCH(request: NextRequest) {
     const { id, ...updates } = await request.json()
     if (!id) {
       return NextResponse.json({ error: 'Booking id is required.' }, { status: 400 })
+    }
+
+    const existing = await getLuxorBooking(id)
+    if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+
+    const nextDate = updates.event_date === undefined ? existing.event_date : updates.event_date
+    const nextStatus = updates.status === undefined ? existing.status : updates.status
+    if (nextDate && (nextStatus === 'tentative' || nextStatus === 'confirmed')) {
+      const conflicts = await findLuxorBookingConflicts(nextDate, id)
+      if (conflicts.length > 0) {
+        return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
+      }
     }
 
     const booking = await updateLuxorBooking(id, updates)

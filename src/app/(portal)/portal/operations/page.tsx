@@ -13,7 +13,6 @@ import {
   Users,
   Eye,
   FileText,
-  Upload,
   Calendar,
   Sparkles,
   Zap,
@@ -36,8 +35,7 @@ import {
   PortalSelect,
   PortalButton
 } from '@/components/portal/PortalUI'
-import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog } from '@/app/api/operations/route'
-import type { LuxorTask } from '@/lib/luxorInquiryTypes'
+import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 
 type SubTab =
   | 'dashboard'
@@ -91,7 +89,7 @@ function OperationsPageContent() {
   const [vendors, setVendors] = useState<LuxorVendor[]>([])
   const [utilities, setUtilities] = useState<LuxorUtilityReading[]>([])
   const [cleaningLogs, setCleaningLogs] = useState<LuxorCleaningLog[]>([])
-  const [maintenanceTasks, setMaintenanceTasks] = useState<LuxorTask[]>([])
+  const [maintenanceTasks, setMaintenanceTasks] = useState<LuxorMaintenanceTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -104,7 +102,7 @@ function OperationsPageContent() {
   // Edit / Delete states
   const [editingItem, setEditingItem] = useState<{
     type: 'bill' | 'task' | 'inventory' | 'vendor'
-    data: LuxorBill | LuxorTask | LuxorInventoryItem | LuxorVendor
+    data: LuxorBill | LuxorMaintenanceTask | LuxorInventoryItem | LuxorVendor
   } | null>(null)
   const [editFormData, setEditFormData] = useState<EditFormData | null>(null)
   const [deletingItem, setDeletingItem] = useState<{ type: 'bill' | 'task' | 'inventory' | 'vendor'; id: string; name: string } | null>(null)
@@ -146,12 +144,12 @@ function OperationsPageContent() {
 
   // State for interactive features
   const [readinessTasks, setReadinessTasks] = useState([
-    { id: '1', label: 'Utilities Active', checked: true },
-    { id: '2', label: 'Venue Cleaned', checked: true },
-    { id: '3', label: 'Bathrooms Stocked', checked: true },
-    { id: '4', label: 'Chairs Counted', checked: true },
-    { id: '5', label: 'Tables Set', checked: true },
-    { id: '6', label: 'HVAC Working', checked: true },
+    { id: '1', label: 'Utilities Active', checked: false },
+    { id: '2', label: 'Venue Cleaned', checked: false },
+    { id: '3', label: 'Bathrooms Stocked', checked: false },
+    { id: '4', label: 'Chairs Counted', checked: false },
+    { id: '5', label: 'Tables Set', checked: false },
+    { id: '6', label: 'HVAC Working', checked: false },
     { id: '7', label: 'Exit Sign Inspection Needed', checked: false, critical: true },
     { id: '8', label: 'Inventory Count Pending', checked: false }
   ])
@@ -373,6 +371,8 @@ function OperationsPageContent() {
   // Calculate readiness score
   const completedCount = readinessTasks.filter((t) => t.checked).length
   const readinessScore = Math.round((completedCount / readinessTasks.length) * 100)
+  const unpaidBillsTotal = bills.filter((bill) => bill.status !== 'paid').reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
+  const sensorsOnline = utilities.length > 0
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
@@ -420,10 +420,10 @@ function OperationsPageContent() {
             {/* Top row metric cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <StatsCard label="Readiness Score" value={`${readinessScore}%`} subtitle="Venue Status Score" tone={readinessScore > 90 ? 'green' : 'gold'} />
-              <StatsCard label="Bills Due" value="$4,289.99" subtitle="Due this week" tone="gold" />
+              <StatsCard label="Unpaid Bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${bills.filter((bill) => bill.status !== 'paid').length} open records`} tone="gold" />
               <StatsCard label="Maintenance" value={String(maintenanceTasks.filter(t => t.status === 'pending').length)} subtitle="Unresolved issues" tone="blue" />
               <StatsCard label="Supply Alerts" value={String(suppliesCounts.filter(s => s.status === 'Low').length)} subtitle="Low stock items" tone="gold" />
-              <StatsCard label="Sensors Status" value="Active" subtitle="Utilities Online" tone="green" />
+              <StatsCard label="Sensors Status" value={sensorsOnline ? 'Reporting' : 'No Data'} subtitle={sensorsOnline ? `${utilities.length} utility records` : 'No sensor records found'} tone={sensorsOnline ? 'green' : 'gold'} />
             </div>
 
             {/* Event Day Readiness Checklist */}
@@ -439,7 +439,7 @@ function OperationsPageContent() {
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Interactive checklist required before hosting any event at the Luxor space. Complete all steps to guarantee guest satisfaction.
+                  Temporary checklist for this browser session. Items start unchecked and are not saved to a specific event yet.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                   {readinessTasks.map((task) => (
@@ -774,33 +774,10 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 max-w-2xl">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Post-Event Cleaning Audit Checklist</h3>
-            <div className="space-y-3">
-              {[
-                'Main lobby mirror buffed and dusted',
-                'Bathrooms deep sanitized and soap dispenses refilled',
-                'Ballroom flooring vacuumed and damp mopped',
-                'Commercial kitchen counters scrubbed and trash bags replaced',
-                'Round tables wiped down and stacked/aligned',
-                'Outer entrance foyer and parking lot debris checkout'
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
-                  <input
-                    type="checkbox"
-                    defaultChecked={idx < 4}
-                    className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer"
-                  />
-                  <span className="text-xs font-semibold text-zinc-300">{item}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-4 border-t border-zinc-900">
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Audit Photo upload</p>
-              <div className="border border-dashed border-zinc-900 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-zinc-950/20 transition-all">
-                <Upload className="text-zinc-650 mb-2" size={24} />
-                <p className="text-xs font-bold text-zinc-400">Upload Before / After Photos</p>
-                <p className="text-[9px] text-zinc-600 mt-1">Accepts PNG or JPEG up to 10MB</p>
-              </div>
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-black/20 p-6 text-center">
+              <AlertTriangle size={28} className="mx-auto text-amber-400" />
+              <p className="mt-3 text-xs font-bold text-white">Event-linked cleaning audits are not connected yet.</p>
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">The previous checklist and photo uploader were visual-only and did not save. Use maintenance tasks until cleaning records and attachments are tied to individual events.</p>
             </div>
           </div>
         </div>

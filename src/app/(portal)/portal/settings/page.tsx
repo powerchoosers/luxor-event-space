@@ -249,31 +249,9 @@ export default function SettingsPage() {
           {activeTab === 'business' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Business Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-bold text-zinc-500">Venue Name</label>
-                  <input
-                    type="text"
-                    defaultValue="Luxor Event Space"
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-bold text-zinc-500">Contact Email</label>
-                  <input
-                    type="email"
-                    defaultValue="booking@luxoratlaspalmas.com"
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
-                  />
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[9px] uppercase font-bold text-zinc-500">Venue Location Address</label>
-                  <input
-                    type="text"
-                    defaultValue="1025 Palmas Avenue, Suite 100, Dallas, TX 75201"
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
-                  />
-                </div>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <p className="text-xs font-bold text-amber-200">Business profile editing is not connected yet.</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">The public website remains the source of truth for the venue name, address, and contact details. This screen no longer shows editable fields that do not save.</p>
               </div>
             </div>
           )}
@@ -301,11 +279,8 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <p className="font-bold text-white">Venue Brand Tagline</p>
-                    <input
-                      type="text"
-                      defaultValue="ELEGANT SPACES. UNFORGETTABLE EVENTS."
-                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
-                    />
+                    <div className="w-full rounded-md border border-[color:var(--portal-border)] bg-[#050505] px-3 py-2 text-xs text-zinc-300">ELEGANT SPACES. UNFORGETTABLE EVENTS.</div>
+                    <p className="text-[9px] text-zinc-600">Display only. Public-site copy is managed in Site Content.</p>
                   </div>
                 </div>
               </div>
@@ -500,25 +475,9 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Automated Notifications</h3>
-                <div className="space-y-3">
-                  {[
-                    { label: 'Notify on new lead form inquiry', desc: 'Email alerts to booking mailbox on new form entries.', checked: true },
-                    { label: 'Auto-send tour reminders', desc: 'SMS/Email reminders scheduled to prospects 24 hours before tour.', checked: true },
-                    { label: 'Contract signature event alerts', desc: 'Notify workspace coordinators immediately when a client signs.', checked: true },
-                    { label: 'Overdue bill utility spikes alerts', desc: 'Alert maintenance when utility sensor spikes or bills exceed average.', checked: false }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
-                      <input
-                        type="checkbox"
-                        defaultChecked={item.checked}
-                        className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer mt-0.5"
-                      />
-                      <div>
-                        <p className="text-xs font-bold text-white">{item.label}</p>
-                        <p className="text-[10px] text-zinc-500 mt-1 leading-normal">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="rounded-xl border border-zinc-800 bg-black/20 p-4">
+                  <p className="text-xs font-bold text-white">New inquiry email alerts are active when Zoho is configured.</p>
+                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Tour emails can be queued from the calendar and client dossier. General reminder switches are hidden until each automation has a saved setting and a verified delivery job.</p>
                 </div>
               </div>
 
@@ -545,20 +504,8 @@ export default function SettingsPage() {
           {activeTab === 'team' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Team Access Roster</h3>
-              <div className="divide-y divide-zinc-900/60 text-xs">
-                {[
-                  { name: 'Elena Concierge', email: 'concierge@luxoratlaspalmas.com', role: 'Full Admin' },
-                  { name: 'Lewis Palma (Owner)', email: 'lewis@luxoratlaspalmas.com', role: 'Owner / CEO' }
-                ].map((user, idx) => (
-                  <div key={idx} className="py-3 flex justify-between items-center first:pt-0 last:pb-0">
-                    <div>
-                      <p className="font-bold text-white">{user.name}</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">{user.email}</p>
-                    </div>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">{user.role}</span>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs leading-relaxed text-zinc-400">Portal access is currently controlled by the approved Zoho email list in the server configuration. Named roles and per-page permissions are not implemented yet, so the portal no longer displays a fictional roster.</p>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-200">Anyone on the approved email list has broad owner-workspace access. Add role-based permissions before inviting sales, event staff, or bookkeepers.</div>
             </div>
           )}
 
@@ -569,9 +516,9 @@ export default function SettingsPage() {
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">External API Channels</h3>
               <div className="space-y-4">
                 {[
-                  { name: 'Zoho Mail Server API', status: 'Connected', desc: 'Used for mailbox synchronization and secure routing.' },
-                  { name: 'Stripe Payment Processor', status: 'Connected', desc: 'Securely collects deposits and updates invoice payments.' },
-                  { name: 'QuickBooks Bookkeeping Link', status: 'Disconnected', desc: 'Optional bookkeeping ledger synchronization.' }
+                  { name: 'Zoho Mail & Login', status: 'Available', desc: 'Used for portal login and email when server credentials are configured.' },
+                  { name: 'Stripe Payment Processor', status: 'Not connected', desc: 'Online card and ACH collection has not been implemented.' },
+                  { name: 'QuickBooks Bookkeeping Link', status: 'Not connected', desc: 'Bookkeeping synchronization has not been implemented.' }
                 ].map((api, idx) => (
                   <div key={idx} className="flex justify-between items-center border-b border-zinc-900 pb-3 last:border-0 last:pb-0">
                     <div>
@@ -579,7 +526,7 @@ export default function SettingsPage() {
                       <p className="text-[10px] text-zinc-550 mt-1 max-w-sm leading-relaxed">{api.desc}</p>
                     </div>
                     <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded border ${
-                      api.status === 'Connected' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : 'border-rose-500/25 bg-rose-500/10 text-rose-400'
+                      api.status === 'Available' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : 'border-zinc-700 bg-zinc-900 text-zinc-400'
                     }`}>
                       {api.status}
                     </span>
@@ -640,6 +587,7 @@ export default function SettingsPage() {
           {activeTab === 'hours' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Venue Tour Availability Hours</h3>
+              <p className="text-[10px] leading-relaxed text-amber-300">Informational only. These hours are not currently connected to the public tour-slot calendar.</p>
               <div className="space-y-3 font-mono text-xs">
                 {[
                   { day: 'Monday - Thursday', hours: '9:00 AM - 5:00 PM' },
@@ -658,15 +606,15 @@ export default function SettingsPage() {
           </PortalTabTransition>
 
           {/* Submit button */}
-          <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
+          {activeTab === 'notifications' && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
             <button
               type="submit"
               disabled={saving}
               className="bg-[#caa24c] hover:bg-[#dfbd68] text-black text-xs font-black uppercase tracking-widest px-6 py-3 rounded-lg shadow-xl shadow-[#caa24c]/10 cursor-pointer disabled:opacity-40 hover:scale-105 active:scale-95 transition-all"
             >
-              {saving ? 'Saving...' : 'Save Configuration'}
+              {saving ? 'Saving...' : 'Save Notification Recipients'}
             </button>
-          </div>
+          </div>}
         </form>
       </div>
     </PortalPageFrame>

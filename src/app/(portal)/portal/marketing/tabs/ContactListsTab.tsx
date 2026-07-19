@@ -106,11 +106,20 @@ export function ContactListsTab({
     }
   }, [onAddModalOpenChange])
 
+  const subscriberEmails = useMemo(
+    () => new Set(
+      marketingLists
+        .flatMap((list) => list.members.map((member) => member.email.trim().toLowerCase()))
+        .filter(Boolean),
+    ),
+    [marketingLists],
+  )
+
   // Map database inquiries to table contacts structure
   const dbContacts = useMemo(() => {
-    return inquiries.map((inq, idx) => {
-      const emailStatus = inq.status === 'closed_lost' ? 'Unsubscribed' : 'Subscribed'
-      const smsStatus = inq.phone ? 'Subscribed' : 'Unsubscribed'
+    return inquiries.map((inq) => {
+      const emailStatus = inq.email && subscriberEmails.has(inq.email.trim().toLowerCase()) ? 'Subscribed' : 'Not subscribed'
+      const smsStatus = 'Not tracked'
       const submittedForm = isGrandOpeningRsvp(inq)
         ? 'Grand Opening RSVP'
         : inq.message?.includes('Pricing') 
@@ -128,7 +137,8 @@ export function ContactListsTab({
         }
       }
       if (inq.status === 'booked') tagList.push('Client')
-      if (inq.status === 'new') tagList.push('New Lead')
+      else if (inq.status === 'closed_lost') tagList.push('Archived')
+      else if (inq.status === 'new') tagList.push('New Lead')
       else tagList.push('Hot Lead')
 
       return {
@@ -145,7 +155,7 @@ export function ContactListsTab({
         tags: tagList
       }
     })
-  }, [inquiries])
+  }, [inquiries, subscriberEmails])
 
   // Extract contacts from marketing lists
   const listContacts = useMemo<ContactRecord[]>(() => {
@@ -162,9 +172,9 @@ export function ContactListsTab({
           event_type: eventVal,
           source: m.source || 'Website',
           submittedForm: list.name || 'Newsletter Signup',
-          dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Recently',
+          dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Date not recorded',
           emailStatus: 'Subscribed',
-          smsStatus: phoneVal ? 'Subscribed' : 'Unsubscribed',
+          smsStatus: 'Not tracked',
           tags: ['Subscriber']
         })
       }
@@ -177,11 +187,11 @@ export function ContactListsTab({
     const map = new Map<string, ContactRecord>()
     
     // First insert list members
-    listContacts.forEach(c => map.set(c.email.toLowerCase(), c))
+    listContacts.forEach(c => map.set(c.email ? `email:${c.email.toLowerCase()}` : `id:${c.id}`, c))
     
     // Overwrite/merge with inquiry data (which is richer)
     dbContacts.forEach(c => {
-      const emailKey = c.email.toLowerCase()
+      const emailKey = c.email ? `email:${c.email.toLowerCase()}` : `id:${c.id}`
       if (map.has(emailKey)) {
         const existing = map.get(emailKey)
         if (existing) {
@@ -232,9 +242,9 @@ export function ContactListsTab({
   const categoryTabs: { id: CategoryView; label: string; count: number }[] = [
     { id: 'all', label: 'All Contacts', count: allContacts.length },
     { id: 'subscribers', label: 'Subscribers', count: allContacts.filter((contact) => contact.emailStatus === 'Subscribed').length },
-    { id: 'leads', label: 'Leads', count: allContacts.filter((contact) => !contact.tags.includes('Client')).length },
+    { id: 'leads', label: 'Leads', count: allContacts.filter((contact) => !contact.tags.includes('Client') && !contact.tags.includes('Archived')).length },
     { id: 'clients', label: 'Clients', count: allContacts.filter((contact) => contact.tags.includes('Client')).length },
-    { id: 'archived', label: 'Archived', count: allContacts.filter((contact) => contact.emailStatus === 'Unsubscribed').length },
+    { id: 'archived', label: 'Archived', count: allContacts.filter((contact) => contact.tags.includes('Archived')).length },
   ]
 
   // Filter contacts
@@ -253,11 +263,11 @@ export function ContactListsTab({
       if (view === 'subscribers') {
         if (c.emailStatus !== 'Subscribed') return false
       } else if (view === 'leads') {
-        if (c.tags.includes('Client')) return false
+        if (c.tags.includes('Client') || c.tags.includes('Archived')) return false
       } else if (view === 'clients') {
         if (!c.tags.includes('Client')) return false
       } else if (view === 'archived') {
-        if (c.emailStatus !== 'Unsubscribed') return false
+        if (!c.tags.includes('Archived')) return false
       }
 
       // 3. Source Filter
@@ -401,13 +411,13 @@ export function ContactListsTab({
                     value={emailStatusFilter}
                     onChange={setEmailStatusFilter}
                     className="w-full"
-                    options={[{ value: 'all', label: 'Email: All' }, { value: 'Subscribed', label: 'Email: Subscribed' }, { value: 'Unsubscribed', label: 'Email: Unsubscribed' }]}
+                    options={[{ value: 'all', label: 'Email: All' }, { value: 'Subscribed', label: 'Email: Subscribed' }, { value: 'Not subscribed', label: 'Email: Not subscribed' }]}
                   />
                   <PortalSelect
                     value={smsStatusFilter}
                     onChange={setSmsStatusFilter}
                     className="w-full"
-                    options={[{ value: 'all', label: 'SMS: All' }, { value: 'Subscribed', label: 'SMS: Subscribed' }, { value: 'Unsubscribed', label: 'SMS: Unsubscribed' }]}
+                    options={[{ value: 'all', label: 'SMS: All' }, { value: 'Not tracked', label: 'SMS: Not tracked' }]}
                   />
                 </div>
               </div>
@@ -461,6 +471,7 @@ export function ContactListsTab({
               </div>
             }
           >
+            <div className="overflow-x-auto">
             <PortalStickyTable minWidth="1050px">
               <PortalStickyThead>
                 <tr className="bg-zinc-950/80 text-[9px] font-black uppercase tracking-wider text-zinc-400">
@@ -503,7 +514,7 @@ export function ContactListsTab({
                           <span className={`inline-block rounded px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${
                             contact.emailStatus === 'Subscribed'
                               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
                           }`}>
                             {contact.emailStatus}
                           </span>
@@ -563,7 +574,8 @@ export function ContactListsTab({
                 )}
               </tbody>
             </PortalStickyTable>
-      </PortalTableCard>
+            </div>
+          </PortalTableCard>
 
       {/* Add Contact Modal */}
       <PortalModal

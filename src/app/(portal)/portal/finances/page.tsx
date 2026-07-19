@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import {
   FileText,
   Search,
@@ -157,6 +158,7 @@ type LuxorBookingExpense = {
 
   const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue')
   const overdueAR = overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+  const unpaidRetainers = bookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0)
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
   const monthlyProfit = Math.max(netRevenue - totalExpenses, 0)
@@ -184,7 +186,7 @@ type LuxorBookingExpense = {
     id: `inv-${i.id}`,
     amount: Number(i.total),
     status: 'paid',
-    payment_method: 'Stripe',
+    payment_method: 'Recorded invoice payment',
     paid_at: i.paid_at || i.updated_at,
     notes: `Invoice: ${i.client_name}`
   }))
@@ -287,7 +289,7 @@ type LuxorBookingExpense = {
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-zinc-500 font-sans">Unpaid Retainer Deposits</span>
-                    <span className="text-[#caa24c] font-bold">$2,500.00</span>
+                    <span className="text-[#caa24c] font-bold">${unpaidRetainers.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
@@ -527,75 +529,10 @@ type LuxorBookingExpense = {
         {/* REPORTS TAB */}
         {activeTab === 'reports' && (
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-            <div className="space-y-6">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Monthly Revenue Breakdown</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Revenue Channels</h4>
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Ballroom Rentals</span>
-                      <span className="font-mono text-zinc-400">82% (${(netRevenue * 0.82).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#caa24c] w-[82%]" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Hospitality & Bar Packages</span>
-                      <span className="font-mono text-zinc-400">12% (${(netRevenue * 0.12).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 w-[12%]" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Audio/Visual Add-ons</span>
-                      <span className="font-mono text-zinc-400">6% (${(netRevenue * 0.06).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 w-[6%]" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Expenses Breakdown</h4>
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Venue Rent & Security</span>
-                      <span className="font-mono text-zinc-400">78% (${(totalExpenses * 0.78).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-rose-500 w-[78%]" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Maintenance & Cleaning</span>
-                      <span className="font-mono text-zinc-400">12% (${(totalExpenses * 0.12).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500 w-[12%]" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1.5">
-                      <span className="text-white">Marketing & Supplies</span>
-                      <span className="font-mono text-zinc-400">10% (${(totalExpenses * 0.10).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-purple-500 w-[10%]" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </div>
+            <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Live Business Reports</h3>
+              <p className="mt-3 max-w-xl text-xs leading-relaxed text-zinc-500">The previous category percentages were estimates presented as facts. The Business Reports page now calculates revenue, conversion, booking value, event types, expenses, and outstanding invoices from saved records.</p>
+              <Link href="/portal/reports" className="mt-5 inline-flex rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-[#f1d27a]">Open live reports</Link>
             </div>
           </div>
         )}

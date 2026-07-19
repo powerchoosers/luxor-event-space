@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { LuxorTask, LuxorBill } from '@/lib/luxorInquiryTypes'
+import { LuxorBill } from '@/lib/luxorInquiryTypes'
 export type { LuxorBill }
 
 export type LuxorInventoryItem = {
@@ -45,6 +45,18 @@ export type LuxorCleaningLog = {
   notes: string | null
 }
 
+export type LuxorMaintenanceTask = {
+  id: string
+  created_at: string
+  updated_at: string
+  title: string
+  description: string | null
+  due_date: string | null
+  completed_at: string | null
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  status: 'pending' | 'completed' | 'cancelled'
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
@@ -58,7 +70,7 @@ export async function GET(request: NextRequest) {
       supabaseRest<LuxorVendor[]>('luxor_vendors?select=*&order=name.asc').catch(() => []),
       supabaseRest<LuxorUtilityReading[]>('luxor_utility_readings?select=*&order=sensor_type.asc').catch(() => []),
       supabaseRest<LuxorCleaningLog[]>('luxor_cleaning_logs?select=*&order=created_at.desc').catch(() => []),
-      supabaseRest<LuxorTask[]>('luxor_tasks?select=*&order=due_date.asc,created_at.desc').catch(() => []),
+      supabaseRest<LuxorMaintenanceTask[]>('luxor_maintenance_tasks?select=*&order=due_date.asc,created_at.desc').catch(() => []),
     ])
 
     return NextResponse.json({ bills, inventory, vendors, utilities, cleaning, tasks })
@@ -82,7 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Type parameter is required.' }, { status: 400 })
     }
 
-    let created: LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorTask | null = null
+    let created: LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorMaintenanceTask | null = null
 
     if (type === 'bill') {
       const [res] = await supabaseRest<LuxorBill[]>('luxor_bills?select=*', {
@@ -138,11 +150,10 @@ export async function POST(request: NextRequest) {
       })
       created = res
     } else if (type === 'task') {
-      const [res] = await supabaseRest<LuxorTask[]>('luxor_tasks?select=*', {
+      const [res] = await supabaseRest<LuxorMaintenanceTask[]>('luxor_maintenance_tasks?select=*', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
-          inquiry_id: data.inquiry_id || 'c37a6b8f-1a8b-4b16-896c-54a7fbd9c8d1',
           title: data.title,
           description: data.description || null,
           due_date: data.due_date || null,
@@ -182,12 +193,12 @@ export async function PATCH(request: NextRequest) {
     else if (type === 'vendor') table = 'luxor_vendors'
     else if (type === 'cleaning') table = 'luxor_cleaning_logs'
     else if (type === 'utility') table = 'luxor_utility_readings'
-    else if (type === 'task') table = 'luxor_tasks'
+    else if (type === 'task') table = 'luxor_maintenance_tasks'
     else {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }
 
-    const [updated] = await supabaseRest<(LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorUtilityReading | LuxorTask)[]>(`${table}?select=*&id=eq.${encodeURIComponent(id)}`, {
+    const [updated] = await supabaseRest<(LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorUtilityReading | LuxorMaintenanceTask)[]>(`${table}?select=*&id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
@@ -224,7 +235,7 @@ export async function DELETE(request: NextRequest) {
     else if (type === 'vendor') table = 'luxor_vendors'
     else if (type === 'cleaning') table = 'luxor_cleaning_logs'
     else if (type === 'utility') table = 'luxor_utility_readings'
-    else if (type === 'task') table = 'luxor_tasks'
+    else if (type === 'task') table = 'luxor_maintenance_tasks'
     else {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }

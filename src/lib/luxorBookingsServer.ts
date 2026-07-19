@@ -29,6 +29,16 @@ export async function getLuxorBooking(id: string) {
   return booking ?? null
 }
 
+export async function findLuxorBookingConflicts(eventDate: string, excludeId?: string) {
+  const filters = [
+    'select=id,client_name,event_date,start_time,end_time,status',
+    `event_date=eq.${encodeURIComponent(eventDate)}`,
+    'status=in.(tentative,confirmed)',
+  ]
+  if (excludeId) filters.push(`id=neq.${encodeURIComponent(excludeId)}`)
+  return supabaseRest<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=10`)
+}
+
 export async function listLuxorPaymentsByBooking(bookingId: string) {
   return supabaseRest<LuxorPayment[]>(
     `luxor_payments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=created_at.desc`,

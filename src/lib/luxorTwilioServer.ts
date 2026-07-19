@@ -53,9 +53,11 @@ export function getLuxorPublicBaseUrl() {
     process.env.LUXOR_PUBLIC_BASE_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') ||
-    'https://luxoratlaspalmas.com'
+    'https://www.luxoratlaspalmas.com'
 
-  return configured.replace(/\/$/, '')
+  const url = new URL(configured)
+  if (url.hostname === 'luxoratlaspalmas.com') url.hostname = 'www.luxoratlaspalmas.com'
+  return url.toString().replace(/\/$/, '')
 }
 
 export function sanitizeTwilioIdentity(value: string) {
@@ -111,8 +113,40 @@ export function validateTwilioWebhook(request: Request, params: TwilioForm) {
   if (!signature) return false
 
   const incomingUrl = new URL(request.url)
-  const validationUrl = `${config.publicBaseUrl}${incomingUrl.pathname}${incomingUrl.search}`
-  return twilio.validateRequest(config.authToken, signature, validationUrl, params)
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https'
+  const pathAndQuery = `${incomingUrl.pathname}${incomingUrl.search}`
+  const candidateOrigins = new Set<string>([
+    new URL(config.publicBaseUrl).origin,
+    incomingUrl.origin,
+  ])
+  if (forwardedHost) candidateOrigins.add(`${forwardedProto}://${forwardedHost}`)
+
+  // The apex domain redirects to www in Vercel. Accept both during rollout so
+  // signatures remain valid for in-flight Twilio webhooks created before the
+  // console URLs are switched to the canonical www host.
+  for (const origin of [...candidateOrigins]) {
+    const candidate = new URL(origin)
+    if (candidate.hostname === 'www.luxoratlaspalmas.com') {
+      candidate.hostname = 'luxoratlaspalmas.com'
+      candidateOrigins.add(candidate.origin)
+    } else if (candidate.hostname === 'luxoratlaspalmas.com') {
+      candidate.hostname = 'www.luxoratlaspalmas.com'
+      candidateOrigins.add(candidate.origin)
+    }
+  }
+
+  const isValid = [...candidateOrigins].some((origin) =>
+    twilio.validateRequest(config.authToken, signature, `${origin}${pathAndQuery}`, params),
+  )
+  if (!isValid) {
+    console.error('Luxor rejected an invalid Twilio signature.', {
+      path: incomingUrl.pathname,
+      forwardedHost: forwardedHost || null,
+      candidateHosts: [...candidateOrigins].map((origin) => new URL(origin).host),
+    })
+  }
+  return isValid
 }
 
 export function buildTwilioCallbackUrl(path: string, params: Record<string, string | null | undefined> = {}) {
