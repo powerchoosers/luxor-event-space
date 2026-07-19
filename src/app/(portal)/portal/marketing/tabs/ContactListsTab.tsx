@@ -51,6 +51,12 @@ interface ContactListsTabProps {
 
 type CategoryView = 'all' | 'subscribers' | 'leads' | 'clients' | 'archived'
 
+function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
+  return inquiry.campaign_key === 'grand_opening_2026_07_25'
+    || inquiry.flow === 'grand_opening_rsvp'
+    || inquiry.source === 'grand_opening_rsvp'
+}
+
 export function ContactListsTab({
   inquiries,
   marketingLists = [],
@@ -101,7 +107,9 @@ export function ContactListsTab({
     return inquiries.map((inq, idx) => {
       const emailStatus = inq.status === 'closed_lost' ? 'Unsubscribed' : 'Subscribed'
       const smsStatus = inq.phone ? 'Subscribed' : 'Unsubscribed'
-      const submittedForm = inq.message?.includes('Pricing') 
+      const submittedForm = isGrandOpeningRsvp(inq)
+        ? 'Grand Opening RSVP'
+        : inq.message?.includes('Pricing') 
         ? 'Pricing Guide Download' 
         : inq.event_type 
         ? `${inq.event_type} Inquiry` 
@@ -401,7 +409,10 @@ export function ContactListsTab({
             <PortalSelect
               value={formFilter}
               onChange={setFormFilter}
-              options={[{ value: 'all', label: 'Form: All' }, { value: 'Wedding Inquiry', label: 'Wedding Inquiry' }]}
+              options={formMenuCounts.map((form) => ({
+                value: form.filterVal,
+                label: form.filterVal === 'all' ? 'Form: All' : form.label,
+              }))}
             />
             <PortalSelect
               value={emailStatusFilter}
