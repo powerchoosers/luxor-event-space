@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Users,
   Search,
@@ -67,6 +67,8 @@ export function ContactListsTab({
   const [tagFilter, setTagFilter] = useState('all')
   const [emailStatusFilter, setEmailStatusFilter] = useState('all')
   const [smsStatusFilter, setSmsStatusFilter] = useState('all')
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const PAGE_SIZE = 25
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [submittingContact, setSubmittingContact] = useState(false)
@@ -278,6 +280,24 @@ export function ContactListsTab({
     })
   }, [allContacts, searchQuery, view, sourceFilter, formFilter, tagFilter, emailStatusFilter, smsStatusFilter])
 
+  // Pagination
+  const totalCount = filteredContacts.length
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const paginatedContacts = filteredContacts.slice(startIndex, startIndex + PAGE_SIZE)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, view, sourceFilter, formFilter, tagFilter, emailStatusFilter, smsStatusFilter])
+
+  // Bounds check
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(1)
+    }
+  }, [totalPages, currentPage])
+
   async function handleSubmitContact(e: React.FormEvent) {
     e.preventDefault()
     if (!newFullName.trim() || !newEmail.trim()) return
@@ -412,6 +432,54 @@ export function ContactListsTab({
                 </button>
               </div>
             }
+            footer={
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-[10px] uppercase font-bold text-zinc-550 tracking-widest select-none">
+                <div>
+                  Showing <span className="text-zinc-350 font-mono">{totalCount === 0 ? 0 : startIndex + 1}</span> -{' '}
+                  <span className="text-zinc-350 font-mono">{Math.min(startIndex + PAGE_SIZE, totalCount)}</span> of{' '}
+                  <span className="text-zinc-350 font-mono">{totalCount}</span> contacts
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
+                    >
+                      Prev
+                    </button>
+                    <div className="flex items-center gap-1 font-mono">
+                      {Array.from({ length: totalPages }).map((_, i) => {
+                        const pageNum = i + 1
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
+                              currentPage === pageNum
+                                ? 'bg-[#caa24c]/15 text-[#f1d27a] border-[#caa24c]/30 font-bold'
+                                : 'bg-zinc-950/20 text-zinc-550 border-zinc-900/60 hover:text-zinc-355 hover:bg-zinc-900'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            }
           >
             <PortalStickyTable minWidth="1050px">
               <PortalStickyThead>
@@ -428,8 +496,8 @@ export function ContactListsTab({
                 </tr>
               </PortalStickyThead>
               <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
-                {filteredContacts.length > 0 ? (
-                  filteredContacts.map((contact, idx) => {
+                {paginatedContacts.length > 0 ? (
+                  paginatedContacts.map((contact, idx) => {
                     const initials = contact.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
                     return (
                       <tr key={idx} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
