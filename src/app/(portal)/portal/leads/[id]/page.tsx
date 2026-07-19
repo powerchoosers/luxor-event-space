@@ -2148,7 +2148,8 @@ export default function LeadDetailPage({
             <div className="relative shrink-0">
               <PortalContactAvatar
                 name={lead.full_name}
-                className="h-20 w-20 text-2xl shadow-xl shadow-black/10"
+                size="2xl"
+                className="shadow-xl shadow-black/10"
               />
               <div
                 className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"

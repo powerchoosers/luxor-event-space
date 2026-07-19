@@ -984,7 +984,7 @@ export function PortalContactAvatar({
   className = '',
 }: {
   name: string
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
   className?: string
 }) {
   const initials = React.useMemo(() => {
@@ -1000,11 +1000,27 @@ export function PortalContactAvatar({
     md: 'w-8 h-8 text-xs',
     lg: 'w-10 h-10 text-sm',
     xl: 'w-16 h-16 text-xl',
+    '2xl': 'w-20 h-20 text-2xl',
   }
+
+  // Split classes to avoid conflicts when custom overrides are passed
+  const sizeClassParts = sizeClasses[size].split(' ')
+  const customParts = className.split(' ')
+
+  const hasWidth = customParts.some(p => p.startsWith('w-'))
+  const hasHeight = customParts.some(p => p.startsWith('h-'))
+  const hasText = customParts.some(p => p.startsWith('text-'))
+
+  const filteredSizeClasses = sizeClassParts.filter(part => {
+    if (part.startsWith('w-') && hasWidth) return false
+    if (part.startsWith('h-') && hasHeight) return false
+    if (part.startsWith('text-') && hasText) return false
+    return true
+  }).join(' ')
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif font-semibold text-[#caa24c] shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] transition-all duration-300 ${sizeClasses[size]} ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif font-semibold text-[#caa24c] shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] transition-all duration-300 ${filteredSizeClasses} ${className}`}
     >
       {initials}
     </div>
