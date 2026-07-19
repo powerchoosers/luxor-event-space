@@ -1,9 +1,10 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar, X } from 'lucide-react'
+import { Calendar, X, Pencil, Loader2 } from 'lucide-react'
+import { useToast } from '@/components/portal/ToastProvider'
 
 export function PortalPageFrame({
   children,
@@ -980,12 +981,18 @@ export function PortalDatePicker({
 
 export function PortalContactAvatar({
   name,
+  avatarUrl,
+  inquiryId,
   size = 'md',
   className = '',
+  onAvatarUpdate,
 }: {
   name: string
+  avatarUrl?: string | null
+  inquiryId?: string
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
   className?: string
+  onAvatarUpdate?: (newUrl: string) => void
 }) {
   const initials = React.useMemo(() => {
     if (!name) return '?'
@@ -1001,6 +1008,91 @@ export function PortalContactAvatar({
     lg: 'w-10 h-10 text-sm',
     xl: 'w-16 h-16 text-xl',
     '2xl': 'w-20 h-20 text-2xl',
+  }
+
+  const [showEditOverlay, setShowEditOverlay] = useState(false)
+  const hoverTimeoutRef = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const { notify } = useToast()
+
+  const handleMouseEnter = () => {
+    if (!inquiryId) return
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      setShowEditOverlay(true)
+    }, 2000)
+  }
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      window.clearTimeout(hoverTimeoutRef.current)
+      hoverTimeoutRef.current = null
+    }
+    setShowEditOverlay(false)
+  }
+
+  const handlePencilClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !inquiryId) return
+
+    setIsUploading(true)
+    try {
+      // 1. Upload to storage
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('name', `avatar-${inquiryId}`)
+      formData.append('category', 'avatar')
+      formData.append('makeBrandAsset', 'false')
+
+      const uploadRes = await fetch('/api/portal/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
+
+      const publicUrl = uploadData.url
+
+      // 2. Fetch current lead metadata
+      const leadRes = await fetch(`/api/inquiries?id=${inquiryId}`)
+      const leadData = await leadRes.json()
+      if (!leadRes.ok) throw new Error(leadData.error || 'Failed to fetch current lead details')
+
+      const updatedMetadata = {
+        ...(leadData.metadata || {}),
+        avatar_url: publicUrl,
+      }
+
+      // 3. PATCH update
+      const patchRes = await fetch('/api/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: inquiryId, metadata: updatedMetadata }),
+      })
+      const patchData = await patchRes.json()
+      if (!patchRes.ok) throw new Error(patchData.error || 'Failed to update avatar in database')
+
+      notify({ title: 'Avatar updated successfully', variant: 'success' })
+      if (onAvatarUpdate) {
+        onAvatarUpdate(publicUrl)
+      }
+    } catch (err) {
+      console.error('Avatar update failed:', err)
+      notify({
+        title: 'Avatar update failed',
+        description: err instanceof Error ? err.message : 'An error occurred during upload.',
+        variant: 'error',
+      })
+    } finally {
+      setIsUploading(false)
+      setShowEditOverlay(false)
+    }
   }
 
   // Split classes to avoid conflicts when custom overrides are passed
@@ -1020,9 +1112,51 @@ export function PortalContactAvatar({
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif font-semibold text-[#caa24c] shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] transition-all duration-300 ${filteredSizeClasses} ${className}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative flex shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 font-serif font-semibold text-[#caa24c] shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] transition-all duration-300 ${filteredSizeClasses} ${
+        inquiryId ? 'cursor-pointer' : ''
+      } ${className}`}
     >
-      {initials}
+      {/* Edit Overlay */}
+      {showEditOverlay && (
+        <div
+          onClick={handlePencilClick}
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/60 transition-all duration-200 hover:bg-black/70"
+          title="Change avatar"
+        >
+          {isUploading ? (
+            <Loader2 className="animate-spin text-white" size={size === 'sm' ? 12 : size === 'md' ? 14 : 18} />
+          ) : (
+            <Pencil className="text-white" size={size === 'sm' ? 11 : size === 'md' ? 13 : 16} />
+          )}
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      {inquiryId && (
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept="image/*"
+          className="hidden"
+          disabled={isUploading}
+        />
+      )}
+
+      {/* Avatar Content */}
+      <div className={`w-full h-full flex items-center justify-center ${showEditOverlay ? 'blur-[1.5px]' : ''}`}>
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={name}
+            className="w-full h-full object-cover rounded-full"
+          />
+        ) : (
+          initials
+        )}
+      </div>
     </div>
   )
 }

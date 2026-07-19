@@ -2148,8 +2148,19 @@ export default function LeadDetailPage({
             <div className="relative shrink-0">
               <PortalContactAvatar
                 name={lead.full_name}
+                avatarUrl={lead.metadata?.avatar_url as string | null}
+                inquiryId={lead.id}
                 size="2xl"
                 className="shadow-xl shadow-black/10"
+                onAvatarUpdate={(newUrl) => {
+                  setLead((current) => current ? {
+                    ...current,
+                    metadata: {
+                      ...(current.metadata || {}),
+                      avatar_url: newUrl
+                    }
+                  } : null)
+                }}
               />
               <div
                 className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
@@ -3712,6 +3723,15 @@ export default function LeadDetailPage({
                       isSaving={Boolean(savingLeadField)}
                       onUpdate={handleLeadFieldUpdate}
                       onViewDetails={() => scrollToSection('lead-messages')}
+                      onAvatarUpdate={(newUrl) => {
+                        setLead((current) => current ? {
+                          ...current,
+                          metadata: {
+                            ...(current.metadata || {}),
+                            avatar_url: newUrl
+                          }
+                        } : null)
+                      }}
                     />
 
                     {/* Recommended Actions */}
@@ -3937,6 +3957,15 @@ export default function LeadDetailPage({
                     isSaving={Boolean(savingLeadField)}
                     onUpdate={handleLeadFieldUpdate}
                     onViewDetails={() => scrollToSection('lead-messages')}
+                    onAvatarUpdate={(newUrl) => {
+                      setLead((current) => current ? {
+                        ...current,
+                        metadata: {
+                          ...(current.metadata || {}),
+                          avatar_url: newUrl
+                        }
+                      } : null)
+                    }}
                   />
 
                   {/* NEXT STEP */}
@@ -5330,11 +5359,13 @@ function ClientSummaryCard({
   isSaving,
   onUpdate,
   onViewDetails,
+  onAvatarUpdate,
 }: {
   lead: LuxorInquiry
   isSaving: boolean
   onUpdate: (field: EditableLeadField, value: string) => Promise<boolean>
   onViewDetails: () => void
+  onAvatarUpdate?: (newUrl: string) => void
 }) {
   const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
   const guestCountOptions = Array.from(new Set([
@@ -5365,7 +5396,13 @@ function ClientSummaryCard({
     <section className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <PortalContactAvatar name={lead.full_name} size="lg" />
+          <PortalContactAvatar
+            name={lead.full_name}
+            avatarUrl={lead.metadata?.avatar_url as string | null}
+            inquiryId={lead.id}
+            size="lg"
+            onAvatarUpdate={onAvatarUpdate}
+          />
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Client Summary</p>
             <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>

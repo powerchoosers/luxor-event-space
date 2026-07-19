@@ -572,6 +572,7 @@ export default function LeadsPage() {
                         <div className="relative">
                           <PortalContactAvatar
                             name={lead.full_name}
+                            avatarUrl={lead.metadata?.avatar_url as string | null}
                             size="md"
                             className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
                           />
@@ -676,6 +677,7 @@ export default function LeadsPage() {
                           <div className="flex items-center gap-3">
                             <PortalContactAvatar
                               name={lead.full_name}
+                              avatarUrl={lead.metadata?.avatar_url as string | null}
                               className="w-7 h-7 text-[10px] group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/25 transition-all duration-300"
                             />
                             <div className="min-w-0 flex-1">
@@ -788,6 +790,7 @@ export default function LeadsPage() {
                       <div className="flex items-center gap-3">
                         <PortalContactAvatar
                           name={lead.full_name}
+                          avatarUrl={lead.metadata?.avatar_url as string | null}
                           className="w-7 h-7 text-[10px]"
                         />
                         <div className="min-w-0 flex-1">

@@ -364,7 +364,7 @@ export default function CommunicationsPage() {
               {/* Header */}
               <div className="bg-[#0c0c0c] rounded-t-xl py-3.5 px-6 border-b border-zinc-900 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <PortalContactAvatar name={selectedInquiry.full_name} size="md" />
+                  <PortalContactAvatar name={selectedInquiry.full_name} avatarUrl={selectedInquiry.metadata?.avatar_url as string | null} size="md" />
                   <div>
                     <Link
                       href={`/portal/leads/${selectedInquiry.id}`}

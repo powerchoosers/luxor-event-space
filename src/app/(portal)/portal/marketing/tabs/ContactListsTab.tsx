@@ -42,6 +42,7 @@ export interface ContactRecord {
   emailStatus: string
   smsStatus: string
   tags: string[]
+  avatar_url?: string | null
 }
 
 interface ContactListsTabProps {
@@ -153,7 +154,8 @@ export function ContactListsTab({
         dateAdded: new Date(inq.created_at).toLocaleString(),
         emailStatus,
         smsStatus,
-        tags: tagList
+        tags: tagList,
+        avatar_url: (inq.metadata?.avatar_url as string) || null,
       }
     })
   }, [inquiries, subscriberEmails])
@@ -176,7 +178,8 @@ export function ContactListsTab({
           dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Date not recorded',
           emailStatus: 'Subscribed',
           smsStatus: 'Not tracked',
-          tags: ['Subscriber']
+          tags: ['Subscriber'],
+          avatar_url: (m.metadata?.avatar_url as string) || null,
         })
       }
     }
@@ -491,7 +494,7 @@ export function ContactListsTab({
                     return (
                       <tr key={contact.id} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
                         <td className="px-6 py-4 flex items-center gap-3">
-                          <PortalContactAvatar name={contact.full_name} size="md" />
+                          <PortalContactAvatar name={contact.full_name} avatarUrl={contact.avatar_url} size="md" />
                           <div>
                             <p className="font-bold text-white leading-tight">{contact.full_name}</p>
                             <p className="text-[10px] text-zinc-550 truncate mt-0.5">{contact.email}</p>
