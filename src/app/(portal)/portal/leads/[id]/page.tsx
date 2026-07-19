@@ -2294,23 +2294,24 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-3 xl:justify-end">
-                          {recommendedActions[0] ? (
-                            <button
-                              type="button"
-                              onClick={recommendedActions[0].onClick}
-                              disabled={recommendedActions[0].disabled}
-                              className="flex-1 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-95 disabled:opacity-40 xl:flex-none cursor-pointer"
-                            >
-                              {updatingStatus ? 'Saving...' : recommendedActions[0].label}
-                            </button>
-                          ) : null}
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 xl:max-w-[340px] xl:justify-end">
                           <button
                             type="button"
-                            onClick={() => scrollToSection('lead-booking')}
-                            className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] transition-colors hover:text-[#f1d27a] cursor-pointer"
+                            onClick={openTourScheduleModal}
+                            disabled={!lead.email}
+                            title={lead.email ? 'Schedule the tour and send the Zoho invite' : 'Add an email address before sending an invite'}
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 xl:flex-none"
                           >
-                            Contract &rarr;
+                            <Calendar size={13} /> Schedule Tour & Invite
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleGuidedStatusChange('tour_confirmed')}
+                            disabled={updatingStatus}
+                            title="Advance the lead when the tour was arranged outside Luxor"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.11em] text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40 xl:flex-none"
+                          >
+                            <CheckCircle2 size={13} /> {updatingStatus ? 'Saving...' : 'Tour Scheduled Offline'}
                           </button>
                         </div>
                       </div>
@@ -4526,22 +4527,24 @@ export default function LeadDetailPage({
       </div>
 
       <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Schedule Tour & Send Invite</h3>
-            <p className="mt-1 text-[11px] text-zinc-500">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase queues the reminders.</p>
+        <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#080706]">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-900 bg-white/[0.02] px-5 py-4 sm:px-6">
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Schedule Tour & Send Invite</h3>
+              <p className="mt-1 text-[11px] leading-4 text-zinc-500">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase sends the reminders.</p>
+            </div>
+            <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} className="shrink-0 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
           </div>
-          <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
-        </div>
-        <form onSubmit={handleScheduleTour} className="space-y-5 bg-[#080706] p-6">
-          <div className="overflow-hidden rounded-xl border border-[#caa24c]/20 bg-black">
+
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 pb-7 portal-scrollbar sm:p-6 sm:pb-8">
+            <div className="overflow-hidden rounded-xl border border-[#caa24c]/20 bg-black">
             <img src={getEventPreviewImage(lead.event_type)} alt={`${lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-75" />
             <div className="px-4 py-3">
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email image selected from event type</p>
               <p className="mt-1 text-xs font-semibold text-zinc-200">{lead.event_type || 'Private Event'} inspiration</p>
             </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Tour date</label>
               <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full" placeholder="Choose tour date" />
@@ -4569,18 +4572,30 @@ export default function LeadDetailPage({
                 { value: '90', label: '90 minutes' },
               ]} className="w-full" />
             </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Details Elena AI may mention to the client</label>
+              <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-zinc-800 bg-black/40 px-3 py-3 text-xs leading-5 text-zinc-200 outline-none focus:border-[#caa24c]/40" />
+              <p className="mt-2 text-[10px] leading-4 text-zinc-600">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
+            </div>
+            <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3 text-[10px] leading-5 text-blue-200/80">
+              This sends one native Zoho calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
+            </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Details Elena AI may mention to the client</label>
-            <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-zinc-800 bg-black/40 px-3 py-3 text-xs leading-5 text-zinc-200 outline-none focus:border-[#caa24c]/40" />
-            <p className="mt-2 text-[10px] leading-4 text-zinc-600">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-zinc-900 bg-[#0b0908]/98 px-5 py-4 shadow-[0_-18px_36px_rgba(0,0,0,0.38)] sm:px-6">
+            <div className="hidden text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-600 sm:block">
+              {!lead.email ? 'Add a client email first' : !tourScheduleDate || !tourScheduleTime ? 'Date and time are required' : 'Ready to send'}
+            </div>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} disabled={schedulingTour} className="min-h-11 flex-1 rounded-xl border border-zinc-800 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40 sm:flex-none">
+                Cancel
+              </button>
+              <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="inline-flex min-h-11 flex-[1.7] items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-xl shadow-[#b98a3e]/15 transition-colors hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none">
+                <Send size={13} /> {schedulingTour ? 'Creating Invite...' : 'Send Invite & Schedule'}
+              </button>
+            </div>
           </div>
-          <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3 text-[10px] leading-5 text-blue-200/80">
-            This sends one native Zoho calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
-          </div>
-          <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="w-full rounded-xl bg-[#b98a3e] py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-[#b98a3e]/15 disabled:opacity-40">
-            {schedulingTour ? 'Creating invite and emails...' : 'Schedule Tour & Send Invite'}
-          </button>
         </form>
       </PortalModal>
 
