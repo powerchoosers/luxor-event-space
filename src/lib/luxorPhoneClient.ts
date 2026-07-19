@@ -1,6 +1,7 @@
 export function getUsDialDigits(value: string) {
   const digits = value.replace(/\D/g, '')
-  return (digits.startsWith('1') && digits.length > 10 ? digits.slice(1) : digits).slice(0, 10)
+  const includesCountryCode = value.trimStart().startsWith('+1') || (digits.startsWith('1') && digits.length > 10)
+  return (includesCountryCode ? digits.slice(1) : digits).slice(0, 10)
 }
 
 export function formatUsDialInput(value: string) {
