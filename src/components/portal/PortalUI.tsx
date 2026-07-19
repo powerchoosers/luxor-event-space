@@ -585,8 +585,17 @@ export function PortalSelect({
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
+      const dropdownHeight = dropdownRef.current ? dropdownRef.current.offsetHeight : 180
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      
+      let top = rect.bottom + 6
+      if (spaceBelow < dropdownHeight + 6 && spaceAbove > dropdownHeight + 6) {
+        top = rect.top - dropdownHeight - 6
+      }
+
       const nextCoords = {
-        top: rect.bottom + 6,
+        top,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
         width: rect.width,
       }
@@ -738,8 +747,17 @@ export function PortalDatePicker({
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
+      const dropdownHeight = dropdownRef.current ? dropdownRef.current.offsetHeight : 290
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      
+      let top = rect.bottom + 6
+      if (spaceBelow < dropdownHeight + 6 && spaceAbove > dropdownHeight + 6) {
+        top = rect.top - dropdownHeight - 6
+      }
+
       const nextCoords = {
-        top: rect.bottom + 6,
+        top,
         left: Math.max(8, Math.min(rect.right - 256, window.innerWidth - 264)),
       }
       setCoords((current) => {
