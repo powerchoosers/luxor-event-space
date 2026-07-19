@@ -546,7 +546,7 @@ function MarketingPageContent() {
   }, [activeTab])
 
   return (
-    <PortalPageFrame className={isContainedTab ? '!h-full !min-h-0 overflow-hidden flex flex-col gap-4' : ''}>
+    <PortalPageFrame className="!h-full !min-h-0 overflow-hidden flex flex-col gap-4">
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
@@ -554,7 +554,7 @@ function MarketingPageContent() {
         actions={headerActions}
       />
 
-      <div className={`flex-grow flex flex-col min-h-0 mt-2 ${isContainedTab ? 'overflow-hidden' : 'overflow-visible'}`}>
+      <div className={`flex-grow flex flex-col min-h-0 mt-2 ${isContainedTab ? 'overflow-hidden' : 'overflow-y-auto portal-scrollbar pr-1'}`}>
         {activeTab === 'overview' && (
           <MarketingOverviewTab
             inquiries={inquiries}
