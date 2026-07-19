@@ -17,6 +17,7 @@ import {
 import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'
+import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 
 interface CallCenterTabProps {
   inquiries: LuxorInquiry[]
@@ -256,13 +257,18 @@ export function CallCenterTab({
               {/* Action Circle Buttons */}
               <div className="flex items-center gap-2">
                 {selectedLead.phone && (
-                  <a
-                    href={`tel:${selectedLead.phone}`}
+                  <button
+                    type="button"
+                    onClick={() => startLuxorBrowserCall({
+                      phoneNumber: selectedLead.phone!,
+                      contactName: selectedLead.full_name,
+                      inquiryId: selectedLead.id,
+                    })}
                     className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors"
                     title={`Call ${selectedLead.full_name}`}
                   >
                     <Phone size={14} />
-                  </a>
+                  </button>
                 )}
                 {selectedLead.phone && (
                   <button

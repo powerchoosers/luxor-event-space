@@ -47,6 +47,9 @@ import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, Lux
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
+import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
+import type { LuxorCall } from '@/lib/luxorCallTypes'
+import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 
 type ZohoEmailMessage = {
   id: string
@@ -62,6 +65,7 @@ type ZohoEmailMessage = {
 type ActivityEntry =
   | { kind: 'note'; id: string; createdAt: string; note: LuxorNote }
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
+  | { kind: 'call'; id: string; createdAt: string; call: LuxorCall }
 
 type LeadMarketingEvent = {
   id: string
@@ -153,6 +157,7 @@ export default function LeadDetailPage({
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
+  const [callRecords, setCallRecords] = useState<LuxorCall[]>([])
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
@@ -414,6 +419,7 @@ export default function LeadDetailPage({
         latestInvoice: null as LuxorInvoice | null,
         noteEntries: [] as ActivityEntry[],
         emailEntries: [] as ActivityEntry[],
+        callEntries: [] as ActivityEntry[],
         allActivityEntries: [] as ActivityEntry[],
         activityCounts: { all: 0, notes: 0, comms: 0, system: 0 },
         sortedTasks: [] as LuxorTask[],
@@ -436,7 +442,13 @@ export default function LeadDetailPage({
       createdAt: normalizeTimelineDate(email.receivedAt),
       email,
     }))
-    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries].sort(
+    const derivedCallEntries: ActivityEntry[] = callRecords.map((call) => ({
+      kind: 'call',
+      id: `call-${call.id}`,
+      createdAt: call.started_at || call.created_at,
+      call,
+    }))
+    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries, ...derivedCallEntries].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     const derivedSortedTasks = [...tasks].sort((a, b) => {
@@ -477,11 +489,12 @@ export default function LeadDetailPage({
       latestInvoice: derivedSortedInvoices[0] ?? null,
       noteEntries: derivedNoteEntries,
       emailEntries: derivedEmailEntries,
+      callEntries: derivedCallEntries,
       allActivityEntries: derivedAllActivityEntries,
       activityCounts: {
-        all: derivedNoteEntries.length + derivedEmailEntries.length,
+        all: derivedNoteEntries.length + derivedEmailEntries.length + derivedCallEntries.length,
         notes: notes.filter((note) => note.note_type === 'note').length,
-        comms: derivedEmailEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
+        comms: derivedEmailEntries.length + derivedCallEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
         system: notes.filter((note) => note.note_type === 'status_change').length,
       },
       sortedTasks: derivedSortedTasks,
@@ -490,13 +503,13 @@ export default function LeadDetailPage({
       sortedInvoices: derivedSortedInvoices,
       sortedPayments: derivedSortedPayments,
     }
-  }, [bookings, emailMessages, invoices, lead, notes, payments, tasks])
+  }, [bookings, callRecords, emailMessages, invoices, lead, notes, payments, tasks])
 
   const activityEntries = useMemo(() => {
     return leadDerivedData.allActivityEntries.filter((entry) => {
       if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
       if (activeFeedTab === 'comms') {
-        return entry.kind === 'email' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+        return entry.kind === 'email' || entry.kind === 'call' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
       }
       if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
       return true
@@ -800,7 +813,7 @@ export default function LeadDetailPage({
 
       void fetchClientEmailThread(leadData.email || '')
 
-      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData] = await Promise.all([
+      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -819,6 +832,9 @@ export default function LeadDetailPage({
         fetch(`/api/tour-actions?inquiryId=${id}`)
           .then(async (res) => res.ok ? ((await res.json()).jobs || []) : [])
           .catch(() => []),
+        fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
       ])
 
       setNotes(notesData)
@@ -827,6 +843,7 @@ export default function LeadDetailPage({
       setBookings(bookingsData)
       setPayments(paymentsData)
       setTourEmailJobs(tourJobsData)
+      setCallRecords(callsData)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
@@ -837,6 +854,17 @@ export default function LeadDetailPage({
 
   useEffect(() => {
     fetchAllData()
+  }, [id])
+
+  useEffect(() => {
+    const refreshCalls = () => {
+      void fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
+        .then(async (response) => response.ok ? await response.json() as LuxorCall[] : [])
+        .then(setCallRecords)
+        .catch(() => undefined)
+    }
+    window.addEventListener('luxor-call-history-refresh', refreshCalls)
+    return () => window.removeEventListener('luxor-call-history-refresh', refreshCalls)
   }, [id])
 
   const fetchClientEmailThread = async (email: string) => {
@@ -2135,12 +2163,13 @@ export default function LeadDetailPage({
             )}
             {lead.phone && (
               <div className="relative inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors">
-                <a 
-                  href={`tel:${lead.phone}`} 
+                <button
+                  type="button"
+                  onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
                   className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] hover:bg-[#caa24c]/2"
                 >
                   <Phone size={13} /> Call Client
-                </a>
+                </button>
                 <span className="h-4 w-px bg-[color:var(--portal-border)]" />
                 <button 
                   type="button" 
@@ -2530,13 +2559,14 @@ export default function LeadDetailPage({
                         ) : (
                           allActivityEntries.slice(0, 5).map((entry) => {
                             const isEmail = entry.kind === 'email'
+                            const isCall = entry.kind === 'call'
                             return (
                               <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
                                 <div className="flex items-center gap-3 min-w-0">
                                   <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
-                                    isEmail 
+                                    isEmail
                                       ? 'bg-purple-500/10 text-purple-400' 
-                                      : entry.note.note_type === 'call_log'
+                                      : isCall || entry.note.note_type === 'call_log'
                                       ? 'bg-emerald-500/10 text-emerald-400'
                                       : entry.note.note_type === 'email_log'
                                       ? 'bg-purple-500/10 text-purple-400'
@@ -2544,7 +2574,7 @@ export default function LeadDetailPage({
                                   }`}>
                                     {isEmail ? (
                                       <Mail size={13} />
-                                    ) : entry.note.note_type === 'call_log' ? (
+                                    ) : isCall || entry.note.note_type === 'call_log' ? (
                                       <Phone size={13} />
                                     ) : (
                                       <FileText size={13} />
@@ -2552,7 +2582,7 @@ export default function LeadDetailPage({
                                   </span>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold text-white leading-tight truncate">
-                                      {isEmail ? entry.email.subject : entry.note.content.substring(0, 45)}
+                                      {isEmail ? entry.email.subject : isCall ? describeActivityEntry(entry) : entry.note.content.substring(0, 45)}
                                     </p>
                                   </div>
                                 </div>
@@ -3873,7 +3903,7 @@ export default function LeadDetailPage({
                       {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => (
                         <div key={entry.id} className="flex items-center gap-3">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
-                            {entry.kind === 'email' ? <Mail size={11} /> : <Check size={11} className="stroke-[3]" />}
+                            {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : <Check size={11} className="stroke-[3]" />}
                           </span>
                           <div>
                             <p className="text-xs font-bold text-white leading-tight">{entry.kind === 'email' ? entry.email.subject : describeActivityEntry(entry)}</p>
@@ -3967,6 +3997,10 @@ export default function LeadDetailPage({
               ) : null}
 
               {activeLeadTab === 'messages' ? (
+                <LuxorTextThread inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} />
+              ) : null}
+
+              {activeLeadTab === 'messages' ? (
                 <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                   <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                     <div>
@@ -4011,6 +4045,29 @@ export default function LeadDetailPage({
               ) : (
                 <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
                   {visibleActivityEntries.map((entry) => {
+                    if (entry.kind === 'call') {
+                      const call = entry.call
+                      const otherNumber = call.direction === 'inbound' ? call.caller_number : call.callee_number
+                      return (
+                        <div key={entry.id} className="portal-render-surface relative group">
+                          <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Luxor Browser Phone</span>
+                            <div className="flex items-center gap-3">
+                              <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${call.direction === 'inbound' ? 'border-blue-500/20 bg-blue-500/10 text-blue-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>{call.direction}</span>
+                              <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold text-zinc-200">{describeActivityEntry(entry)}</p>
+                          <p className="mt-1 font-mono text-[10px] text-zinc-600">{otherNumber} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
+                          {call.is_voicemail && call.recording_sid ? (
+                            <audio controls preload="none" className="mt-3 w-full" src={`/api/twilio/recordings/${call.recording_sid}`}>Your browser does not support audio playback.</audio>
+                          ) : null}
+                          <Link href="/portal/calls" className="mt-2 inline-block text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a]">Open call record →</Link>
+                        </div>
+                      )
+                    }
+
                     if (entry.kind === 'email') {
                       const email = entry.email
                       const isOutgoing = email.direction === 'outgoing'
@@ -4516,9 +4573,9 @@ export default function LeadDetailPage({
       )}
 
       <div className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
-        <a href={lead.phone ? `tel:${lead.phone}` : undefined} aria-disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] aria-disabled:pointer-events-none aria-disabled:opacity-40">
+        <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40">
           <Phone size={14} /> Call
-        </a>
+        </button>
         <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))} disabled={!lead.email} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
           <Mail size={14} /> Email
         </button>
@@ -5843,10 +5900,24 @@ function describeActivityEntry(entry: ActivityEntry) {
     return entry.email.direction === 'outgoing' ? 'Email sent' : 'Email received'
   }
 
+  if (entry.kind === 'call') {
+    if (entry.call.is_voicemail) return 'Voicemail received'
+    if (entry.call.direction === 'inbound') {
+      return ['busy', 'failed', 'no-answer', 'canceled'].includes(entry.call.status) ? 'Inbound call missed' : 'Inbound call received'
+    }
+    return 'Outbound call placed'
+  }
+
   if (entry.note.note_type === 'call_log') return 'Call logged'
   if (entry.note.note_type === 'email_log') return 'Email logged'
   if (entry.note.note_type === 'status_change') return 'Status updated'
   return 'Note added'
+}
+
+function formatCallDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = Math.max(0, seconds % 60)
+  return `${minutes}:${String(remainder).padStart(2, '0')}`
 }
 
 function getLeadNextStep(lead: LuxorInquiry, latestBooking: LuxorBooking | null, latestInvoice: LuxorInvoice | null) {

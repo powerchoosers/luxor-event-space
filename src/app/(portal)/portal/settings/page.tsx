@@ -30,6 +30,7 @@ import {
   PortalSelect
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -563,6 +564,7 @@ export default function SettingsPage() {
 
           {/* INTEGRATIONS */}
           {activeTab === 'integrations' && (
+            <div className="space-y-6">
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">External API Channels</h3>
               <div className="space-y-4">
@@ -584,6 +586,11 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Twilio Phone Numbers</h3><p className="mt-1 text-[10px] leading-relaxed text-zinc-550">Search, purchase, configure, and choose the number Luxor uses for browser calls and text messages.</p></div>
+              <TwilioNumberManager />
+            </div>
             </div>
           )}
 

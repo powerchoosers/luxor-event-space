@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { CalendarDays, Mail, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
+import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
   { label: 'Grand Opening', href: '/grand-opening-rsvp' },
@@ -70,6 +71,7 @@ export const Footer = () => {
                 <Mail className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>booking@luxoratlaspalmas.com</span>
               </a>
+              <PublicPhoneLink className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start" />
               <p>Private venue tours by appointment.</p>
             </div>
           </div>

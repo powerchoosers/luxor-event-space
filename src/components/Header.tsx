@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { CalendarDays, Menu, X } from 'lucide-react'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
   { label: 'Grand Opening', href: '/grand-opening-rsvp' },
@@ -94,6 +95,8 @@ export const Header = () => {
 
         <div className="flex items-center gap-4">
 
+          <PublicPhoneLink compact className="hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
+
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -175,6 +178,7 @@ export const Header = () => {
                   <CalendarDays size={18} />
                   Schedule a Tour
                 </Link>
+                <PublicPhoneLink className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#f1d27a]" />
               </motion.div>
             </motion.div>
           </motion.div>

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -715,9 +716,9 @@ export default function LeadsPage() {
                               </a>
                             )}
                             {lead.phone && (
-                              <a href={`tel:${lead.phone}`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Call Phone">
+                              <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Call from Luxor browser phone">
                                 <Phone size={11} />
-                              </a>
+                              </button>
                             )}
                           </div>
 

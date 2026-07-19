@@ -40,6 +40,7 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
 import { ToastProvider } from '@/components/portal/ToastProvider'
 import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
+import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
@@ -54,6 +55,8 @@ const PortalElenaChat = dynamic(
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
+  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Calls & Voicemail' },
+  { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
@@ -176,17 +179,22 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     const loadData = async () => {
       try {
-        const res = await fetch('/api/inquiries', {
+        const [res, messageRes] = await Promise.all([
+          fetch('/api/inquiries', {
           headers: { Accept: 'application/json' },
           cache: 'no-store',
-        })
+          }),
+          fetch('/api/twilio/messages?limit=200', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        ])
         if (res.ok && active) {
           const data = await res.json()
           setInquiries(data)
           
           // Count 'new' or 'tour_requested' inquiries as unhandled notifications
           const unhandled = data.filter((i: LuxorInquiry) => i.status === 'new' || i.status === 'tour_requested').length
-          setNotificationCount(unhandled)
+          const messages = messageRes.ok ? await messageRes.json() as Array<{ direction: string; is_read: boolean }> : []
+          const unreadTexts = messages.filter((message) => message.direction === 'inbound' && !message.is_read).length
+          setNotificationCount(unhandled + unreadTexts)
         }
       } catch (err) {
         console.error('Failed to sync notification counter:', err)
@@ -228,6 +236,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <ToastProvider>
+      <PortalVoiceProvider>
       <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto portal-scrollbar ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -440,9 +449,10 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-5">
+            <PortalPhoneButton />
             
             {/* Bell Notifications */}
-            <Link href="/portal/leads" prefetch className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
+            <Link href="/portal/messages" prefetch className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
               <Bell size={18} className="text-zinc-400 transition-colors" />
               {notificationCount > 0 && (
                 <span className="absolute right-1.5 top-1.5 h-4 min-w-4 rounded-full border border-black bg-blue-600 text-[8px] font-black text-white flex items-center justify-center px-1 font-mono">
@@ -451,7 +461,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               )}
             </Link>
 
-            <Link href="/portal/communications" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Messages">
+            <Link href="/portal/messages" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Text messages">
               <MessageSquare size={18} className="text-zinc-400" />
             </Link>
             
@@ -528,6 +538,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           />
         )}
       </AnimatePresence>
+      </PortalVoiceProvider>
       </ToastProvider>
     </body>
   )
