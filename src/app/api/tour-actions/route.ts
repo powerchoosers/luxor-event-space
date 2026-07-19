@@ -6,7 +6,6 @@ import {
   createPublicToken,
   getTourResponseLinks,
   listLuxorEmailJobsForInquiry,
-  processLuxorEmailJobs,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
@@ -169,15 +168,14 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      const [sendResult] = await processLuxorEmailJobs([confirmationJob])
       await createNote(
         inquiryId,
-        `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. Zoho calendar invite sent; branded confirmation ${sendResult.status === 'sent' ? 'sent' : 'saved for follow-up'}, with ${reminderJobs.length} automatic reminder${reminderJobs.length === 1 ? '' : 's'} queued.`,
+        `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. Zoho calendar invite sent; branded confirmation and ${reminderJobs.length} automatic reminder${reminderJobs.length === 1 ? '' : 's'} queued for Supabase delivery.`,
         'email_log',
         session.email,
       )
 
-      return NextResponse.json({ inquiry: updated, calendar, confirmationJob, reminderJobs, sendResult }, { status: 201 })
+      return NextResponse.json({ inquiry: updated, calendar, confirmationJob, reminderJobs }, { status: 201 })
     }
 
     if (action === 'send-email') {
