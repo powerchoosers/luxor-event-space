@@ -1,4 +1,5 @@
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
+import { LUXOR_BOOKING_EMAIL, LUXOR_VENUE_ADDRESS, LUXOR_WEBSITE } from './luxorVenue'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -22,7 +23,6 @@ export function buildLuxorPaymentRequestEmail(input: {
     <tr>
       <td style="padding:12px 0;border-bottom:1px solid rgba(202,162,76,0.1);font-size:12px;line-height:1.5;color:rgba(247,239,227,0.82);">${escapeHtml(item.description)}</td>
       <td align="center" style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,0.1);font-size:12px;color:rgba(215,194,154,0.66);">${Number(item.quantity)}</td>
-      <td align="right" style="padding:12px 0;border-bottom:1px solid rgba(202,162,76,0.1);font-size:12px;color:#f7efe3;">${money(item.total)}</td>
     </tr>`).join('')
 
   return {
@@ -56,7 +56,7 @@ export function buildLuxorPaymentRequestEmail(input: {
         <tr><td style="padding:24px 48px 10px;">
           <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:#caa24c;">Proposal Services</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-            <tr><td style="padding:8px 0;font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:rgba(202,162,76,0.62);">Service</td><td align="center" style="padding:8px;font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:rgba(202,162,76,0.62);">Qty</td><td align="right" style="padding:8px 0;font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:rgba(202,162,76,0.62);">Total</td></tr>
+            <tr><td style="padding:8px 0;font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:rgba(202,162,76,0.62);">Service</td><td align="center" style="padding:8px;font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:rgba(202,162,76,0.62);">Qty</td></tr>
             ${itemRows}
           </table>
         </td></tr>
@@ -74,7 +74,7 @@ export function buildLuxorPaymentRequestEmail(input: {
         </td></tr>
         <tr><td style="background-color:#080605;padding:30px 48px 34px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
           <p style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:25px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
-          <p style="margin:0;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.5);">1934 Pendleton Dr, Garland, TX 75041<br /><a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.72);text-decoration:none;">booking@luxoratlaspalmas.com</a><br /><a href="https://www.luxoratlaspalmas.com" style="color:rgba(202,162,76,0.72);text-decoration:none;">luxoratlaspalmas.com</a></p>
+          <p style="margin:0;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.5);">${escapeHtml(LUXOR_VENUE_ADDRESS)}<br /><a href="mailto:${escapeHtml(LUXOR_BOOKING_EMAIL)}" style="color:rgba(202,162,76,0.72);text-decoration:none;">${escapeHtml(LUXOR_BOOKING_EMAIL)}</a><br /><a href="${escapeHtml(LUXOR_WEBSITE)}" style="color:rgba(202,162,76,0.72);text-decoration:none;">luxoratlaspalmas.com</a></p>
         </td></tr>
       </table>
     </td></tr>

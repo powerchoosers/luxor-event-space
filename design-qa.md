@@ -1,48 +1,53 @@
-# Design QA — Messages new-conversation pane
+# Proposal Builder Design QA
 
-- Source visual truth: `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-df6cd7c1-4c36-4229-82ed-2df08dc8591f.png`
-- Implementation route: `/portal/messages`
-- Intended viewport: desktop, 1828 × 874 reference
-- State: New conversation recipient search open
+- Source visual truth: `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-fe31aa54-6568-468b-80ef-9172a19a7c3d.png`
+- Supporting pricing source: `C:/Users/Lap3p/Downloads/Packages.xlsx`
+- Intended implementation route: `/portal/leads/[id]`, Tour stage, Proposal Builder modal
+- Intended viewport: 1024 × 768 (iPad landscape), with portrait and desktop responsive checks planned
+- Intended state: Mid package selected, editable internal pricing visible, client-safe preview visible
+- Themes: light and dark
+- Implementation screenshot: unavailable
 
 ## Full-view comparison evidence
 
-The Google Messages reference was opened at original resolution. The Luxor implementation could not be captured because the in-app browser runtime failed before navigation. This was a browser-control runtime failure rather than an application error.
+Blocked. The in-app browser runtime could not start because its local kernel was interpreted as an ES module by the machine-level `C:/Users/Lap3p/package.json`. The failure occurred before a browser tab could be connected, so a browser-rendered screenshot of the authenticated proposal modal could not be captured.
 
-## Focused comparison evidence
+The generated client PDF was rendered and visually inspected at `C:/Users/Lap3p/.codex/visualizations/2026/07/19/019f7bdf-263c-7711-85c9-398d20c9c92f/proposal-sample.png`. It correctly shows service names and quantities, one final total, the San Antonio venue address, and no per-item prices. This is supporting document evidence, not a substitute for the required browser comparison.
 
-Rendered comparison is unavailable for the same browser-runtime blocker. Code inspection confirms the requested interaction: the left conversation rail remains present while recipient search replaces the right thread pane; line selection is housed in a separate overflow menu beside New.
+## Focused region comparison evidence
+
+Not available because the browser-rendered implementation screenshot could not be captured. Source-code checks confirm the three intended regions—proposal details, package/service editor, and client preview—but code inspection is not treated as visual evidence.
 
 ## Findings
 
-- [P1] Browser-rendered interaction verification unavailable.
-  - Location: `/portal/messages`, New button, both overflow menus, and right-side recipient search.
-  - Evidence: no post-change implementation screenshot could be captured.
-  - Impact: exact responsive sizing and hover brightness cannot be visually certified from code alone.
-  - Fix: reconnect the in-app browser and capture the New conversation state plus both overflow-menu hover/open states.
+- [P2] Browser-rendered tablet and theme validation is missing.
+  - Location: Proposal Builder modal at `/portal/leads/[id]`.
+  - Evidence: the source reference is available, but no authenticated implementation screenshot could be captured.
+  - Impact: iPad portrait/landscape overflow, modal density, and light/dark contrast cannot receive a final visual sign-off.
+  - Fix: capture the Mid-package state at 1024 × 768 and 768 × 1024 in both themes once the in-app browser runtime is available; compare the source and implementation in one combined review input.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: existing Luxor portal typography is intentionally preserved rather than copying Google branding; rendered comparison blocked.
-- Spacing and layout rhythm: the reference's persistent left rail/right compose pane structure is implemented; rendered comparison blocked.
-- Colors and visual tokens: existing Luxor black, zinc, and gold tokens are preserved.
-- Image quality and asset fidelity: no new raster assets are required; existing contact avatars remain in use.
-- Copy and content: the right pane uses “New conversation,” a “To:” field, contact search, and matching-contact results.
+- Fonts and typography: implemented with the existing portal type system and compact uppercase labels; browser validation blocked.
+- Spacing and layout rhythm: three-column landscape grid and stacked portrait flow implemented; browser validation blocked.
+- Colors and tokens: surfaces, borders, text, and muted text use `--portal-*` theme variables; browser validation blocked.
+- Image quality and asset fidelity: the reference does not require a new image asset; existing Lucide icons are used instead of handcrafted artwork.
+- Copy and content: package names, internal pricing labels, client privacy explanation, and email actions are implemented with real Luxor data.
+
+## Primary interactions checked
+
+- Package preset selection and exact workbook totals checked in code.
+- Add/remove service behavior checked in code.
+- Custom line-item creation checked in code.
+- Internal-only price editing and client-safe preview checked in code.
+- Proposal save and continue-to-email handoff checked in code.
+- Signed Stripe webhook endpoint verified locally with a harmless test event.
+- Console errors: not checked because browser startup was blocked.
 
 ## Comparison history
 
-- Initial mismatch: New Message appeared as a centered modal and the number selector occupied permanent rail space.
-- Fixes made: replaced the modal with the right-side compose pane, moved line selection into an overflow menu, and removed idle borders from both three-dot triggers while adding brighter hover containers.
-- Post-fix visual evidence: blocked by the in-app browser runtime connection failure.
+- Pass 1: blocked before capture. No visual fixes were made from a browser comparison because the implementation view was unavailable.
 
-## Implementation checklist
+## Final result
 
-- [x] Keep the conversation rail visible while starting a message on desktop.
-- [x] Render recipient search in the thread pane.
-- [x] Move business-number selection beside New in an overflow menu.
-- [x] Remove idle borders from both overflow buttons.
-- [x] Add brighter hover backgrounds and icon colors.
-- [x] Pass TypeScript, lint, and whitespace validation.
-- [ ] Capture and compare the rendered implementation when browser control is available.
-
-final result: blocked
+blocked

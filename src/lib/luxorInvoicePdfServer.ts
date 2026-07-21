@@ -1,7 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
+import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+function displayDate(value: string) {
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-US')
+}
 
 export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: LuxorInquiry | null) {
   const pdf = await PDFDocument.create()
@@ -36,41 +42,31 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   draw(`#${invoice.id.slice(0, 8).toUpperCase()}`, 360, 10, regular)
   y -= 17
   draw(inquiry?.email || '', margin, 10, regular, muted)
-  draw(`Created ${new Date(invoice.created_at).toLocaleDateString('en-US')}`, 360, 10, regular, muted)
+  draw(`Created ${displayDate(invoice.created_at)}`, 360, 10, regular, muted)
   y -= 17
-  draw([invoice.event_type, inquiry?.target_date].filter(Boolean).join(' - '), margin, 10, regular, muted)
-  if (invoice.due_date) draw(`Due ${new Date(invoice.due_date).toLocaleDateString('en-US')}`, 360, 10, regular, muted)
+  draw([invoice.event_type, inquiry?.target_date ? displayDate(inquiry.target_date) : null].filter(Boolean).join(' - '), margin, 10, regular, muted)
+  if (invoice.due_date) draw(`Due ${displayDate(invoice.due_date)}`, 360, 10, regular, muted)
   y -= 38
 
   draw('SERVICE', margin, 8, bold, muted)
-  draw('QTY', 400, 8, bold, muted)
-  draw('PRICE', 455, 8, bold, muted)
-  draw('TOTAL', 520, 8, bold, muted)
+  draw('QTY', 520, 8, bold, muted)
   y -= 12
   page.drawLine({ start: { x: margin, y }, end: { x: 558, y }, thickness: 0.6, color: rgb(0.8, 0.79, 0.76) })
   y -= 22
 
   for (const item of invoice.line_items || []) {
     if (y < 120) newPage()
-    const label = item.description.length > 56 ? `${item.description.slice(0, 53)}...` : item.description
+    const label = item.description.length > 76 ? `${item.description.slice(0, 73)}...` : item.description
     draw(label, margin, 10, regular)
-    draw(String(item.quantity), 405, 10, regular)
-    draw(money(item.unitPrice), 455, 10, regular)
-    draw(money(item.total), 515, 10, bold)
+    draw(String(item.quantity), 525, 10, regular)
     y -= 25
   }
 
   y -= 8
-  page.drawLine({ start: { x: 360, y }, end: { x: 558, y }, thickness: 0.6, color: rgb(0.8, 0.79, 0.76) })
-  y -= 22
-  draw('Subtotal', 400, 10, regular, muted)
-  draw(money(invoice.subtotal), 510, 10, regular)
-  y -= 20
-  draw(`Tax (${(Number(invoice.tax_rate || 0) * 100).toFixed(2)}%)`, 400, 10, regular, muted)
-  draw(money(invoice.total - invoice.subtotal), 510, 10, regular)
-  y -= 25
-  draw('TOTAL', 400, 11, bold)
-  draw(money(invoice.total), 510, 12, bold, gold)
+  page.drawLine({ start: { x: 340, y }, end: { x: 558, y }, thickness: 0.6, color: rgb(0.8, 0.79, 0.76) })
+  y -= 28
+  draw('TOTAL INVESTMENT', 340, 11, bold)
+  draw(money(invoice.total), 485, 13, bold, gold)
 
   if (invoice.notes) {
     y -= 48
@@ -82,6 +78,6 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     }
   }
 
-  page.drawText('Luxor Event Space - 1934 Pendleton Dr, Garland, TX 75041', { x: margin, y: 36, size: 8, font: regular, color: muted })
+  page.drawText(`Luxor Event Space - ${LUXOR_VENUE_ADDRESS}`, { x: margin, y: 36, size: 8, font: regular, color: muted })
   return pdf.save()
 }

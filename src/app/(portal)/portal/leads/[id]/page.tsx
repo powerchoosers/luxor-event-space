@@ -52,6 +52,7 @@ import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
+import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
 import { catalogItemToLineItem, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
 type ZohoEmailMessage = {
@@ -1120,23 +1121,15 @@ export default function LeadDetailPage({
   const handleInvoiceItemChange = (index: number, field: keyof LuxorInvoiceLineItem, val: string | number) => {
     const updated = [...invoiceItems]
     const item = { ...updated[index] }
-
-    if (field === 'quantity') {
-      item.quantity = Math.max(1, Number(val))
-    } else if (field === 'unitPrice') {
-      item.unitPrice = Math.max(0, Number(val))
-    } else if (field === 'description') {
-      item.description = String(val)
-    }
-
+    if (field === 'quantity') item.quantity = Math.max(1, Number(val))
+    else if (field === 'unitPrice') item.unitPrice = Math.max(0, Number(val))
+    else if (field === 'description') item.description = String(val)
     item.total = item.quantity * item.unitPrice
     updated[index] = item
     setInvoiceItems(updated)
   }
 
-  const addInvoiceItem = () => {
-    setInvoiceItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0, total: 0 }])
-  }
+  const addInvoiceItem = () => setInvoiceItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0, total: 0 }])
 
   const addCatalogItem = () => {
     const catalogItem = LUXOR_SERVICE_CATALOG.find((item) => item.id === selectedCatalogItem)
@@ -1151,15 +1144,14 @@ export default function LeadDetailPage({
 
   const removeInvoiceItem = (index: number) => {
     if (invoiceItems.length === 1) return
-    setInvoiceItems((prev) => prev.filter((_, i) => i !== index))
+    setInvoiceItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
   }
 
   const getInvoiceSubtotal = () => invoiceItems.reduce((acc, item) => acc + item.total, 0)
   const getInvoiceTax = () => getInvoiceSubtotal() * (Math.max(0, Number(invoiceTaxRate) || 0) / 100)
   const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
 
-  const handleCreateInvoice = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleCreateInvoice = async (action: 'save' | 'email') => {
     if (!lead) return
 
     try {
@@ -1185,21 +1177,17 @@ export default function LeadDetailPage({
         }),
       })
 
-      if (!res.ok) throw new Error('Failed to create invoice.')
-      const invoice = await res.json()
+      const responseBody = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(responseBody.error || 'Failed to create invoice.')
+      const invoice = responseBody as LuxorInvoice
       setInvoices((prev) => [invoice, ...prev])
       await handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
       setIsInvoiceModalOpen(false)
-      
-      // Reset invoice form
-      setInvoiceDesc('')
-      setInvoiceDueDate('')
-      setInvoiceNotes('')
-      setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
-      notify({ title: 'Invoice draft created', description: `${formatMoney(total)} was added to this lead.`, variant: 'success' })
+      notify({ title: 'Proposal saved', description: `${formatMoney(total)} was added to this lead.`, variant: 'success' })
+      if (action === 'email') openPaymentRequest(invoice)
     } catch (err) {
       console.error(err)
-      notify({ title: 'Invoice not created', description: 'Review the invoice fields and try again.', variant: 'error' })
+      notify({ title: 'Proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
     } finally {
       setSubmittingInvoice(false)
     }
@@ -2771,6 +2759,9 @@ export default function LeadDetailPage({
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Reschedule</button>
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Follow Up</button>
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex min-h-11 flex-[1.4] min-w-[140px] items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#b98a3e]/15 transition-colors hover:bg-[#a8792f] cursor-pointer">
+                            <FileText size={14} /> Build Proposal
+                          </button>
                         </div>
                       </section>
                       
@@ -4935,8 +4926,29 @@ export default function LeadDetailPage({
         ) : null}
       </PortalModal>
 
-      {/* Invoice drafting modal */}
-      <PortalModal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
+      <ProposalBuilderModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        clientName={lead.full_name}
+        clientEmail={lead.email}
+        eventType={lead.event_type}
+        eventDate={lead.target_date}
+        description={invoiceDesc}
+        onDescriptionChange={setInvoiceDesc}
+        dueDate={invoiceDueDate}
+        onDueDateChange={setInvoiceDueDate}
+        items={invoiceItems}
+        onItemsChange={setInvoiceItems}
+        notes={invoiceNotes}
+        onNotesChange={setInvoiceNotes}
+        taxRate={invoiceTaxRate}
+        onTaxRateChange={setInvoiceTaxRate}
+        submitting={submittingInvoice}
+        onSubmit={(action) => void handleCreateInvoice(action)}
+      />
+
+      {/* Legacy invoice builder retained as a fallback while the new proposal builder is validated. */}
+      <PortalModal isOpen={false} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
         <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Draft Event Invoice</h3>
               <button onClick={() => setIsInvoiceModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
@@ -4944,7 +4956,7 @@ export default function LeadDetailPage({
               </button>
             </div>
             
-            <form onSubmit={handleCreateInvoice} className="flex-1 overflow-y-auto p-6 space-y-4 portal-scrollbar bg-[#080706]">
+            <form onSubmit={(event) => { event.preventDefault(); void handleCreateInvoice('save') }} className="flex-1 overflow-y-auto p-6 space-y-4 portal-scrollbar bg-[#080706]">
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Invoice Description / Summary</label>
                 <input

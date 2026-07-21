@@ -10,6 +10,17 @@ export type LuxorCatalogItem = {
   requiresCustomPrice?: boolean
 }
 
+export type LuxorPackagePresetId = 'rent-only' | 'small' | 'mid' | 'best'
+
+export type LuxorPackagePreset = {
+  id: LuxorPackagePresetId
+  name: string
+  eyebrow: string
+  description: string
+  catalogIds: string[]
+  includedItems: Array<{ id: string; category: string; name: string }>
+}
+
 // Transcribed from Packages.xlsx. Null prices are intentionally left editable
 // because the source workbook does not provide a final number.
 export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
@@ -31,6 +42,8 @@ export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
   { id: 'security-1', category: 'Required services', name: 'Security - 1 officer / 6 hours', unitPrice: 250 },
   { id: 'security-2', category: 'Required services', name: 'Security - 2 officers / 6 hours', unitPrice: 450 },
   { id: 'security-3', category: 'Required services', name: 'Security - 3 officers / higher-risk event', unitPrice: 650 },
+  { id: 'guest-tables', category: 'Venue setup', name: 'Guest tables set up', unitPrice: 100 },
+  { id: 'basic-linens', category: 'Venue setup', name: 'Basic linens', unitPrice: 500 },
   { id: 'decor-basic', category: 'Decor', name: 'Basic decor package', unitPrice: 600 },
   { id: 'decor-full', category: 'Decor', name: 'Full decor package', unitPrice: 4350 },
   { id: 'catering-buffet', category: 'Catering', name: 'Buffet catering - up to 100 guests', unitPrice: 2150 },
@@ -49,6 +62,56 @@ export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
   { id: 'bar-extra-hour', category: 'Bar', name: 'Additional bartender hour', unitPrice: 75, note: 'Per bartender.' },
 ]
 
+const FULL_DECOR_INCLUSIONS = [
+  { id: 'included-guest-tables', category: 'Decor inclusions', name: 'Guest tables set up' },
+  { id: 'included-premium-linens', category: 'Decor inclusions', name: 'Premium linens' },
+  { id: 'included-chargers', category: 'Decor inclusions', name: 'Acrylic charger plates' },
+  { id: 'included-florals', category: 'Decor inclusions', name: 'Silk floral centerpieces' },
+  { id: 'included-tall-designs', category: 'Decor inclusions', name: 'Half tall centerpiece designs' },
+  { id: 'included-small-designs', category: 'Decor inclusions', name: 'Half small centerpiece designs' },
+  { id: 'included-sweetheart-table', category: 'Decor inclusions', name: 'Sweetheart table decor' },
+  { id: 'included-signing-table', category: 'Decor inclusions', name: 'Signing table with simple decor' },
+  { id: 'included-gift-table', category: 'Decor inclusions', name: 'Gift table with premium linen' },
+  { id: 'included-cake-table', category: 'Decor inclusions', name: 'Cake table with premium decor' },
+]
+
+// Preset totals match the standard package table in Packages.xlsx using the
+// Friday evening rental example: $2,825 / $8,725 / $9,725 / $11,125.
+export const LUXOR_PACKAGE_PRESETS: LuxorPackagePreset[] = [
+  {
+    id: 'rent-only',
+    name: 'Rent Only',
+    eyebrow: 'Venue essentials',
+    description: 'Friday evening venue rental with the required setup, security, and cleaning.',
+    catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'guest-tables', 'basic-linens'],
+    includedItems: [],
+  },
+  {
+    id: 'small',
+    name: 'Small',
+    eyebrow: 'Decor + buffet',
+    description: 'Venue, required services, full decor, and buffet catering for up to 100 guests.',
+    catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-buffet'],
+    includedItems: FULL_DECOR_INCLUSIONS,
+  },
+  {
+    id: 'mid',
+    name: 'Mid',
+    eyebrow: 'Most popular',
+    description: 'The Small package plus the DJ package.',
+    catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-buffet', 'dj'],
+    includedItems: FULL_DECOR_INCLUSIONS,
+  },
+  {
+    id: 'best',
+    name: 'Best',
+    eyebrow: 'Full experience',
+    description: 'Full decor, plated dinner, DJ, Signature photo booth, and bartender service.',
+    catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-plated', 'dj', 'booth-signature', 'bar-service-1-75'],
+    includedItems: FULL_DECOR_INCLUSIONS,
+  },
+]
+
 export function catalogItemToLineItem(item: LuxorCatalogItem): LuxorInvoiceLineItem {
   const unitPrice = item.unitPrice ?? 0
   const quantity = item.minimumCharge && unitPrice > 0 ? Math.ceil(item.minimumCharge / unitPrice) : 1
@@ -57,4 +120,27 @@ export function catalogItemToLineItem(item: LuxorCatalogItem): LuxorInvoiceLineI
 
 export function getLuxorCatalogItem(id: string | undefined) {
   return id ? LUXOR_SERVICE_CATALOG.find((item) => item.id === id) : undefined
+}
+
+export function packagePresetToLineItems(preset: LuxorPackagePreset): LuxorInvoiceLineItem[] {
+  const pricedItems = preset.catalogIds
+    .map((id) => getLuxorCatalogItem(id))
+    .filter((item): item is LuxorCatalogItem => Boolean(item))
+    .map(catalogItemToLineItem)
+
+  const includedItems = preset.includedItems.map((item) => ({
+    catalogId: item.id,
+    category: item.category,
+    included: true,
+    description: item.name,
+    quantity: 1,
+    unitPrice: 0,
+    total: 0,
+  }))
+
+  return [...pricedItems, ...includedItems]
+}
+
+export function getPackagePresetTotal(preset: LuxorPackagePreset) {
+  return packagePresetToLineItems(preset).reduce((total, item) => total + item.total, 0)
 }

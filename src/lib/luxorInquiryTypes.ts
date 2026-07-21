@@ -110,6 +110,7 @@ export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancel
 export type LuxorInvoiceLineItem = {
   catalogId?: string
   category?: string
+  included?: boolean
   description: string
   quantity: number
   unitPrice: number

@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
       return {
         ...(typeof item.catalogId === 'string' ? { catalogId: item.catalogId } : {}),
         ...(typeof item.category === 'string' ? { category: item.category } : {}),
+        ...(item.included === true ? { included: true } : {}),
         description: String(item.description || '').trim(),
         quantity,
         unitPrice,

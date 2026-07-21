@@ -7,10 +7,10 @@ import { updateLuxorBooking } from './luxorBookingsServer'
 
 function defaultContractBody(booking: LuxorBooking) {
   const proposalItems = Array.isArray(booking.metadata?.proposalLineItems)
-    ? booking.metadata.proposalLineItems as Array<{ description?: string; quantity?: number; total?: number }>
+    ? booking.metadata.proposalLineItems as Array<{ description?: string; quantity?: number }>
     : []
   const serviceSummary = proposalItems.length
-    ? ['Included services:', ...proposalItems.map((item) => `- ${item.description || 'Service'} x ${Number(item.quantity || 1)}: $${Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)].join('\n')
+    ? ['Included services:', ...proposalItems.map((item) => `- ${item.description || 'Service'} x ${Number(item.quantity || 1)}`)].join('\n')
     : ''
   return [
     `This agreement reserves Luxor Event Space for ${booking.client_name}.`,
