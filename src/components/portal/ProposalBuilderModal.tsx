@@ -184,7 +184,7 @@ export function ProposalBuilderModal({
         <div className="grid min-h-0 flex-1 overflow-y-auto min-[920px]:grid-cols-[220px_minmax(430px,1fr)_270px] min-[920px]:overflow-hidden xl:grid-cols-[250px_minmax(520px,1fr)_320px]">
           <aside className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 min-[920px]:overflow-y-auto min-[920px]:border-b-0 min-[920px]:border-r sm:p-5">
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Proposal details</p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 min-[920px]:grid-cols-1">
+            <div className="mt-4 grid grid-cols-1 gap-4">
               <label className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Title</span>
                 <input required value={description} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="Event proposal" className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
@@ -193,17 +193,17 @@ export function ProposalBuilderModal({
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Valid until</span>
                 <PortalDatePicker value={dueDate} onChange={onDueDateChange} className="w-full" placeholder="Select date" />
               </div>
-              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:col-span-2 min-[920px]:col-span-1">
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Client</p>
                 <p className="mt-1 text-sm font-bold">{clientName}</p>
                 <p className="mt-0.5 truncate text-[11px] text-[color:var(--portal-muted)]">{clientEmail || 'No email on file'}</p>
               </div>
-              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:col-span-2 min-[920px]:col-span-1">
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Event</p>
                 <p className="mt-1 text-sm font-bold">{eventType || 'Event booking'}</p>
                 <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{formatEventDate(eventDate)}</p>
               </div>
-              <label className="space-y-1.5 sm:col-span-2 min-[920px]:col-span-1">
+              <label className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Client notes</span>
                 <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Optional note shown on the proposal" className="min-h-24 w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-sm leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
               </label>
