@@ -7,10 +7,12 @@ import { AnimatePresence, motion } from 'framer-motion'
 type ToastVariant = 'info' | 'success' | 'warning' | 'error'
 
 type ToastInput = {
-  title: string
-  description?: string
+  title: ReactNode
+  description?: ReactNode
   variant?: ToastVariant
   durationMs?: number
+  action?: ReactNode
+  icon?: ReactNode
 }
 
 type Toast = ToastInput & {
@@ -102,11 +104,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   <X size={15} />
                 </button>
                 <div className="flex gap-3">
-                  <span className={`mt-0.5 shrink-0 ${style.labelClassName}`}>{style.icon}</span>
-                  <div className="min-w-0">
+                  <span className={`mt-0.5 shrink-0 ${style.labelClassName}`}>
+                    {toast.icon !== undefined ? toast.icon : style.icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold leading-5 text-white">{toast.title}</p>
                     {toast.description ? (
                       <p className="mt-1 text-xs leading-5 text-current/75">{toast.description}</p>
+                    ) : null}
+                    {toast.action ? (
+                      <div className="mt-3 pointer-events-auto">
+                        {toast.action}
+                      </div>
                     ) : null}
                   </div>
                 </div>

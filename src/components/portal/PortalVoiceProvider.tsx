@@ -63,7 +63,8 @@ type VoiceContextValue = {
 const VoiceContext = createContext<VoiceContextValue | null>(null)
 
 export function PortalVoiceProvider({ children }: { children: React.ReactNode }) {
-  const { notify } = useToast()
+  const { notify, dismiss } = useToast()
+  const incomingCallToastIdRef = useRef<string | null>(null)
   const [phoneState, setPhoneState] = useState<PhoneState>('disabled')
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
@@ -148,9 +149,13 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setActiveCall(null)
     setIncomingCall(null)
     setIsMuted(false)
+    if (incomingCallToastIdRef.current) {
+      dismiss(incomingCallToastIdRef.current)
+      incomingCallToastIdRef.current = null
+    }
     window.dispatchEvent(new Event('luxor-call-history-refresh'))
     window.setTimeout(loadUnreadCount, 1000)
-  }, [loadUnreadCount])
+  }, [loadUnreadCount, dismiss])
 
   const attachCallEvents = useCallback((call: Call, initial: ActiveCall) => {
     currentCallRef.current = call
@@ -162,6 +167,11 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     call.on('accept', () => {
       setActiveCall((current) => current ? { ...current, phase: 'active', startedAt: Date.now() } : current)
       setIncomingCall(null)
+      setIsPanelOpen(true)
+      if (incomingCallToastIdRef.current) {
+        dismiss(incomingCallToastIdRef.current)
+        incomingCallToastIdRef.current = null
+      }
     })
     call.on('disconnect', clearCall)
     call.on('cancel', clearCall)
@@ -196,6 +206,66 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setIncomingCall(incoming)
     setIsPanelOpen(false)
     setUnreadCount((count) => count + 1)
+
+    // Trigger the incoming call toast notification
+    let toastId = ''
+    toastId = notify({
+      title: (
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Incoming Call</span>
+          {inquiryId ? (
+            <Link
+              href={`/portal/leads/${inquiryId}`}
+              onClick={() => dismiss(toastId)}
+              className="mt-0.5 inline-block text-sm font-bold text-white hover:text-[#caa24c] hover:underline transition-colors"
+            >
+              {contactName}
+            </Link>
+          ) : (
+            <span className="mt-0.5 text-sm font-bold text-white">{contactName}</span>
+          )}
+        </div>
+      ),
+      description: (
+        <span className="font-mono text-zinc-400 text-[11px]">
+          {formatPhoneDisplay(phoneNumber)}
+        </span>
+      ),
+      icon: (
+        <PortalContactAvatar
+          name={contactName}
+          size="sm"
+          className="border-[#caa24c]/40 bg-[#caa24c]/15 text-[#caa24c]"
+        />
+      ),
+      variant: 'warning',
+      durationMs: 0,
+      action: (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (toastId) dismiss(toastId)
+              call.reject()
+            }}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-[10px] font-black uppercase tracking-wider text-red-300 hover:bg-red-500/15"
+          >
+            <PhoneOff size={11} /> Decline
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (toastId) dismiss(toastId)
+              call.accept()
+            }}
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-emerald-500 px-3 text-[10px] font-black uppercase tracking-wider text-black hover:bg-emerald-400"
+          >
+            <PhoneCall size={11} /> Answer
+          </button>
+        </div>
+      )
+    })
+    incomingCallToastIdRef.current = toastId
 
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(`Incoming Luxor call: ${contactName}`, {
@@ -398,12 +468,10 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
       <PortalPhonePanel
         activeCall={activeCall}
         dialNumber={dialNumber}
-        incomingCall={incomingCall}
         isMuted={isMuted}
         isOpen={isPanelOpen}
         phoneError={phoneError}
         phoneState={phoneState}
-        onAnswer={answerIncoming}
         onClose={() => setIsPanelOpen(false)}
         dialMatch={dialMatch}
         isLookingUpNumber={isLookingUpNumber}
@@ -415,7 +483,6 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         onDialNumberChange={(value) => setDialNumber(formatUsDialInput(value))}
         onEnable={() => void enablePhone()}
         onHangUp={hangUp}
-        onReject={rejectIncoming}
         onSendDigit={(digit) => currentCallRef.current?.sendDigits(digit)}
         onToggleMute={toggleMute}
       />
@@ -457,38 +524,32 @@ function PortalPhonePanel({
   activeCall,
   dialMatch,
   dialNumber,
-  incomingCall,
   isMuted,
   isOpen,
   isLookingUpNumber,
   phoneError,
   phoneState,
-  onAnswer,
   onClose,
   onDial,
   onDialNumberChange,
   onEnable,
   onHangUp,
-  onReject,
   onSendDigit,
   onToggleMute,
 }: {
   activeCall: ActiveCall | null
   dialMatch: DialMatch | null
   dialNumber: string
-  incomingCall: IncomingCall | null
   isMuted: boolean
   isOpen: boolean
   isLookingUpNumber: boolean
   phoneError: string | null
   phoneState: PhoneState
-  onAnswer: () => void
   onClose: () => void
   onDial: () => void
   onDialNumberChange: (value: string) => void
   onEnable: () => void
   onHangUp: () => void
-  onReject: () => void
   onSendDigit: (digit: string) => void
   onToggleMute: () => void
 }) {
@@ -502,39 +563,6 @@ function PortalPhonePanel({
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(intervalId)
   }, [activeCall?.phase])
-
-  if (incomingCall) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
-        <motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.92, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }} className="w-full max-w-md rounded-3xl border border-[#caa24c]/30 bg-[#090806] p-7 text-center shadow-[0_30px_100px_rgba(0,0,0,0.75)]">
-          <div className="mx-auto flex items-center justify-center">
-            <PortalContactAvatar name={incomingCall.contactName} size="xl" className="animate-pulse shadow-[0_0_30px_rgba(202,162,76,0.18)]" />
-          </div>
-          <p className="mt-5 text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Incoming Luxor Call</p>
-          {incomingCall.inquiryId ? (
-            <Link
-              href={`/portal/leads/${incomingCall.inquiryId}`}
-              onClick={onClose}
-              className="mt-3 inline-block font-serif text-3xl font-semibold text-white hover:text-[#caa24c] hover:underline transition-colors"
-            >
-              {incomingCall.contactName}
-            </Link>
-          ) : (
-            <h2 className="mt-3 font-serif text-3xl font-semibold text-white">{incomingCall.contactName}</h2>
-          )}
-          <p className="mt-2 font-mono text-sm text-zinc-400">{formatPhoneDisplay(incomingCall.phoneNumber)}</p>
-          <div className="mt-8 grid grid-cols-2 gap-3">
-            <button type="button" onClick={onReject} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 text-xs font-black uppercase tracking-wider text-red-300 hover:bg-red-500/15">
-              <PhoneOff size={17} /> Decline
-            </button>
-            <button type="button" onClick={onAnswer} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black hover:bg-emerald-400">
-              <PhoneCall size={17} /> Answer
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    )
-  }
 
   return (
     <AnimatePresence>
