@@ -67,7 +67,8 @@ export const metadata: Metadata = {
   },
   robots: { index: true, follow: true },
   icons: {
-    icon: '/luxor-palm-mark.png',
+    icon: '/icon.png',
+    apple: '/apple-icon.png',
   },
 }
 

@@ -799,3 +799,34 @@ body[data-portal-theme='light'] [role="status"] button.bg-emerald-500:hover {
   background-color: #047857 !important;
 }
 
+
+/* Phone dialer panel overrides for light mode */
+body[data-portal-theme='light'] .portal-call-btn {
+  background-color: #18130d !important;
+  color: #caa24c !important;
+}
+body[data-portal-theme='light'] .portal-call-btn svg {
+  color: #caa24c !important;
+}
+body[data-portal-theme='light'] .portal-call-btn:hover:not(:disabled) {
+  background-color: #2a2218 !important;
+  color: #f1d27a !important;
+}
+body[data-portal-theme='light'] .portal-call-btn:hover:not(:disabled) svg {
+  color: #f1d27a !important;
+}
+body[data-portal-theme='light'] .portal-call-btn:disabled {
+  background-color: #f4efe7 !important;
+  color: #a99d8e !important;
+  border: 1px solid rgba(124, 91, 36, 0.1) !important;
+  opacity: 0.6 !important;
+}
+body[data-portal-theme='light'] .portal-call-btn:disabled svg {
+  color: #a99d8e !important;
+}
+
+body[data-portal-theme='light'] input::placeholder {
+  color: var(--portal-muted) !important;
+  opacity: 0.55 !important;
+}
+

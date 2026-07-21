@@ -179,9 +179,9 @@ export async function sendLuxorZohoEmail(input: {
         headers: {
           Authorization: `Zoho-oauthtoken ${accessToken}`,
           Accept: 'application/json',
-          // Zoho's raw-file upload endpoint expects the binary body with its
-          // API media type, rather than the attachment's own MIME type.
-          'Content-Type': 'application/json',
+          // Zoho's raw-file upload endpoint expects the binary body with
+          // application/octet-stream, rather than the attachment's own MIME type.
+          'Content-Type': 'application/octet-stream',
         },
         body: Buffer.from(attachment.content),
       },

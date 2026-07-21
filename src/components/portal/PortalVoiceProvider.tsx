@@ -679,8 +679,8 @@ function PortalPhonePanel({
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && validDialNumber) onDial()
               }}
-              placeholder="+1 (210) 555-0123"
-              className="h-12 min-w-0 flex-1 bg-transparent font-mono text-sm text-white outline-none placeholder:text-zinc-700"
+              placeholder="Type number..."
+              className="portal-input-transparent h-12 min-w-0 flex-1 bg-transparent font-mono text-sm text-white outline-none placeholder:text-zinc-700"
             />
             {dialNumber && (
               <button type="button" onClick={() => onDialNumberChange(removeLastDialDigit(dialNumber))} className="p-1 text-zinc-600 hover:text-white" aria-label="Delete digit">
@@ -712,7 +712,7 @@ function PortalPhonePanel({
               </motion.div>
             )}
           </AnimatePresence>
-          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-emerald-400 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none">
+          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="portal-call-btn mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-emerald-400 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none">
             <PhoneCall size={16} /> Call from Luxor
           </button>
         </div>
