@@ -16,6 +16,31 @@ function safeFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
+async function ensureDocumentBucket() {
+  const { url, serviceRoleKey } = getSupabaseConfig()
+  const response = await fetch(`${url}/storage/v1/bucket`, {
+    method: 'POST',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: DOCUMENT_BUCKET,
+      name: DOCUMENT_BUCKET,
+      public: false,
+      file_size_limit: 10 * 1024 * 1024,
+      allowed_mime_types: ['application/pdf'],
+    }),
+    cache: 'no-store',
+  })
+
+  // Storage returns a conflict when the private bucket is already present.
+  if (!response.ok && response.status !== 409) {
+    throw new Error(`Could not prepare private PDF storage: ${await response.text()}`)
+  }
+}
+
 export async function getLuxorDocumentByInvoice(invoiceId: string, documentType: LuxorDocumentType = 'proposal') {
   const documents = await supabaseRest<LuxorDocument[]>(
     `luxor_documents?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}&document_type=eq.${documentType}&limit=1`,
@@ -43,6 +68,7 @@ export async function saveLuxorProposalPdf(input: {
   const fileName = `Luxor-${label}-${invoice.id.slice(0, 8)}.pdf`
   const storagePath = `invoices/${safeFilePart(invoice.id)}/${fileName}`
   const { url, serviceRoleKey } = getSupabaseConfig()
+  await ensureDocumentBucket()
   const upload = await fetch(`${url}/storage/v1/object/${DOCUMENT_BUCKET}/${storagePath}`, {
     method: 'PUT',
     headers: {
