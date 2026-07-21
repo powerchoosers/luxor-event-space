@@ -393,6 +393,26 @@ export function PortalTimelineItem({
   )
 }
 
+export function PortalCloseButton({
+  onClick,
+  className = '',
+  size = 15,
+  'aria-label': ariaLabel = 'Close',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: number }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg p-1 text-zinc-500 opacity-60 transition-all hover:bg-white/5 hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer ${className}`}
+      aria-label={ariaLabel}
+      {...props}
+    >
+      <X size={size} />
+    </button>
+  )
+}
+
 export function PortalModal({
   isOpen,
   onClose,
@@ -525,9 +545,7 @@ export function PortalModal({
                     <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
                     {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
                   </div>
-                  <button type="button" onClick={onClose} aria-label={`Close ${title}`} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-[color:var(--portal-muted)] transition-all hover:border-[color:var(--portal-border)] hover:bg-black/5 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                    <X size={16} />
-                  </button>
+                  <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
                 </div>
                 <div className="overflow-y-auto p-5 portal-scrollbar sm:p-6">{children}</div>
               </>

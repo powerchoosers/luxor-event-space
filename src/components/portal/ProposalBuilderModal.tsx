@@ -23,7 +23,7 @@ import {
   packagePresetToLineItems,
   type LuxorPackagePreset,
 } from '@/lib/luxorServiceCatalog'
-import { PortalDatePicker, PortalModal } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalModal, PortalCloseButton } from '@/components/portal/PortalUI'
 
 type ProposalSubmitAction = 'save' | 'email'
 
@@ -175,9 +175,7 @@ export function ProposalBuilderModal({
             <span className="hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] sm:inline-flex">
               Internal prices are private
             </span>
-            <button type="button" onClick={onClose} aria-label="Close proposal builder" className="flex h-11 w-11 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-              <X size={18} />
-            </button>
+            <PortalCloseButton onClick={onClose} aria-label="Close proposal builder" />
           </div>
         </header>
 

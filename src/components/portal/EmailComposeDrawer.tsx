@@ -28,7 +28,7 @@ import {
   Check,
   CheckCircle
 } from 'lucide-react'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import { EMAIL_TEMPLATES, EmailBlock, EmailTemplate } from '@/app/(portal)/portal/marketing/emailTemplates'
 import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer'
@@ -442,14 +442,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close Drawer"
-            className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"
-          >
-            <X size={14} />
-          </button>
+          <PortalCloseButton onClick={onClose} aria-label="Close drawer" />
         </div>
       </div>
 

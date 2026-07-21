@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
-import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
@@ -350,12 +350,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
             />
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all"
-          >
-            <X size={18} />
-          </button>
+          <PortalCloseButton onClick={onClose} aria-label="Close preview" />
         </div>
 
         {/* Content */}

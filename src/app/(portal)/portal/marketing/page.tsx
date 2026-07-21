@@ -21,7 +21,8 @@ import {
   PortalPageHeader,
   PortalModal,
   PortalStatusBadge,
-  PortalButton
+  PortalButton,
+  PortalCloseButton
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -662,9 +663,7 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
           <h3 className="mt-1 truncate text-lg font-bold text-white">{campaign.name}</h3>
           <p className="mt-1 truncate text-xs text-zinc-500">{campaign.subject}</p>
         </div>
-        <button onClick={onClose} className="rounded-lg p-2 text-zinc-500 transition-all hover:bg-zinc-800 hover:text-white">
-          <X size={18} />
-        </button>
+        <PortalCloseButton onClick={onClose} aria-label="Close report" />
       </div>
 
       <div className="portal-scrollbar overflow-y-auto p-6 max-h-[500px]">

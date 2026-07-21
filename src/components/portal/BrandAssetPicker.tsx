@@ -13,7 +13,7 @@ import {
   Copy
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
-import { PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalModal, PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 
 type BrandAsset = {
   id: string
@@ -182,13 +182,7 @@ export function BrandAssetPicker({
             <ImageIcon size={18} className="text-[#caa24c]" />
             <h3 className="font-serif text-sm font-bold text-white uppercase tracking-wider">{title}</h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[color:var(--portal-muted)] hover:text-white transition-colors cursor-pointer"
-          >
-            <X size={18} />
-          </button>
+          <PortalCloseButton onClick={onClose} aria-label="Close brand asset picker" />
         </div>
 
         {/* Content Area */}

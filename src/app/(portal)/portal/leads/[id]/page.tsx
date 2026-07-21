@@ -44,7 +44,7 @@ import {
   PartyPopper,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -4715,7 +4715,7 @@ export default function LeadDetailPage({
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Schedule Tour & Send Invite</h3>
               <p className="mt-1 text-[11px] leading-4 text-zinc-500">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase sends the reminders.</p>
             </div>
-            <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} className="shrink-0 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
+            <PortalCloseButton onClick={() => setIsTourScheduleModalOpen(false)} aria-label="Close tour scheduler" className="shrink-0" />
           </div>
 
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 pb-7 portal-scrollbar sm:p-6 sm:pb-8">
@@ -4788,9 +4788,7 @@ export default function LeadDetailPage({
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Add Vendors</h3>
             <p className="mt-1 text-[11px] text-zinc-500">Link existing operation vendors to this lead.</p>
           </div>
-          <button type="button" onClick={() => setIsVendorModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
-            Close
-          </button>
+          <PortalCloseButton onClick={() => setIsVendorModalOpen(false)} aria-label="Close vendor picker" />
         </div>
         <div className="max-h-[70vh] overflow-y-auto bg-[#080706] p-6 portal-scrollbar">
           {loadingVendors ? (
@@ -4842,9 +4840,7 @@ export default function LeadDetailPage({
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">{timelineEditIndex === null ? 'Add Timeline Step' : 'Edit Timeline Step'}</h3>
             <p className="mt-1 text-[11px] text-zinc-500">Build a simple run of show for this event.</p>
           </div>
-          <button type="button" onClick={() => setIsTimelineModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
-            Close
-          </button>
+          <PortalCloseButton onClick={() => setIsTimelineModalOpen(false)} aria-label="Close timeline step modal" />
         </div>
         <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[#080706] p-6">
           <div className="space-y-1.5">
@@ -4896,7 +4892,7 @@ export default function LeadDetailPage({
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Send Payment Request</h3>
                 <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">The client receives the full proposal PDF and a Stripe link for only the amount selected here.</p>
               </div>
-              <button type="button" onClick={() => setPaymentRequestInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Close</button>
+              <PortalCloseButton onClick={() => setPaymentRequestInvoice(null)} aria-label="Close payment request window" />
             </div>
             <div className="space-y-5 p-6">
               <div className="grid grid-cols-3 gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-[10px]">
@@ -4942,7 +4938,7 @@ export default function LeadDetailPage({
                 <a href={`/api/invoices/${pdfPreviewInvoice.id}/pdf`} className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] hover:text-[#b98a3e] sm:inline-flex">
                   <FileText size={13} /> Download
                 </a>
-                <button type="button" onClick={() => setPdfPreviewInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Close</button>
+                <PortalCloseButton onClick={() => setPdfPreviewInvoice(null)} aria-label="Close PDF preview window" />
               </div>
             </div>
             <iframe
@@ -4980,9 +4976,7 @@ export default function LeadDetailPage({
       <PortalModal isOpen={false} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
         <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Draft Event Invoice</h3>
-              <button onClick={() => setIsInvoiceModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
-                Close
-              </button>
+              <PortalCloseButton onClick={() => setIsInvoiceModalOpen(false)} aria-label="Close invoice draft modal" />
             </div>
             
             <form onSubmit={(event) => { event.preventDefault(); void handleCreateInvoice('save') }} className="flex-1 overflow-y-auto p-6 space-y-4 portal-scrollbar bg-[#080706]">
@@ -5140,9 +5134,7 @@ export default function LeadDetailPage({
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Create Booking Record</h3>
                 <p className="mt-1 text-[11px] text-zinc-500">This keeps the calendar, contract, and deposit details tied to the lead.</p>
               </div>
-              <button onClick={() => setIsBookingModalOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">
-                Close
-              </button>
+              <PortalCloseButton onClick={() => setIsBookingModalOpen(false)} aria-label="Close booking creator modal" />
             </div>
 
             <form onSubmit={handleCreateBooking} className="flex-1 overflow-y-auto bg-[#080706] p-6 space-y-5 portal-scrollbar">

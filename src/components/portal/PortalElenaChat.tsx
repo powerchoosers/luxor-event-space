@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
+import { PortalCloseButton } from './PortalUI'
 
 type ExecutedQuery = {
   query: string
@@ -424,14 +425,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           >
             <History size={16} />
           </button>
-          <button 
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-zinc-800 p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white cursor-pointer"
-            aria-label="Close Elena Chat"
-          >
-            <X size={16} />
-          </button>
+          <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
 

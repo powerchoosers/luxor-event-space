@@ -18,7 +18,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
-import { PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
 import { formatPhoneDisplay, formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
 
 type PhoneState = 'disabled' | 'starting' | 'ready' | 'error'
@@ -554,9 +554,7 @@ function PortalPhonePanel({
             {phoneState === 'ready' ? 'Ready for calls' : phoneState === 'starting' ? 'Connecting...' : phoneState === 'error' ? 'Needs attention' : 'Not enabled'}
           </div>
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-white" aria-label="Close phone">
-          <X size={16} />
-        </button>
+        <PortalCloseButton onClick={onClose} aria-label="Close phone" />
       </div>
 
       {activeCall ? (

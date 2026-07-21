@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { PortalContactAvatar } from './PortalUI'
+import { PortalContactAvatar, PortalCloseButton } from './PortalUI'
 import { useToast } from './ToastProvider'
 
 type Conversation = {
@@ -336,7 +336,7 @@ function NewMessagePane({ query, results, searching, onQueryChange, onSelect, on
 function MediaGallery({ items, onClose }: { items: Array<{ url: string; message: LuxorMessage }>; onClose: () => void }) {
   return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-40 bg-black/80 p-5 backdrop-blur-sm">
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mx-auto flex h-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-[#10100e]">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4"><div><p className="text-sm font-black text-white">Shared media</p><p className="mt-1 text-[10px] text-zinc-600">Images and files received in this conversation.</p></div><button type="button" onClick={onClose} className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-white" aria-label="Close media gallery"><X size={16}/></button></div>
+      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4"><div><p className="text-sm font-black text-white">Shared media</p><p className="mt-1 text-[10px] text-zinc-600">Images and files received in this conversation.</p></div><PortalCloseButton onClick={onClose} aria-label="Close media gallery" /></div>
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{items.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{items.map((item, index) => <a key={`${item.message.id}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-zinc-800 bg-black/30"><div className="aspect-square bg-zinc-950"><img src={item.url} alt={`Shared media from ${formatMessageTime(item.message.created_at)}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/></div><p className="px-3 py-2 font-mono text-[8px] text-zinc-600">{new Date(item.message.created_at).toLocaleString()}</p></a>)}</div> : <div className="flex h-full items-center justify-center text-center"><div><Images size={25} className="mx-auto text-zinc-800"/><p className="mt-3 text-sm font-bold text-zinc-400">No shared media yet</p><p className="mt-1 text-xs text-zinc-650">Photos received through MMS or RCS will appear here.</p></div></div>}</div>
     </motion.div>
   </motion.div>
