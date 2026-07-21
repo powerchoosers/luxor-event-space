@@ -36,8 +36,24 @@ async function ensureDocumentBucket() {
   })
 
   // Storage returns a conflict when the private bucket is already present.
-  if (!response.ok && response.status !== 409) {
-    throw new Error(`Could not prepare private PDF storage: ${await response.text()}`)
+  if (!response.ok) {
+    const text = await response.text()
+    let isDuplicate = response.status === 409
+    if (!isDuplicate) {
+      try {
+        const json = JSON.parse(text)
+        if (
+          json.statusCode === '409' ||
+          json.error === 'Duplicate' ||
+          json.message?.includes('already exists')
+        ) {
+          isDuplicate = true
+        }
+      } catch {}
+    }
+    if (!isDuplicate) {
+      throw new Error(`Could not prepare private PDF storage: ${text}`)
+    }
   }
 }
 

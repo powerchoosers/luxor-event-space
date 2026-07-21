@@ -723,3 +723,79 @@ input[type="reset"],
   cursor: pointer !important;
 }
 
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Light Theme Toast Notifications Overrides
+   ───────────────────────────────────────────────────────────────────────────── */
+
+body[data-portal-theme='light'] [role="status"] {
+  background-color: var(--portal-card) !important;
+  box-shadow: 0 16px 40px -10px rgba(48, 33, 14, 0.12) !important;
+}
+
+/* Success toast in light mode */
+body[data-portal-theme='light'] [role="status"].bg-emerald-500\/10 {
+  border-color: rgba(16, 185, 129, 0.24) !important;
+  color: #064e3b !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-emerald-500\/10 .text-white {
+  color: #064e3b !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-emerald-500\/10 .text-emerald-300 {
+  color: #059669 !important;
+}
+
+/* Error toast in light mode */
+body[data-portal-theme='light'] [role="status"].bg-rose-500\/10 {
+  border-color: rgba(244, 63, 94, 0.24) !important;
+  color: #4c0519 !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-rose-500\/10 .text-white {
+  color: #4c0519 !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-rose-500\/10 .text-rose-300 {
+  color: #e11d48 !important;
+}
+
+/* Warning toast in light mode */
+body[data-portal-theme='light'] [role="status"].bg-\[\#caa24c\]\/10 {
+  border-color: rgba(202, 162, 76, 0.28) !important;
+  color: #451a03 !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-\[\#caa24c\]\/10 .text-white {
+  color: #451a03 !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-\[\#caa24c\]\/10 .text-\[\#f1d27a\] {
+  color: #b45309 !important;
+}
+
+/* Info toast in light mode */
+body[data-portal-theme='light'] [role="status"].bg-blue-500\/10 {
+  border-color: rgba(59, 130, 246, 0.24) !important;
+  color: #1e3a8a !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-blue-500\/10 .text-white {
+  color: #1e3a8a !important;
+}
+body[data-portal-theme='light'] [role="status"].bg-blue-500\/10 .text-blue-300 {
+  color: #2563eb !important;
+}
+
+/* Inbound call action buttons in light mode */
+body[data-portal-theme='light'] [role="status"] button.text-red-300 {
+  color: #dc2626 !important;
+  border-color: rgba(220, 38, 38, 0.24) !important;
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+body[data-portal-theme='light'] [role="status"] button.text-red-300:hover {
+  background-color: rgba(220, 38, 38, 0.14) !important;
+}
+
+body[data-portal-theme='light'] [role="status"] button.bg-emerald-500 {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+}
+body[data-portal-theme='light'] [role="status"] button.bg-emerald-500:hover {
+  background-color: #047857 !important;
+}
+
