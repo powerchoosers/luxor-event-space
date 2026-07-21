@@ -779,8 +779,10 @@ export async function sendMarketingCampaignNow(id: string) {
     jobIds.map((jobId) => updateLuxorEmailJob(jobId, { status: 'queued', scheduled_for: now })),
   )
 
+  // A manual send starts the campaign, but it must not bypass the drip queue.
+  // The worker releases the remaining recipients one at a time.
   const jobs = await listQueuedLuxorEmailJobsByIds(jobIds)
-  const results = await processLuxorEmailJobs(jobs)
+  const results = jobs.length ? await processLuxorEmailJobs([jobs[0]]) : []
 
   return {
     processed: results.length,
@@ -918,7 +920,8 @@ export async function addRecipientToGrandOpeningCampaign(data: {
     },
   )
 
-  // 5. Create and immediately send the individual email job
+  // 5. Queue the individual email. Grand Opening traffic is marketing traffic,
+  // so it must use the same paced worker as every other campaign recipient.
   const now = new Date().toISOString()
   const job = await createLuxorEmailJob({
     jobType: 'marketing_campaign',
@@ -943,9 +946,6 @@ export async function addRecipientToGrandOpeningCampaign(data: {
     },
   )
 
-  // 6. Process the job immediately
-  const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
-  await processLuxorEmailJobs(jobs)
 }
 
 /**

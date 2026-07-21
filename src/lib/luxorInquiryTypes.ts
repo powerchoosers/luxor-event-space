@@ -135,6 +135,23 @@ export type LuxorInvoice = {
   notes: string | null
 }
 
+export type LuxorDocumentType = 'proposal' | 'invoice'
+
+export type LuxorDocument = {
+  id: string
+  created_at: string
+  updated_at: string
+  inquiry_id: string | null
+  invoice_id: string | null
+  document_type: LuxorDocumentType
+  title: string
+  file_name: string
+  storage_path: string
+  content_type: string
+  size_bytes: number
+  created_by: string | null
+}
+
 export type LuxorBillStatus = 'paid' | 'unpaid' | 'overdue'
 
 export type LuxorBill = {

@@ -199,6 +199,7 @@ export default function LeadDetailPage({
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
+  const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
   const [customPaymentAmount, setCustomPaymentAmount] = useState('')
 
@@ -4671,6 +4672,9 @@ export default function LeadDetailPage({
                       <div><span className="block text-zinc-600">Balance due</span><span className="font-mono text-zinc-200">{formatMoney(getInvoiceBalance(inv))}</span></div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setPdfPreviewInvoice(inv)} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
+                        <Eye size={12} /> View PDF
+                      </button>
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
                         <FileText size={12} /> Download PDF
                       </a>
@@ -4923,6 +4927,31 @@ export default function LeadDetailPage({
               </button>
             </div>
           </form>
+        ) : null}
+      </PortalModal>
+
+      <PortalModal isOpen={Boolean(pdfPreviewInvoice)} onClose={() => setPdfPreviewInvoice(null)} maxWidth="max-w-6xl">
+        {pdfPreviewInvoice ? (
+          <div className="flex h-[min(82vh,860px)] min-h-[520px] flex-col overflow-hidden bg-[color:var(--portal-bg)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
+              <div className="min-w-0">
+                <h3 className="truncate text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{pdfPreviewInvoice.status === 'draft' ? 'Proposal' : 'Invoice'} Preview</h3>
+                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Saved PDFs open exactly as the client received them. Drafts are previewed live.</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <a href={`/api/invoices/${pdfPreviewInvoice.id}/pdf`} className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] hover:text-[#b98a3e] sm:inline-flex">
+                  <FileText size={13} /> Download
+                </a>
+                <button type="button" onClick={() => setPdfPreviewInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Close</button>
+              </div>
+            </div>
+            <iframe
+              key={pdfPreviewInvoice.id}
+              title={`${pdfPreviewInvoice.status === 'draft' ? 'Proposal' : 'Invoice'} PDF preview`}
+              src={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`}
+              className="min-h-0 flex-1 bg-white"
+            />
+          </div>
         ) : null}
       </PortalModal>
 

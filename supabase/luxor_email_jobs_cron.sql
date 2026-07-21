@@ -30,6 +30,14 @@ begin
     from public.luxor_email_jobs
     where status = 'queued'
       and scheduled_for <= now()
+      -- A campaign scheduled for one time is a start time, not a bulk-send
+      -- instruction. This global gate also protects overlapping cron runs.
+      and not exists (
+        select 1
+        from public.luxor_email_jobs recent
+        where recent.status in ('sending', 'sent')
+          and coalesce(recent.sent_at, recent.updated_at) > now() - interval '60 seconds'
+      )
     order by scheduled_for asc, created_at asc
     for update skip locked
     limit job_limit

@@ -40,9 +40,11 @@ Deno.serve(async (request) => {
     }).filter(([, value]) => !value).map(([name]) => name)
     if (missing.length) return json({ error: `Missing Edge Function configuration: ${missing.join(", ")}.` }, 500)
 
+    // The database claim function enforces the one-email pacing window. Keep
+    // the worker batch at one as a second line of defense against bulk sends.
     const jobs = await supabaseRest<EmailJob[]>("rpc/luxor_claim_due_email_jobs", {
       method: "POST",
-      body: JSON.stringify({ job_limit: 25 }),
+      body: JSON.stringify({ job_limit: 1 }),
     })
     const results = []
 

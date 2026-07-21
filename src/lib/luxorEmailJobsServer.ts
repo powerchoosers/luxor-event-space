@@ -452,7 +452,9 @@ export async function processLuxorEmailJobs(
   return results
 }
 
-export async function processDueLuxorEmailJobs(limit = 25) {
+// Supabase Cron runs this worker every minute. Keeping the default at one job
+// makes a due-time collision harmless: one scheduled minute equals one send.
+export async function processDueLuxorEmailJobs(limit = 1) {
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
     return processLuxorEmailJobs(jobs, { markSending: false })

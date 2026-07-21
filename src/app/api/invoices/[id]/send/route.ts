@@ -7,6 +7,7 @@ import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorPaymentRequestEmail } from '@/lib/luxorProposalEmailServer'
+import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
 
     const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
+    await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
     const email = buildLuxorPaymentRequestEmail({ invoice, inquiry, checkoutUrl: checkout.url, paymentAmount, paymentLabel, paidTotal, balanceDue })
     await sendLuxorZohoEmail({
       to: inquiry.email,
