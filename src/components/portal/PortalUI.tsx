@@ -404,7 +404,7 @@ export function PortalCloseButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg p-1 text-zinc-500 opacity-60 transition-all hover:bg-white/5 hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer ${className}`}
+      className={`rounded-lg p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer ${className}`}
       aria-label={ariaLabel}
       {...props}
     >
