@@ -4886,22 +4886,22 @@ export default function LeadDetailPage({
       {/* Payment request modal */}
       <PortalModal isOpen={Boolean(paymentRequestInvoice)} onClose={() => setPaymentRequestInvoice(null)} maxWidth="max-w-lg">
         {paymentRequestInvoice ? (
-          <form onSubmit={handleSendInvoice} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#080706]">
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+          <form onSubmit={handleSendInvoice} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Send Payment Request</h3>
-                <p className="mt-1 text-[11px] text-zinc-500">The client receives the full proposal PDF and a Stripe link for only the amount selected here.</p>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Send Payment Request</h3>
+                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">The client receives the full proposal PDF and a Stripe link for only the amount selected here.</p>
               </div>
-              <button type="button" onClick={() => setPaymentRequestInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Close</button>
+              <button type="button" onClick={() => setPaymentRequestInvoice(null)} className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Close</button>
             </div>
             <div className="space-y-5 p-6">
-              <div className="grid grid-cols-3 gap-2 rounded-xl border border-zinc-900 bg-zinc-950/70 p-4 text-[10px]">
-                <div><span className="block text-zinc-600">Invoice</span><span className="font-mono text-zinc-200">{formatMoney(paymentRequestInvoice.total)}</span></div>
-                <div><span className="block text-zinc-600">Paid</span><span className="font-mono text-emerald-400">{formatMoney(getInvoicePaidTotal(paymentRequestInvoice.id))}</span></div>
-                <div><span className="block text-zinc-600">Balance</span><span className="font-mono text-[#f1d27a]">{formatMoney(getInvoiceBalance(paymentRequestInvoice))}</span></div>
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-[10px]">
+                <div><span className="block text-[color:var(--portal-muted)]">Invoice</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(paymentRequestInvoice.total)}</span></div>
+                <div><span className="block text-[color:var(--portal-muted)]">Paid</span><span className="font-mono text-emerald-700 dark:text-emerald-400">{formatMoney(getInvoicePaidTotal(paymentRequestInvoice.id))}</span></div>
+                <div><span className="block text-[color:var(--portal-muted)]">Balance</span><span className="font-mono text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(getInvoiceBalance(paymentRequestInvoice))}</span></div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Payment to request</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Payment to request</label>
                 <PortalSelect
                   value={paymentRequestKind}
                   onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
@@ -4914,8 +4914,8 @@ export default function LeadDetailPage({
               </div>
               {paymentRequestKind === 'custom' ? (
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Custom amount</label>
-                  <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-sm text-zinc-200 outline-none focus:border-[#caa24c]/50" />
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Custom amount</label>
+                  <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
                 </div>
               ) : null}
               <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#b98a3e] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f] disabled:opacity-40">

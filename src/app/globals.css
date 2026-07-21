@@ -138,6 +138,11 @@ body[data-portal-theme='light'] select {
   border-color: var(--portal-border) !important;
 }
 
+body[data-portal-theme='light'] :is(input, textarea).portal-input-transparent {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
 body[data-portal-theme='light'] .text-\[\#f1d27a\],
 body[data-portal-theme='light'] .text-\[\#caa24c\] {
   color: #a8792f !important;

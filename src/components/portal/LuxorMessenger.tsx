@@ -187,7 +187,7 @@ export function LuxorMessenger() {
   const sharedMedia = selectedConversation?.messages.flatMap((message) => message.media_urls.map((url) => ({ url, message }))) || []
 
   return (
-    <section className="relative grid min-h-[calc(100dvh-9.5rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[#080807] shadow-2xl lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <section className="portal-surface relative grid min-h-[calc(100dvh-9.5rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl lg:grid-cols-[22rem_minmax(0,1fr)]">
       <aside className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col border-r border-[color:var(--portal-border)]`}>
         <div className="border-b border-[color:var(--portal-border)] p-4">
           <div className="flex items-center justify-between gap-3">
@@ -203,11 +203,11 @@ export function LuxorMessenger() {
               </div>
             </div>
           </div>
-          <label className="mt-4 flex h-10 items-center gap-2 rounded-lg border border-zinc-800 bg-black/35 px-3 focus-within:border-[#caa24c]/45">
+          <label className="mt-4 flex h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/45">
             <Search size={14} className="text-zinc-600" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-zinc-700" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-zinc-700" />
           </label>
-          <div className="mt-3 grid grid-cols-2 rounded-lg border border-zinc-850 bg-black/25 p-1">
+          <div className="mt-3 grid grid-cols-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
             {(['all', 'unread'] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-md py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${filter === value ? 'bg-[#caa24c]/12 text-[#f1d27a]' : 'text-zinc-600 hover:text-zinc-300'}`}>{value}</button>)}
           </div>
         </div>
@@ -268,10 +268,10 @@ export function LuxorMessenger() {
               </div>
             </div>
 
-            <div className="border-t border-[color:var(--portal-border)] bg-[#090908]/95 p-3 sm:p-4">
-              <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-xl border border-zinc-800 bg-black/35 p-2 focus-within:border-[#caa24c]/40">
+            <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:p-4">
+              <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 focus-within:border-[#caa24c]/40">
                 <div className="min-w-0 flex-1 px-2 py-1">
-                  <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} placeholder={`Message ${selectedConversation.contactName}`} className="max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-white outline-none placeholder:text-zinc-700" />
+                  <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} placeholder={`Message ${selectedConversation.contactName}`} className="portal-input-transparent max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-white outline-none placeholder:text-zinc-700" />
                   <div className="mt-1 flex items-center justify-between gap-2"><p className="font-mono text-[8px] text-zinc-700">{body.length} / 1600 · Enter to send · Shift+Enter for a new line</p><AnimatePresence>{isComposing ? <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1 text-[8px] text-[#caa24c]">Typing <TypingDots/></motion.span> : null}</AnimatePresence></div>
                 </div>
                 <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-black transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
@@ -320,7 +320,7 @@ function NewMessagePane({ query, results, searching, onQueryChange, onSelect, on
     <div className="border-b border-[color:var(--portal-border)] px-4 py-5 sm:px-6">
       <label className="flex items-center gap-3">
         <span className="text-xs font-black text-[#f1d27a]">To:</span>
-        <input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type a name or phone number" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"/>
+        <input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type a name or phone number" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"/>
         {searching ? <Loader2 size={14} className="animate-spin text-[#caa24c]"/> : null}
       </label>
     </div>
