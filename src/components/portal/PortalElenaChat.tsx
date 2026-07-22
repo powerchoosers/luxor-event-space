@@ -682,7 +682,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         )}
 
         {/* Input */}
-        <div className="border-t border-[#caa24c]/10 bg-zinc-950/80 p-3">
+        <div className="border-t border-[#caa24c]/10 bg-zinc-950/60 p-3">
           <form 
             onSubmit={(e) => {
               e.preventDefault()
