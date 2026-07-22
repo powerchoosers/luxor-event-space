@@ -577,7 +577,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
+        <div className={`portal-scrollbar min-h-0 flex-1 p-4 ${messages.length === 0 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -585,25 +585,25 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -12, scale: 0.98 }}
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className="min-h-full flex flex-col justify-between space-y-4"
+              className={messages.length === 0 ? 'h-full flex flex-col justify-center' : 'min-h-full flex flex-col justify-between space-y-4'}
             >
               {messages.length === 0 ? (
-                <div className="flex min-h-full flex-col items-center justify-center text-center px-2 py-6 space-y-6">
+                <div className="flex flex-col items-center justify-center text-center px-2 py-2 space-y-4 my-auto">
                   <div className="relative">
-                    <div className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
+                    <div className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
                       <Image src="/luxor-concierge.png" alt="Elena AI" fill className="object-cover" />
                     </div>
-                    <span className="absolute bottom-0.5 right-0.5 h-4 w-4 rounded-full border-2 border-[#050505] bg-green-500" />
+                    <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#050505] bg-green-500" />
                   </div>
 
-                  <div className="max-w-xs space-y-1.5">
+                  <div className="max-w-xs space-y-1">
                     <h3 className="font-serif text-lg font-medium text-zinc-300">Elena AI Concierge</h3>
                     <p className="text-xs text-zinc-500 leading-relaxed">
                       Connected to your live Luxor database & CRM intelligence.
                     </p>
                   </div>
 
-                  <div className="w-full space-y-2 pt-2">
+                  <div className="w-full space-y-2 pt-1">
                     <div className="flex items-center justify-between px-1">
                       <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Smart Suggestions</p>
                       {isLoadingSuggestions && (
@@ -627,7 +627,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             }}
                             type="button"
                             onClick={() => handleSend(suggestion)}
-                            className="flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
+                            className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
                           >
                             <span className="line-clamp-2 leading-snug">{suggestion}</span>
                             <Sparkles size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />

@@ -830,3 +830,14 @@ body[data-portal-theme='light'] input::placeholder {
   opacity: 0.55 !important;
 }
 
+/* Suggestion card soft border overrides for light mode */
+body[data-portal-theme='light'] .portal-suggestion-card {
+  border-color: rgba(180, 150, 100, 0.22) !important;
+  background-color: var(--portal-soft) !important;
+  color: var(--portal-text) !important;
+  box-shadow: 0 2px 8px -2px rgba(120, 90, 40, 0.06) !important;
+}
+body[data-portal-theme='light'] .portal-suggestion-card:hover {
+  border-color: rgba(202, 162, 76, 0.45) !important;
+  background-color: #ede6d9 !important;
+}
