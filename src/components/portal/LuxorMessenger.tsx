@@ -48,6 +48,8 @@ export function LuxorMessenger() {
   const [lineOptionsOpen, setLineOptionsOpen] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
   const threadEndRef = useRef<HTMLDivElement>(null)
+  const lineOptionsRef = useRef<HTMLDivElement>(null)
+  const optionsRef = useRef<HTMLDivElement>(null)
 
   const loadMessages = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -73,6 +75,23 @@ export function LuxorMessenger() {
     const intervalId = window.setInterval(() => void loadMessages(true), 15_000)
     return () => window.clearInterval(intervalId)
   }, [loadMessages])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (lineOptionsOpen && lineOptionsRef.current && !lineOptionsRef.current.contains(target)) {
+        setLineOptionsOpen(false)
+      }
+      if (optionsOpen && optionsRef.current && !optionsRef.current.contains(target)) {
+        setOptionsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [lineOptionsOpen, optionsOpen])
 
   const lineMessages = useMemo(() => selectedLine === 'all' ? messages : messages.filter((message) => {
     const businessSide = message.direction === 'inbound' ? message.to_number : message.from_number
@@ -194,7 +213,7 @@ export function LuxorMessenger() {
             <h1 className="font-serif text-2xl font-semibold text-white">Text Messages</h1>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-black hover:bg-[#dfbd68]"><Plus size={13}/> New</button>
-              <div className="relative">
+              <div className="relative" ref={lineOptionsRef}>
                 <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
                 <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-1.5 shadow-2xl backdrop-blur-xl">
                   <p className="px-3 pb-1 pt-2 font-mono text-[8px] uppercase tracking-widest text-zinc-650">Show messages for</p>
@@ -244,7 +263,7 @@ export function LuxorMessenger() {
               <div className="flex shrink-0 items-center gap-2">
                 <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-800 px-3 text-[9px] font-black uppercase tracking-wider text-zinc-300 hover:border-emerald-500/25 hover:text-emerald-400"><Phone size={13}/> <span className="hidden sm:inline">Call</span></button>
                 {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#caa24c]/25 px-3 text-[9px] font-black uppercase tracking-wider text-[#f1d27a] hover:bg-[#caa24c]/8"><UserRound size={13}/> <span className="hidden sm:inline">View Lead</span></Link> : null}
-                <div className="relative">
+                <div className="relative" ref={optionsRef}>
                   <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={16}/></button>
                   <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-1.5 shadow-2xl backdrop-blur-xl">
                     <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"><Images size={14}/> Media gallery <span className="ml-auto font-mono text-zinc-600">{sharedMedia.length}</span></button>
