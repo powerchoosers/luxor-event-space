@@ -11,7 +11,8 @@ import {
   Trash2,
   Edit2,
   Check,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -116,10 +117,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
 
+  const [smartSuggestions, setSmartSuggestions] = useState<string[]>([])
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+
   useEffect(() => {
     if (isOpen) {
       scrollToBottom()
+      loadSmartSuggestions()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isOpen])
 
   useEffect(() => {
@@ -128,6 +134,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
+
+  const loadSmartSuggestions = async () => {
+    setIsLoadingSuggestions(true)
+    try {
+      const res = await fetch(`/api/portal/elena-chat/suggestions?activePath=${encodeURIComponent(activePath)}`)
+      if (res.ok) {
+        const data = (await res.json()) as { suggestions?: string[] }
+        if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+          setSmartSuggestions(data.suggestions)
+        }
+      }
+    } catch (err) {
+      console.error('Error loading smart suggestions:', err)
+    } finally {
+      setIsLoadingSuggestions(false)
+    }
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -565,9 +588,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               </div>
 
               <div className="w-full space-y-2 pt-2">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550 text-left px-1">Suggested Requests</p>
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Smart Suggestions</p>
+                  {isLoadingSuggestions && (
+                    <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
+                      <Loader2 size={10} className="animate-spin" /> Querying CRM...
+                    </span>
+                  )}
+                </div>
                 <div className="grid gap-2">
-                  {pathSuggestions.map((suggestion, idx) => (
+                  {(smartSuggestions.length > 0 ? smartSuggestions : pathSuggestions).map((suggestion, idx) => (
                     <button
                       key={idx}
                       type="button"
