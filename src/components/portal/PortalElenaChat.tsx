@@ -404,7 +404,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             />
           </div>
           <div>
-            <h3 className="font-serif text-base font-medium leading-none text-[#f7efe3]">Elena AI</h3>
+            <h3 className="font-serif text-base font-medium leading-none text-zinc-300">Elena AI</h3>
             <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-green-500">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               CRM Intelligence Connected
@@ -412,6 +412,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            type="button"
+            onClick={handleCreateSession}
+            className="rounded-lg border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white p-1.5 transition-colors cursor-pointer"
+            title="Start New Chat Session"
+            aria-label="Start New Chat Session"
+          >
+            <Plus size={16} />
+          </button>
           <button 
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
@@ -431,102 +440,110 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
       {/* Main Drawer Shell / Overlay List */}
       <div className="relative flex-1 min-h-0 flex flex-col">
-        {showSessionsList && (
-          <div className="absolute inset-0 z-20 flex flex-col bg-[#050505] p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-              <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Chat Sessions</h4>
-              <button
-                type="button"
-                onClick={handleCreateSession}
-                className="inline-flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-black px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer transition-all"
-              >
-                <Plus size={11} strokeWidth={3} /> New Session
-              </button>
-            </div>
-            
-            <div className="portal-scrollbar flex-1 overflow-y-auto space-y-2">
-              {sessions.length === 0 ? (
-                <p className="text-xs text-zinc-550 text-center py-6">No chat sessions found bestie! 💕</p>
-              ) : (
-                sessions.map((session) => (
-                  <div 
-                    key={session.id}
-                    className={`group flex items-center justify-between rounded-xl border p-3.5 transition-all ${
-                      currentSessionId === session.id
-                        ? 'border-[#caa24c]/30 bg-[#caa24c]/5'
-                        : 'border-zinc-900 bg-zinc-950/40 hover:border-zinc-850 hover:bg-zinc-950/80'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0 pr-2">
-                      {editingSessionId === session.id ? (
-                        <form 
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            handleRenameSession(session.id, editTitleInput)
-                          }}
-                          className="flex items-center gap-1.5"
-                        >
-                          <input
-                            autoFocus
-                            type="text"
-                            value={editTitleInput}
-                            onChange={(e) => setEditTitleInput(e.target.value)}
-                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-white outline-none focus:border-[#caa24c]"
-                          />
-                          <button type="submit" className="text-green-500 hover:text-green-400 p-0.5 cursor-pointer">
-                            <Check size={13} />
-                          </button>
-                          <button 
-                            type="button" 
-                            onClick={() => setEditingSessionId(null)}
-                            className="text-red-500 hover:text-red-400 p-0.5 cursor-pointer"
+        <AnimatePresence>
+          {showSessionsList && (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -15 }}
+              transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute inset-0 z-20 flex flex-col bg-[#050505] p-4 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Chat Sessions</h4>
+                <button
+                  type="button"
+                  onClick={handleCreateSession}
+                  className="inline-flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-black px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer transition-all"
+                >
+                  <Plus size={11} strokeWidth={3} /> New Session
+                </button>
+              </div>
+              
+              <div className="portal-scrollbar flex-1 overflow-y-auto space-y-2">
+                {sessions.length === 0 ? (
+                  <p className="text-xs text-zinc-550 text-center py-6">No chat sessions found bestie! 💕</p>
+                ) : (
+                  sessions.map((session) => (
+                    <div 
+                      key={session.id}
+                      className={`group flex items-center justify-between rounded-xl border p-3.5 transition-all ${
+                        currentSessionId === session.id
+                          ? 'border-[#caa24c]/30 bg-[#caa24c]/5'
+                          : 'border-zinc-900 bg-zinc-950/40 hover:border-zinc-850 hover:bg-zinc-950/80'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0 pr-2">
+                        {editingSessionId === session.id ? (
+                          <form 
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              handleRenameSession(session.id, editTitleInput)
+                            }}
+                            className="flex items-center gap-1.5"
                           >
-                            <X size={13} />
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editTitleInput}
+                              onChange={(e) => setEditTitleInput(e.target.value)}
+                              className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-white outline-none focus:border-[#caa24c]"
+                            />
+                            <button type="submit" className="text-green-500 hover:text-green-400 p-0.5 cursor-pointer">
+                              <Check size={13} />
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => setEditingSessionId(null)}
+                              className="text-red-500 hover:text-red-400 p-0.5 cursor-pointer"
+                            >
+                              <X size={13} />
+                            </button>
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleLoadSession(session.id)}
+                            className="w-full text-left font-serif text-sm text-zinc-300 hover:text-white truncate cursor-pointer"
+                          >
+                            {session.title}
                           </button>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleLoadSession(session.id)}
-                          className="w-full text-left font-serif text-sm text-[#f7efe3] hover:text-white truncate cursor-pointer"
-                        >
-                          {session.title}
-                        </button>
-                      )}
-                      <span className="text-[9px] text-zinc-650 block mt-1 font-mono">
-                        {new Date(session.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-
-                    {editingSessionId !== session.id && (
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingSessionId(session.id)
-                            setEditTitleInput(session.title)
-                          }}
-                          className="text-zinc-500 hover:text-[#caa24c] p-1 rounded hover:bg-zinc-900 cursor-pointer"
-                          title="Rename Session"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSession(session.id)}
-                          className="text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-zinc-900 cursor-pointer"
-                          title="Delete Session"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        )}
+                        <span className="text-[9px] text-zinc-650 block mt-1 font-mono">
+                          {new Date(session.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
+  
+                      {editingSessionId !== session.id && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSessionId(session.id)
+                              setEditTitleInput(session.title)
+                            }}
+                            className="text-zinc-500 hover:text-[#caa24c] p-1 rounded hover:bg-zinc-900 cursor-pointer"
+                            title="Rename Session"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSession(session.id)}
+                            className="text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-zinc-900 cursor-pointer"
+                            title="Delete Session"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Messages Window */}
         <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
@@ -551,8 +568,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <div 
                     className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
                       msg.role === 'user'
-                        ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-[#f7efe3]'
-                        : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/80 text-zinc-300'
+                        ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-zinc-300'
+                        : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/30 text-zinc-300'
                     }`}
                   >
                     {renderFormattedContent(msg.content)}
@@ -581,7 +598,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       <div className="flex items-start gap-2.5">
                         <Info size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-xs font-semibold text-[#f7efe3]">Action Confirmation Required</p>
+                          <p className="text-xs font-semibold text-zinc-300">Action Confirmation Required</p>
                           <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{msg.confirmation.summary}</p>
                         </div>
                       </div>
@@ -678,7 +695,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask Elena to query or update something..."
-              className="flex-1 bg-transparent py-1 text-xs text-zinc-200 placeholder-zinc-600 outline-none"
+              className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-zinc-200 placeholder-zinc-600 outline-none"
               disabled={isLoading}
             />
             <button 

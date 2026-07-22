@@ -2135,7 +2135,7 @@ export default function LeadDetailPage({
       </div>
 
       <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
-        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
+        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] [.elena-chat-open_&]:lg:grid-cols-1 [.elena-chat-open_&]:xl:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
             <div className="relative shrink-0">
               <PortalContactAvatar
@@ -2226,7 +2226,7 @@ export default function LeadDetailPage({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end [.elena-chat-open_&]:lg:justify-start [.elena-chat-open_&]:xl:justify-end">
             {lead.email && (
               <button 
                 type="button"
@@ -5266,7 +5266,7 @@ function ClientDossierLoading() {
 
       {/* 2. Top Header Card */}
       <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 lg:p-6 shadow-2xl shadow-black/10">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] [.elena-chat-open_&]:lg:grid-cols-1 [.elena-chat-open_&]:xl:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div className="flex min-w-0 gap-4">
             <div className="h-20 w-20 shrink-0 rounded-full luxor-skeleton animate-pulse" />
             <div className="min-w-0 pt-1 flex-1 space-y-3">
@@ -5279,7 +5279,7 @@ function ClientDossierLoading() {
               <div className="h-3.5 w-44 luxor-skeleton rounded mt-2" />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end [.elena-chat-open_&]:lg:justify-start [.elena-chat-open_&]:xl:justify-end">
             <div className="h-9 w-28 luxor-skeleton rounded-lg" />
             <div className="h-9 w-28 luxor-skeleton rounded-lg" />
             <div className="h-9 w-32 luxor-skeleton rounded-lg animate-pulse" />
