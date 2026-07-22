@@ -39,7 +39,20 @@ export async function GET(request: Request) {
       if (!chats || chats.length === 0) {
         return NextResponse.json({ error: 'Chat session not found' }, { status: 404 })
       }
-      return NextResponse.json(chats[0])
+      const chat = chats[0]
+      const rawMessages = chat.messages || []
+      const hasUserMessage = rawMessages.some((m) => m.role === 'user')
+      if (!hasUserMessage) {
+        chat.messages = []
+      } else {
+        chat.messages = rawMessages.filter((m, idx) => {
+          if (idx === 0 && m.role === 'assistant' && (m.content?.includes('bestie') || m.content?.includes('Elena AI Concierge active'))) {
+            return false
+          }
+          return true
+        })
+      }
+      return NextResponse.json(chat)
     }
 
     const chats = await supabaseRest<Omit<ElenaChatSession, 'messages'>[]>(

@@ -184,7 +184,19 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       const response = await fetch(`/api/portal/elena-chat/sessions?id=${sessionId}`)
       if (!response.ok) throw new Error('Failed to load messages')
       const data = (await response.json()) as { messages: Message[] }
-      setMessages(data.messages)
+      const raw = data.messages || []
+      const hasUserMsg = raw.some((m) => m.role === 'user')
+      if (!hasUserMsg) {
+        setMessages([])
+      } else {
+        const cleaned = raw.filter((m, idx) => {
+          if (idx === 0 && m.role === 'assistant' && (m.content?.includes('bestie') || m.content?.includes('Elena AI Concierge active'))) {
+            return false
+          }
+          return true
+        })
+        setMessages(cleaned)
+      }
     } catch (err) {
       console.error(err)
     } finally {
