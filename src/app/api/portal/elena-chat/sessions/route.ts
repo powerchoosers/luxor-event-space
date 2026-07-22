@@ -60,12 +60,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const defaultMsg: ChatMessage[] = [
-      {
-        role: 'assistant',
-        content: "Elena AI Concierge active. Connected to your live Luxor database & CRM. How can I assist with your venue operations, lead intelligence, or analytics today?"
-      }
-    ]
+    const defaultMsg: ChatMessage[] = []
 
     const newChat = await supabaseRest<ElenaChatSession[]>('luxor_elena_chats', {
       method: 'POST',

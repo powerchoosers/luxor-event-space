@@ -10,7 +10,8 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -103,12 +104,7 @@ function getQueryIndicatorText(sql: string) {
 }
 
 export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: "Elena AI Concierge active. Connected to your live Luxor database & CRM. How can I assist with your venue operations, lead intelligence, or analytics today?"
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -547,139 +543,160 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
         {/* Messages Window */}
         <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
-          <AnimatePresence initial={false}>
-            {messages.map((msg, index) => (
-              <motion.div 
-                layout
-                key={index} 
-                className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-              >
-                <motion.div
-                  initial={{ opacity: 0, y: 30, scale: 0.88, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+          {messages.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+              className="flex min-h-full flex-col items-center justify-center text-center px-2 py-6 space-y-6"
+            >
+              <div className="relative">
+                <div className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
+                  <Image src="/luxor-concierge.png" alt="Elena AI" fill className="object-cover" />
+                </div>
+                <span className="absolute bottom-0.5 right-0.5 h-4 w-4 rounded-full border-2 border-[#050505] bg-green-500" />
+              </div>
+
+              <div className="max-w-xs space-y-1.5">
+                <h3 className="font-serif text-lg font-medium text-zinc-300">Elena AI Concierge</h3>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Connected to your live Luxor database & CRM intelligence.
+                </p>
+              </div>
+
+              <div className="w-full space-y-2 pt-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550 text-left px-1">Suggested Requests</p>
+                <div className="grid gap-2">
+                  {pathSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSend(suggestion)}
+                      className="flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group"
+                    >
+                      <span className="line-clamp-2">{suggestion}</span>
+                      <Sparkles size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {messages.map((msg, index) => (
+                <motion.div 
+                  layout
+                  key={index} 
+                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
-                  {msg.role === 'assistant' && (
-                    <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                      <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                  <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.88, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
+                        <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                      </div>
+                    )}
+                    <div 
+                      className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
+                        msg.role === 'user'
+                          ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-zinc-300'
+                          : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/30 text-zinc-300'
+                      }`}
+                    >
+                      {renderFormattedContent(msg.content)}
+                    </div>
+                  </motion.div>
+
+                  {/* Render SQL execution indicators */}
+                  {msg.executedQueries && msg.executedQueries.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2 pl-8">
+                      {msg.executedQueries.map((eq, qIdx) => (
+                        <span 
+                          key={qIdx} 
+                          className="inline-flex items-center gap-1 rounded bg-[#caa24c]/5 border border-[#caa24c]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#f1d27a] font-sans"
+                        >
+                          <span className="h-1 w-1 rounded-full bg-[#caa24c]" />
+                          {getQueryIndicatorText(eq.query)}
+                        </span>
+                      ))}
                     </div>
                   )}
-                  <div 
-                    className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
-                      msg.role === 'user'
-                        ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-zinc-300'
-                        : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/30 text-zinc-300'
-                    }`}
-                  >
-                    {renderFormattedContent(msg.content)}
-                  </div>
-                </motion.div>
 
-                {/* Render SQL execution indicators */}
-                {msg.executedQueries && msg.executedQueries.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 pl-8">
-                    {msg.executedQueries.map((eq, qIdx) => (
-                      <span 
-                        key={qIdx} 
-                        className="inline-flex items-center gap-1 rounded bg-[#caa24c]/5 border border-[#caa24c]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#f1d27a] font-sans"
-                      >
-                        <span className="h-1 w-1 rounded-full bg-[#caa24c]" />
-                        {getQueryIndicatorText(eq.query)}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Render Direct Action Confirmation Cards */}
-                {msg.confirmation && !msg.isConfirmed && !msg.isCancelled && (
-                  <div className="w-[88%] mt-3 pl-8">
-                    <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3.5 space-y-3">
-                      <div className="flex items-start gap-2.5">
-                        <Info size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-semibold text-zinc-300">Action Confirmation Required</p>
-                          <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{msg.confirmation.summary}</p>
+                  {/* Render Direct Action Confirmation Cards */}
+                  {msg.confirmation && !msg.isConfirmed && !msg.isCancelled && (
+                    <div className="w-[88%] mt-3 pl-8">
+                      <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3.5 space-y-3">
+                        <div className="flex items-start gap-2.5">
+                          <Info size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-300">Action Confirmation Required</p>
+                            <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{msg.confirmation.summary}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmAction(index, msg.confirmation!)}
+                            className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                          >
+                            Confirm Action
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelAction(index)}
+                            className="rounded border border-zinc-850 hover:bg-zinc-900 text-zinc-450 hover:text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-2 justify-end pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleConfirmAction(index, msg.confirmation!)}
-                          className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
-                        >
-                          Confirm Action
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleCancelAction(index)}
-                          className="rounded border border-zinc-850 hover:bg-zinc-900 text-zinc-450 hover:text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {msg.confirmation && msg.isConfirmed && (
-                  <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                    Action Confirmed & Executed
-                  </div>
-                )}
+                  {msg.confirmation && msg.isConfirmed && (
+                    <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                      Action Confirmed & Executed
+                    </div>
+                  )}
 
-                {msg.confirmation && msg.isCancelled && (
-                  <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-550 font-medium flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                    Action Cancelled
-                  </div>
-                )}
-              </motion.div>
-            ))}
+                  {msg.confirmation && msg.isCancelled && (
+                    <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-550 font-medium flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                      Action Cancelled
+                    </div>
+                  )}
+                </motion.div>
+              ))}
 
-            {/* Typing indicator */}
-            {isLoading && (
-              <motion.div
-                layout
-                key="thinking-indicator"
-                initial={{ opacity: 0, y: 20, scale: 0.9, originX: 0, originY: 1 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                transition={{ duration: 0.3 }}
-                className="flex items-start gap-2 max-w-[80%]"
-              >
-                <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                  <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
-                </div>
-                <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
-                  <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
-                  <span>Querying database...</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Typing indicator */}
+              {isLoading && (
+                <motion.div
+                  layout
+                  key="thinking-indicator"
+                  initial={{ opacity: 0, y: 20, scale: 0.9, originX: 0, originY: 1 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex items-start gap-2 max-w-[80%]"
+                >
+                  <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
+                    <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                  </div>
+                  <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
+                    <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
+                    <span>Querying database...</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Suggested prompts */}
-        {messages.length === 1 && (
-          <div className="border-t border-[#caa24c]/5 p-3 space-y-1.5 bg-[#050505]">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-550 px-1">Suggested Requests</p>
-            <div className="flex flex-wrap gap-1.5">
-              {pathSuggestions.map((s, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleSend(s)}
-                  className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-left text-xs text-zinc-450 hover:border-[#caa24c]/20 hover:bg-[#caa24c]/2 hover:text-[#f1d27a] transition-all cursor-pointer"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Input */}
         <div className="border-t border-[#caa24c]/10 bg-zinc-950/60 p-3">
