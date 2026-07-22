@@ -192,7 +192,11 @@ export async function sendLuxorZohoEmail(input: {
     if (!upload.data?.storeName || !upload.data.attachmentName || !upload.data.attachmentPath) {
       throw new Error('Zoho did not return attachment details.')
     }
-    uploadedAttachments.push(upload.data)
+    uploadedAttachments.push({
+      storeName: upload.data.storeName,
+      attachmentName: upload.data.attachmentName,
+      attachmentPath: upload.data.attachmentPath,
+    })
   }
 
   const payload = {
