@@ -70,6 +70,26 @@ export async function listLuxorDocumentsByInquiry(inquiryId: string) {
   )
 }
 
+export async function deleteLuxorDocumentsByInvoice(invoiceId: string) {
+  const documents = await supabaseRest<LuxorDocument[]>(
+    `luxor_documents?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}`,
+  )
+  const { url, serviceRoleKey } = getSupabaseConfig()
+  for (const document of documents) {
+    const response = await fetch(`${url}/storage/v1/object/${DOCUMENT_BUCKET}/${document.storage_path}`, {
+      method: 'DELETE',
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      cache: 'no-store',
+    })
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Could not delete ${document.file_name}: ${await response.text()}`)
+    }
+  }
+  await supabaseRest<null>(`luxor_documents?invoice_id=eq.${encodeURIComponent(invoiceId)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function saveLuxorProposalPdf(input: {
   invoice: LuxorInvoice
   inquiryId: string | null

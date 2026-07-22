@@ -200,6 +200,8 @@ export default function LeadDetailPage({
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
+  const [invoiceToDelete, setInvoiceToDelete] = useState<LuxorInvoice | null>(null)
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
   const [customPaymentAmount, setCustomPaymentAmount] = useState('')
 
@@ -1287,10 +1289,16 @@ export default function LeadDetailPage({
 
   const getInvoiceBalance = (invoice: LuxorInvoice) => Math.max(0, Math.round((Number(invoice.total) - getInvoicePaidTotal(invoice.id)) * 100) / 100)
 
-  const openPaymentRequest = (invoice: LuxorInvoice) => {
+  const getSuggestedInvoiceDeposit = (invoice: LuxorInvoice) => {
     const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
     const balance = getInvoiceBalance(invoice)
-    const suggestedDeposit = booking?.deposit_required ? Math.min(Number(booking.deposit_required), balance) : Math.min(Math.round(Number(invoice.total) * 0.25 * 100) / 100, balance)
+    const amount = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(invoice.total) * 0.25 * 100) / 100
+    return Math.min(amount, balance)
+  }
+
+  const openPaymentRequest = (invoice: LuxorInvoice) => {
+    const balance = getInvoiceBalance(invoice)
+    const suggestedDeposit = getSuggestedInvoiceDeposit(invoice)
     setPaymentRequestInvoice(invoice)
     setPaymentRequestKind(getInvoicePaidTotal(invoice.id) > 0 ? 'balance' : 'deposit')
     setCustomPaymentAmount(String(suggestedDeposit || balance))
@@ -1301,14 +1309,13 @@ export default function LeadDetailPage({
     if (!paymentRequestInvoice) return
     const invoiceId = paymentRequestInvoice.id
     const balance = getInvoiceBalance(paymentRequestInvoice)
-    const booking = bookings.find((item) => item.invoice_id === invoiceId) || latestBooking
-    const suggestedDeposit = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(paymentRequestInvoice.total) * 0.25 * 100) / 100
+    const suggestedDeposit = getSuggestedInvoiceDeposit(paymentRequestInvoice)
     const paymentAmount = paymentRequestKind === 'balance'
       ? balance
       : paymentRequestKind === 'deposit'
         ? Math.min(suggestedDeposit, balance)
         : Number(customPaymentAmount)
-    const paymentLabel = paymentRequestKind === 'deposit' ? 'Event deposit' : paymentRequestKind === 'balance' ? 'Remaining event balance' : 'Event payment installment'
+    const paymentLabel = paymentRequestKind === 'deposit' ? '25% event deposit' : paymentRequestKind === 'balance' ? 'Full remaining event balance' : 'Custom event payment installment'
     try {
       setSendingInvoiceId(invoiceId)
       const response = await fetch(`/api/invoices/${invoiceId}/send`, {
@@ -1325,6 +1332,25 @@ export default function LeadDetailPage({
       notify({ title: 'Proposal not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingInvoiceId(null)
+    }
+  }
+
+  const handleDeleteInvoice = async () => {
+    if (!invoiceToDelete) return
+    const invoiceId = invoiceToDelete.id
+    try {
+      setDeletingInvoiceId(invoiceId)
+      const response = await fetch(`/api/invoices/${invoiceId}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'The invoice could not be deleted.')
+      setInvoices((current) => current.filter((invoice) => invoice.id !== invoiceId))
+      setPayments((current) => current.filter((payment) => payment.invoice_id !== invoiceId))
+      setInvoiceToDelete(null)
+      notify({ title: 'Invoice deleted', description: 'The invoice, saved PDF, and unused payment link were removed.', variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Invoice not deleted', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setDeletingInvoiceId(null)
     }
   }
 
@@ -4654,32 +4680,35 @@ export default function LeadDetailPage({
             ) : (
               <div className="space-y-3">
                 {sortedInvoices.map((inv, index) => (
-                  <div key={inv.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                  <div key={inv.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">{inv.id.slice(0, 8).toUpperCase()}</p>
-                        <p className="mt-1 text-sm font-mono font-bold text-white">${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                        <p className="mt-1 text-[10px] text-zinc-600">
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-bold text-[color:var(--portal-text)]">{inv.description || `${inv.event_type || 'Event'} proposal`}</p>
+                        <p className="mt-1 text-[9px] font-mono uppercase tracking-widest text-[color:var(--portal-muted)]">Invoice {inv.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="mt-2 text-sm font-mono font-bold text-[color:var(--portal-text)]">${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
                           {index === 0 ? 'Latest invoice' : 'Invoice record'}
                           {inv.due_date ? ` • Due ${new Date(inv.due_date).toLocaleDateString()}` : ''}
                         </p>
                       </div>
                       <PortalStatusBadge status={inv.status} />
                     </div>
-                    {index === 0 && inv.description ? <p className="mt-3 text-xs leading-5 text-zinc-400">{inv.description}</p> : null}
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-zinc-900 bg-black/20 p-3 text-[10px]">
-                      <div><span className="block text-zinc-600">Paid</span><span className="font-mono text-emerald-400">{formatMoney(getInvoicePaidTotal(inv.id))}</span></div>
-                      <div><span className="block text-zinc-600">Balance due</span><span className="font-mono text-zinc-200">{formatMoney(getInvoiceBalance(inv))}</span></div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px]">
+                      <div><span className="block text-[color:var(--portal-muted)]">Paid</span><span className="font-mono text-emerald-700 dark:text-emerald-400">{formatMoney(getInvoicePaidTotal(inv.id))}</span></div>
+                      <div><span className="block text-[color:var(--portal-muted)]">Balance due</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(getInvoiceBalance(inv))}</span></div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => setPdfPreviewInvoice(inv)} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
+                      <button type="button" onClick={() => setPdfPreviewInvoice(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <Eye size={12} /> View PDF
                       </button>
-                      <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition-colors hover:text-white">
+                      <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
                       </a>
                       <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
                         <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
+                      </button>
+                      <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0 || inv.status === 'paid'} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
+                        <Trash2 size={12} /> Delete
                       </button>
                     </div>
                   </div>
@@ -4906,9 +4935,9 @@ export default function LeadDetailPage({
                   value={paymentRequestKind}
                   onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
                   options={[
-                    { value: 'deposit', label: 'Deposit payment' },
-                    { value: 'balance', label: 'Entire remaining balance' },
-                    { value: 'custom', label: 'Custom installment amount' },
+                    { value: 'deposit', label: `25% event deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
+                    { value: 'balance', label: `Pay invoice in full — ${formatMoney(getInvoiceBalance(paymentRequestInvoice))}` },
+                    { value: 'custom', label: 'Custom installment — choose an amount' },
                   ]}
                 />
               </div>
@@ -4923,6 +4952,24 @@ export default function LeadDetailPage({
               </button>
             </div>
           </form>
+        ) : null}
+      </PortalModal>
+
+      <PortalModal isOpen={Boolean(invoiceToDelete)} onClose={() => !deletingInvoiceId && setInvoiceToDelete(null)} maxWidth="max-w-md">
+        {invoiceToDelete ? (
+          <div className="bg-[color:var(--portal-bg)] p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-700 dark:text-red-300"><Trash2 size={18} /></div>
+              <div>
+                <h3 className="text-sm font-black text-[color:var(--portal-text)]">Delete this invoice?</h3>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">This permanently removes <span className="font-semibold text-[color:var(--portal-text)]">{invoiceToDelete.description || `invoice ${invoiceToDelete.id.slice(0, 8).toUpperCase()}`}</span>, its saved PDF, and any unused Stripe payment link. Paid invoices cannot be deleted.</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setInvoiceToDelete(null)} disabled={Boolean(deletingInvoiceId)} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] disabled:opacity-40">Keep invoice</button>
+              <button type="button" onClick={() => void handleDeleteInvoice()} disabled={Boolean(deletingInvoiceId)} className="rounded-lg bg-red-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-red-700 disabled:opacity-40">{deletingInvoiceId ? 'Deleting...' : 'Delete invoice'}</button>
+            </div>
+          </div>
         ) : null}
       </PortalModal>
 

@@ -158,7 +158,6 @@ export async function sendLuxorZohoEmail(input: {
   const from = normalizeEmailAddress(input.from) || loginEmail
   const subject = input.subject.trim()
   const content = input.content.trim()
-  const fromName = input.fromName?.trim() || 'Luxor Event Space'
 
   if (!to) throw new Error('Please add a valid recipient email address.')
   if (!subject) throw new Error('Please add an email subject.')
@@ -169,48 +168,53 @@ export async function sendLuxorZohoEmail(input: {
 
   const accessToken = await getZohoAccessToken()
   const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content)
-  const senderName = fromName.replace(/"/g, '')
-  const uploadedAttachments = []
-  for (const attachment of input.attachments || []) {
-    const uploadResponse = await fetch(
-      `${baseUrl}/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(attachment.filename)}&isInline=false`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Zoho-oauthtoken ${accessToken}`,
-          Accept: 'application/json',
-          // Zoho's raw-file upload endpoint expects the binary body with
-          // application/octet-stream, rather than the attachment's own MIME type.
-          'Content-Type': 'application/octet-stream',
-        },
-        body: Buffer.from(attachment.content),
-      },
-    )
-    const uploadText = await uploadResponse.text()
-    if (!uploadResponse.ok) throw new Error(`Zoho attachment upload failed with ${uploadResponse.status}: ${uploadText}`)
-    const upload = uploadText ? JSON.parse(uploadText) as { data?: { storeName?: string; attachmentName?: string; attachmentPath?: string } } : {}
-    if (!upload.data?.storeName || !upload.data.attachmentName || !upload.data.attachmentPath) {
-      throw new Error('Zoho did not return attachment details.')
-    }
-    uploadedAttachments.push({
-      storeName: upload.data.storeName,
-      attachmentName: upload.data.attachmentName,
-      attachmentPath: upload.data.attachmentPath,
-    })
-  }
 
-  const payload = {
-    fromAddress: `"${senderName}" <${from}>`,
-    toAddress: to,
-    subject,
-    content: looksLikeHtml ? content : plainTextToHtml(content),
-    mailFormat: 'html',
-    ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
+  const uploadAttachments = async () => {
+    const uploaded = []
+    for (const attachment of input.attachments || []) {
+      const uploadResponse = await fetch(
+        `${baseUrl}/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(attachment.filename)}&isInline=false`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/octet-stream',
+          },
+          body: Buffer.from(attachment.content),
+        },
+      )
+      const uploadText = await uploadResponse.text()
+      if (!uploadResponse.ok) throw new Error(`Zoho attachment upload failed with ${uploadResponse.status}: ${uploadText}`)
+      const upload = uploadText ? JSON.parse(uploadText) as { data?: { storeName?: string; attachmentName?: string; attachmentPath?: string } } : {}
+      if (!upload.data?.storeName || !upload.data.attachmentName || !upload.data.attachmentPath) {
+        throw new Error('Zoho did not return attachment details.')
+      }
+      uploaded.push({
+        storeName: upload.data.storeName,
+        attachmentName: upload.data.attachmentName,
+        attachmentPath: upload.data.attachmentPath,
+      })
+    }
+    return uploaded
   }
 
   let response: Response | null = null
   let resultText = ''
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // Zoho attachment references are temporary. A fresh upload on retry avoids
+    // reusing a reference that its mail service may have already consumed.
+    const uploadedAttachments = await uploadAttachments()
+    const payload = {
+      // Zoho's documented contract calls for the authenticated mailbox address.
+      // The mailbox's configured display name is applied by Zoho.
+      fromAddress: from,
+      toAddress: to,
+      subject,
+      content: looksLikeHtml ? content : plainTextToHtml(content),
+      mailFormat: 'html',
+      ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
+    }
     response = await fetch(`${baseUrl}/accounts/${accountId}/messages`, {
       method: 'POST',
       headers: {
@@ -231,7 +235,7 @@ export async function sendLuxorZohoEmail(input: {
 
     console.warn('[zoho-mail] transient send failure; retrying once', {
       status: response.status,
-      hasAttachments: uploadedAttachments.length > 0,
+      hasAttachments: Boolean(input.attachments?.length),
     })
     await new Promise((resolve) => setTimeout(resolve, 400))
   }

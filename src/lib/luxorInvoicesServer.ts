@@ -38,7 +38,8 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}) {
     throw new Error(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`)
   }
 
-  return (await response.json()) as T
+  const text = await response.text()
+  return (text ? JSON.parse(text) : null) as T
 }
 
 export async function listInvoices(limit = 1000) {
@@ -113,6 +114,15 @@ export async function updateInvoice(
   })
 
   return updated ?? null
+}
+
+export async function deleteInvoice(id: string) {
+  await supabaseRest<null>(`luxor_payments?invoice_id=eq.${encodeURIComponent(id)}&status=neq.paid`, {
+    method: 'DELETE',
+  })
+  await supabaseRest<null>(`luxor_invoices?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function listAllBills() {
