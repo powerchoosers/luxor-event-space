@@ -137,6 +137,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   const loadSmartSuggestions = async () => {
     setIsLoadingSuggestions(true)
+    setSmartSuggestions([])
     try {
       const res = await fetch(`/api/portal/elena-chat/suggestions?activePath=${encodeURIComponent(activePath)}`)
       if (res.ok) {
@@ -613,26 +614,57 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       )}
                     </div>
                     <div className="grid gap-2">
-                      <AnimatePresence mode="popLayout">
-                        {(smartSuggestions.length > 0 ? smartSuggestions : pathSuggestions).map((suggestion, idx) => (
-                          <motion.button
-                            key={suggestion}
-                            initial={{ opacity: 0, y: 14, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ 
-                              duration: 0.32, 
-                              delay: idx * 0.07, 
-                              ease: [0.23, 1, 0.32, 1] 
-                            }}
-                            type="button"
-                            onClick={() => handleSend(suggestion)}
-                            className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
+                      <AnimatePresence mode="wait">
+                        {isLoadingSuggestions && smartSuggestions.length === 0 ? (
+                          <motion.div
+                            key="suggestions-skeleton"
+                            initial={{ opacity: 0, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, filter: 'blur(0px)' }}
+                            exit={{ opacity: 0, filter: 'blur(6px)' }}
+                            transition={{ duration: 0.25 }}
+                            className="grid gap-2"
                           >
-                            <span className="line-clamp-2 leading-snug">{suggestion}</span>
-                            <Sparkles size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
-                          </motion.button>
-                        ))}
+                            {[1, 2, 3, 4].map((i) => (
+                              <div
+                                key={i}
+                                className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
+                              >
+                                <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
+                                <Sparkles size={13} className="shrink-0 text-zinc-700/50" />
+                              </div>
+                            ))}
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="suggestions-list"
+                            initial={{ opacity: 0, filter: 'blur(6px)', y: 6 }}
+                            animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                            transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                            className="grid gap-2"
+                          >
+                            <AnimatePresence mode="popLayout">
+                              {(smartSuggestions.length > 0 ? smartSuggestions : pathSuggestions).map((suggestion, idx) => (
+                                <motion.button
+                                  key={suggestion}
+                                  initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ 
+                                    duration: 0.3, 
+                                    delay: idx * 0.06, 
+                                    ease: [0.23, 1, 0.32, 1] 
+                                  }}
+                                  type="button"
+                                  onClick={() => handleSend(suggestion)}
+                                  className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
+                                >
+                                  <span className="line-clamp-2 leading-snug">{suggestion}</span>
+                                  <Sparkles size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
+                                </motion.button>
+                              ))}
+                            </AnimatePresence>
+                          </motion.div>
+                        )}
                       </AnimatePresence>
                     </div>
                   </div>
