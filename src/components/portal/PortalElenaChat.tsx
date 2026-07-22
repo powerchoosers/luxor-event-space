@@ -106,7 +106,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hey bestie! 💕 Your COO, CFO, Marketing guru, and business mentor is in the house. I've got full access to our Luxor database, so whether you want to crunch numbers, check leads, brainstorm marketing ideas, or get some operations advice, I've got your back. What are we tackling today?"
+      content: "Elena AI Concierge active. Connected to your live Luxor database & CRM. How can I assist with your venue operations, lead intelligence, or analytics today?"
     }
   ])
   const [input, setInput] = useState('')
@@ -694,7 +694,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask Elena to query or update something..."
+              placeholder="Type a message or ask Elena anything..."
               className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-zinc-200 placeholder-zinc-600 outline-none"
               disabled={isLoading}
             />

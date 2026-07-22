@@ -63,7 +63,7 @@ export async function POST() {
     const defaultMsg: ChatMessage[] = [
       {
         role: 'assistant',
-        content: "Hey bestie! 💕 Your COO, CFO, Marketing guru, and business mentor is in the house. I've got full access to our Luxor database, so whether you want to crunch numbers, check leads, brainstorm marketing ideas, or get some operations advice, I've got your back. What are we tackling today?"
+        content: "Elena AI Concierge active. Connected to your live Luxor database & CRM. How can I assist with your venue operations, lead intelligence, or analytics today?"
       }
     ]
 
