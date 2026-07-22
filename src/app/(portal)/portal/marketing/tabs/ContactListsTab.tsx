@@ -552,12 +552,12 @@ export function ContactListsTab({
                                 onClick={() => {
                                   window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: contact } }))
                                 }}
-                                className="rounded p-1 text-zinc-500 hover:text-white transition-colors"
+                                className="rounded p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100"
                               >
                                 <Mail size={13} />
                               </button>
                             )}
-                            <button className="rounded p-1 text-zinc-650 hover:text-white transition-colors">
+                            <button className="rounded p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100">
                               <MoreVertical size={13} />
                             </button>
                           </div>
