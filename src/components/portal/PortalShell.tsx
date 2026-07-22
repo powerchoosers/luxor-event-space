@@ -39,6 +39,7 @@ import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
 import { ToastProvider } from '@/components/portal/ToastProvider'
+import { PortalContactAvatar } from '@/components/portal/PortalUI'
 import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 
@@ -411,61 +412,80 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             </button>
 
             {/* Header Search Command Bar */}
-            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group">
-              <Search size={14} className="shrink-0 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
+            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group">
+              <Search size={14} className="shrink-0 text-zinc-500 group-focus-within:text-[#caa24c] transition-colors" />
               <input
                 type="text"
                 value={searchQuery}
                 onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 250)}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search clients, events, or emails..."
-                className="w-full bg-transparent px-2 text-xs font-semibold text-zinc-300 outline-none placeholder:text-zinc-650"
+                className="portal-input-transparent w-full px-2 text-xs font-semibold text-zinc-200 outline-none placeholder:text-zinc-500"
               />
               
               {/* Search Results Dropdown overlay */}
-              {searchFocused && searchResults.length > 0 && (
-                <div className="absolute left-0 top-11 z-50 w-full rounded-xl border shadow-2xl p-2 space-y-1 bg-[color:var(--portal-card)]" style={{ borderColor: 'var(--portal-border)' }}>
-                  <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1 border-b mb-1" style={{ borderColor: 'var(--portal-border)' }}>
-                    Matching Dossier Records
-                  </div>
-                  {searchResults.map((result) => (
-                    <div
-                      key={result.id}
-                      className="group/item flex items-center justify-between rounded hover:bg-[color:var(--portal-soft)] transition-colors"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => selectSearchResult(result.id)}
-                        className="flex-1 text-left px-3 py-2 outline-none cursor-pointer"
-                      >
-                        <div className="truncate pr-2">
-                          <p className="text-xs font-bold text-white leading-tight">{result.full_name}</p>
-                          <p className="text-[9px] text-zinc-500 truncate mt-0.5">{result.email || 'No email registered'}</p>
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-1.5 pr-3 shrink-0">
-                        {result.email && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: result } }))
-                            }}
-                            className="rounded p-1 text-zinc-500 hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
-                            title={`Email ${result.full_name}`}
-                          >
-                            <Mail size={13} />
-                          </button>
-                        )}
-                        <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">
-                          {result.event_type || 'Booking'}
-                        </span>
-                      </div>
+              <AnimatePresence>
+                {searchFocused && searchResults.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[22rem] rounded-xl border p-2 space-y-1 shadow-2xl backdrop-blur-2xl"
+                  >
+                    <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1 border-b mb-1 border-[color:var(--portal-border)]">
+                      Matching Dossier Records
                     </div>
-                  ))}
-                </div>
-              )}
+                    {searchResults.map((result) => (
+                      <div
+                        key={result.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
+                      >
+                        <Link
+                          href={`/portal/leads/${result.id}`}
+                          onClick={() => selectSearchResult(result.id)}
+                          className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
+                        >
+                          <PortalContactAvatar
+                            name={result.full_name}
+                            avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
+                            size="sm"
+                          />
+                          <div className="truncate min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
+                              {result.full_name}
+                            </p>
+                            <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                              {result.email || 'No email registered'}
+                            </p>
+                          </div>
+                        </Link>
+                        <div className="flex items-center gap-1.5 pl-2 shrink-0">
+                          {result.email && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: result } }))
+                              }}
+                              className="rounded p-1.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
+                              title={`Email ${result.full_name}`}
+                            >
+                              <Mail size={13} />
+                            </button>
+                          )}
+                          <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
+                            {result.event_type || 'Booking'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 

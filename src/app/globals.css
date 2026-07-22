@@ -841,3 +841,16 @@ body[data-portal-theme='light'] .portal-suggestion-card:hover {
   border-color: rgba(202, 162, 76, 0.45) !important;
   background-color: #ede6d9 !important;
 }
+
+/* Global Search Dropdown Overrides for solid opacity and high contrast */
+.portal-search-dropdown {
+  background-color: #080808 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85) !important;
+}
+
+body[data-portal-theme='light'] .portal-search-dropdown {
+  background-color: #ffffff !important;
+  border-color: rgba(124, 91, 36, 0.18) !important;
+  box-shadow: 0 20px 45px -15px rgba(48, 33, 14, 0.25) !important;
+}
