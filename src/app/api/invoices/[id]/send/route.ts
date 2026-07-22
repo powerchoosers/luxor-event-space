@@ -10,10 +10,12 @@ import { buildLuxorPaymentRequestEmail } from '@/lib/luxorProposalEmailServer'
 import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  let invoiceId = 'unknown'
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const { id } = await params
+    invoiceId = id
     const invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
     const expectedSubtotal = Math.round(invoice.line_items.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1) * Math.max(0, Number(item.unitPrice) || 0), 0) * 100) / 100
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const stripe = new Stripe(secretKey)
     const origin = new URL(request.url).origin
-    const checkout = await stripe.checkout.sessions.create({
+    const checkoutPayload: Stripe.Checkout.SessionCreateParams = {
       mode: 'payment',
       customer_email: inquiry.email,
       client_reference_id: invoice.id,
@@ -64,6 +66,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
       success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/payment/cancelled`,
+    }
+    const checkout = await stripe.checkout.sessions.create(checkoutPayload, {
+      idempotencyKey: `invoice-${invoice.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}`,
     })
     if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
 
@@ -80,6 +85,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const updated = await updateInvoice(invoice.id, { status: 'sent' })
     return NextResponse.json({ invoice: updated, checkoutUrl: checkout.url, paymentAmount, balanceDue })
   } catch (error) {
+    console.error('[invoice-payment-request] failed', {
+      invoiceId,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to send proposal.' }, { status: 500 })
   }
 }

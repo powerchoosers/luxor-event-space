@@ -208,24 +208,35 @@ export async function sendLuxorZohoEmail(input: {
     ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
   }
 
-  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  let response: Response | null = null
+  let resultText = ''
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    response = await fetch(`${baseUrl}/accounts/${accountId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    resultText = await response.text()
+    if (response.ok) break
 
-  const resultText = await response.text()
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      cachedAccessToken = null
+    if (response.status === 401) cachedAccessToken = null
+    const retryable = response.status >= 500 && response.status <= 504
+    if (!retryable || attempt === 2) {
+      throw new Error(`Zoho send failed with ${response.status}: ${resultText}`)
     }
 
-    throw new Error(`Zoho send failed with ${response.status}: ${resultText}`)
+    console.warn('[zoho-mail] transient send failure; retrying once', {
+      status: response.status,
+      hasAttachments: uploadedAttachments.length > 0,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 400))
   }
+
+  if (!response?.ok) throw new Error('Zoho send failed without a response.')
 
   const result = resultText ? (JSON.parse(resultText) as ZohoSendResponse) : {}
 
