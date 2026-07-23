@@ -78,13 +78,6 @@ let activeZohoReads = 0
 let zohoReadCooldownUntil = 0
 const zohoReadQueue: Array<() => void> = []
 
-class ZohoRateLimitError extends Error {
-  constructor(public retryAfterMs: number) {
-    super('Zoho Mail is briefly rate limiting requests. Please retry in a moment.')
-    this.name = 'ZohoRateLimitError'
-  }
-}
-
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
@@ -106,34 +99,39 @@ function releaseZohoReadSlot() {
 function retryAfterMilliseconds(response: Response, attempt: number) {
   const retryAfter = response.headers.get('retry-after')
   const seconds = retryAfter ? Number.parseFloat(retryAfter) : Number.NaN
-  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 10_000)
-  return attempt === 0 ? 900 : 2_000
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 30_000)
+  return [1_200, 3_000, 7_000][attempt] || 10_000
+}
+
+async function waitForZohoReadCooldown() {
+  let remaining = zohoReadCooldownUntil - Date.now()
+  while (remaining > 0) {
+    await wait(Math.min(remaining, 30_000))
+    remaining = zohoReadCooldownUntil - Date.now()
+  }
 }
 
 async function fetchZohoMailRead(url: string, init: RequestInit = {}) {
-  const cooldownRemaining = zohoReadCooldownUntil - Date.now()
-  if (cooldownRemaining > 0) throw new ZohoRateLimitError(cooldownRemaining)
-
+  await waitForZohoReadCooldown()
   await acquireZohoReadSlot()
   try {
-    const queuedCooldownRemaining = zohoReadCooldownUntil - Date.now()
-    if (queuedCooldownRemaining > 0) throw new ZohoRateLimitError(queuedCooldownRemaining)
+    await waitForZohoReadCooldown()
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       const response = await fetch(url, init)
       if (response.ok) return response
 
       const responseText = await response.clone().text().catch(() => '')
       const rateLimited = response.status === 429 || /too many requests|rate.?limit/i.test(responseText)
       const transient = rateLimited || (response.status >= 500 && response.status <= 504)
-      if (!transient || attempt === 2) {
+      if (!transient || attempt === 3) {
         if (rateLimited) zohoReadCooldownUntil = Date.now() + 30_000
         return response
       }
 
       const delay = retryAfterMilliseconds(response, attempt)
       if (rateLimited) zohoReadCooldownUntil = Date.now() + delay
-      await wait(delay)
+      await (rateLimited ? waitForZohoReadCooldown() : wait(delay))
       if (zohoReadCooldownUntil <= Date.now()) zohoReadCooldownUntil = 0
     }
     throw new Error('Zoho Mail request failed without a response.')
@@ -643,15 +641,18 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
           const data = folderResult.data || {}
 
           // Also fetch full HTML content from the content sub-endpoint
-          let content = String(data.content || data.summary || '')
-          const contentRes = await fetchZohoMailRead(
-            `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
-            { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-          )
-          if (contentRes.ok) {
-            const contentData = await contentRes.json().catch(() => ({})) as { data?: { content?: string } }
-            content = String(contentData.data?.content || content)
+          let content = String(data.content || '')
+          if (!content.trim()) {
+            const contentRes = await fetchZohoMailRead(
+              `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
+              { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+            )
+            if (contentRes.ok) {
+              const contentData = await contentRes.json().catch(() => ({})) as { data?: { content?: string } }
+              content = String(contentData.data?.content || '')
+            }
           }
+          content ||= String(data.summary || '')
 
           if (Object.keys(data).length > 0) {
             return parseMessageData(data, content)
@@ -682,11 +683,11 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
     const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
     const data = result.data || {}
 
-    let fullContent = String(data.content || data.summary || '')
+    let fullContent = String(data.content || '')
 
     // If we have a folderId hint from the data, try the content endpoint
     const resolvedFolderId = String(data.folderId || folderId || '')
-    if (resolvedFolderId) {
+    if (resolvedFolderId && !fullContent.trim()) {
       const contentResponse = await fetchZohoMailRead(
         `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
         { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
@@ -716,6 +717,8 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
         console.warn('[Zoho] originalmessage fallback failed:', mimeErr)
       }
     }
+
+    fullContent ||= String(data.summary || '')
 
     return parseMessageData(data, fullContent)
   } catch (err) {

@@ -278,22 +278,52 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     setLoadingThread(!cached)
     setThreadError(null)
     setReplyStatus(null)
-    fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, { cache: 'no-store' })
-      .then(async (response) => {
-        const data = await response.json() as EmailThreadData & { error?: string }
-        if (!response.ok) throw new Error(data.error || 'Unable to load conversation.')
-        if (current) {
-          threadCache.set(threadId, data)
-          setThread(data)
+    const controller = new AbortController()
+    const loadThread = async () => {
+      try {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const response = await fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, {
+            cache: 'no-store',
+            signal: controller.signal,
+          })
+          const data = await response.json() as EmailThreadData & { error?: string }
+          if (response.ok) {
+            if (current) {
+              threadCache.set(threadId, data)
+              setThread(data)
+            }
+            return
+          }
+
+          if (response.status === 503 && attempt < 2) {
+            const retryAfter = Number.parseFloat(response.headers.get('retry-after') || '')
+            const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 30_000) : 5_000 * (attempt + 1)
+            await new Promise<void>((resolve, reject) => {
+              const timer = window.setTimeout(resolve, delay)
+              controller.signal.addEventListener('abort', () => {
+                window.clearTimeout(timer)
+                reject(new DOMException('Aborted', 'AbortError'))
+              }, { once: true })
+            })
+            continue
+          }
+
+          throw new Error(data.error || 'Unable to load conversation.')
         }
-      })
-      .catch((error) => {
+      } catch (error) {
+        if (controller.signal.aborted) return
         console.error(error)
         if (current) setThreadError(error instanceof Error ? error.message : 'Unable to load the rest of this conversation.')
         if (current && !cached) setThread(null)
-      })
-      .finally(() => { if (current) setLoadingThread(false) })
-    return () => { current = false }
+      } finally {
+        if (current) setLoadingThread(false)
+      }
+    }
+    void loadThread()
+    return () => {
+      current = false
+      controller.abort()
+    }
   }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
 
   const draftWithElena = async () => {
