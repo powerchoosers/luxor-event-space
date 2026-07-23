@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLuxorBookingsByInquiry, listLuxorBookingsWithPayments, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { createNote } from '@/lib/luxorNotesServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,6 +47,23 @@ export async function POST(request: NextRequest) {
     }
 
     const booking = await createLuxorBooking(body)
+    if (booking?.inquiry_id) {
+      const inquiry = await getLuxorInquiry(booking.inquiry_id)
+      if (inquiry && inquiry.status !== 'closed_lost') {
+        await updateLuxorInquiry(inquiry.id, {
+          status: 'booked',
+          pipeline_stage: 'contract',
+          metadata: {
+            ...inquiry.metadata,
+            booking_created_at: booking.created_at,
+            latest_booking_id: booking.id,
+          },
+        })
+        if (inquiry.status !== 'booked') {
+          await createNote(inquiry.id, 'Booking record created. Lead advanced to Contract.', 'status_change', session.email)
+        }
+      }
+    }
     return NextResponse.json(booking, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create booking.'

@@ -133,6 +133,14 @@ export type LuxorInvoice = {
   due_date: string | null
   paid_at: string | null
   notes: string | null
+  public_token?: string | null
+  proposal_sent_at?: string | null
+  proposal_viewed_at?: string | null
+  payment_requested_at?: string | null
+  payment_requested_amount?: number | null
+  payment_requested_label?: string | null
+  stripe_checkout_session_id?: string | null
+  stripe_checkout_url?: string | null
 }
 
 export type LuxorDocumentType = 'proposal' | 'invoice' | 'contract' | 'guest_guide' | 'executed_contract' | 'contract_audit'

@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { booking_id, invoice_id, inquiry_id, amount, status, payment_method, notes, processor, processor_reference } = body
+    const metadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {}
 
     if (!amount) {
       return NextResponse.json({ error: 'Amount is required.' }, { status: 400 })
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         processor: processor || null,
         processor_reference: processor_reference || null,
-        metadata: {},
+        metadata,
       }),
     })
 

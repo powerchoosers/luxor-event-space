@@ -1355,7 +1355,10 @@ export default function LeadDetailPage({
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'The proposal could not be sent.')
       if (payload.invoice) setInvoices((current) => current.map((item) => item.id === invoiceId ? payload.invoice : item))
+      if (payload.inquiry) setLead(payload.inquiry)
       setPaymentRequestInvoice(null)
+      setSelectedStageOverride(null)
+      await fetchAllData(false)
       notify({ title: 'Payment request sent', description: `${formatMoney(paymentAmount)} and the proposal PDF were emailed to the client.`, variant: 'success' })
     } catch (err) {
       notify({ title: 'Proposal not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
@@ -1587,11 +1590,9 @@ export default function LeadDetailPage({
       setBookingNotes('')
       setBookingStatus('tentative')
 
-      if (lead.status !== 'booked') {
-        await handleStatusChange('booked')
-      } else {
-        notify({ title: 'Booking created', description: bookingEventDate ? formatDisplayDate(bookingEventDate) : 'Event date still to be confirmed.', variant: 'success' })
-      }
+      setSelectedStageOverride(null)
+      await fetchAllData(false)
+      notify({ title: 'Booking created', description: `${bookingEventDate ? formatDisplayDate(bookingEventDate) : 'Event date still to be confirmed.'} Contract is now the active stage.`, variant: 'success' })
     } catch (err) {
       console.error(err)
       notify({ title: 'Booking not created', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
@@ -1725,11 +1726,22 @@ export default function LeadDetailPage({
   const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
   const depositBalance = Math.max(0, bookingDepositAmount - depositPaidTotal)
   const remainingBalance = Math.max(0, bookingContractAmount - paidTotal)
-  const proposalAmount = latestInvoice?.total || latestBooking?.contract_total || 0
-  const proposalSentAt = notes.find((note) => (
+  const proposalInvoice = sortedInvoices.find((invoice) => invoice.status === 'sent' || invoice.status === 'paid') || latestInvoice
+  const proposalPayments = proposalInvoice
+    ? sortedPayments.filter((payment) => payment.invoice_id === proposalInvoice.id && payment.status === 'paid')
+    : []
+  const proposalPaidTotal = proposalPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  const proposalBalance = Math.max(0, Math.round((Number(proposalInvoice?.total || 0) - proposalPaidTotal) * 100) / 100)
+  const proposalAmount = proposalInvoice?.total || latestBooking?.contract_total || 0
+  const proposalSentAt = proposalInvoice?.proposal_sent_at || (
+    proposalInvoice && (proposalInvoice.status === 'sent' || proposalInvoice.status === 'paid')
+      ? proposalInvoice.updated_at
+      : null
+  ) || notes.find((note) => (
     note.note_type === 'status_change' &&
     note.content.toLowerCase().includes('proposal')
   ))?.created_at || (lead.status === 'proposal_sent' ? lead.updated_at : null)
+  const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
   const marketingRecentEvents = marketingEngagement?.recent_events ?? []
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
@@ -3368,84 +3380,126 @@ export default function LeadDetailPage({
               if (currentStage === 'proposal') {
                 return (
                   <>
-                    {/* Header */}
                     <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                       <div>
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Proposal</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Create, customize, and track your custom proposals.</p>
+                        <p className="text-xs text-[color:var(--portal-muted)]">See exactly what was sent, whether it was opened, and what has been paid.</p>
                       </div>
                       <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Proposal Builder
+                        {proposalInvoice ? 'New Version' : 'Build Proposal'}
                       </button>
                     </div>
 
-                    {/* Proposal Details & Proposal Items Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Proposal Details */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
-                        <div>
-                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Proposal Summary</p>
-                            <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit Details</button>
-                          </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Package Option</span>
-                              <span className="font-bold text-white">{lead.package_interest || latestBooking?.package_name || 'Not selected'}</span>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {[
+                        {
+                          label: 'Proposal sent',
+                          value: proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not sent',
+                          detail: proposalSentAt ? 'Client delivery completed' : 'Send it to advance this lead',
+                          icon: Send,
+                          tone: proposalSentAt ? 'emerald' : 'amber',
+                        },
+                        {
+                          label: 'Client opened',
+                          value: proposalViewedAt ? formatDisplayDate(proposalViewedAt) : 'Not opened yet',
+                          detail: proposalViewedAt ? 'Secure proposal page viewed' : proposalSentAt ? 'Waiting for client view' : 'Available after sending',
+                          icon: Eye,
+                          tone: proposalViewedAt ? 'emerald' : 'neutral',
+                        },
+                        {
+                          label: 'Payment',
+                          value: proposalPaidTotal > 0 ? formatMoney(proposalPaidTotal) : 'No payment recorded',
+                          detail: proposalInvoice ? `${formatMoney(proposalBalance)} balance remaining` : 'Create a proposal first',
+                          icon: DollarSign,
+                          tone: proposalBalance <= 0 && proposalAmount > 0 ? 'emerald' : proposalPaidTotal > 0 ? 'amber' : 'neutral',
+                        },
+                        {
+                          label: 'Proposal total',
+                          value: proposalAmount > 0 ? formatMoney(proposalAmount) : 'Not priced',
+                          detail: proposalInvoice ? `${proposalInvoice.line_items.length} line items` : 'No saved proposal',
+                          icon: FileText,
+                          tone: proposalAmount > 0 ? 'gold' : 'neutral',
+                        },
+                      ].map((item) => {
+                        const StatusIcon = item.icon
+                        const toneClass = item.tone === 'emerald'
+                          ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400'
+                          : item.tone === 'amber'
+                            ? 'border-amber-500/20 bg-amber-500/[0.06] text-amber-400'
+                            : item.tone === 'gold'
+                              ? 'border-[#caa24c]/25 bg-[#caa24c]/[0.07] text-[#f1d27a]'
+                              : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-zinc-500'
+                        return (
+                          <section key={item.label} className={`rounded-2xl border p-4 shadow-xl shadow-black/10 ${toneClass}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-75">{item.label}</p>
+                                <p className="mt-3 text-sm font-black text-white">{item.value}</p>
+                                <p className="mt-1 text-[10px] leading-4 opacity-70">{item.detail}</p>
+                              </div>
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/15"><StatusIcon size={15} /></span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Est. Total Amount</span>
-                              <span className="font-bold text-[#caa24c]">{proposalAmount > 0 ? formatMoney(proposalAmount) : 'Not priced'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
-                              <span className="font-bold text-white">{proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not marked sent'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Expiration Date</span>
-                              <span className="font-bold text-white">{latestInvoice?.due_date ? formatDisplayDate(latestInvoice.due_date) : 'No expiration set'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Viewed by Client</span>
-                              <span className="font-bold text-zinc-400">{String(lead.metadata?.proposal_viewed_at ? formatDisplayDate(String(lead.metadata.proposal_viewed_at)) : 'Not tracked')}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestInvoice?.status || lead.status.replaceAll('_', ' ')}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Draft Invoice</button>
-                          <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
-                        </div>
-                      </section>
-
-                      {/* Proposal Items & Packages */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Line Items Breakdown</p>
-                          <div className="space-y-2 text-xs">
-                            {latestInvoice?.line_items?.length ? (
-                              <>
-                                {latestInvoice.line_items.map((item, index) => (
-                                  <div key={`${item.description}-${index}`} className="flex justify-between py-1 border-b border-zinc-850">
-                                    <span className="text-zinc-400">{item.description}</span>
-                                    <span className="font-mono font-bold text-white">{formatMoney(item.total)}</span>
-                                  </div>
-                                ))}
-                                <div className="flex justify-between py-1.5 pt-2">
-                                  <span className="font-bold text-white">Estimated Total</span>
-                                  <span className="font-mono font-bold text-[#caa24c] text-sm">{formatMoney(latestInvoice.total)}</span>
-                                </div>
-                              </>
-                            ) : (
-                              <p className="text-xs text-zinc-500">No proposal or invoice line items have been drafted yet.</p>
-                            )}
-                          </div>
-                        </div>
-                      </section>
+                          </section>
+                        )
+                      })}
                     </div>
+
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[linear-gradient(135deg,rgba(202,162,76,0.1),rgba(202,162,76,0.025))] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#f1d27a]"><ChevronRight size={17} /></span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Next move</p>
+                            <h4 className="mt-1 text-sm font-black text-white">
+                              {!proposalInvoice ? 'Build the proposal' : !proposalSentAt ? 'Send the proposal and payment request' : proposalPaidTotal <= 0 ? 'Watch for the client view and payment' : !latestBooking ? 'Create the booking record' : 'Continue to the contract'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-zinc-500">
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Sending automatically moves this lead into Proposal.' : proposalPaidTotal <= 0 ? 'Opened and payment status update here automatically.' : !latestBooking ? 'Payment is recorded. Create the booking to unlock Contract.' : 'The booking exists, so contract preparation is unlocked.'}
+                            </p>
+                          </div>
+                        </div>
+                        {!proposalInvoice ? (
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white">Build Proposal</button>
+                        ) : !proposalSentAt || proposalPaidTotal <= 0 ? (
+                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-40">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
+                        ) : (
+                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Proposal line items</p>
+                          <p className="mt-1 text-xs text-zinc-600">The exact services and numbers stored on the latest sent proposal.</p>
+                        </div>
+                        {proposalInvoice ? <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-zinc-300">View PDF</button> : null}
+                      </div>
+                      {proposalInvoice?.line_items?.length ? (
+                        <>
+                          <div className="divide-y divide-[color:var(--portal-border)]">
+                            {proposalInvoice.line_items.map((item, index) => (
+                              <div key={`${item.description}-${index}`} className="grid gap-2 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_70px_110px_110px] sm:items-center">
+                                <div className="min-w-0"><p className="font-bold text-zinc-200">{item.description}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-zinc-600">{item.category || 'Custom service'}</p></div>
+                                <div><span className="text-[9px] uppercase text-zinc-600 sm:hidden">Qty </span><span className="font-mono text-zinc-400">{item.quantity}</span></div>
+                                <div className="font-mono text-zinc-400 sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
+                                <div className="font-mono font-bold text-white sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-black/10 px-5 py-4 text-xs sm:ml-auto sm:w-80">
+                            <div className="flex justify-between text-zinc-500"><span>Subtotal</span><span className="font-mono">{formatMoney(proposalInvoice.subtotal)}</span></div>
+                            <div className="flex justify-between text-zinc-500"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="font-mono">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
+                            <div className="flex justify-between border-t border-white/10 pt-2 text-sm font-black text-white"><span>Total</span><span className="font-mono text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
+                            <div className="flex justify-between text-emerald-400"><span>Paid</span><span className="font-mono">{formatMoney(proposalPaidTotal)}</span></div>
+                            <div className="flex justify-between font-bold text-white"><span>Balance</span><span className="font-mono">{formatMoney(proposalBalance)}</span></div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="p-8 text-center"><p className="text-xs font-bold text-zinc-300">No proposal line items yet.</p><button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white">Build Proposal</button></div>
+                      )}
+                    </section>
                   </>
                 )
               }
@@ -6459,7 +6513,7 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
   const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || latestBooking?.status === 'confirmed' || isLegacyComplete
-  const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || isLegacyComplete
+  const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || Boolean(bookingMetadata.final_payment_paid_at) || isLegacyComplete
   const eventCompleted = Boolean(bookingMetadata.event_completed_at) || isLegacyComplete
   const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || isLegacyComplete
 

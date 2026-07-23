@@ -61,6 +61,13 @@ export async function getInvoice(id: string) {
   return invoice ?? null
 }
 
+export async function getInvoiceByPublicToken(token: string) {
+  const [invoice] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&public_token=eq.${encodeURIComponent(token)}&limit=1`,
+  )
+  return invoice ?? null
+}
+
 export async function listPaidPaymentsByInvoice(invoiceId: string) {
   return supabaseRest<LuxorPayment[]>(
     `luxor_payments?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}&status=eq.paid&order=created_at.desc`,
@@ -102,7 +109,24 @@ export async function createInvoice(data: {
 
 export async function updateInvoice(
   id: string,
-  updates: Partial<Pick<LuxorInvoice, 'status' | 'due_date' | 'paid_at' | 'notes' | 'line_items' | 'subtotal' | 'tax_rate' | 'total'>>
+  updates: Partial<Pick<LuxorInvoice,
+    | 'status'
+    | 'due_date'
+    | 'paid_at'
+    | 'notes'
+    | 'line_items'
+    | 'subtotal'
+    | 'tax_rate'
+    | 'total'
+    | 'public_token'
+    | 'proposal_sent_at'
+    | 'proposal_viewed_at'
+    | 'payment_requested_at'
+    | 'payment_requested_amount'
+    | 'payment_requested_label'
+    | 'stripe_checkout_session_id'
+    | 'stripe_checkout_url'
+  >>
 ) {
   const [updated] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',

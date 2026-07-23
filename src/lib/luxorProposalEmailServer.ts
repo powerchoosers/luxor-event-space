@@ -10,13 +10,13 @@ function escapeHtml(value: string) {
 export function buildLuxorPaymentRequestEmail(input: {
   invoice: LuxorInvoice
   inquiry: LuxorInquiry
-  checkoutUrl: string
+  reviewUrl: string
   paymentAmount: number
   paymentLabel: string
   paidTotal: number
   balanceDue: number
 }) {
-  const { invoice, inquiry, checkoutUrl, paymentAmount, paymentLabel, paidTotal, balanceDue } = input
+  const { invoice, inquiry, reviewUrl, paymentAmount, paymentLabel, paidTotal, balanceDue } = input
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const remainingAfterPayment = Math.max(0, Math.round((balanceDue - paymentAmount) * 100) / 100)
   const itemRows = invoice.line_items.map((item) => `
@@ -100,8 +100,8 @@ export function buildLuxorPaymentRequestEmail(input: {
           </table>
         </td></tr>
         <tr><td align="center" style="padding:8px 48px 42px;">
-          <a href="${escapeHtml(checkoutUrl)}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:15px 34px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);">Pay Securely With Stripe</a>
-          <p class="luxor-muted" style="margin:18px 0 0;font-size:11px;line-height:1.7;color:rgba(215,194,154,0.48);">Payments are processed securely by Stripe. Reply to this email before paying if any service or quantity needs to change.</p>
+          <a href="${escapeHtml(reviewUrl)}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:15px 34px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);">Review Proposal &amp; Pay</a>
+          <p class="luxor-muted" style="margin:18px 0 0;font-size:11px;line-height:1.7;color:rgba(215,194,154,0.48);">Review the complete proposal before continuing to Stripe. Reply to this email before paying if any service or quantity needs to change.</p>
         </td></tr>
         <tr><td class="luxor-header" style="background-color:#080605;padding:30px 48px 34px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
           <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:25px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>

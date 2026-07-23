@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
-import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorPaymentRequestEmail } from '@/lib/luxorProposalEmailServer'
 import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
+import { createNote } from '@/lib/luxorNotesServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let invoiceId = 'unknown'
@@ -74,7 +75,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
     await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
-    const email = buildLuxorPaymentRequestEmail({ invoice, inquiry, checkoutUrl: checkout.url, paymentAmount, paymentLabel, paidTotal, balanceDue })
+    const now = new Date().toISOString()
+    const publicToken = invoice.public_token || crypto.randomUUID()
+    const reviewUrl = `${origin}/proposal/${publicToken}`
+    await updateInvoice(invoice.id, {
+      public_token: publicToken,
+      payment_requested_at: now,
+      payment_requested_amount: paymentAmount,
+      payment_requested_label: paymentLabel,
+      stripe_checkout_session_id: checkout.id,
+      stripe_checkout_url: checkout.url,
+    })
+    const email = buildLuxorPaymentRequestEmail({ invoice, inquiry, reviewUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
     await sendLuxorZohoEmail({
       to: inquiry.email,
       subject: email.subject,
@@ -82,8 +94,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       attachments: [{ filename: `Luxor-Proposal-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }],
     })
 
-    const updated = await updateInvoice(invoice.id, { status: 'sent' })
-    return NextResponse.json({ invoice: updated, checkoutUrl: checkout.url, paymentAmount, balanceDue })
+    const updated = await updateInvoice(invoice.id, { status: 'sent', proposal_sent_at: now })
+    let updatedInquiry = inquiry
+    if (!['booked', 'closed_lost'].includes(inquiry.status)) {
+      updatedInquiry = await updateLuxorInquiry(inquiry.id, {
+        status: 'proposal_sent',
+        pipeline_stage: 'proposal',
+        metadata: {
+          ...inquiry.metadata,
+          proposal_sent_at: now,
+          latest_proposal_invoice_id: invoice.id,
+        },
+      }) ?? inquiry
+      if (inquiry.status !== 'proposal_sent') {
+        await createNote(inquiry.id, 'Proposal sent. Lead advanced to Proposal.', 'status_change', session.email)
+      }
+    }
+    return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, checkoutUrl: checkout.url, paymentAmount, balanceDue })
   } catch (error) {
     console.error('[invoice-payment-request] failed', {
       invoiceId,
