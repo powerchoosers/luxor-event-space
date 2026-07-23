@@ -64,10 +64,91 @@ const DEFAULT_ALLOWED_SENDERS = ['booking@luxoratlaspalmas.com', 'hello@luxoratl
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null
 let cachedCalendarUid: string | null = null
-let cachedInboxListing: { items: LuxorZohoMessage[]; expiresAt: number } | null = null
+let cachedInboxListing: { items: LuxorZohoMessage[]; expiresAt: number; staleUntil: number } | null = null
 let inboxListingRequest: Promise<LuxorZohoMessage[]> | null = null
-let cachedSentListing: { items: LuxorZohoMessage[]; expiresAt: number } | null = null
+let cachedSentListing: { items: LuxorZohoMessage[]; expiresAt: number; staleUntil: number } | null = null
 let sentListingRequest: Promise<LuxorZohoMessage[]> | null = null
+const messageDetailCache = new Map<string, { message: LuxorZohoMessage; expiresAt: number }>()
+const messageDetailRequests = new Map<string, Promise<LuxorZohoMessage | null>>()
+const threadListingCache = new Map<string, { messages: LuxorZohoMessage[]; expiresAt: number; staleUntil: number }>()
+const threadListingRequests = new Map<string, Promise<LuxorZohoMessage[]>>()
+
+const ZOHO_READ_CONCURRENCY = 2
+let activeZohoReads = 0
+let zohoReadCooldownUntil = 0
+const zohoReadQueue: Array<() => void> = []
+
+class ZohoRateLimitError extends Error {
+  constructor(public retryAfterMs: number) {
+    super('Zoho Mail is briefly rate limiting requests. Please retry in a moment.')
+    this.name = 'ZohoRateLimitError'
+  }
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+async function acquireZohoReadSlot() {
+  if (activeZohoReads < ZOHO_READ_CONCURRENCY) {
+    activeZohoReads += 1
+    return
+  }
+  await new Promise<void>((resolve) => zohoReadQueue.push(resolve))
+  activeZohoReads += 1
+}
+
+function releaseZohoReadSlot() {
+  activeZohoReads = Math.max(0, activeZohoReads - 1)
+  zohoReadQueue.shift()?.()
+}
+
+function retryAfterMilliseconds(response: Response, attempt: number) {
+  const retryAfter = response.headers.get('retry-after')
+  const seconds = retryAfter ? Number.parseFloat(retryAfter) : Number.NaN
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 10_000)
+  return attempt === 0 ? 900 : 2_000
+}
+
+async function fetchZohoMailRead(url: string, init: RequestInit = {}) {
+  const cooldownRemaining = zohoReadCooldownUntil - Date.now()
+  if (cooldownRemaining > 0) throw new ZohoRateLimitError(cooldownRemaining)
+
+  await acquireZohoReadSlot()
+  try {
+    const queuedCooldownRemaining = zohoReadCooldownUntil - Date.now()
+    if (queuedCooldownRemaining > 0) throw new ZohoRateLimitError(queuedCooldownRemaining)
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await fetch(url, init)
+      if (response.ok) return response
+
+      const responseText = await response.clone().text().catch(() => '')
+      const rateLimited = response.status === 429 || /too many requests|rate.?limit/i.test(responseText)
+      const transient = rateLimited || (response.status >= 500 && response.status <= 504)
+      if (!transient || attempt === 2) {
+        if (rateLimited) zohoReadCooldownUntil = Date.now() + 30_000
+        return response
+      }
+
+      const delay = retryAfterMilliseconds(response, attempt)
+      if (rateLimited) zohoReadCooldownUntil = Date.now() + delay
+      await wait(delay)
+      if (zohoReadCooldownUntil <= Date.now()) zohoReadCooldownUntil = 0
+    }
+    throw new Error('Zoho Mail request failed without a response.')
+  } finally {
+    releaseZohoReadSlot()
+  }
+}
+
+function cacheMessageDetail(key: string, message: LuxorZohoMessage) {
+  if (messageDetailCache.size >= 300) {
+    const oldestKey = messageDetailCache.keys().next().value
+    if (oldestKey) messageDetailCache.delete(oldestKey)
+  }
+  messageDetailCache.set(key, { message, expiresAt: Date.now() + 10 * 60_000 })
+}
 
 function getZohoConfig() {
   const clientId = process.env.ZOHO_CLIENT_ID
@@ -393,7 +474,7 @@ export async function listLuxorZohoInbox(limit = 25) {
       const { accountId, baseUrl } = getZohoConfig()
       const accessToken = await getZohoAccessToken()
       const params = new URLSearchParams({ limit: '50' })
-      const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+      const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
         headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
         cache: 'no-store',
       })
@@ -422,8 +503,17 @@ export async function listLuxorZohoInbox(limit = 25) {
 
   try {
     const items = await inboxListingRequest
-    cachedInboxListing = { items, expiresAt: Date.now() + 15_000 }
+    cachedInboxListing = {
+      items,
+      expiresAt: Date.now() + 60_000,
+      staleUntil: Date.now() + 5 * 60_000,
+    }
     return items.slice(0, safeLimit)
+  } catch (error) {
+    if (cachedInboxListing && cachedInboxListing.staleUntil > Date.now()) {
+      return cachedInboxListing.items.slice(0, safeLimit)
+    }
+    throw error
   } finally {
     inboxListingRequest = null
   }
@@ -446,7 +536,7 @@ export async function listLuxorZohoSentMessages(limit = 50) {
         start: '1',
         includeto: 'true',
       })
-      const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+      const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
         headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
         cache: 'no-store',
       })
@@ -475,8 +565,17 @@ export async function listLuxorZohoSentMessages(limit = 50) {
 
   try {
     const items = await sentListingRequest
-    cachedSentListing = { items, expiresAt: Date.now() + 15_000 }
+    cachedSentListing = {
+      items,
+      expiresAt: Date.now() + 60_000,
+      staleUntil: Date.now() + 5 * 60_000,
+    }
     return items.slice(0, safeLimit)
+  } catch (error) {
+    if (cachedSentListing && cachedSentListing.staleUntil > Date.now()) {
+      return cachedSentListing.items.slice(0, safeLimit)
+    }
+    throw error
   } finally {
     sentListingRequest = null
   }
@@ -484,6 +583,28 @@ export async function listLuxorZohoSentMessages(limit = 50) {
 
 export async function getLuxorZohoMessageDetail(messageId: string, folderId?: string) {
   if (!messageId) return null
+  const cacheKey = `${folderId || 'no-folder'}:${messageId}`
+  const cached = messageDetailCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.message
+
+  const existingRequest = messageDetailRequests.get(cacheKey)
+  if (existingRequest) return existingRequest
+
+  const request = fetchLuxorZohoMessageDetail(messageId, folderId)
+  messageDetailRequests.set(cacheKey, request)
+  try {
+    const message = await request
+    if (message) {
+      cacheMessageDetail(cacheKey, message)
+      return message
+    }
+    return cached?.message || null
+  } finally {
+    messageDetailRequests.delete(cacheKey)
+  }
+}
+
+async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string): Promise<LuxorZohoMessage | null> {
   const { accountId, baseUrl, allowedSenders } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
 
@@ -501,6 +622,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
       to: String(data.toAddress || ''),
       cc: String(data.ccAddress || ''),
       receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
+      summary: decodeHtmlEntities(String(data.summary || '')),
       content,
       htmlContent: content,
       hasAttachment: zohoBoolean(data.hasAttachment),
@@ -512,7 +634,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     // Strategy 1: If folderId is known, use the folder-specific endpoint which reliably returns content
     if (folderId) {
       try {
-        const folderDetailRes = await fetch(
+        const folderDetailRes = await fetchZohoMailRead(
           `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/details`,
           { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
         )
@@ -522,7 +644,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
 
           // Also fetch full HTML content from the content sub-endpoint
           let content = String(data.content || data.summary || '')
-          const contentRes = await fetch(
+          const contentRes = await fetchZohoMailRead(
             `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
             { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
           )
@@ -541,7 +663,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     }
 
     // Strategy 2: Generic /messages/view/{id} — always attempt as fallback
-    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
+    const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
       headers: {
         Authorization: `Zoho-oauthtoken ${accessToken}`,
         Accept: 'application/json',
@@ -565,7 +687,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     // If we have a folderId hint from the data, try the content endpoint
     const resolvedFolderId = String(data.folderId || folderId || '')
     if (resolvedFolderId) {
-      const contentResponse = await fetch(
+      const contentResponse = await fetchZohoMailRead(
         `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
         { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
       )
@@ -580,7 +702,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     // Strategy 3: originalmessage endpoint — works without folderId, returns MIME source
     if (!fullContent.trim()) {
       try {
-        const mimeRes = await fetch(
+        const mimeRes = await fetchZohoMailRead(
           `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/originalmessage`,
           { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
         )
@@ -615,7 +737,7 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
     includeto: 'true',
   })
 
-  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+  const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
     headers: {
       Authorization: `Zoho-oauthtoken ${accessToken}`,
       Accept: 'application/json',
@@ -663,14 +785,41 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
 
 export async function listLuxorZohoThread(threadId: string, limit = 50): Promise<LuxorZohoMessage[]> {
   if (!threadId.trim()) return []
+  const safeLimit = Math.min(Math.max(limit, 1), 100)
+  const cacheKey = `${threadId.trim()}:${safeLimit}`
+  const cached = threadListingCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.messages
+
+  const existingRequest = threadListingRequests.get(cacheKey)
+  if (existingRequest) return existingRequest
+
+  const request = fetchLuxorZohoThread(threadId, safeLimit)
+  threadListingRequests.set(cacheKey, request)
+  try {
+    const messages = await request
+    threadListingCache.set(cacheKey, {
+      messages,
+      expiresAt: Date.now() + 60_000,
+      staleUntil: Date.now() + 10 * 60_000,
+    })
+    return messages
+  } catch (error) {
+    if (cached && cached.staleUntil > Date.now()) return cached.messages
+    throw error
+  } finally {
+    threadListingRequests.delete(cacheKey)
+  }
+}
+
+async function fetchLuxorZohoThread(threadId: string, limit: number): Promise<LuxorZohoMessage[]> {
   const { accountId, baseUrl, allowedSenders } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
   const params = new URLSearchParams({
     threadId: threadId.trim(),
-    limit: String(Math.min(Math.max(limit, 1), 100)),
+    limit: String(limit),
     includeto: 'true',
   })
-  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+  const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
     headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
     cache: 'no-store',
   })
@@ -699,10 +848,15 @@ export async function listLuxorZohoThread(threadId: string, limit = 50): Promise
     }
   }).filter((message) => message.id)
 
-  const detailed = await Promise.all(summaries.map(async (message) => {
-    const detail = await getLuxorZohoMessageDetail(message.id, message.folderId)
-    return detail ? { ...message, ...detail, direction: message.direction } : message
-  }))
+  const detailed: LuxorZohoMessage[] = []
+  for (let index = 0; index < summaries.length; index += ZOHO_READ_CONCURRENCY) {
+    const batch = summaries.slice(index, index + ZOHO_READ_CONCURRENCY)
+    const batchDetails = await Promise.all(batch.map(async (message) => {
+      const detail = await getLuxorZohoMessageDetail(message.id, message.folderId)
+      return detail ? { ...message, ...detail, direction: message.direction } : message
+    }))
+    detailed.push(...batchDetails)
+  }
   return detailed.sort((a, b) => new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime())
 }
 
@@ -748,6 +902,7 @@ export async function replyLuxorZohoEmail(input: {
     throw new Error(`Zoho reply failed with ${response.status}: ${resultText}`)
   }
   cachedSentListing = null
+  threadListingCache.clear()
   const result = resultText ? (JSON.parse(resultText) as ZohoSendResponse) : {}
   return {
     success: true,

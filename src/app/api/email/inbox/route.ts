@@ -130,15 +130,21 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch email inbox.'
     const scopeError = message.includes('INVALID_OAUTHSCOPE')
+    const rateLimited = /too many requests|rate.?limit|briefly rate limiting/i.test(message)
 
     return NextResponse.json(
       {
         error: scopeError
           ? 'Zoho needs to be reconnected with email search permission before client email history can load.'
-          : message,
+          : rateLimited
+            ? 'Zoho is briefly pacing mailbox requests. Your saved emails will stay visible while sync cools down.'
+            : message,
         reconnectRequired: scopeError,
       },
-      { status: scopeError ? 403 : 500 },
+      {
+        status: scopeError ? 403 : rateLimited ? 503 : 500,
+        headers: rateLimited ? { 'Retry-After': '30' } : undefined,
+      },
     )
   }
 }
