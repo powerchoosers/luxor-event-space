@@ -21,6 +21,9 @@ import {
   Search,
   UserCheck,
   ArrowRight,
+  CalendarCheck2,
+  FileSignature,
+  Eye,
 } from 'lucide-react'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
@@ -86,10 +89,10 @@ export function PortalNotificationModal({
     return items.filter((item) => {
       if (unreadOnly && item.isRead) return false
 
-      if (activeTab === 'email' && item.type !== 'email') return false
+      if (activeTab === 'email' && item.type !== 'email' && item.type !== 'email_open') return false
       if (activeTab === 'call' && item.type !== 'call') return false
       if (activeTab === 'sms' && item.type !== 'sms') return false
-      if (activeTab === 'form' && item.type !== 'form') return false
+      if (activeTab === 'form' && item.type !== 'form' && item.type !== 'booking' && item.type !== 'contract') return false
       if (activeTab === 'billing' && item.type !== 'invoice_paid' && item.type !== 'bill_due') return false
 
       if (q) {
@@ -134,6 +137,12 @@ export function PortalNotificationModal({
         return <MessageSquare size={16} className="text-emerald-500 dark:text-emerald-400" />
       case 'form':
         return <ClipboardList size={16} className="text-[#caa24c]" />
+      case 'booking':
+        return <CalendarCheck2 size={16} className="text-[#caa24c]" />
+      case 'contract':
+        return <FileSignature size={16} className="text-emerald-500 dark:text-emerald-400" />
+      case 'email_open':
+        return <Eye size={16} className="text-blue-500 dark:text-blue-400" />
       case 'invoice_paid':
         return <CheckCircle2 size={16} className="text-emerald-500 dark:text-emerald-400" />
       case 'bill_due':
@@ -287,9 +296,9 @@ export function PortalNotificationModal({
                 >
                   <Mail size={12} />
                   <span>Emails</span>
-                  {(unreadCountsByType?.email || 0) > 0 && (
+                  {((unreadCountsByType?.email || 0) + (unreadCountsByType?.email_open || 0)) > 0 && (
                     <span className="rounded-full bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-blue-600 dark:text-blue-300">
-                      {unreadCountsByType?.email}
+                      {(unreadCountsByType?.email || 0) + (unreadCountsByType?.email_open || 0)}
                     </span>
                   )}
                 </button>
@@ -337,10 +346,10 @@ export function PortalNotificationModal({
                   }`}
                 >
                   <ClipboardList size={12} />
-                  <span>Forms</span>
-                  {(unreadCountsByType?.form || 0) > 0 && (
+                  <span>Leads</span>
+                  {((unreadCountsByType?.form || 0) + (unreadCountsByType?.booking || 0) + (unreadCountsByType?.contract || 0)) > 0 && (
                     <span className="rounded-full bg-[#caa24c]/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-[#caa24c]">
-                      {unreadCountsByType?.form}
+                      {(unreadCountsByType?.form || 0) + (unreadCountsByType?.booking || 0) + (unreadCountsByType?.contract || 0)}
                     </span>
                   )}
                 </button>
@@ -453,7 +462,7 @@ export function PortalNotificationModal({
                           <span>Reply Email</span>
                         </button>
                       )}
-                      {item.type === 'form' && (
+                      {(item.type === 'form' || item.type === 'booking' || item.type === 'contract' || item.type === 'email_open' || item.type === 'invoice_paid') && (
                         <span className="flex items-center gap-1 text-[10px] font-semibold text-[#caa24c] group-hover:underline">
                           <UserCheck size={11} />
                           <span>View Lead</span>

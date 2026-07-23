@@ -103,6 +103,13 @@ export async function getLuxorSignatureRequestByToken(token: string) {
   return signature ?? null
 }
 
+export async function listLuxorSignatureRequests(limit = 100) {
+  const safeLimit = Math.min(Math.max(limit, 1), 250)
+  return supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&order=updated_at.desc&limit=${encodeURIComponent(safeLimit)}`,
+  )
+}
+
 export async function updateLuxorSignatureRequest(id: string, updates: Partial<LuxorSignatureRequest>) {
   const [updated] = await supabaseRest<LuxorSignatureRequest[]>(`luxor_signature_requests?select=*&id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',

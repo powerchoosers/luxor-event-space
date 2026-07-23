@@ -65,6 +65,13 @@ type ZohoEmailMessage = {
   summary: string
   hasAttachment: boolean
   direction?: 'incoming' | 'outgoing' | 'matched'
+  folderId?: string
+  threadId?: string
+}
+
+function emailReaderUrl(email: ZohoEmailMessage) {
+  const folderQuery = email.folderId ? `&folderId=${encodeURIComponent(email.folderId)}` : ''
+  return `/portal/marketing?tab=emails&messageId=${encodeURIComponent(email.id)}${folderQuery}`
 }
 
 type ActivityEntry =
@@ -2761,7 +2768,10 @@ export default function LeadDetailPage({
                             const isEmail = entry.kind === 'email'
                             const isCall = entry.kind === 'call'
                             return (
-                              <div key={entry.id} className="flex items-center justify-between py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0">
+                              <div key={entry.id} className="relative flex items-center justify-between rounded-lg py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0 transition-colors hover:bg-white/[0.03]">
+                                {isEmail ? (
+                                  <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />
+                                ) : null}
                                 <div className="flex items-center gap-3 min-w-0">
                                   <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
                                     isEmail
@@ -3089,7 +3099,7 @@ export default function LeadDetailPage({
                             emailMessages.map((email) => {
                               const isOutgoing = email.direction === 'outgoing'
                               return (
-                                <div key={email.id} className="p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 space-y-1">
+                                <Link href={emailReaderUrl(email)} key={email.id} className="block p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 space-y-1 transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                                   <div className="flex justify-between items-start gap-2">
                                     <span className={`rounded border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-widest ${
                                       isOutgoing
@@ -3109,7 +3119,8 @@ export default function LeadDetailPage({
                                   {email.summary && (
                                     <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{decodeHtmlEntities(email.summary)}</p>
                                   )}
-                                </div>
+                                  <span className="inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
+                                </Link>
                               )
                             })
                           )}
@@ -4294,7 +4305,7 @@ export default function LeadDetailPage({
                       const emailSummary = compactActivityText(email.summary)
 
                       return (
-                        <div key={entry.id} className="portal-render-surface relative group">
+                        <Link href={emailReaderUrl(email)} key={entry.id} className="portal-render-surface relative block rounded-lg group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -4318,7 +4329,8 @@ export default function LeadDetailPage({
                           {emailSummary ? (
                             <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{emailSummary}</p>
                           ) : null}
-                        </div>
+                          <span className="mt-2 inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
+                        </Link>
                       )
                     }
 
@@ -5715,6 +5727,23 @@ function LeadLifecycleRail({
     return stepId
   }
 
+  const getStageIcon = (stageId: string) => {
+    const icons = {
+      inquiry: MessageSquare,
+      tour: Calendar,
+      proposal: FileText,
+      contract: FileSignature,
+      deposit: DollarSign,
+      planning: NotebookPen,
+      final_payment: ReceiptText,
+      event: PartyPopper,
+      closing: ClipboardCheck,
+      complete: CheckCircle2,
+    }
+
+    return icons[stageId as keyof typeof icons] || Circle
+  }
+
   const activeIndex = steps.findIndex(s => s.isActive)
   let finalSteps = steps.map((step, idx) => {
     let active = step.isActive
@@ -5753,6 +5782,7 @@ function LeadLifecycleRail({
           const isDone = step.isCompleted
           const stepStageId = getStageIdFromStepId(step.id)
           const isCurrent = activeStageId ? stepStageId === activeStageId : step.isActive
+          const StageIcon = getStageIcon(step.id)
 
           return (
             <button
@@ -5768,13 +5798,11 @@ function LeadLifecycleRail({
                   ? 'border-2 border-[#caa24c] bg-white dark:bg-zinc-950 text-[#caa24c] ring-4 ring-[#caa24c]/10'
                   : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650'
               }`}>
-                {isDone ? (
-                  <Check size={13} className="stroke-[3]" />
-                ) : isCurrent ? (
-                  <FileText size={13} className="stroke-[2.5]" />
-                ) : (
-                  <Circle size={6} className="fill-current text-[color:var(--portal-faint)] border-none" />
-                )}
+                <StageIcon
+                  size={14}
+                  strokeWidth={isDone || isCurrent ? 2.5 : 2}
+                  aria-hidden="true"
+                />
               </div>
 
               <span className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] ${

@@ -211,12 +211,23 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }, [loadEmails])
 
   useEffect(() => {
+    const linkedTarget = initialMessageId ? messages.find((message) => message.id === initialMessageId) : null
+    if (linkedTarget) {
+      const linkedKey = messageKey(linkedTarget)
+      if (selectedId !== linkedTarget.id || selectedMessageKey !== linkedKey) {
+        setSelectedId(linkedTarget.id)
+        setSelectedMessageKey(linkedKey)
+        setReplyOpen(false)
+        setThreadError(null)
+      }
+      return
+    }
     if (selectedMessageKey && messages.some((message) => messageKey(message) === selectedMessageKey)) return
-    const target = (initialMessageId && messages.find((message) => message.id === initialMessageId)) || messages[0]
+    const target = messages[0]
     if (!target) return
     setSelectedId(target.id)
     setSelectedMessageKey(messageKey(target))
-  }, [initialMessageId, messages, selectedMessageKey])
+  }, [initialMessageId, messages, selectedId, selectedMessageKey])
 
   const selectedSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)

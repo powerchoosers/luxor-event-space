@@ -166,6 +166,9 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         call: 'warning',
         sms: 'info',
         email: 'info',
+        booking: 'success',
+        contract: 'success',
+        email_open: 'info',
       }
       notify({
         title: item.title,

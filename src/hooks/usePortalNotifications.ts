@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'invoice_paid' | 'bill_due'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open'
 
 export interface PortalNotificationItem {
   id: string
@@ -68,6 +68,18 @@ function isInternalEmail(msg: Record<string, unknown>): boolean {
 
 type RawRecord = Record<string, unknown>
 
+function normalizeEmail(value: unknown) {
+  const match = String(value || '').toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/i)
+  return match?.[0] || ''
+}
+
+function leadUrl(inquiryId: unknown, section?: string) {
+  const id = String(inquiryId || '').trim()
+  if (!id) return '/portal/leads'
+  const query = section ? `?tab=${encodeURIComponent(section)}` : ''
+  return `/portal/leads/${encodeURIComponent(id)}${query}`
+}
+
 export type NotificationToastPayload = {
   id: string
   type: NotificationType
@@ -92,22 +104,41 @@ export function usePortalNotifications() {
       if (!silent) setLoading(true)
       const currentReadIds = getStoredReadIds()
 
-      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes] = await Promise.allSettled([
+      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/email/inbox?limit=25&folder=inbox', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/messages?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/calls?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/invoices', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/expenses', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/bookings', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/payments', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/signatures?limit=100', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/marketing/events?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
       ])
 
       const aggregated: PortalNotificationItem[] = []
+      const inquiries = inquiriesRes.status === 'fulfilled' && inquiriesRes.value.ok
+        ? await inquiriesRes.value.json() as RawRecord[]
+        : []
+      const invoiceRecords = invoicesRes.status === 'fulfilled' && invoicesRes.value.ok
+        ? await invoicesRes.value.json() as RawRecord[]
+        : []
+      const inquiryByEmail = new Map<string, RawRecord>()
+      const invoiceById = new Map<string, RawRecord>()
+      if (Array.isArray(inquiries)) {
+        inquiries.forEach((inquiry) => {
+          const email = normalizeEmail(inquiry.email)
+          if (email && !inquiryByEmail.has(email)) inquiryByEmail.set(email, inquiry)
+        })
+      }
+      if (Array.isArray(invoiceRecords)) {
+        invoiceRecords.forEach((invoice) => invoiceById.set(String(invoice.id || ''), invoice))
+      }
 
       // 1. Form Submissions & Inquiries
-      if (inquiriesRes.status === 'fulfilled' && inquiriesRes.value.ok) {
-        const data = await inquiriesRes.value.json()
-        if (Array.isArray(data)) {
-          data.forEach((inq: RawRecord) => {
+      if (Array.isArray(inquiries)) {
+          inquiries.forEach((inq: RawRecord) => {
             const inqId = String(inq.id || '')
             const fullName = String(inq.full_name || 'New Lead Inquiry')
             const eventType = String(inq.event_type || 'Event')
@@ -122,11 +153,10 @@ export function usePortalNotifications() {
               subtitle: `${eventType} Inquiry ${guestCount ? `(${guestCount} guests)` : ''}`,
               timestamp: createdAt,
               isRead,
-              targetUrl: `/portal/leads?id=${inqId}`,
+              targetUrl: leadUrl(inqId),
               metadata: { inquiryId: inqId, email: inq.email, phone: inq.phone },
             })
           })
-        }
       }
 
       // 2. Incoming Emails (filter out internal/sent emails)
@@ -138,7 +168,7 @@ export function usePortalNotifications() {
           .forEach((msg: RawRecord, idx: number) => {
             const emailId = String(msg.messageId || msg.id || `email_${idx}_${msg.dateSent || ''}`)
             const subject = decodeHtmlEntities(String(msg.subject || 'New Email Received'))
-            const senderName = String(msg.senderName || msg.sender || msg.fromAddress || 'Unknown sender')
+            const senderName = String(msg.senderName || msg.sender || msg.fromAddress || msg.from || 'Unknown sender')
             const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
             const folderId = String(msg.folderId || '')
 
@@ -152,7 +182,7 @@ export function usePortalNotifications() {
               timestamp,
               isRead,
               targetUrl: `/portal/marketing?tab=emails&messageId=${encodeURIComponent(emailId)}${folderQuery}`,
-              metadata: { sender: msg.sender, fromAddress: msg.fromAddress, folderId },
+              metadata: { sender: msg.sender, fromAddress: msg.fromAddress || msg.from, folderId },
             })
           })
       }
@@ -168,6 +198,7 @@ export function usePortalNotifications() {
             const timestamp = String(msg.created_at || msg.date_created || new Date().toISOString())
 
             const isRead = currentReadIds.has(smsId) || Boolean(msg.is_read)
+            const inquiryId = String(msg.inquiry_id || '')
             aggregated.push({
               id: smsId,
               type: 'sms',
@@ -175,8 +206,8 @@ export function usePortalNotifications() {
               subtitle: body,
               timestamp,
               isRead,
-              targetUrl: '/portal/messages?tab=sms',
-              metadata: { fromNumber: msg.from_number },
+              targetUrl: inquiryId ? leadUrl(inquiryId, 'messages') : '/portal/messages?tab=sms',
+              metadata: { fromNumber: msg.from_number, inquiryId },
             })
           })
         }
@@ -197,6 +228,7 @@ export function usePortalNotifications() {
             const timestamp = String(call.created_at || new Date().toISOString())
 
             const isRead = currentReadIds.has(callId) || Boolean(call.is_read)
+            const inquiryId = String(call.inquiry_id || '')
             aggregated.push({
               id: callId,
               type: 'call',
@@ -204,18 +236,65 @@ export function usePortalNotifications() {
               subtitle: fromNumber ? `Phone: ${fromNumber}` : 'Inbound call unattended',
               timestamp,
               isRead,
-              targetUrl: '/portal/calls',
-              metadata: { fromNumber: call.from_number },
+              targetUrl: inquiryId ? leadUrl(inquiryId, 'activity') : '/portal/calls',
+              metadata: { fromNumber: call.from_number, inquiryId },
             })
           })
         }
       }
 
-      // 5. Invoices (Paid & Due)
-      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.ok) {
-        const data = await invoicesRes.value.json()
+      // 5. Confirmed or tentative bookings — always open the client dossier.
+      if (bookingsRes.status === 'fulfilled' && bookingsRes.value.ok) {
+        const data = await bookingsRes.value.json()
         if (Array.isArray(data)) {
-          data.forEach((inv: RawRecord) => {
+          data.filter((booking: RawRecord) => booking.status === 'confirmed' || booking.status === 'tentative').forEach((booking: RawRecord) => {
+            const bookingId = String(booking.id || '')
+            const inquiryId = String(booking.inquiry_id || inquiryByEmail.get(normalizeEmail(booking.email))?.id || '')
+            const status = String(booking.status)
+            aggregated.push({
+              id: `booking_${bookingId}_${status}`,
+              type: 'booking',
+              title: status === 'confirmed' ? `Booking confirmed: ${String(booking.client_name || 'Client')}` : `Booking held: ${String(booking.client_name || 'Client')}`,
+              subtitle: [booking.event_type, booking.event_date].filter(Boolean).join(' · ') || 'Open the client record for booking details',
+              timestamp: String(booking.booked_at || booking.updated_at || booking.created_at || new Date().toISOString()),
+              isRead: currentReadIds.has(`booking_${bookingId}_${status}`),
+              targetUrl: leadUrl(inquiryId, 'overview'),
+              metadata: { inquiryId, bookingId },
+            })
+          })
+        }
+      }
+
+      // 6. Actual payment records, with invoice status as a fallback.
+      const paidInvoiceIds = new Set<string>()
+      if (paymentsRes.status === 'fulfilled' && paymentsRes.value.ok) {
+        const data = await paymentsRes.value.json()
+        if (Array.isArray(data)) {
+          data.filter((payment: RawRecord) => payment.status === 'paid').forEach((payment: RawRecord) => {
+            const paymentId = String(payment.id || '')
+            const inquiryId = String(payment.inquiry_id || '')
+            const invoiceId = String(payment.invoice_id || '')
+            if (invoiceId) paidInvoiceIds.add(invoiceId)
+            const invoiceInquiryId = String(invoiceById.get(invoiceId)?.inquiry_id || '')
+            const inquiry = inquiryId || invoiceInquiryId ? null : inquiryByEmail.get(normalizeEmail(payment.metadata && (payment.metadata as RawRecord).email))
+            const resolvedInquiryId = inquiryId || invoiceInquiryId || String(inquiry?.id || '')
+            aggregated.push({
+              id: `payment_${paymentId}`,
+              type: 'invoice_paid',
+              title: 'Payment received',
+              subtitle: `$${Number(payment.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} received${payment.payment_method ? ` via ${String(payment.payment_method)}` : ''}`,
+              timestamp: String(payment.paid_at || payment.updated_at || payment.created_at || new Date().toISOString()),
+              isRead: currentReadIds.has(`payment_${paymentId}`),
+              targetUrl: leadUrl(resolvedInquiryId, 'documents'),
+              metadata: { inquiryId: resolvedInquiryId, invoiceId, paymentId },
+            })
+          })
+        }
+      }
+
+      // 7. Invoices (Paid fallback & Due)
+      if (Array.isArray(invoiceRecords)) {
+          invoiceRecords.forEach((inv: RawRecord) => {
             const invId = `inv_${String(inv.id)}`
             const clientName = String(inv.client_name || 'Client')
             const total = Number(inv.total || 0)
@@ -225,7 +304,8 @@ export function usePortalNotifications() {
 
             const isPaid = inv.status === 'paid'
             const isRead = currentReadIds.has(`${invId}_paid`) || currentReadIds.has(invId)
-            if (isPaid) {
+            const inquiryId = String(inv.inquiry_id || '')
+            if (isPaid && !paidInvoiceIds.has(String(inv.id || ''))) {
               aggregated.push({
                 id: `${invId}_paid`,
                 type: 'invoice_paid',
@@ -233,8 +313,8 @@ export function usePortalNotifications() {
                 subtitle: `$${total.toLocaleString('en-US', { minimumFractionDigits: 2 })} paid for ${eventType}`,
                 timestamp,
                 isRead,
-                targetUrl: '/portal/invoices',
-                metadata: { invoiceId: inv.id },
+                targetUrl: leadUrl(inquiryId, 'documents'),
+                metadata: { invoiceId: inv.id, inquiryId },
               })
             } else if (inv.status !== 'draft' && inv.status !== 'cancelled') {
               aggregated.push({
@@ -244,15 +324,62 @@ export function usePortalNotifications() {
                 subtitle: `$${total.toLocaleString('en-US', { minimumFractionDigits: 2 })} due ${dueDate ? `on ${dueDate}` : 'soon'}`,
                 timestamp: String(inv.created_at || new Date().toISOString()),
                 isRead,
-                targetUrl: '/portal/invoices',
-                metadata: { invoiceId: inv.id },
+                targetUrl: inquiryId ? leadUrl(inquiryId, 'documents') : '/portal/finances?tab=invoices',
+                metadata: { invoiceId: inv.id, inquiryId },
               })
             }
+          })
+      }
+
+      // 8. Contract viewed/signed activity.
+      if (signaturesRes.status === 'fulfilled' && signaturesRes.value.ok) {
+        const data = await signaturesRes.value.json()
+        if (Array.isArray(data)) {
+          data.filter((signature: RawRecord) => signature.status === 'viewed' || signature.status === 'signed').forEach((signature: RawRecord) => {
+            const signatureId = String(signature.id || '')
+            const inquiryId = String(signature.inquiry_id || '')
+            const signed = signature.status === 'signed'
+            const notificationId = `contract_${signatureId}_${String(signature.status)}`
+            aggregated.push({
+              id: notificationId,
+              type: 'contract',
+              title: signed ? `Contract signed: ${String(signature.client_name || 'Client')}` : `Contract opened: ${String(signature.client_name || 'Client')}`,
+              subtitle: String(signature.contract_title || 'Luxor Event Space agreement'),
+              timestamp: String(signature.signed_at || signature.updated_at || signature.created_at || new Date().toISOString()),
+              isRead: currentReadIds.has(notificationId),
+              targetUrl: leadUrl(inquiryId, 'documents'),
+              metadata: { inquiryId, signatureId },
+            })
           })
         }
       }
 
-      // 6. Expenses & Bills Due
+      // 9. Campaign opens/clicks matched to a lead email.
+      if (marketingEventsRes.status === 'fulfilled' && marketingEventsRes.value.ok) {
+        const data = await marketingEventsRes.value.json() as { events?: RawRecord[] }
+        const seenEngagements = new Set<string>()
+        ;(data.events || []).filter((event) => event.event_type === 'open' || event.event_type === 'click').forEach((event) => {
+          const inquiry = inquiryByEmail.get(normalizeEmail(event.recipient_email))
+          if (!inquiry?.id) return
+          const engagementKey = `${String(event.campaign_id || '')}:${String(event.recipient_id || '')}:${String(event.event_type || '')}`
+          if (seenEngagements.has(engagementKey)) return
+          seenEngagements.add(engagementKey)
+          const eventId = `marketing_${String(event.id || '')}`
+          const clicked = event.event_type === 'click'
+          aggregated.push({
+            id: eventId,
+            type: 'email_open',
+            title: `${String(inquiry.full_name || event.recipient_name || 'Client')} ${clicked ? 'clicked' : 'opened'} your email`,
+            subtitle: String(event.campaign_subject || event.campaign_name || 'Marketing email'),
+            timestamp: String(event.created_at || new Date().toISOString()),
+            isRead: currentReadIds.has(eventId),
+            targetUrl: leadUrl(inquiry.id, 'activity'),
+            metadata: { inquiryId: inquiry.id, campaignId: event.campaign_id, eventId: event.id },
+          })
+        })
+      }
+
+      // 10. Expenses & Bills Due
       if (expensesRes.status === 'fulfilled' && expensesRes.value.ok) {
         const data = await expensesRes.value.json()
         if (Array.isArray(data)) {
@@ -363,8 +490,11 @@ export function usePortalNotifications() {
       call: 0,
       sms: 0,
       form: 0,
+      booking: 0,
       invoice_paid: 0,
       bill_due: 0,
+      contract: 0,
+      email_open: 0,
     }
     items.forEach((item) => {
       if (!item.isRead) {

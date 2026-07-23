@@ -2,9 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildSignatureEmail, buildSignatureEmailHtml, createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { createLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { createLuxorSignatureRequest, listLuxorSignatureRequests } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
+    const requestedLimit = Number.parseInt(request.nextUrl.searchParams.get('limit') || '100', 10)
+    const signatures = await listLuxorSignatureRequests(Number.isFinite(requestedLimit) ? requestedLimit : 100)
+    return NextResponse.json(signatures.map((signature) => ({
+      id: signature.id,
+      inquiry_id: signature.inquiry_id,
+      booking_id: signature.booking_id,
+      client_name: signature.client_name,
+      status: signature.status,
+      contract_title: signature.contract_title,
+      created_at: signature.created_at,
+      updated_at: signature.updated_at,
+      signed_at: signature.signed_at,
+    })))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch signature requests.'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
