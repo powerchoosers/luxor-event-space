@@ -4966,6 +4966,12 @@ export default function LeadDetailPage({
                   ]}
                 />
               </div>
+              {paymentRequestKind === 'custom' ? (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Custom amount</label>
+                  <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+                </div>
+              ) : null}
               <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#caa24c] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">
                 {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email PDF + Payment Link'}
               </button>
