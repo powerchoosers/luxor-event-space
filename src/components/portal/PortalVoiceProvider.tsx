@@ -508,11 +508,11 @@ export function PortalPhoneButton() {
       title={phoneState === 'ready' ? 'Luxor phone ready' : 'Open Luxor phone'}
     >
       {activeCall ? <PhoneCall size={20} className="text-emerald-400" /> : <Phone size={20} className="text-zinc-400" />}
-      <span className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border border-zinc-950 ${
+      <span className={`absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full border border-zinc-950 ${
         phoneState === 'ready' ? 'bg-emerald-400' : phoneState === 'error' ? 'bg-red-400' : 'bg-zinc-600'
       }`} />
       {unreadCount > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-1 font-mono text-[9px] font-black text-black shadow-xs">
+        <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-0.5 font-mono text-[9px] font-black text-black shadow-xs">
           {Math.min(unreadCount, 99)}
         </span>
       )}

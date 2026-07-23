@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'invoice_paid' | 'bill_due'
 
@@ -16,6 +16,12 @@ export interface PortalNotificationItem {
 }
 
 const READ_STORAGE_KEY = 'luxor_read_notification_ids_v1'
+
+// Internal/self email addresses to filter out — never show emails to/from ourselves
+const INTERNAL_EMAIL_ADDRESSES = [
+  'booking@luxoratlaspalmas.com',
+  'hello@luxoratlaspalmas.com',
+]
 
 function getStoredReadIds(): Set<string> {
   if (typeof window === 'undefined') return new Set()
@@ -37,7 +43,37 @@ function saveStoredReadIds(ids: Set<string>) {
   }
 }
 
+function isInternalEmail(msg: Record<string, unknown>): boolean {
+  const from = String(msg.fromAddress || msg.from || msg.sender || '').toLowerCase()
+  const to = String(msg.toAddress || msg.to || '').toLowerCase()
+  const direction = String(msg.direction || '').toLowerCase()
+
+  // Drop sent/outbound emails entirely
+  if (direction === 'sent' || direction === 'outbound' || direction === 'sending') return true
+
+  // Drop emails where the sender is our own mailbox (internal self-emails)
+  if (INTERNAL_EMAIL_ADDRESSES.some((addr) => from.includes(addr))) return true
+
+  // Drop emails where the recipient is our own mailbox and sender is also our mailbox (internal)
+  if (
+    INTERNAL_EMAIL_ADDRESSES.some((addr) => to.includes(addr)) &&
+    INTERNAL_EMAIL_ADDRESSES.some((addr) => from.includes(addr))
+  ) {
+    return true
+  }
+
+  return false
+}
+
 type RawRecord = Record<string, unknown>
+
+export type NotificationToastPayload = {
+  id: string
+  type: NotificationType
+  title: string
+  subtitle: string
+  targetUrl: string
+}
 
 export function usePortalNotifications() {
   const [items, setItems] = useState<PortalNotificationItem[]>([])
@@ -45,9 +81,14 @@ export function usePortalNotifications() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchNotifications = useCallback(async () => {
+  // Track IDs from last poll so we can detect genuinely new items
+  const seenIdsRef = useRef<Set<string> | null>(null)
+  // Callback fired for each new item (used by PortalShell to fire toasts)
+  const onNewItemRef = useRef<((item: NotificationToastPayload) => void) | null>(null)
+
+  const fetchNotifications = useCallback(async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const currentReadIds = getStoredReadIds()
 
       const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes] = await Promise.allSettled([
@@ -87,31 +128,33 @@ export function usePortalNotifications() {
         }
       }
 
-      // 2. Incoming Emails
+      // 2. Incoming Emails (filter out internal/sent emails)
       if (emailsRes.status === 'fulfilled' && emailsRes.value.ok) {
         const data = await emailsRes.value.json()
         const messages = Array.isArray(data.messages) ? data.messages : []
-        messages.forEach((msg: RawRecord, idx: number) => {
-          const emailId = String(msg.messageId || msg.id || `email_${idx}_${msg.dateSent || ''}`)
-          const subject = String(msg.subject || msg.sender || 'New Email Received')
-          const summary = String(msg.summary || msg.sender || msg.fromAddress || 'Zoho Inbox message')
-          const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
+        messages
+          .filter((msg: RawRecord) => !isInternalEmail(msg))
+          .forEach((msg: RawRecord, idx: number) => {
+            const emailId = String(msg.messageId || msg.id || `email_${idx}_${msg.dateSent || ''}`)
+            const subject = String(msg.subject || 'New Email Received')
+            const senderName = String(msg.senderName || msg.sender || msg.fromAddress || 'Unknown sender')
+            const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
 
-          const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
-          aggregated.push({
-            id: emailId,
-            type: 'email',
-            title: subject,
-            subtitle: summary,
-            timestamp,
-            isRead,
-            targetUrl: '/portal/messages?tab=emails',
-            metadata: { sender: msg.sender, fromAddress: msg.fromAddress },
+            const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
+            aggregated.push({
+              id: emailId,
+              type: 'email',
+              title: subject,
+              subtitle: `From: ${senderName}`,
+              timestamp,
+              isRead,
+              targetUrl: '/portal/messages?tab=emails',
+              metadata: { sender: msg.sender, fromAddress: msg.fromAddress },
+            })
           })
-        })
       }
 
-      // 3. SMS Messages
+      // 3. SMS Messages (inbound only)
       if (messagesRes.status === 'fulfilled' && messagesRes.value.ok) {
         const data = await messagesRes.value.json()
         if (Array.isArray(data)) {
@@ -140,8 +183,8 @@ export function usePortalNotifications() {
       if (callsRes.status === 'fulfilled' && callsRes.value.ok) {
         const data = await callsRes.value.json()
         if (Array.isArray(data)) {
-          const missedCalls = data.filter((c: RawRecord) => 
-            c.direction === 'inbound' && 
+          const missedCalls = data.filter((c: RawRecord) =>
+            c.direction === 'inbound' &&
             (c.status === 'no-answer' || c.status === 'canceled' || c.status === 'busy' || c.status === 'failed' || c.outcome === 'missed')
           )
           missedCalls.forEach((call: RawRecord) => {
@@ -178,7 +221,7 @@ export function usePortalNotifications() {
             const timestamp = String(inv.updated_at || inv.created_at || new Date().toISOString())
 
             const isPaid = inv.status === 'paid'
-            const isRead = currentReadIds.has(invId)
+            const isRead = currentReadIds.has(`${invId}_paid`) || currentReadIds.has(invId)
             if (isPaid) {
               aggregated.push({
                 id: `${invId}_paid`,
@@ -236,6 +279,25 @@ export function usePortalNotifications() {
       // Sort by timestamp descending
       aggregated.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
+      // Detect genuinely new items since last poll and fire toast callbacks
+      const previousIds = seenIdsRef.current
+      const currentIds = new Set(aggregated.map((i) => i.id))
+      seenIdsRef.current = currentIds
+
+      if (previousIds !== null && onNewItemRef.current) {
+        for (const item of aggregated) {
+          if (!previousIds.has(item.id) && !item.isRead) {
+            onNewItemRef.current({
+              id: item.id,
+              type: item.type,
+              title: item.title,
+              subtitle: item.subtitle,
+              targetUrl: item.targetUrl,
+            })
+          }
+        }
+      }
+
       setItems(aggregated)
       setError(null)
     } catch (err) {
@@ -246,11 +308,24 @@ export function usePortalNotifications() {
     }
   }, [])
 
+  // Initial fetch (not silent so loading state shows)
   useEffect(() => {
-    fetchNotifications()
-    const interval = setInterval(fetchNotifications, 45000)
-    return () => clearInterval(interval)
+    fetchNotifications(false)
   }, [fetchNotifications])
+
+  // Fast-poll for high-priority: invoices & form submissions every 15s
+  // General poll every 30s
+  useEffect(() => {
+    const generalInterval = setInterval(() => fetchNotifications(true), 30_000)
+    return () => clearInterval(generalInterval)
+  }, [fetchNotifications])
+
+  const registerToastCallback = useCallback((cb: (item: NotificationToastPayload) => void) => {
+    onNewItemRef.current = cb
+    return () => {
+      if (onNewItemRef.current === cb) onNewItemRef.current = null
+    }
+  }, [])
 
   const markAsRead = useCallback((id: string) => {
     setReadIds((prev) => {
@@ -305,5 +380,6 @@ export function usePortalNotifications() {
     refresh: fetchNotifications,
     markAsRead,
     markAllAsRead,
+    registerToastCallback,
   }
 }

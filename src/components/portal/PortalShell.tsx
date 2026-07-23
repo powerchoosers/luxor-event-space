@@ -37,7 +37,7 @@ import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
-import { ToastProvider } from '@/components/portal/ToastProvider'
+import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
 import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
@@ -137,6 +137,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   )
 
   // Notification State & Popover Modal
+  const { notify } = useToast()
   const {
     items: notificationItems,
     unreadCount: notificationCount,
@@ -145,10 +146,39 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     markAsRead,
     markAllAsRead,
     refresh: refreshNotifications,
+    registerToastCallback,
   } = usePortalNotifications()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const bellButtonRef = useRef<HTMLButtonElement>(null)
-  const knownUnreadTextIds = useRef<Set<string> | null>(null)
+
+  // Fire toasts immediately when new notifications arrive between polls
+  useEffect(() => {
+    return registerToastCallback((item) => {
+      const variantMap: Record<string, 'success' | 'warning' | 'info' | 'error'> = {
+        invoice_paid: 'success',
+        bill_due: 'warning',
+        form: 'info',
+        call: 'warning',
+        sms: 'info',
+        email: 'info',
+      }
+      notify({
+        title: item.title,
+        description: item.subtitle,
+        variant: variantMap[item.type] ?? 'info',
+        durationMs: 8000,
+        action: (
+          <button
+            type="button"
+            onClick={() => router.push(item.targetUrl)}
+            className="mt-1 text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 cursor-pointer"
+          >
+            View →
+          </button>
+        ),
+      })
+    })
+  }, [registerToastCallback, notify, router])
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
   // Global Email Compose State & Event Listener
@@ -192,56 +222,23 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     ).slice(0, 5)
   }, [deferredSearchQuery, inquiries])
 
+  // Load inquiries for header search bar
   useEffect(() => {
     let active = true
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-    const loadData = async () => {
+    const loadInquiries = async () => {
       try {
-        const [res, messageRes] = await Promise.all([
-          fetch('/api/inquiries', {
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-          }),
-          fetch('/api/twilio/messages?limit=200', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        ])
+        const res = await fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' })
         if (res.ok && active) {
           const data = await res.json()
           setInquiries(data)
-          
-          const messages = messageRes.ok ? await messageRes.json() as Array<{ id: string; direction: string; is_read: boolean; body: string; contact_name: string | null; from_number: string }> : []
-          const unreadMessages = messages.filter((message) => message.direction === 'inbound' && !message.is_read)
-          if (knownUnreadTextIds.current) {
-            const newMessages = unreadMessages.filter((message) => !knownUnreadTextIds.current?.has(message.id))
-            if ('Notification' in window && Notification.permission === 'granted') {
-              newMessages.forEach((message) => {
-                const notification = new Notification(`New Luxor text: ${message.contact_name || message.from_number}`, {
-                  body: message.body || 'Media message',
-                  icon: '/favicon.ico',
-                  tag: `luxor-text-${message.id}`,
-                })
-                notification.onclick = () => { window.focus(); router.push('/portal/messages'); notification.close() }
-              })
-            }
-            unreadMessages.forEach((message) => knownUnreadTextIds.current?.add(message.id))
-          } else {
-            knownUnreadTextIds.current = new Set(unreadMessages.map((message) => message.id))
-          }
         }
       } catch (err) {
-        console.error('Failed to sync notification counter:', err)
-      } finally {
-        if (active) {
-          timeoutId = setTimeout(loadData, 60000)
-        }
+        console.error('Failed to load inquiries for search:', err)
       }
     }
-
-    loadData()
-    return () => {
-      active = false
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [router])
+    loadInquiries()
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     fetch('/api/portal/user-preferences')
@@ -394,7 +391,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
       </aside>
 
       <main className={`flex h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <header className={`z-40 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
+        <header className={`z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-[#caa24c]/10 bg-[#050505]/75'
@@ -413,7 +410,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             <button
               type="button"
               onClick={() => setSidebarCollapsed((current) => !current)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 rounded-lg"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!sidebarCollapsed}
             >
