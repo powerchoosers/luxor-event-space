@@ -12,7 +12,6 @@ import {
   Search,
   Sparkles,
   Trash2,
-  X,
 } from 'lucide-react'
 import type { LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import {
@@ -90,6 +89,7 @@ export function ProposalBuilderModal({
 }: ProposalBuilderModalProps) {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
+  const [activeView, setActiveView] = useState<'builder' | 'details' | 'preview'>('builder')
 
   const categories = useMemo(
     () => ['All', ...Array.from(new Set(LUXOR_SERVICE_CATALOG.map((item) => item.category)))],
@@ -171,16 +171,58 @@ export function ProposalBuilderModal({
               <h2 className="truncate text-sm font-black uppercase tracking-[0.12em] sm:text-base">Proposal Builder</h2>
             </div>
           </div>
+
+          {/* Tablet & Mobile View Switcher */}
+          <div className="flex items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 xl:hidden">
+            <button
+              type="button"
+              onClick={() => setActiveView('builder')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
+                activeView === 'builder'
+                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <Sparkles size={12} />
+              <span className="hidden sm:inline">Services &</span> Items
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView('details')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
+                activeView === 'details'
+                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <FileText size={12} />
+              Details
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView('preview')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
+                activeView === 'preview'
+                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <Eye size={12} />
+              Preview
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
-            <span className="hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] sm:inline-flex">
-              Internal prices are private
+            <span className="hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] xl:inline-flex">
+              Internal prices private
             </span>
             <PortalCloseButton onClick={onClose} aria-label="Close proposal builder" />
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 overflow-y-auto min-[920px]:grid-cols-[220px_minmax(430px,1fr)_270px] min-[920px]:overflow-hidden xl:grid-cols-[250px_minmax(520px,1fr)_320px]">
-          <aside className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 min-[920px]:overflow-y-auto min-[920px]:border-b-0 min-[920px]:border-r sm:p-5">
+        <div className="flex flex-1 min-h-0 flex-col overflow-y-auto xl:grid xl:grid-cols-[250px_minmax(520px,1fr)_320px] xl:overflow-hidden">
+          {/* Left Column: Proposal details */}
+          <aside className={`${activeView === 'details' ? 'block' : 'hidden'} xl:block border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 xl:overflow-y-auto xl:border-b-0 xl:border-r sm:p-5`}>
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Proposal details</p>
             <div className="mt-4 grid grid-cols-1 gap-4">
               <label className="space-y-1.5">
@@ -208,31 +250,32 @@ export function ProposalBuilderModal({
             </div>
           </aside>
 
-          <main className="min-h-0 p-4 min-[920px]:overflow-y-auto sm:p-5 xl:p-6">
+          {/* Main Workspace Column: Package Presets, Service Library & Selected Items */}
+          <main className={`${activeView === 'builder' ? 'block' : 'hidden'} xl:block min-h-0 flex-1 p-4 xl:overflow-y-auto sm:p-5 xl:p-6`}>
             <section>
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Start with a package</p>
-                  <h3 className="mt-1 text-base font-black">Select everything at once, then adjust it.</h3>
+                  <h3 className="mt-1 text-base font-black">Select everything at once, then adjust it</h3>
                 </div>
                 {activePreset ? <span className="hidden items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 sm:flex"><Check size={12} /> {activePreset.name} selected</span> : null}
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {LUXOR_PACKAGE_PRESETS.map((preset) => {
                   const selected = activePreset?.id === preset.id
                   return (
-                    <button key={preset.id} type="button" onClick={() => applyPreset(preset)} className={`min-h-28 rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c] bg-[#caa24c]/12 shadow-[0_0_0_1px_rgba(202,162,76,0.15)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/45'}`}>
+                    <button key={preset.id} type="button" onClick={() => applyPreset(preset)} className={`min-h-24 rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c] bg-[#caa24c]/12 shadow-[0_0_0_1px_rgba(202,162,76,0.15)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/45'}`}>
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{preset.eyebrow}</span>
                         {selected ? <Check size={15} className="text-[#a8792f] dark:text-[#f1d27a]" /> : <ChevronRight size={15} className="text-[color:var(--portal-muted)]" />}
                       </div>
-                      <p className="mt-3 text-sm font-black">{preset.name}</p>
+                      <p className="mt-2 text-sm font-black">{preset.name}</p>
                       <p className="mt-1 font-mono text-xs font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(getPackagePresetTotal(preset))}</p>
                     </button>
                   )
                 })}
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Package prices use the Friday evening example from Packages.xlsx. Change the rental or any service below for the actual event.</p>
+              <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Package prices use the Friday evening example. Change the rental or any service below for the actual event.</p>
             </section>
 
             <section className="mt-7">
@@ -243,17 +286,34 @@ export function ProposalBuilderModal({
                 </div>
                 <div className="relative sm:w-72">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services" className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pl-9 pr-3 text-sm outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services..." className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pl-9 pr-3 text-sm outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
                 </div>
               </div>
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-                {categories.map((category) => (
-                  <button key={category} type="button" onClick={() => setActiveCategory(category)} className={`min-h-10 shrink-0 rounded-full border px-4 text-[10px] font-black uppercase tracking-wider transition ${activeCategory === category ? 'border-[#caa24c] bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'}`}>
-                    {category}
-                  </button>
-                ))}
+
+              {/* Refined Category Filter Pills with Touch Scroll */}
+              <div className="relative mt-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 touch-pan-x scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {categories.map((category) => {
+                    const isActive = activeCategory === category
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setActiveCategory(category)}
+                        className={`min-h-9 shrink-0 rounded-xl border px-3.5 text-[10px] uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${
+                          isActive
+                            ? 'border-[#caa24c] bg-[#caa24c]/15 text-[#8c6529] dark:text-[#f1d27a] font-black shadow-sm'
+                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] font-bold hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleServices.map((service) => {
                   const selected = selectedCatalogIds.has(service.id)
                   return (
@@ -307,7 +367,8 @@ export function ProposalBuilderModal({
             </section>
           </main>
 
-          <aside className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 min-[920px]:overflow-y-auto min-[920px]:border-l min-[920px]:border-t-0 sm:p-5">
+          {/* Right Column: Client preview */}
+          <aside className={`${activeView === 'preview' ? 'block' : 'hidden'} xl:block border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 xl:overflow-y-auto xl:border-l xl:border-t-0 sm:p-5`}>
             <div className="flex items-center justify-between">
               <div><p className="text-[9px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Client preview</p><p className="mt-1 text-xs font-bold">What they will see</p></div>
               <Eye size={17} className="text-[#a8792f] dark:text-[#caa24c]" />
