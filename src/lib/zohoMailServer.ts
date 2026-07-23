@@ -64,6 +64,10 @@ const DEFAULT_ALLOWED_SENDERS = ['booking@luxoratlaspalmas.com', 'hello@luxoratl
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null
 let cachedCalendarUid: string | null = null
+let cachedInboxListing: { items: LuxorZohoMessage[]; expiresAt: number } | null = null
+let inboxListingRequest: Promise<LuxorZohoMessage[]> | null = null
+let cachedSentListing: { items: LuxorZohoMessage[]; expiresAt: number } | null = null
+let sentListingRequest: Promise<LuxorZohoMessage[]> | null = null
 
 function getZohoConfig() {
   const clientId = process.env.ZOHO_CLIENT_ID
@@ -277,6 +281,7 @@ export async function sendLuxorZohoEmail(input: {
   if (!response?.ok) throw new Error('Zoho send failed without a response.')
 
   const result = resultText ? (JSON.parse(resultText) as ZohoSendResponse) : {}
+  cachedSentListing = null
 
   return {
     messageId: result.data?.messageId || result.data?.message_id || null,
@@ -378,89 +383,103 @@ function formatZohoUtcDateTime(value: string) {
 }
 
 export async function listLuxorZohoInbox(limit = 25) {
-  const { accountId, baseUrl } = getZohoConfig()
-  const accessToken = await getZohoAccessToken()
-  const params = new URLSearchParams({
-    limit: String(Math.min(Math.max(limit, 1), 50)),
-  })
-
-  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-    },
-    cache: 'no-store',
-  })
-
-  const resultText = await response.text()
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      cachedAccessToken = null
-    }
-
-    throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
+  const safeLimit = Math.min(Math.max(limit, 1), 50)
+  if (cachedInboxListing && cachedInboxListing.expiresAt > Date.now()) {
+    return cachedInboxListing.items.slice(0, safeLimit)
   }
 
-  const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+  if (!inboxListingRequest) {
+    inboxListingRequest = (async () => {
+      const { accountId, baseUrl } = getZohoConfig()
+      const accessToken = await getZohoAccessToken()
+      const params = new URLSearchParams({ limit: '50' })
+      const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+        headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+        cache: 'no-store',
+      })
+      const resultText = await response.text()
+      if (!response.ok) {
+        if (response.status === 401) cachedAccessToken = null
+        throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
+      }
+      const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+      return (result.data || []).map((message): LuxorZohoMessage => ({
+        id: message.messageId || message.message_id || '',
+        threadId: message.threadId || message.messageId || message.message_id || '',
+        folderId: message.folderId || '',
+        subject: decodeHtmlEntities(message.subject) || '(No subject)',
+        from: message.fromAddress || message.sender || 'Unknown sender',
+        to: message.toAddress || '',
+        cc: message.ccAddress || '',
+        receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
+        summary: decodeHtmlEntities(message.summary),
+        hasAttachment: zohoBoolean(message.hasAttachment),
+        isRead: String(message.status || '') === '1',
+        direction: 'incoming',
+      }))
+    })()
+  }
 
-  return (result.data || []).map((message) => ({
-    id: message.messageId || message.message_id || '',
-    threadId: message.threadId || message.messageId || message.message_id || '',
-    folderId: message.folderId || '',
-    subject: decodeHtmlEntities(message.subject) || '(No subject)',
-    from: message.fromAddress || message.sender || 'Unknown sender',
-    to: message.toAddress || '',
-    receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-    summary: decodeHtmlEntities(message.summary),
-    hasAttachment: zohoBoolean(message.hasAttachment),
-    isRead: String(message.status || '') === '1',
-  }))
+  try {
+    const items = await inboxListingRequest
+    cachedInboxListing = { items, expiresAt: Date.now() + 15_000 }
+    return items.slice(0, safeLimit)
+  } finally {
+    inboxListingRequest = null
+  }
 }
 
 export async function listLuxorZohoSentMessages(limit = 50) {
-  const { accountId, baseUrl, allowedSenders } = getZohoConfig()
-  const accessToken = await getZohoAccessToken()
-  const primarySender = allowedSenders[0] || 'booking@luxoratlaspalmas.com'
-  const params = new URLSearchParams({
-    searchKey: `sender:${primarySender}`,
-    limit: String(Math.min(Math.max(limit, 1), 100)),
-    start: '1',
-    includeto: 'true',
-  })
-
-  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
-  })
-
-  const resultText = await response.text()
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      cachedAccessToken = null
-    }
-    throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
+  const safeLimit = Math.min(Math.max(limit, 1), 100)
+  if (cachedSentListing && cachedSentListing.expiresAt > Date.now()) {
+    return cachedSentListing.items.slice(0, safeLimit)
   }
 
-  const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+  if (!sentListingRequest) {
+    sentListingRequest = (async () => {
+      const { accountId, baseUrl, allowedSenders } = getZohoConfig()
+      const accessToken = await getZohoAccessToken()
+      const primarySender = allowedSenders[0] || 'booking@luxoratlaspalmas.com'
+      const params = new URLSearchParams({
+        searchKey: `sender:${primarySender}`,
+        limit: '100',
+        start: '1',
+        includeto: 'true',
+      })
+      const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+        headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+        cache: 'no-store',
+      })
+      const resultText = await response.text()
+      if (!response.ok) {
+        if (response.status === 401) cachedAccessToken = null
+        throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
+      }
+      const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+      return (result.data || []).map((message): LuxorZohoMessage => ({
+        id: message.messageId || message.message_id || '',
+        threadId: message.threadId || message.messageId || message.message_id || '',
+        folderId: message.folderId || '',
+        subject: decodeHtmlEntities(message.subject) || '(No subject)',
+        from: message.fromAddress || message.sender || primarySender,
+        to: message.toAddress || '',
+        cc: message.ccAddress || '',
+        receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
+        summary: decodeHtmlEntities(message.summary),
+        hasAttachment: zohoBoolean(message.hasAttachment),
+        direction: 'outgoing',
+        isRead: true,
+      }))
+    })()
+  }
 
-  return (result.data || []).map((message) => ({
-    id: message.messageId || message.message_id || '',
-    threadId: message.threadId || message.messageId || message.message_id || '',
-    folderId: message.folderId || '',
-    subject: decodeHtmlEntities(message.subject) || '(No subject)',
-    from: message.fromAddress || message.sender || primarySender,
-    to: message.toAddress || '',
-    cc: message.ccAddress || '',
-    receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-    summary: decodeHtmlEntities(message.summary),
-    hasAttachment: zohoBoolean(message.hasAttachment),
-    direction: 'outgoing' as const,
-    isRead: true,
-  }))
+  try {
+    const items = await sentListingRequest
+    cachedSentListing = { items, expiresAt: Date.now() + 15_000 }
+    return items.slice(0, safeLimit)
+  } finally {
+    sentListingRequest = null
+  }
 }
 
 export async function getLuxorZohoMessageDetail(messageId: string, folderId?: string) {
@@ -728,6 +747,7 @@ export async function replyLuxorZohoEmail(input: {
     if (response.status === 401) cachedAccessToken = null
     throw new Error(`Zoho reply failed with ${response.status}: ${resultText}`)
   }
+  cachedSentListing = null
   const result = resultText ? (JSON.parse(resultText) as ZohoSendResponse) : {}
   return {
     success: true,

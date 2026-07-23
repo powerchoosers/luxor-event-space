@@ -61,12 +61,47 @@ interface EmailThreadData {
   bookings: Array<{ id: string; status: string; event_date: string | null; package_name: string | null }>
 }
 
-let mailboxCache: EmailMessageItem[] | null = null
+const MAILBOX_SESSION_KEY = 'luxor_email_mailbox_v1'
+
+function readSessionMailbox() {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(MAILBOX_SESSION_KEY) || 'null') as {
+      cachedAt?: number
+      messages?: EmailMessageItem[]
+    } | null
+    if (!stored?.cachedAt || !Array.isArray(stored.messages)) return null
+    return Date.now() - stored.cachedAt < 5 * 60_000 ? stored.messages : null
+  } catch {
+    return null
+  }
+}
+
+function saveMailbox(messages: EmailMessageItem[]) {
+  mailboxCache = messages
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(MAILBOX_SESSION_KEY, JSON.stringify({ cachedAt: Date.now(), messages }))
+  } catch {
+    // The in-memory cache still protects the current page if storage is unavailable.
+  }
+}
+
+let mailboxCache: EmailMessageItem[] | null = readSessionMailbox()
 let mailboxRequest: Promise<EmailMessageItem[]> | null = null
 const messageDetailCache = new Map<string, EmailMessageItem>()
 const threadCache = new Map<string, EmailThreadData>()
 
+function messageKey(message: EmailMessageItem) {
+  return `${message.folder || message.direction || 'email'}:${message.folderId || 'no-folder'}:${message.id}`
+}
+
+function detailCacheKey(messageId: string, folderId?: string) {
+  return `${folderId || 'no-folder'}:${messageId}`
+}
+
 async function requestMailbox(force = false) {
+  if (mailboxCache && !force) return mailboxCache
   if (mailboxRequest && !force) return mailboxRequest
 
   const request = fetch('/api/email/inbox?limit=100&folder=all', { cache: 'no-store' })
@@ -82,7 +117,7 @@ async function requestMailbox(force = false) {
         throw error
       }
       const messages = data.messages || []
-      mailboxCache = messages
+      saveMailbox(messages)
       return messages
     })
 
@@ -120,6 +155,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   // Selected email detail state
   const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
+  const [selectedMessageKey, setSelectedMessageKey] = useState<string | null>(null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [thread, setThread] = useState<EmailThreadData | null>(null)
@@ -150,13 +186,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     try {
       const list = await requestMailbox(force)
       setMessages(list)
-      setSelectedId((current) => {
-        if (current) return current
-        const target = initialMessageId && list.some((m) => m.id === initialMessageId)
-          ? initialMessageId
-          : list[0]?.id || null
-        return target
-      })
     } catch (err) {
       console.error(err)
       setReconnectRequired(Boolean((err as Error & { reconnectRequired?: boolean }).reconnectRequired))
@@ -170,7 +199,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     void loadEmails(false)
   }, [loadEmails])
 
-  const selectedFolderId = messages.find((message) => message.id === selectedId)?.folderId
+  useEffect(() => {
+    if (selectedMessageKey && messages.some((message) => messageKey(message) === selectedMessageKey)) return
+    const target = (initialMessageId && messages.find((message) => message.id === initialMessageId)) || messages[0]
+    if (!target) return
+    setSelectedId(target.id)
+    setSelectedMessageKey(messageKey(target))
+  }, [initialMessageId, messages, selectedMessageKey])
+
+  const selectedSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
+    || messages.find((message) => message.id === selectedId)
+  const selectedFolderId = selectedSummary?.folderId
 
   // Fetch full message detail when selection changes
   useEffect(() => {
@@ -181,9 +220,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
     let isCurrent = true
     const fetchDetail = async () => {
-      const cached = messageDetailCache.get(selectedId)
+      const cacheKey = detailCacheKey(selectedId, selectedFolderId)
+      const cached = messageDetailCache.get(cacheKey)
       if (cached) setMessageDetail(cached)
-      else setMessageDetail(mailboxCache?.find((message) => message.id === selectedId) || null)
+      else setMessageDetail(selectedSummary || mailboxCache?.find((message) => message.id === selectedId) || null)
       setLoadingDetail(!cached)
       try {
         const folderQuery = selectedFolderId ? `?folderId=${encodeURIComponent(selectedFolderId)}` : ''
@@ -191,17 +231,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         if (res.ok) {
           const detail = (await res.json()) as EmailMessageItem
           if (isCurrent) {
-            messageDetailCache.set(selectedId, detail)
+            messageDetailCache.set(cacheKey, detail)
             setMessageDetail(detail)
             setReadIds((prev) => new Set(prev).add(selectedId))
           }
         } else {
-          const fallback = messageDetailCache.get(selectedId) || mailboxCache?.find((m) => m.id === selectedId) || null
+          const fallback = messageDetailCache.get(cacheKey) || selectedSummary || null
           if (isCurrent) setMessageDetail(fallback)
         }
       } catch (err) {
         console.error('Error loading email message detail:', err)
-        const fallback = messageDetailCache.get(selectedId) || mailboxCache?.find((m) => m.id === selectedId) || null
+        const fallback = messageDetailCache.get(cacheKey) || selectedSummary || null
         if (isCurrent) setMessageDetail(fallback)
       } finally {
         if (isCurrent) setLoadingDetail(false)
@@ -212,7 +252,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     return () => {
       isCurrent = false
     }
-  }, [selectedId, selectedFolderId])
+  }, [selectedId, selectedFolderId, selectedSummary])
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
@@ -293,10 +333,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         })
         setMessages((current) => {
           const next = [sentMessage, ...current.filter((message) => message.id !== sentMessage.id)]
-          mailboxCache = next
+          saveMailbox(next)
           return next
         })
-        messageDetailCache.set(sentMessage.id, sentMessage)
+        messageDetailCache.set(detailCacheKey(sentMessage.id, sentMessage.folderId), sentMessage)
       }
       setReplyText('')
       setReplyInstruction('')
@@ -403,7 +443,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   const selectMessage = (message: EmailMessageItem) => {
     setSelectedId(message.id)
-    setMessageDetail(messageDetailCache.get(message.id) || message)
+    setSelectedMessageKey(messageKey(message))
+    setMessageDetail(messageDetailCache.get(detailCacheKey(message.id, message.folderId)) || message)
     setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
     setReplyOpen(false)
     setReplyText('')
@@ -594,13 +635,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </div>
           ) : (
             pagedMessages.map((msg) => {
-              const isSelected = msg.id === selectedId
+              const isSelected = messageKey(msg) === selectedMessageKey
               const isStarred = starredIds.has(msg.id)
               const isRead = readIds.has(msg.id)
 
               return (
                 <div
-                  key={msg.id}
+                  key={messageKey(msg)}
                   onClick={() => selectMessage(msg)}
                   className={`p-4 flex flex-col gap-2 transition-all cursor-pointer relative group ${
                     isSelected
@@ -823,7 +864,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 ) : (
                   (thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
                     <ThreadMessage
-                      key={message.id}
+                      key={`${messageKey(message)}:${index}`}
                       message={message}
                       expanded={message.id === selectedId || index === all.length - 1}
                       viewMode={viewMode}

@@ -94,7 +94,7 @@ export function usePortalNotifications() {
 
       const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/email/inbox?limit=25', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/email/inbox?limit=25&folder=inbox', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/messages?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/calls?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/invoices', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
