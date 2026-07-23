@@ -80,3 +80,11 @@ The GitHub repository is ready for a standard Vercel Next.js deployment:
 - Build command: `npm run build`
 - Output/framework detection: Next.js defaults
 - The public website can run without secrets, but portal, Zoho mail, and Twilio features require their server-only env vars in Vercel. Do not expose them with `NEXT_PUBLIC_`.
+
+## Supabase Connection And Authority
+
+- The `Supabase` Codex plugin is connected to the production database used by this Luxor repository.
+- Lewis authorizes Codex to use that connected Supabase project autonomously for database work required by requested Luxor features, including inspecting schema, running SQL, applying migrations, managing storage-related database configuration, and verifying results.
+- Confirm that the target contains the Luxor tables before making changes. Do not assume that similarly named CRM tables are the intended target.
+- Apply checked-in migrations when they are required for the requested feature, then verify the resulting columns, constraints, RLS posture, and relevant advisors.
+- This standing authorization does not permit exposing credentials, weakening RLS, deleting production data, resetting branches, or performing unrelated destructive changes without Lewis explicitly requesting that specific action.
