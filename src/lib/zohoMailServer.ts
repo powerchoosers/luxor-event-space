@@ -494,7 +494,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     if (folderId) {
       try {
         const folderDetailRes = await fetch(
-          `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}`,
+          `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/details`,
           { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
         )
         if (folderDetailRes.ok) {
@@ -541,13 +541,10 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
     const data = result.data || {}
 
-    console.log(`[Zoho] strategy-2 data keys for ${messageId}:`, Object.keys(data).join(', ') || '(empty)')
-
     let fullContent = String(data.content || data.summary || '')
 
     // If we have a folderId hint from the data, try the content endpoint
     const resolvedFolderId = String(data.folderId || folderId || '')
-    console.log(`[Zoho] resolvedFolderId for ${messageId}:`, resolvedFolderId || '(none)')
     if (resolvedFolderId) {
       const contentResponse = await fetch(
         `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
@@ -556,7 +553,6 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
       if (contentResponse.ok) {
         const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
         fullContent = String(contentResult.data?.content || fullContent)
-        console.log(`[Zoho] content endpoint returned ${fullContent.length} chars for ${messageId}`)
       } else {
         console.warn(`[Zoho] content endpoint returned ${contentResponse.status} for ${messageId}`)
       }
@@ -572,7 +568,6 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
         if (mimeRes.ok) {
           const mimeData = await mimeRes.json().catch(() => ({})) as { data?: { content?: string; htmlContent?: string } }
           fullContent = String(mimeData.data?.htmlContent || mimeData.data?.content || fullContent)
-          console.log(`[Zoho] originalmessage returned ${fullContent.length} chars for ${messageId}`)
         } else {
           console.warn(`[Zoho] originalmessage returned ${mimeRes.status} for ${messageId}`)
         }

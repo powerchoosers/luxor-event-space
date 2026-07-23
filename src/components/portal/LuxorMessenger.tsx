@@ -252,7 +252,7 @@ export function LuxorMessenger() {
       </aside>
 
       <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 flex-col`}>
-        {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
+        {loading ? <LoadingMessagePane /> : newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
           <>
             <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
@@ -323,7 +323,7 @@ function MessageBubble({ message }: { message: LuxorMessage }) {
   const outbound = message.direction === 'outbound'
   return <motion.div layout initial={{ opacity: 0, y: 34, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
     <div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
-      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] text-white shadow-md' : 'rounded-bl-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
+      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] !text-white shadow-md' : 'rounded-bl-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
       <p className={`mt-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span>{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={11} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'}/> : null}</> : null}</p>
       {message.error_message ? <p className="mt-1 text-[9px] text-red-400">{message.error_message}</p> : null}
     </div>
@@ -363,7 +363,44 @@ function MediaGallery({ items, onClose }: { items: Array<{ url: string; message:
 
 function DateDivider({ value }: { value: string }) { return <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[color:var(--portal-border)]"/><span className="font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)]">{new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="h-px flex-1 bg-[color:var(--portal-border)]"/></div> }
 function TypingDots() { return <span className="flex items-center gap-0.5" aria-hidden="true">{[0, 1, 2].map((dot) => <motion.span key={dot} className="h-1 w-1 rounded-full bg-[#caa24c]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 0.75, repeat: Infinity, delay: dot * 0.12 }}/>)}</span> }
-function LoadingConversations() { return <div className="space-y-1 p-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse gap-3 rounded-xl p-3"><span className="h-10 w-10 rounded-full luxor-skeleton"/><span className="flex-1 space-y-2"><span className="block h-3 w-1/2 rounded luxor-skeleton"/><span className="block h-2 w-4/5 rounded luxor-skeleton"/></span></div>)}</div> }
+function LoadingConversations() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="space-y-1 p-3" aria-label="Loading conversations">
+      {Array.from({ length: 7 }, (_, index) => (
+        <motion.div key={index} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, delay: index * 0.035, ease: [0.23, 1, 0.32, 1] }} className="flex gap-3 rounded-xl border border-transparent p-3">
+          <span className="h-10 w-10 shrink-0 rounded-full luxor-skeleton" />
+          <span className="min-w-0 flex-1 space-y-2.5 pt-0.5">
+            <span className="flex items-center justify-between gap-3"><span className="block h-3 w-2/5 rounded luxor-skeleton"/><span className="block h-2 w-10 rounded luxor-skeleton"/></span>
+            <span className="block h-2 w-24 rounded luxor-skeleton"/>
+            <span className="block h-2.5 w-4/5 rounded luxor-skeleton"/>
+          </span>
+        </motion.div>
+      ))}
+    </motion.div>
+  )
+}
+
+function LoadingMessagePane() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }} className="flex min-h-0 flex-1 flex-col" aria-label="Loading message thread">
+      <div className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-3">
+        <div className="flex items-center gap-3"><span className="h-10 w-10 rounded-full luxor-skeleton"/><span className="space-y-2"><span className="block h-3 w-32 rounded luxor-skeleton"/><span className="block h-2 w-24 rounded luxor-skeleton"/></span></div>
+        <div className="flex gap-2"><span className="h-9 w-20 rounded-lg luxor-skeleton"/><span className="h-9 w-9 rounded-lg luxor-skeleton"/></div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden px-5 py-7 sm:px-7">
+        <div className="mx-auto max-w-4xl space-y-5">
+          <div className="mx-auto h-2 w-24 rounded luxor-skeleton"/>
+          {[{ side: 'left', width: 'w-3/5' }, { side: 'right', width: 'w-2/5' }, { side: 'left', width: 'w-1/2' }, { side: 'right', width: 'w-3/5' }].map((item, index) => (
+            <motion.div key={index} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 + index * 0.05, ease: [0.23, 1, 0.32, 1] }} className={`flex ${item.side === 'right' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`${item.width} space-y-2`}><div className="h-16 rounded-2xl luxor-skeleton"/><div className={`h-2 w-16 rounded luxor-skeleton ${item.side === 'right' ? 'ml-auto' : ''}`}/></div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-[color:var(--portal-border)] p-4"><div className="mx-auto h-14 max-w-4xl rounded-xl luxor-skeleton"/></div>
+    </motion.div>
+  )
+}
 function EmptyMessenger() { return <div className="flex flex-1 items-center justify-center p-8 text-center"><div><span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[#caa24c]/15 bg-[#caa24c]/5 text-[#caa24c]"><MessageSquare size={22}/></span><p className="mt-4 text-sm font-bold text-[color:var(--portal-text)]">No text conversations yet</p><p className="mt-1 max-w-xs text-xs leading-5 text-[color:var(--portal-muted)]">Open a lead with a mobile number and choose Text Client to begin.</p></div></div> }
 function dayKey(value: string) { return new Date(value).toDateString() }
 function formatMessageTime(value: string) { return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }

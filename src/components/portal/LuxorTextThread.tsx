@@ -40,10 +40,14 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
       <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3"><div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Text conversation</p><p className="mt-1 text-[10px] text-zinc-600">{phone ? `${contactName || 'Client'} · ${formatPhoneDisplay(phone)}` : 'Inbound and outbound SMS conversations.'}</p></div><MessageSquare size={17} className="text-[#caa24c]" /></div>
       <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-1 portal-scrollbar">
         {loading ? (
-          <p className="py-10 text-center text-xs text-zinc-600">
-            <Loader2 className="mr-2 inline animate-spin" size={14} />
-            Loading texts
-          </p>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4 py-3" aria-label="Loading text conversation">
+            {[0, 1, 2, 3].map((index) => (
+              <motion.div key={index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05, duration: 0.28, ease: [0.23, 1, 0.32, 1] }} className={`space-y-1.5 ${index % 2 ? 'ml-auto w-3/5' : 'w-2/3'}`}>
+                <div className="h-14 rounded-2xl luxor-skeleton" />
+                <div className={`h-2 w-20 rounded luxor-skeleton ${index % 2 ? 'ml-auto' : ''}`} />
+              </motion.div>
+            ))}
+          </motion.div>
         ) : messages.length ? (
           <AnimatePresence initial={false}>
             {[...messages].reverse().map((message) => (
@@ -55,11 +59,11 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                 key={message.id}
                 className={`max-w-[88%] rounded-2xl px-4 py-3 ${
                   message.direction === 'outbound'
-                    ? 'ml-auto bg-[#caa24c] text-white shadow-md'
+                    ? 'ml-auto bg-[#caa24c] !text-white shadow-md'
                     : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
                 }`}
               >
-                <p className="whitespace-pre-wrap text-sm">{message.body || '(Media message)'}</p>
+                <p className={`whitespace-pre-wrap text-sm ${message.direction === 'outbound' ? '!text-white' : ''}`}>{message.body || '(Media message)'}</p>
                 <p
                   className={`mt-1 text-[8px] font-black uppercase tracking-wider ${
                     message.direction === 'outbound' ? 'text-white/80' : 'text-[color:var(--portal-muted)]'

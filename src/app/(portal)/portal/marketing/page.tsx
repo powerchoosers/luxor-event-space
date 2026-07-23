@@ -596,7 +596,7 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' ? 'flex-1 min-h-0 overflow-hidden' : ''}>
+    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
@@ -604,7 +604,7 @@ function MarketingPageContent() {
         actions={headerActions}
       />
 
-      <div className="flex-grow flex flex-col min-h-0 mt-2">
+      <div className="flex-grow flex flex-col min-h-0 overflow-hidden mt-2">
         {activeTab === 'overview' && (
           <MarketingOverviewTab
             inquiries={inquiries}

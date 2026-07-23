@@ -33,7 +33,9 @@ export function RouteTransition({
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
   const isPortal = surface === 'portal'
-  const portalClass = 'flex-1 min-h-full w-full flex flex-col transform-gpu'
+  const portalClass = fillAvailableHeight
+    ? 'flex-1 min-h-0 h-full w-full flex flex-col overflow-hidden transform-gpu'
+    : 'flex-1 min-h-full w-full flex flex-col transform-gpu'
 
   if (reduceMotion) {
     return isPortal ? <div className={portalClass}>{children}</div> : <>{children}</>

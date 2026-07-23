@@ -77,16 +77,10 @@ export async function GET(
     const folderId = new URL(request.url).searchParams.get('folderId') || undefined
     const detail = await getLuxorZohoMessageDetail(id, folderId)
     if (!detail) {
-      return NextResponse.json({
-        id,
-        subject: 'Message Summary',
-        from: 'booking@luxoratlaspalmas.com',
-        to: '',
-        receivedAt: new Date().toISOString(),
-        content: 'Email content details unavailable from Zoho Mail server API.',
-        htmlContent: null,
-        hasAttachment: false,
-      })
+      return NextResponse.json(
+        { error: 'Zoho could not retrieve this email body. Refresh the mailbox and try again.' },
+        { status: 502 },
+      )
     }
 
     return NextResponse.json(detail)
