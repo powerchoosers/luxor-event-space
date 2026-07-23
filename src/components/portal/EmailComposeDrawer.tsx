@@ -648,6 +648,13 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                             </span>
                           )}
                         </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Subject */}
             <div className="space-y-1 shrink-0">
               <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Subject</label>
