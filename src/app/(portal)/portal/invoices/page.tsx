@@ -15,7 +15,8 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
-  PortalSelect
+  PortalSelect,
+  PortalTableSkeleton
 } from '@/components/portal/PortalUI'
 
 export default function InvoicesPage() {
@@ -147,11 +148,7 @@ export default function InvoicesPage() {
           </PortalStickyThead>
           <tbody className="divide-y divide-zinc-900/30">
             {loading ? (
-              <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
-                  FETCHING LEDGER...
-                </td>
-              </tr>
+              <PortalTableSkeleton cols={6} rows={5} />
             ) : error ? (
               <tr>
                 <td colSpan={6} className="px-8 py-12 text-sm text-red-350">

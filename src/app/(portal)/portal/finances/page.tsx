@@ -25,7 +25,8 @@ import {
   PortalTableCard,
   PortalStatusBadge,
   PortalSelect,
-  PortalButton
+  PortalButton,
+  PortalTableSkeleton
 } from '@/components/portal/PortalUI'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
 
@@ -346,9 +347,7 @@ type LuxorBookingExpense = {
                 </PortalStickyThead>
                 <tbody className="divide-y divide-zinc-900/30">
                   {loading ? (
-                    <tr>
-                      <td colSpan={6} className="px-8 py-12 text-center text-xs font-bold text-zinc-550 uppercase tracking-widest">Loading records...</td>
-                    </tr>
+                    <PortalTableSkeleton cols={6} rows={5} />
                   ) : filteredInvoices.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-8 py-12 text-center text-xs text-zinc-550">No invoices matching criteria.</td>

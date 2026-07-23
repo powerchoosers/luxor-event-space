@@ -33,7 +33,9 @@ import {
   PortalModal,
   PortalDatePicker,
   PortalSelect,
-  PortalButton
+  PortalButton,
+  PortalCardSkeleton,
+  PortalTableSkeleton
 } from '@/components/portal/PortalUI'
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 
@@ -412,9 +414,15 @@ function OperationsPageContent() {
       </div>
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
-      {/* Tab Panels */}
-      {/* DASHBOARD TAB */}
-      {activeTab === 'dashboard' && (
+      {loading ? (
+        <div className="p-4 space-y-6">
+          <PortalCardSkeleton count={5} />
+          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 h-64 luxor-skeleton" />
+        </div>
+      ) : (
+        <>
+          {/* DASHBOARD TAB */}
+          {activeTab === 'dashboard' && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
             {/* Top row metric cards */}
@@ -794,6 +802,8 @@ function OperationsPageContent() {
             </p>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* 1. New Bill Modal */}

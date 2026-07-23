@@ -25,7 +25,7 @@ import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
 import { LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
-import { PortalPageFrame, PortalPageHeader } from "@/components/portal/PortalUI";
+import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 
@@ -302,9 +302,9 @@ export default async function PortalOverview() {
       )}
 
       {/* TOP ROW: 4 Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <PortalStaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Bookings Card */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Calendar size={22} strokeWidth={1.5} />
@@ -322,10 +322,10 @@ export default async function PortalOverview() {
             </div>
             <p className="text-[10px] font-bold text-[color:var(--portal-muted)] mt-2">{bookingsPercentage}% to goal</p>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* Cash Flow Card */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[180px] overflow-hidden relative">
+        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[180px] overflow-hidden relative">
           <div className="flex justify-between items-start z-10 relative">
             <div>
               <span className="text-[#caa24c] mb-4 block">
@@ -354,10 +354,10 @@ export default async function PortalOverview() {
             <span className="text-[color:var(--portal-muted)]/40">•</span>
             <span className="text-[#b93c3c]">${totalOutflow.toLocaleString()} out</span>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* Next Event Card */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
           {nextBooking ? (
             <>
               <div>
@@ -391,10 +391,10 @@ export default async function PortalOverview() {
               </div>
             </>
           )}
-        </div>
+        </PortalStaggerCard>
 
         {/* Needs Attention Card */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Bell size={22} strokeWidth={1.5} />
@@ -409,8 +409,8 @@ export default async function PortalOverview() {
               View my tasks <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </div>
-      </div>
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {/* MIDDLE ROW: 3 Columns (Today's Priorities, This Week, Bills Due) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

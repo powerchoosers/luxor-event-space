@@ -177,7 +177,17 @@ export default function CallsPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar">
             {loading ? (
-              <div className="flex h-full min-h-64 items-center justify-center gap-2 text-xs text-zinc-500"><Loader2 size={16} className="animate-spin" /> Loading calls</div>
+              <div className="p-4 space-y-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                    <div className="h-9 w-9 rounded-full luxor-skeleton shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3.5 w-32 rounded luxor-skeleton" />
+                      <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : filteredCalls.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center px-6 text-center"><Phone size={28} className="text-zinc-800" /><p className="mt-3 text-sm font-bold text-zinc-400">No calls found</p><p className="mt-1 text-xs text-zinc-600">Calls will appear here after the Twilio setup is connected.</p></div>
             ) : filteredCalls.map((call) => (

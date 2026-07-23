@@ -200,8 +200,16 @@ export default function CalendarPage() {
       ) : null}
 
       {loading ? (
-        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center text-sm text-[color:var(--portal-muted)]">
-          Loading calendar...
+        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 shadow-xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="h-6 w-48 rounded luxor-skeleton" />
+            <div className="h-8 w-32 rounded-lg luxor-skeleton" />
+          </div>
+          <div className="grid grid-cols-7 gap-3 pt-4">
+            {Array.from({ length: 28 }).map((_, i) => (
+              <div key={i} className="h-20 rounded-xl luxor-skeleton" />
+            ))}
+          </div>
         </div>
       ) : activeCalendar === 'tours' ? (
         <PortalCalendar

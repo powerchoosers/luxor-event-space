@@ -1221,3 +1221,107 @@ export function PortalContactAvatar({
     </div>
   )
 }
+
+export function PortalStaggerGroup({
+  children,
+  className = '',
+  staggerDelay = 0.05,
+}: {
+  children: React.ReactNode
+  className?: string
+  staggerDelay?: number
+}) {
+  return (
+    <motion.div
+      initial="hidden"
+      animate="show"
+      variants={{
+        hidden: {},
+        show: {
+          transition: {
+            staggerChildren: staggerDelay,
+          },
+        },
+      }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+export function PortalStaggerCard({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, y: 14, scale: 0.98 },
+        show: {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: {
+            duration: 0.35,
+            ease: [0.23, 1, 0.32, 1],
+          },
+        },
+      }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+export function PortalTableSkeleton({
+  cols = 6,
+  rows = 5,
+}: {
+  cols?: number
+  rows?: number
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <tr key={rowIndex} className="border-b border-[color:var(--portal-border)]">
+          <td className="px-6 py-4" colSpan={cols}>
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 shrink-0 rounded-full luxor-skeleton" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-48 rounded luxor-skeleton" />
+                <div className="h-3 w-32 rounded luxor-skeleton" />
+              </div>
+              <div className="h-6 w-20 rounded-full luxor-skeleton" />
+              <div className="h-4 w-28 rounded luxor-skeleton" />
+            </div>
+          </td>
+        </tr>
+      ))}
+    </>
+  )
+}
+
+export function PortalCardSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-4 shadow-xl"
+        >
+          <div className="flex items-center justify-between">
+            <div className="h-5 w-24 rounded luxor-skeleton" />
+            <div className="h-6 w-6 rounded-full luxor-skeleton" />
+          </div>
+          <div className="h-8 w-32 rounded luxor-skeleton" />
+          <div className="h-3 w-40 rounded luxor-skeleton" />
+        </div>
+      ))}
+    </div>
+  )
+}

@@ -37,7 +37,8 @@ import {
   PortalSelect,
   PortalButton,
   PortalContactAvatar,
-  PortalPagination
+  PortalPagination,
+  PortalTableSkeleton
 } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -508,11 +509,7 @@ export default function LeadsPage() {
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
-                    FETCHING RECORDS...
-                  </td>
-                </tr>
+                <PortalTableSkeleton cols={6} rows={6} />
               ) : error ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-12 text-sm text-red-300">

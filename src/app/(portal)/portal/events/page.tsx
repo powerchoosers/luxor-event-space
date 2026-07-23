@@ -134,7 +134,14 @@ export default function EventsPage() {
           >
             <div className="divide-y divide-zinc-900/30">
               {loading ? (
-                <div className="p-8 text-center text-xs font-semibold tracking-wider text-zinc-500">FETCHING OPERATIONS...</div>
+                <div className="p-4 space-y-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="space-y-2 p-3">
+                      <div className="h-4 w-40 rounded luxor-skeleton" />
+                      <div className="h-3 w-28 rounded luxor-skeleton" />
+                    </div>
+                  ))}
+                </div>
               ) : filteredBookings.length === 0 ? (
                 <div className="p-8 text-center text-xs text-zinc-500">No events matched search criteria.</div>
               ) : (

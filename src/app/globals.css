@@ -536,13 +536,21 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(90deg, rgba(39, 39, 42, 0.55), rgba(63, 63, 70, 0.34), rgba(39, 39, 42, 0.55));
   }
 
+  body[data-portal-theme='light'] .luxor-skeleton {
+    background: linear-gradient(90deg, rgba(228, 222, 212, 0.8), rgba(244, 240, 232, 0.95), rgba(228, 222, 212, 0.8)) !important;
+  }
+
   .luxor-skeleton::after {
     content: '';
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(202, 162, 76, 0.16), transparent);
+    background: linear-gradient(90deg, transparent, rgba(202, 162, 76, 0.18), transparent);
     animation: luxor-skeleton-sheen 1.35s ease-in-out infinite;
+  }
+
+  body[data-portal-theme='light'] .luxor-skeleton::after {
+    background: linear-gradient(90deg, transparent, rgba(168, 121, 47, 0.25), transparent) !important;
   }
 
   .luxor-loading-bar {
