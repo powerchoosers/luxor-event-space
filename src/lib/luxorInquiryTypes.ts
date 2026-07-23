@@ -135,7 +135,7 @@ export type LuxorInvoice = {
   notes: string | null
 }
 
-export type LuxorDocumentType = 'proposal' | 'invoice'
+export type LuxorDocumentType = 'proposal' | 'invoice' | 'contract' | 'guest_guide' | 'executed_contract' | 'contract_audit'
 
 export type LuxorDocument = {
   id: string
@@ -305,6 +305,16 @@ export type LuxorSignatureRequest = {
   contract_body: string
   signed_name: string | null
   signed_at: string | null
+  client_first_name?: string | null
+  client_last_name?: string | null
+  owner_name?: string | null
+  owner_email?: string | null
+  owner_signed_at?: string | null
+  contract_document_path?: string | null
+  guest_guide_path?: string | null
+  executed_document_path?: string | null
+  audit_document_path?: string | null
+  document_hash?: string | null
   signer_ip: string | null
   signer_user_agent: string | null
   expires_at: string | null

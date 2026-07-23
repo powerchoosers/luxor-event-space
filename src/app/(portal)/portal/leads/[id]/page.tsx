@@ -1296,6 +1296,27 @@ export default function LeadDetailPage({
     return Math.min(amount, balance)
   }
 
+  const handleSendContractPackage = async (booking: LuxorBooking) => {
+    try {
+      setUpdatingStatus(true)
+      const res = await fetch('/api/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'The contract package could not be sent.')
+      await createFlowNote('Luxor agreement and Guest Guide sent to the client through the secure signature portal.', 'status_change')
+      await fetchAllData(false)
+      notify({ title: 'Contract package sent', description: 'The client received the Guest Guide and secure signing link.', variant: 'success' })
+    } catch (err) {
+      console.error(err)
+      notify({ title: 'Contract not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
   const openPaymentRequest = (invoice: LuxorInvoice) => {
     const balance = getInvoiceBalance(invoice)
     const suggestedDeposit = getSuggestedInvoiceDeposit(invoice)
@@ -1885,16 +1906,20 @@ export default function LeadDetailPage({
   } else if (lead.status === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : 'Mark contract sent') : 'Create booking record',
+      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : latestBooking.contract_status === 'not_sent' ? 'Send agreement + guide' : 'Review contract status') : 'Create booking record',
       detail: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? 'Contract is already signed'
-          : 'Track contract progress without sending a portal email'
+          : latestBooking.contract_status === 'not_sent'
+            ? 'Email the branded package and secure signing link'
+            : 'Open the contract record and review progress'
         : 'Create the booking record first',
       onClick: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? () => scrollToSection('lead-booking')
-          : () => handleTrackContractStatus(latestBooking, 'sent')
+          : latestBooking.contract_status === 'not_sent'
+            ? () => handleSendContractPackage(latestBooking)
+            : () => scrollToSection('lead-booking')
         : openBookingModal,
       disabled: updatingStatus,
       loading: updatingStatus,
@@ -3396,8 +3421,7 @@ export default function LeadDetailPage({
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
                           {latestBooking ? (
                             <>
-                              <button type="button" onClick={() => handleTrackContractStatus(latestBooking, 'sent')} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Mark Sent</button>
-                              <button type="button" onClick={() => handleTrackContractStatus(latestBooking, 'signed')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Signed</button>
+                              <button type="button" disabled={updatingStatus || latestBooking.contract_status === 'signed'} onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} className="flex-1 min-w-[120px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer disabled:opacity-45">{latestBooking.contract_status === 'signed' ? 'Agreement Complete' : latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? 'Send Agreement + Guide' : 'Review Contract'}</button>
                             </>
                           ) : (
                             <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
@@ -4587,7 +4611,7 @@ export default function LeadDetailPage({
             {sortedBookings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
                 <p className="font-semibold text-zinc-300">No booking record is linked yet.</p>
-                <p className="mt-1 text-zinc-600">Use the booking form when the event date is ready, then track contract progress manually until the real contract workflow is connected.</p>
+                <p className="mt-1 text-zinc-600">Create the booking record first. The agreement uses its event date, package, guest count, and payment details.</p>
                 <button
                   type="button"
                   onClick={openBookingModal}
@@ -4629,11 +4653,11 @@ export default function LeadDetailPage({
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleTrackContractStatus(booking, booking.contract_status === 'sent' ? 'signed' : 'sent')}
-                        disabled={booking.contract_status === 'signed'}
+                        onClick={() => booking.contract_status === 'not_sent' || !booking.contract_status ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
+                        disabled={booking.contract_status === 'signed' || updatingStatus}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12 disabled:opacity-45"
                       >
-                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' ? 'Mark Signed' : 'Mark Sent'}
+                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Mark Signed Manually' : 'Send Agreement + Guide'}
                       </button>
                       <button
                         type="button"

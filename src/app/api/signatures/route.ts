@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
-import { buildSignatureEmail, createLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { buildSignatureEmail, buildSignatureEmailHtml, createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
+import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,8 +34,24 @@ export async function POST(request: NextRequest) {
       subject: email.subject,
       body: email.body,
       scheduledFor: new Date().toISOString(),
-      metadata: { manual: true, requestedBy: session.email },
+      metadata: { manual: true, requestedBy: session.email, includes_guest_guide: true },
     })
+
+    try {
+      const guide = await downloadLuxorPrivatePdf(signature.guest_guide_path || '')
+      await sendLuxorZohoEmail({
+        to: signature.client_email,
+        subject: email.subject,
+        content: buildSignatureEmailHtml(signature),
+        from: 'booking@luxoratlaspalmas.com',
+        fromName: 'Luxor Event Space',
+        attachments: [{ filename: 'Luxor-Guest-Guide.pdf', content: guide, contentType: 'application/pdf' }],
+      })
+      await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString() })
+    } catch (sendError) {
+      await updateLuxorEmailJob(job.id, { status: 'failed', last_error: sendError instanceof Error ? sendError.message : 'Email send failed.' })
+      throw sendError
+    }
 
     return NextResponse.json({ signature, job }, { status: 201 })
   } catch (error) {

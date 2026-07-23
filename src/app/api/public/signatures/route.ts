@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorSignatureRequestByToken, signLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent, signLuxorSignatureRequest, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+
+function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
+  if (!signature) return null
+  return {
+    id: signature.id,
+    client_name: signature.client_name,
+    client_email: signature.client_email,
+    client_first_name: signature.client_first_name,
+    client_last_name: signature.client_last_name,
+    owner_name: signature.owner_name,
+    status: signature.status,
+    contract_title: signature.contract_title,
+    contract_body: signature.contract_body,
+    signed_name: signature.signed_name,
+    signed_at: signature.signed_at,
+    owner_signed_at: signature.owner_signed_at,
+    expires_at: signature.expires_at,
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +29,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     }
 
-    return NextResponse.json(signature)
+    if (signature.status === 'sent') await updateLuxorSignatureRequest(signature.id, { status: 'viewed' })
+    await recordLuxorSignatureEvent({
+      signatureRequestId: signature.id,
+      eventType: 'viewed',
+      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
+      userAgent: request.headers.get('user-agent'),
+    })
+
+    return NextResponse.json({ ...publicSignature(signature), status: signature.status === 'sent' ? 'viewed' : signature.status })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load signature request.'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -37,7 +64,7 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get('user-agent'),
     })
 
-    return NextResponse.json(signature)
+    return NextResponse.json(publicSignature(signature))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to submit signature.'
     return NextResponse.json({ error: message }, { status: 500 })

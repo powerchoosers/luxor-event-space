@@ -16,7 +16,7 @@ function safeFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-async function ensureDocumentBucket() {
+export async function ensureDocumentBucket() {
   const { url, serviceRoleKey } = getSupabaseConfig()
   const response = await fetch(`${url}/storage/v1/bucket`, {
     method: 'POST',
@@ -55,6 +55,33 @@ async function ensureDocumentBucket() {
       throw new Error(`Could not prepare private PDF storage: ${text}`)
     }
   }
+}
+
+export async function saveLuxorPrivatePdf(storagePath: string, pdf: Uint8Array) {
+  const { url, serviceRoleKey } = getSupabaseConfig()
+  await ensureDocumentBucket()
+  const response = await fetch(`${url}/storage/v1/object/${DOCUMENT_BUCKET}/${storagePath}`, {
+    method: 'PUT',
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/pdf',
+      'x-upsert': 'true',
+    },
+    body: Buffer.from(pdf),
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new Error(`Could not save the private PDF: ${await response.text()}`)
+}
+
+export async function downloadLuxorPrivatePdf(storagePath: string) {
+  const { url, serviceRoleKey } = getSupabaseConfig()
+  const response = await fetch(`${url}/storage/v1/object/${DOCUMENT_BUCKET}/${storagePath}`, {
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new Error(`Could not open the private PDF: ${await response.text()}`)
+  return new Uint8Array(await response.arrayBuffer())
 }
 
 export async function getLuxorDocumentByInvoice(invoiceId: string, documentType: LuxorDocumentType = 'proposal') {

@@ -365,6 +365,12 @@ export function buildSignatureEmail(signature: LuxorSignatureRequest) {
   }
 }
 
+export function buildSignatureEmailHtml(signature: LuxorSignatureRequest) {
+  const firstName = signature.client_first_name || signature.client_name.split(' ')[0] || signature.client_name
+  const signingUrl = absoluteUrl(`/secure-portal/sign/${signature.token}`)
+  return `<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media(prefers-color-scheme:dark){.bg{background:#050505!important}.card{background:#0a0807!important;color:#f7efe3!important}.muted{color:#d7c29a!important}}</style></head><body class="bg" style="margin:0;background:#eee7dc;padding:28px 12px;font-family:Arial,sans-serif"><table class="card" role="presentation" style="width:100%;max-width:620px;margin:auto;background:#fffaf2;color:#221d18;border:1px solid #d9bd84"><tr><td style="height:4px;background:#caa24c"></td></tr><tr><td style="padding:32px 42px;text-align:center;border-bottom:1px solid #d9bd84"><div style="font-family:Georgia,serif;color:#b48635;font-size:28px;letter-spacing:.18em">LUXOR</div><div style="font-size:8px;letter-spacing:.35em;color:#8c754f;margin-top:6px">AT LAS PALMAS EVENTS</div></td></tr><tr><td style="padding:46px 42px"><div style="color:#b48635;font-size:10px;font-weight:700;letter-spacing:.25em;text-transform:uppercase">Your event agreement</div><h1 style="font-family:Georgia,serif;font-size:38px;line-height:1.1;margin:14px 0">Ready for your signature</h1><p class="muted" style="font-size:15px;line-height:1.75;color:#675d50">Hi ${escapeHtml(firstName)}, your Luxor Event Space agreement is ready to read, download, and sign. Your Guest Guide is attached to this email so you can begin planning right away.</p><p style="margin:30px 0"><a href="${signingUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:15px 26px;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Review &amp; sign agreement</a></p><p class="muted" style="font-size:12px;line-height:1.7;color:#756755">After you sign, Arianna will be countersigned automatically and both you and Luxor will receive completed copies. This secure link expires in 30 days.</p></td></tr></table></body></html>`
+}
+
 export async function createLuxorEmailJob(data: {
   inquiryId?: string | null
   bookingId?: string | null
