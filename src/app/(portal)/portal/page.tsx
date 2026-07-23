@@ -306,9 +306,10 @@ export default async function PortalOverview() {
         {/* Bookings Card */}
         <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
           <div>
-            <div className="w-12 h-12 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 flex items-center justify-center text-[#caa24c] mb-4">
+            <span className="text-[#caa24c] mb-4 block">
               <Calendar size={22} strokeWidth={1.5} />
-            </div>
+
+            </span>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
             <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tracking-tight">
               {bookingsCount} <span className="text-xl font-normal text-[color:var(--portal-muted)]">/ {bookingsGoal}</span>
@@ -327,9 +328,10 @@ export default async function PortalOverview() {
         <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[180px] overflow-hidden relative">
           <div className="flex justify-between items-start z-10 relative">
             <div>
-              <div className="w-12 h-12 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 flex items-center justify-center text-[#caa24c] mb-4">
+              <span className="text-[#caa24c] mb-4 block">
                 <DollarSign size={22} strokeWidth={1.5} />
-              </div>
+
+              </span>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">
                 CASH FLOW <span className="text-[9px] font-medium opacity-85">(THIS MONTH)</span>
               </p>
@@ -359,9 +361,10 @@ export default async function PortalOverview() {
           {nextBooking ? (
             <>
               <div>
-                <div className="w-12 h-12 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 flex items-center justify-center text-[#caa24c] mb-4">
+                <span className="text-[#caa24c] mb-4 block">
                   <Calendar size={22} strokeWidth={1.5} />
-                </div>
+
+                </span>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
                 <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
                   {nextBookingDisplayTitle}
@@ -375,9 +378,10 @@ export default async function PortalOverview() {
           ) : (
             <>
               <div>
-                <div className="w-12 h-12 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 flex items-center justify-center text-[#caa24c] mb-4">
+                <span className="text-[#caa24c] mb-4 block">
                   <Calendar size={22} strokeWidth={1.5} />
-                </div>
+
+                </span>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
                 <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No Upcoming Events</p>
                 <p className="text-xs text-[color:var(--portal-muted)] mt-1">None scheduled</p>
@@ -392,9 +396,10 @@ export default async function PortalOverview() {
         {/* Needs Attention Card */}
         <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
           <div>
-            <div className="w-12 h-12 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 flex items-center justify-center text-[#caa24c] mb-4">
+            <span className="text-[#caa24c] mb-4 block">
               <Bell size={22} strokeWidth={1.5} />
-            </div>
+
+            </span>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
             <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tracking-tight">{needsAttentionCount}</p>
             <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">items</p>

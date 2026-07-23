@@ -23,7 +23,8 @@ import {
   PortalSelect,
   PortalAnimatedTabs,
   PortalButton,
-  PortalContactAvatar
+  PortalContactAvatar,
+  PortalPagination
 } from '@/components/portal/PortalUI'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -434,43 +435,7 @@ export function ContactListsTab({
                   <span className="text-zinc-350 font-mono">{totalCount}</span> contacts
                 </div>
                 {totalPages > 1 && (
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
-                    >
-                      Prev
-                    </button>
-                    <div className="flex items-center gap-1 font-mono">
-                      {Array.from({ length: totalPages }).map((_, i) => {
-                        const pageNum = i + 1
-                        return (
-                          <button
-                            key={pageNum}
-                            type="button"
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
-                              currentPage === pageNum
-                                ? 'bg-[#caa24c]/15 text-[#f1d27a] border-[#caa24c]/30 font-bold'
-                                : 'bg-zinc-950/20 text-zinc-550 border-zinc-900/60 hover:text-zinc-355 hover:bg-zinc-900'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={currentPage === totalPages}
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
-                    >
-                      Next
-                    </button>
-                  </div>
+                  <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
                 )}
               </div>
             }

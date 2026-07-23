@@ -16,7 +16,7 @@ import {
   MessageCircle,
   Phone,
   Send,
-  Sparkles,
+  BrainCircuit,
   User,
   X,
 } from 'lucide-react'
@@ -522,7 +522,7 @@ export function LuxorConciergeChat() {
                           transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
                           className="shrink-0"
                         >
-                          <Sparkles className="h-3.5 w-3.5 text-[#caa24c]" />
+                          <BrainCircuit className="h-3.5 w-3.5 text-[#caa24c]" />
                         </motion.div>
                         <span className="font-serif">Elena is typing</span>
                         <div className="flex gap-1 items-center ml-1">

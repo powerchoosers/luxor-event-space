@@ -11,7 +11,7 @@ import {
   Trash2,
   Edit2,
   Check,
-  Sparkles,
+  BrainCircuit,
   Loader2
 } from 'lucide-react'
 import Image from 'next/image'
@@ -630,7 +630,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
                               >
                                 <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
-                                <Sparkles size={13} className="shrink-0 text-zinc-700/50" />
+                                <BrainCircuit size={13} className="shrink-0 text-zinc-700/50" />
                               </div>
                             ))}
                           </motion.div>
@@ -659,7 +659,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                   className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
                                 >
                                   <span className="line-clamp-2 leading-snug">{suggestion}</span>
-                                  <Sparkles size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
+                                  <BrainCircuit size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
                                 </motion.button>
                               ))}
                             </AnimatePresence>

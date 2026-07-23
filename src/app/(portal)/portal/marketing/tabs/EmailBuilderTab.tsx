@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   PenSquare,
-  Sparkles,
+  BrainCircuit,
   LayoutTemplate,
   Loader2,
   ChevronRight,
@@ -389,7 +389,7 @@ export function EmailBuilderTab({
             
             {activeLead && (
               <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3 flex items-start gap-2.5">
-                <Sparkles size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
+                <BrainCircuit size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
                 <div className="text-xs leading-normal">
                   <span className="font-bold text-[#f7efe3]">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
                 </div>

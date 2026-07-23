@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   Loader2,
   Check,
+  BrainCircuit,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
@@ -85,6 +87,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [draftingReply, setDraftingReply] = useState(false)
   const [sendingReply, setSendingReply] = useState(false)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
+  const [replyOpen, setReplyOpen] = useState(false)
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
@@ -329,10 +332,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }
 
   return (
-    <div className="flex flex-1 min-h-0 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl backdrop-blur-xl font-sans text-[color:var(--portal-text)]">
+    <div className="flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
-      <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 flex flex-col justify-between hidden md:flex">
-        <div className="space-y-6">
+      <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex flex-col overflow-hidden hidden md:flex">
+        {/* Scrollable folder list area */}
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4 space-y-6">
           {/* Primary Action Button */}
           <button
             type="button"
@@ -385,8 +389,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           </div>
         </div>
 
-        {/* Sync & Mailbox Footer */}
-        <div className="pt-4 border-t border-[color:var(--portal-border)] space-y-3">
+        {/* Pinned Sync & Mailbox Footer */}
+        <div className="shrink-0 p-4 pt-3 border-t border-[color:var(--portal-border)] space-y-3">
           <div className="flex items-center justify-between text-[10px] font-mono text-[color:var(--portal-muted)]">
             <span>Zoho & Supabase Sync</span>
             <button
@@ -409,7 +413,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       </div>
 
       {/* PANE 2: Message Threads List */}
-      <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col min-h-0">
+      <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden">
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
           <div className="flex items-center justify-between">
@@ -476,7 +480,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               return (
                 <div
                   key={msg.id}
-                  onClick={() => setSelectedId(msg.id)}
+                  onClick={() => {
+                    setSelectedId(msg.id)
+                    setReplyOpen(false)
+                    setReplyText('')
+                    setReplyInstruction('')
+                    setReplyStatus(null)
+                  }}
                   className={`p-4 flex flex-col gap-2 transition-all cursor-pointer relative group ${
                     isSelected
                       ? 'bg-[#caa24c]/10 border-l-2 border-[#caa24c]'
@@ -529,7 +539,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       </div>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className="flex-1 min-h-0 bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
+      <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
         {selectedId && messageDetail ? (
           <>
             {/* Email Header Bar */}
@@ -551,13 +561,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() =>
-                      triggerCompose(
-                        currentInquiry || undefined,
-                        messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to,
-                        `Re: ${messageDetail.subject}`
-                      )
-                    }
+                    onClick={() => setReplyOpen(true)}
                     className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-xs"
                   >
                     <Send size={13} /> Reply
@@ -671,7 +675,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               </div>
             </div>
 
-            {/* Gmail-style conversation stream and inline reply */}
+            {/* Scrollable email thread — grows to fill, reply pinned below */}
             <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {(loadingDetail || loadingThread) ? (
@@ -689,63 +693,69 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     />
                   ))
                 )}
-
-                {messageDetail.direction !== 'campaign' && (
-                  <div className="rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-5 shadow-xl space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply in this conversation</p>
-                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
-                          To {thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)}
-                          {thread?.messages?.length ? ` · ${thread.messages.length} messages in thread` : ''}
-                        </p>
-                      </div>
-                      {currentInquiry && (
-                        <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:underline">
-                          {currentInquiry.full_name} · View client file
-                        </Link>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        value={replyInstruction}
-                        onChange={(event) => setReplyInstruction(event.target.value)}
-                        placeholder="Optional note for Elena: confirm the tour and ask about guest count..."
-                        className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void draftWithElena()}
-                        disabled={draftingReply || loadingThread}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 cursor-pointer disabled:opacity-50"
-                      >
-                        {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                        Draft with Elena
-                      </button>
-                    </div>
-                    <textarea
-                      value={replyText}
-                      onChange={(event) => setReplyText(event.target.value)}
-                      rows={6}
-                      placeholder="Write your reply here, or ask Elena to draft it from the full email chain and client history."
-                      className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
-                    />
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-500 font-medium' : 'text-[color:var(--portal-muted)]'}`}>{replyStatus}</p>
-                      <button
-                        type="button"
-                        onClick={() => void sendInlineReply()}
-                        disabled={sendingReply || !replyText.trim()}
-                        className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {sendingReply ? <Loader2 size={14} className="animate-spin" /> : replyStatus?.startsWith('Reply sent') ? <Check size={14} /> : <Send size={14} />}
-                        Send reply
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
+
+            {/* Reply composer stays hidden until Reply is selected. */}
+            {messageDetail.direction !== 'campaign' && replyOpen && (
+              <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply in this conversation</p>
+                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">
+                      To {thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)}
+                      {thread?.messages?.length ? ` · ${thread.messages.length} messages in thread` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {currentInquiry && (
+                      <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:underline">
+                        {currentInquiry.full_name} · View client file
+                      </Link>
+                    )}
+                    <button type="button" onClick={() => setReplyOpen(false)} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={replyInstruction}
+                    onChange={(event) => setReplyInstruction(event.target.value)}
+                    placeholder="Optional note for Elena: confirm the tour and ask about guest count..."
+                    className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void draftWithElena()}
+                    disabled={draftingReply || loadingThread}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                    Draft with Elena
+                  </button>
+                </div>
+                <textarea
+                  value={replyText}
+                  onChange={(event) => setReplyText(event.target.value)}
+                  rows={4}
+                  placeholder="Write your reply here, or ask Elena to draft it from the full email chain and client history."
+                  className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-500 font-medium' : 'text-[color:var(--portal-muted)]'}`}>{replyStatus}</p>
+                  <button
+                    type="button"
+                    onClick={() => void sendInlineReply()}
+                    disabled={sendingReply || !replyText.trim()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {sendingReply ? <Loader2 size={14} className="animate-spin" /> : replyStatus?.startsWith('Reply sent') ? <Check size={14} /> : <Send size={14} />}
+                    Send reply
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">

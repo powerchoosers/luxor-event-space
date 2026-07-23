@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar, X, Pencil, Loader2 } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, X, Pencil, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/portal/ToastProvider'
 
 export function PortalPageFrame({
@@ -35,7 +35,7 @@ export function PortalPageHeader({
     <div className="flex shrink-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          {icon ? <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[#caa24c] shadow-[0_0_20px_rgba(202,162,76,0.14)]">{icon}</div> : null}
+          {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
           <h1 className="text-2xl font-bold tracking-tight text-white/90 sm:text-3xl">{title}</h1>
         </div>
         <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p>
@@ -271,6 +271,49 @@ export function PortalStickyThead({ children }: { children: React.ReactNode }) {
     <thead className="sticky top-0 z-20 border-b border-[color:var(--portal-border)] shadow-[0_1px_0_rgba(124,91,36,0.08)]">
       {children}
     </thead>
+  )
+}
+
+export function PortalPagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  const buttonClass = 'flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35'
+
+  return (
+    <nav className="flex items-center gap-2" aria-label="Pagination">
+      <button type="button" aria-label="Previous page" title="Previous page" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className={buttonClass}>
+        <ChevronLeft size={15} strokeWidth={2.25} aria-hidden="true" />
+      </button>
+      <div className="flex items-center gap-1 font-mono">
+        {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+          <button
+            key={page}
+            type="button"
+            aria-label={`Go to page ${page}`}
+            aria-current={currentPage === page ? 'page' : undefined}
+            onClick={() => onPageChange(page)}
+            className={`flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-[10px] transition-colors ${
+              currentPage === page
+                ? 'border-[#caa24c]/40 bg-[#caa24c]/15 font-bold text-[#a8792f]'
+                : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/30 hover:bg-[#caa24c]/8 hover:text-[color:var(--portal-text)]'
+            }`}
+          >
+            {page}
+          </button>
+        ))}
+      </div>
+      <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
+        <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
+      </button>
+    </nav>
   )
 }
 
@@ -1178,4 +1221,3 @@ export function PortalContactAvatar({
     </div>
   )
 }
-

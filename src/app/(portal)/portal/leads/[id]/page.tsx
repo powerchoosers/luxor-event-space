@@ -2299,7 +2299,7 @@ export default function LeadDetailPage({
                 <MessageSquare size={13} /> Text Client
               </button>
             )}
-            <div className="relative inline-flex items-center rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] shadow-lg shadow-[#b98a3e]/20 transition-all active:scale-95">
+            <div className="portal-gold-button relative inline-flex items-center rounded-lg bg-[#caa24c] hover:bg-[#dfbd68] shadow-lg shadow-[#caa24c]/20 transition-all active:scale-95">
               <button
                 type="button"
                 onClick={() => setIsInvoiceModalOpen(true)}
@@ -2439,7 +2439,7 @@ export default function LeadDetailPage({
                             onClick={openTourScheduleModal}
                             disabled={!lead.email}
                             title={lead.email ? 'Schedule the tour and send the Zoho invite' : 'Add an email address before sending an invite'}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#b98a3e]/10 transition-all hover:bg-[#a8792f] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Calendar size={13} /> Schedule Invite
                           </button>
@@ -2618,7 +2618,7 @@ export default function LeadDetailPage({
                               type="button"
                               onClick={handleSaveTourAttendance}
                               disabled={savingTourAttendance}
-                              className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                              className="px-4 py-1.5 rounded bg-[#caa24c] text-[10px] font-black uppercase text-white hover:bg-[#dfbd68] transition-all cursor-pointer"
                             >
                               {savingTourAttendance ? 'Saving...' : 'Save'}
                             </button>
@@ -2786,7 +2786,7 @@ export default function LeadDetailPage({
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Reschedule</button>
                           <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Follow Up</button>
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex min-h-11 flex-[1.4] min-w-[140px] items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#b98a3e]/15 transition-colors hover:bg-[#a8792f] cursor-pointer">
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex min-h-11 flex-[1.4] min-w-[140px] items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] cursor-pointer">
                             <FileText size={14} /> Build Proposal
                           </button>
                         </div>
@@ -2874,7 +2874,7 @@ export default function LeadDetailPage({
                                 type="button"
                                 onClick={handleSaveTourAttendance}
                                 disabled={savingTourAttendance}
-                                className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                                className="px-4 py-1.5 rounded bg-[#caa24c] text-[10px] font-black uppercase text-white hover:bg-[#dfbd68] transition-all cursor-pointer"
                               >
                                 {savingTourAttendance ? 'Saving...' : 'Save'}
                               </button>
@@ -3900,7 +3900,7 @@ export default function LeadDetailPage({
                               type="button"
                               onClick={handleSaveSummary}
                               disabled={savingSummary}
-                              className="px-4 py-1.5 rounded bg-[#b98a3e] text-[10px] font-black uppercase text-white hover:bg-[#a8792f] transition-all cursor-pointer"
+                              className="px-4 py-1.5 rounded bg-[#caa24c] text-[10px] font-black uppercase text-white hover:bg-[#dfbd68] transition-all cursor-pointer"
                             >
                               {savingSummary ? 'Saving...' : 'Save'}
                             </button>
@@ -4016,7 +4016,7 @@ export default function LeadDetailPage({
                       <button
                         type="button"
                         onClick={nextStepAction}
-                        className="w-full py-2.5 rounded-lg bg-[#b98a3e] hover:bg-[#a8792f] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#b98a3e]/10 transition-all cursor-pointer active:scale-95"
+                        className="w-full py-2.5 rounded-lg bg-[#caa24c] hover:bg-[#dfbd68] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/10 transition-all cursor-pointer active:scale-95"
                       >
                         {nextStepButton}
                       </button>
@@ -4118,7 +4118,7 @@ export default function LeadDetailPage({
                     <button
                       type="submit"
                       disabled={submittingNote || !noteContent.trim()}
-                      className="inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-[#b98a3e]/10 transition-colors hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-[#caa24c]/10 transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       <Send size={12} />
                       {submittingNote ? 'Saving...' : 'Save Note'}
@@ -4728,7 +4728,7 @@ export default function LeadDetailPage({
         <button type="button" onClick={() => setTextPopupOpen(true)} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
           <MessageSquare size={14} /> Text
         </button>
-        <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
+        <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
           <ChevronRight size={14} /> Next
         </button>
       </div>
@@ -4802,7 +4802,7 @@ export default function LeadDetailPage({
               <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} disabled={schedulingTour} className="min-h-11 flex-1 rounded-xl border border-zinc-800 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40 sm:flex-none">
                 Cancel
               </button>
-              <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="inline-flex min-h-11 flex-[1.7] items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-xl shadow-[#b98a3e]/15 transition-colors hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none">
+              <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="inline-flex min-h-11 flex-[1.7] items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-xl shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none">
                 <Send size={13} /> {schedulingTour ? 'Creating Invite...' : 'Send Invite & Schedule'}
               </button>
             </div>
@@ -4905,7 +4905,7 @@ export default function LeadDetailPage({
           </div>
           <button
             type="submit"
-            className="w-full rounded-lg bg-[#b98a3e] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f]"
+            className="w-full rounded-lg bg-[#caa24c] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68]"
           >
             {timelineEditIndex === null ? 'Add Step' : 'Save Step'}
           </button>
@@ -4947,7 +4947,7 @@ export default function LeadDetailPage({
                   <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
                 </div>
               ) : null}
-              <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#b98a3e] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#a8792f] disabled:opacity-40">
+              <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#caa24c] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">
                 {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email PDF + Payment Link'}
               </button>
             </div>
@@ -4982,7 +4982,7 @@ export default function LeadDetailPage({
                 <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Saved PDFs open exactly as the client received them. Drafts are previewed live.</p>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                <a href={`/api/invoices/${pdfPreviewInvoice.id}/pdf`} className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] hover:text-[#b98a3e] sm:inline-flex">
+                <a href={`/api/invoices/${pdfPreviewInvoice.id}/pdf`} className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] hover:text-[#caa24c] sm:inline-flex">
                   <FileText size={13} /> Download
                 </a>
                 <PortalCloseButton onClick={() => setPdfPreviewInvoice(null)} aria-label="Close PDF preview window" />
@@ -5076,7 +5076,7 @@ export default function LeadDetailPage({
                         }))}
                       />
                     </div>
-                    <button type="button" onClick={addCatalogItem} disabled={!selectedCatalogItem} className="rounded-lg bg-[#b98a3e] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-40">
+                    <button type="button" onClick={addCatalogItem} disabled={!selectedCatalogItem} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-40">
                       Add
                     </button>
                   </div>

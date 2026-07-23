@@ -36,7 +36,8 @@ import {
   PortalModal,
   PortalSelect,
   PortalButton,
-  PortalContactAvatar
+  PortalContactAvatar,
+  PortalPagination
 } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -489,50 +490,14 @@ export default function LeadsPage() {
                 <span className="text-zinc-350 font-mono">{totalCount}</span> leads
               </div>
               {totalPages > 1 && (
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={currentPage === 1}
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
-                  >
-                    Prev
-                  </button>
-                  <div className="flex items-center gap-1 font-mono">
-                    {Array.from({ length: totalPages }).map((_, i) => {
-                      const pageNum = i + 1
-                      return (
-                        <button
-                          key={pageNum}
-                          type="button"
-                          onClick={() => handlePageChange(pageNum)}
-                          className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${
-                            currentPage === pageNum
-                              ? 'bg-[#caa24c]/15 text-[#f1d27a] border-[#caa24c]/30 font-bold'
-                              : 'bg-zinc-950/20 text-zinc-550 border-zinc-900/60 hover:text-zinc-355 hover:bg-zinc-900'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={currentPage === totalPages}
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    className="px-3 py-1.5 rounded bg-zinc-950/85 border border-zinc-900 text-zinc-400 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed hover:bg-zinc-900 transition-all font-black uppercase tracking-wider text-[9px]"
-                  >
-                    Next
-                  </button>
-                </div>
+                <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
               )}
             </div>
           }
         >
           <PortalStickyTable minWidth="1060px">
             <PortalStickyThead>
-              <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.15em] bg-[#0c0c0c]/85">
+              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
                 <th className="px-8 py-3.5">Full Name & Contact</th>
                 <th className="px-6 py-3.5">Step</th>
                 <th className="px-6 py-3.5">Event Parameters</th>
@@ -541,7 +506,7 @@ export default function LeadsPage() {
                 <th className="px-8 py-3.5 text-right">Engagement</th>
               </tr>
             </PortalStickyThead>
-            <tbody className="divide-y divide-zinc-900/30">
+            <tbody className="divide-y divide-[color:var(--portal-border)]">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500 text-center font-semibold tracking-wider">
@@ -565,7 +530,7 @@ export default function LeadsPage() {
                 </tr>
               ) : (
                 paginatedLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors group">
+                  <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
                     <td className="px-8 py-3">
                       <Link
                         href={`/portal/leads/${lead.id}`}
@@ -629,20 +594,20 @@ export default function LeadsPage() {
                           <button
                             type="button"
                             onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                            className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/25 transition-all hover:bg-zinc-800"
+                            className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
                             title={`Call ${formatPhoneDisplay(lead.phone)}`}
                           >
                             <Phone size={14} />
                           </button>
                         ) : null}
                         {lead.phone ? (
-                          <Link href={`/portal/leads/${lead.id}?tab=messages`} className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-[#caa24c] hover:border-[#caa24c]/25 transition-all hover:bg-zinc-800" title="Text client">
+                          <Link href={`/portal/leads/${lead.id}?tab=messages`} className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[#a8792f]" title="Text client">
                             <MessageSquare size={14} />
                           </Link>
                         ) : null}
                         <Link
                           href={`/portal/leads/${lead.id}`}
-                          className="p-2 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all hover:bg-zinc-800"
+                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]"
                           title="Open Dossier"
                         >
                           <ExternalLink size={14} />
