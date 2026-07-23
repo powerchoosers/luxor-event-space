@@ -36,8 +36,8 @@ import { BrandAssetPicker } from './BrandAssetPicker'
 
 // Allowed Zoho email senders
 const ALLOWED_SENDERS = [
-  { value: 'booking@luxoratlaspalmas.com', label: 'booking@luxoratlaspalmas.com' },
-  { value: 'hello@luxoratlaspalmas.com', label: 'hello@luxoratlaspalmas.com' }
+  { value: 'booking@luxoratlaspalmas.com', label: 'Booking Email' },
+  { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email' }
 ]
 
 const DEFAULT_FOOTER_BLOCK: EmailBlock = {
@@ -454,16 +454,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             {/* Senders and Recipients */}
             <div className="grid grid-cols-2 gap-3 shrink-0">
               <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">From Name</label>
+                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">From Name</label>
                 <input
                   type="text"
                   value={fromName}
                   onChange={(e) => setFromName(e.target.value)}
-                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">From Address</label>
+                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">From Address</label>
                 <PortalSelect
                   value={fromAddress}
                   options={ALLOWED_SENDERS}
@@ -475,7 +475,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             <div className="grid grid-cols-2 gap-3 shrink-0">
               <div className="space-y-1 relative">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">To (Client)</label>
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">To (Client)</label>
                   {!lead && (
                     <button
                       type="button"
@@ -491,7 +491,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     type="text"
                     readOnly
                     value={`${lead.full_name} <${lead.email || ''}>`}
-                    className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 py-1.5 text-xs text-zinc-400 outline-none"
+                    className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none"
                   />
                 ) : (
                   <div className="relative font-sans">
@@ -504,7 +504,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                         setToAddress(e.target.value)
                         setShowClientDropdown(true)
                       }}
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-white outline-none focus:border-[#caa24c]/40 placeholder:text-zinc-600"
+                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
                     />
                     {showClientDropdown && toAddress.trim().length > 0 && (
                       <>
@@ -648,22 +648,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                             </span>
                           )}
                         </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Subject */}
             <div className="space-y-1 shrink-0">
-              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Subject</label>
+              <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Subject</label>
               <input
                 type="text"
                 placeholder="Enter email subject line..."
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40 placeholder:text-zinc-600"
+                className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
               />
             </div>
 
@@ -1097,16 +1090,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
       {/* Action Footer (Hidden if minimized) */}
       {!isMinimized && (
-        <div className="flex items-center justify-between border-t border-[#caa24c]/20 bg-black/20 p-4 shrink-0">
+        <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shrink-0">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={track}
                 onChange={(e) => setTrack(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-[#caa24c]/30 bg-[color:var(--portal-soft)] accent-[#caa24c] outline-none"
+                className="h-3.5 w-3.5 rounded border-[color:var(--portal-border)] bg-[color:var(--portal-card)] accent-[#caa24c] outline-none"
               />
-              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors">
                 Track Opens & Clicks
               </span>
             </label>
@@ -1129,13 +1122,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
               type="button"
               disabled={isSending}
               onClick={handleSend}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-lg transition-colors hover:bg-[#a8792f] disabled:opacity-40 cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all hover:bg-[#dfbd68] disabled:opacity-40 cursor-pointer"
             >
               {isSending ? (
-                <>Delivering...</>
+                <span className="text-white font-bold">Delivering...</span>
               ) : (
                 <>
-                  <Send size={11} /> Send Email
+                  <Send size={12} className="text-white" />
+                  <span className="text-white font-bold">Send Email</span>
                 </>
               )}
             </button>

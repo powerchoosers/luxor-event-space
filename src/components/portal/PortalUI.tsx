@@ -628,6 +628,7 @@ export function PortalSelect({
   onChange,
   options,
   className = '',
+  buttonClassName = '',
   placeholder = 'Select option...',
   disabled = false,
 }: {
@@ -635,6 +636,7 @@ export function PortalSelect({
   onChange: (val: string) => void
   options: { value: string; label: string }[]
   className?: string
+  buttonClassName?: string
   placeholder?: string
   disabled?: boolean
 }) {
@@ -715,10 +717,10 @@ export function PortalSelect({
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_12px_30px_-18px_rgba(0,0,0,0.75)] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-[color:var(--portal-text,#f7efe3)]"
+        className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 ${buttonClassName}`}
       >
-        <span>{selectedOption ? selectedOption.label : placeholder}</span>
-        <span className={`text-[10px] text-[color:var(--portal-muted,#d7c29a)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+        <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
+        <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
       <AnimatePresence>
         {isOpen ? (
