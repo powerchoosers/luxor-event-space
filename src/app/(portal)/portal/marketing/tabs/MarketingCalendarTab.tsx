@@ -9,6 +9,7 @@ import {
 } from '@/components/portal/PortalCalendar'
 import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { Campaign } from '../page'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 interface MarketingCalendarTabProps {
   campaigns: Campaign[]
@@ -113,7 +114,7 @@ function CampaignCalendarDetails({ campaign }: { campaign: Campaign }) {
         <PortalStatusBadge status={campaign.status} />
         <span className="font-mono text-[10px] text-zinc-500">{formatDateTime(campaign.scheduled_for as string)}</span>
       </div>
-      <p className="text-sm font-bold text-white">{campaign.subject}</p>
+      <p className="text-sm font-bold text-white">{decodeHtmlEntities(campaign.subject)}</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <DetailMetric label="Recipients" value={campaign.recipient_count.toLocaleString()} />
         <DetailMetric label="Sent" value={campaign.sent_count.toLocaleString()} />

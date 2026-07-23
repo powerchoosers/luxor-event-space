@@ -14,6 +14,7 @@ import { EmailBuilderShell } from '../EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailBlock, type EmailTemplate } from '../emailTemplates'
 import { useToast } from '@/components/portal/ToastProvider'
 import { type LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent } from '../page'
 
 interface EmailBuilderTabProps {
@@ -331,7 +332,7 @@ export function EmailBuilderTab({
                   {activityEvents.length ? activityEvents.slice(0, 5).map((event) => (
                     <div key={event.id} className="flex justify-between items-center gap-3 py-1.5 border-b border-zinc-900 last:border-b-0">
                       <div>
-                        <span className="text-white">{event.campaign_name || event.campaign_subject || 'Campaign name unavailable'}</span>
+                        <span className="text-white">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
                         <p className="text-[9px] text-zinc-550 font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
                       </div>
                       <span className="font-mono text-[9px] text-zinc-650 shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>

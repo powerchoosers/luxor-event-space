@@ -6,6 +6,7 @@ import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -336,7 +337,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
           <div className="flex items-center gap-4">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Email Preview</p>
-              <h3 className="text-sm font-bold text-white/90 mt-0.5 truncate max-w-xs">{subject || 'Untitled Email'}</h3>
+              <h3 className="text-sm font-bold text-white/90 mt-0.5 truncate max-w-xs">{decodeHtmlEntities(subject) || 'Untitled Email'}</h3>
             </div>
           </div>
 
@@ -367,7 +368,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                   <span className="h-3 w-3 rounded-full bg-emerald-400" />
                 </div>
                 <div className="flex-1 bg-zinc-800 rounded px-3 py-1 text-[10px] text-zinc-550 font-mono">
-                  {subject || 'Untitled Email'}
+                  {decodeHtmlEntities(subject) || 'Untitled Email'}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleCopyHtml} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 transition-all cursor-pointer">

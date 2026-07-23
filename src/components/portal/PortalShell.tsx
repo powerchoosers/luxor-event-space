@@ -115,14 +115,16 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing'))
   const [elenaOpen, setElenaOpen] = useState(false)
 
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname)
     if (pathname.startsWith('/portal/operations')) {
       setOperationsExpanded(true)
     }
     if (pathname.startsWith('/portal/marketing')) {
       setMarketingExpanded(true)
     }
-  }, [pathname])
+  }
   const portalTheme = useSyncExternalStore(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -267,38 +269,32 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto portal-scrollbar ${
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden portal-scrollbar ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
       } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`flex flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] min-h-full ${
-          sidebarCollapsed ? 'p-4' : 'p-6'
-        }`}>
-          <div className={`mb-8 flex items-start ${sidebarCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
-            <Link href="/portal" className="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
-              {sidebarCollapsed ? (
-                <LuxorWordmark
-                  compact
-                  horizontal
-                  subline={false}
-                  className="[&_.luxor-wordmark]:hidden"
-                  markClassName="!h-11 !w-11"
+        <div className="flex flex-col min-h-full px-3.5 py-6">
+          <div className="mb-8 flex items-center justify-between px-1">
+            <Link href="/portal" className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
+              <div className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full border border-[#caa24c]/40 bg-black/40 p-0.5 overflow-hidden">
+                <Image
+                  src="/luxor-palm-mark.png"
+                  alt=""
+                  width={255}
+                  height={190}
+                  className="h-10 w-10 object-contain object-[center_42%]"
+                  priority
                 />
-              ) : (
-                <>
-                  <LuxorWordmark
-                    compact
-                    horizontal
-                    subline={false}
-                    className="[&_.luxor-wordmark]:!text-[1.55rem]"
-                    markClassName="!h-12 !w-12"
-                  />
-                  <p className="ml-[3.65rem] mt-1 text-[10px] font-medium uppercase leading-none tracking-widest text-[#caa24c]">
-                    Owner Portal
-                  </p>
-                </>
-              )}
+              </div>
+              <div className={`transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] whitespace-nowrap overflow-hidden ${
+                sidebarCollapsed ? 'max-w-0 opacity-0 -translate-x-2 pointer-events-none' : 'max-w-[180px] opacity-100 translate-x-0'
+              }`}>
+                <p className="luxor-wordmark !text-[1.4rem] leading-none">LUXOR</p>
+                <p className="mt-1 text-[9px] font-medium uppercase leading-none tracking-widest text-[#caa24c]">
+                  Owner Portal
+                </p>
+              </div>
             </Link>
           </div>
 
@@ -318,28 +314,40 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                           setMarketingExpanded(!marketingExpanded)
                         }
                       }}
-                      className={`group relative flex w-full items-center rounded-lg border text-sm font-medium transition-all cursor-pointer ${
-                        sidebarCollapsed ? 'justify-center px-0 py-3' : 'justify-between px-3 py-2.5'
-                      } ${
+                      title={sidebarCollapsed ? item.label : undefined}
+                      aria-label={item.label}
+                      className={`group relative flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm font-medium transition-all cursor-pointer ${
                         isCurrentGroup
                           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
                           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        {isCurrentGroup && !sidebarCollapsed && (
+                      <div className="flex items-center gap-3 min-w-0">
+                        {isCurrentGroup && (
                           <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
                         )}
-                        <span className={`${isCurrentGroup ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
+                        <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${isCurrentGroup ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
                           {item.icon}
                         </span>
-                        <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>{item.label}</span>
-                      </div>
-                      {!sidebarCollapsed && (
-                        <span className="text-zinc-500 mr-1">
-                          <ChevronDown size={14} className={`transform transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                        <span
+                          className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                            sidebarCollapsed
+                              ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
+                              : 'max-w-[200px] opacity-100 translate-x-0'
+                          }`}
+                        >
+                          {item.label}
                         </span>
-                      )}
+                      </div>
+                      <span
+                        className={`text-zinc-500 mr-1 shrink-0 transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                          sidebarCollapsed
+                            ? 'max-w-0 opacity-0 pointer-events-none'
+                            : 'max-w-[20px] opacity-100'
+                        }`}
+                      >
+                        <ChevronDown size={14} className={`transform transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                      </span>
                     </button>
                     
                     <AnimatePresence initial={false}>
@@ -383,9 +391,24 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
             <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} collapsed={sidebarCollapsed} />
             <form action="/api/auth/logout" method="post">
-              <button type="submit" className={`group flex w-full items-center rounded-lg text-sm font-medium text-zinc-500 transition-all hover:bg-red-500/5 hover:text-red-400 ${sidebarCollapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'}`} aria-label="Log out">
-                <LogOut size={18} className="transition-transform group-hover:translate-x-1" />
-                <span className={`${sidebarCollapsed ? 'sr-only' : ''}`}>Log Out</span>
+              <button
+                type="submit"
+                title={sidebarCollapsed ? 'Log Out' : undefined}
+                className="group relative flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:border-red-500/10 hover:text-red-400 cursor-pointer"
+                aria-label="Log out"
+              >
+                <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                  <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
+                </span>
+                <span
+                  className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                    sidebarCollapsed
+                      ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
+                      : 'max-w-[200px] opacity-100 translate-x-0'
+                  }`}
+                >
+                  Log Out
+                </span>
               </button>
             </form>
           </div>
@@ -633,9 +656,7 @@ function SidebarLink({
       prefetch
       title={collapsed ? label : undefined}
       aria-label={label}
-      className={`group relative flex items-center rounded-lg border text-sm font-medium transition-all ${
-        collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-2.5'
-      } ${
+      className={`group relative flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
         active
           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
@@ -644,10 +665,18 @@ function SidebarLink({
       {active && (
         <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c] shadow-[0_0_8px_rgba(202,162,76,0.6)]" />
       )}
-      <span className={`${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
+      <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
         {icon}
       </span>
-      <span className={`${collapsed ? 'sr-only' : ''}`}>{label}</span>
+      <span
+        className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+          collapsed
+            ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
+            : 'max-w-[200px] opacity-100 translate-x-0'
+        }`}
+      >
+        {label}
+      </span>
     </Link>
   )
 }

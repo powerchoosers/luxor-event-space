@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { decodeHtmlEntities } from './luxorTextUtils'
+
 import crypto from 'crypto'
 import {
   LuxorMarketingCampaign,
@@ -309,8 +311,8 @@ export async function listMarketingActivityEvents(options: { since?: string | nu
       ...event,
       recipient_email: recipient?.email ?? null,
       recipient_name: recipient?.name ?? null,
-      campaign_name: campaign?.name ?? null,
-      campaign_subject: campaign?.subject ?? null,
+      campaign_name: campaign?.name ? decodeHtmlEntities(campaign.name) : null,
+      campaign_subject: campaign?.subject ? decodeHtmlEntities(campaign.subject) : null,
     }
   })
 }
@@ -371,8 +373,8 @@ export async function getLeadMarketingEngagement(email: string, options: { event
       ...event,
       recipient_email: recipient?.email ?? normalizedEmail,
       recipient_name: recipient?.name ?? null,
-      campaign_name: campaign?.name ?? null,
-      campaign_subject: campaign?.subject ?? null,
+      campaign_name: campaign?.name ? decodeHtmlEntities(campaign.name) : null,
+      campaign_subject: campaign?.subject ? decodeHtmlEntities(campaign.subject) : null,
     }
   })
 
@@ -383,8 +385,8 @@ export async function getLeadMarketingEngagement(email: string, options: { event
       return {
         recipient_id: recipient.id,
         campaign_id: recipient.campaign_id,
-        campaign_name: campaign?.name ?? null,
-        campaign_subject: campaign?.subject ?? null,
+        campaign_name: campaign?.name ? decodeHtmlEntities(campaign.name) : null,
+        campaign_subject: campaign?.subject ? decodeHtmlEntities(campaign.subject) : null,
         audience_label: campaign?.audience_label ?? null,
         campaign_status: campaign?.status ?? 'draft',
         scheduled_for: campaign?.scheduled_for ?? null,

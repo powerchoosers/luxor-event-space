@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { listLuxorZohoInbox, listLuxorZohoMessagesForAddress, listLuxorZohoSentMessages } from '@/lib/zohoMailServer'
 import { listMarketingCampaigns, type MarketingCampaignSummary } from '@/lib/luxorMarketingServer'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,6 +29,8 @@ export async function GET(request: NextRequest) {
 
     const messages: Array<{
       id: string
+      threadId?: string
+      folderId?: string
       subject: string
       from: string
       to: string
@@ -37,6 +40,7 @@ export async function GET(request: NextRequest) {
       direction: 'incoming' | 'outgoing' | 'campaign'
       folder: 'inbox' | 'sent' | 'campaigns'
       category?: string
+      isRead?: boolean
     }> = []
 
     // Fetch inbox messages if applicable
@@ -78,7 +82,7 @@ export async function GET(request: NextRequest) {
         campaigns.forEach((camp: MarketingCampaignSummary) => {
           messages.push({
             id: `campaign-${camp.id}`,
-            subject: camp.subject || camp.name,
+            subject: decodeHtmlEntities(camp.subject || camp.name),
             from: 'booking@luxoratlaspalmas.com',
             to: camp.audience_label || `${camp.recipient_count} Recipients`,
             receivedAt: camp.sent_at || camp.created_at,

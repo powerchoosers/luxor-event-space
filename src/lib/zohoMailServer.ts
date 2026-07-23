@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { decodeHtmlEntities } from './luxorTextUtils'
+
 type ZohoTokenResponse = {
   access_token?: string
   expires_in?: number
@@ -405,11 +407,11 @@ export async function listLuxorZohoInbox(limit = 25) {
     id: message.messageId || message.message_id || '',
     threadId: message.threadId || message.messageId || message.message_id || '',
     folderId: message.folderId || '',
-    subject: message.subject || '(No subject)',
+    subject: decodeHtmlEntities(message.subject) || '(No subject)',
     from: message.fromAddress || message.sender || 'Unknown sender',
     to: message.toAddress || '',
     receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-    summary: message.summary || '',
+    summary: decodeHtmlEntities(message.summary),
     hasAttachment: zohoBoolean(message.hasAttachment),
     isRead: String(message.status || '') === '1',
   }))
@@ -449,12 +451,12 @@ export async function listLuxorZohoSentMessages(limit = 50) {
     id: message.messageId || message.message_id || '',
     threadId: message.threadId || message.messageId || message.message_id || '',
     folderId: message.folderId || '',
-    subject: message.subject || '(No subject)',
+    subject: decodeHtmlEntities(message.subject) || '(No subject)',
     from: message.fromAddress || message.sender || primarySender,
     to: message.toAddress || '',
     cc: message.ccAddress || '',
     receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-    summary: message.summary || '',
+    summary: decodeHtmlEntities(message.summary),
     hasAttachment: zohoBoolean(message.hasAttachment),
     direction: 'outgoing' as const,
     isRead: true,
@@ -475,7 +477,7 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
       id: messageId,
       threadId: String(data.threadId || messageId),
       folderId: String(data.folderId || folderId || ''),
-      subject: String(data.subject || '(No subject)'),
+      subject: decodeHtmlEntities(String(data.subject || '')) || '(No subject)',
       from: String(data.fromAddress || data.sender || ''),
       to: String(data.toAddress || ''),
       cc: String(data.ccAddress || ''),
@@ -530,6 +532,8 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
 
     if (!response.ok) {
       if (response.status === 401) cachedAccessToken = null
+      const errText = await response.text().catch(() => '')
+      console.error(`[Zoho] getLuxorZohoMessageDetail strategy-2 failed — status ${response.status}:`, errText.slice(0, 400))
       return null
     }
 
@@ -537,10 +541,13 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
     const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
     const data = result.data || {}
 
+    console.log(`[Zoho] strategy-2 data keys for ${messageId}:`, Object.keys(data).join(', ') || '(empty)')
+
     let fullContent = String(data.content || data.summary || '')
 
     // If we have a folderId hint from the data, try the content endpoint
     const resolvedFolderId = String(data.folderId || folderId || '')
+    console.log(`[Zoho] resolvedFolderId for ${messageId}:`, resolvedFolderId || '(none)')
     if (resolvedFolderId) {
       const contentResponse = await fetch(
         `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
@@ -549,6 +556,28 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
       if (contentResponse.ok) {
         const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
         fullContent = String(contentResult.data?.content || fullContent)
+        console.log(`[Zoho] content endpoint returned ${fullContent.length} chars for ${messageId}`)
+      } else {
+        console.warn(`[Zoho] content endpoint returned ${contentResponse.status} for ${messageId}`)
+      }
+    }
+
+    // Strategy 3: originalmessage endpoint — works without folderId, returns MIME source
+    if (!fullContent.trim()) {
+      try {
+        const mimeRes = await fetch(
+          `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/originalmessage`,
+          { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+        )
+        if (mimeRes.ok) {
+          const mimeData = await mimeRes.json().catch(() => ({})) as { data?: { content?: string; htmlContent?: string } }
+          fullContent = String(mimeData.data?.htmlContent || mimeData.data?.content || fullContent)
+          console.log(`[Zoho] originalmessage returned ${fullContent.length} chars for ${messageId}`)
+        } else {
+          console.warn(`[Zoho] originalmessage returned ${mimeRes.status} for ${messageId}`)
+        }
+      } catch (mimeErr) {
+        console.warn('[Zoho] originalmessage fallback failed:', mimeErr)
       }
     }
 
@@ -605,12 +634,12 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
       id: message.messageId || message.message_id || '',
       threadId: message.threadId || message.messageId || message.message_id || '',
       folderId: message.folderId || '',
-      subject: message.subject || '(No subject)',
+      subject: decodeHtmlEntities(message.subject) || '(No subject)',
       from,
       to,
       cc: message.ccAddress || '',
       receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-      summary: message.summary || '',
+      summary: decodeHtmlEntities(message.summary),
       hasAttachment: zohoBoolean(message.hasAttachment),
       direction,
       isRead: direction === 'outgoing' || String(message.status || '') === '1',
@@ -644,12 +673,12 @@ export async function listLuxorZohoThread(threadId: string, limit = 50): Promise
       id: message.messageId || message.message_id || '',
       threadId: message.threadId || threadId,
       folderId: message.folderId || '',
-      subject: message.subject || '(No subject)',
+      subject: decodeHtmlEntities(message.subject) || '(No subject)',
       from,
       to: message.toAddress || '',
       cc: message.ccAddress || '',
       receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-      summary: message.summary || '',
+      summary: decodeHtmlEntities(message.summary),
       hasAttachment: zohoBoolean(message.hasAttachment),
       isRead: direction === 'outgoing' || String(message.status || '') === '1',
       direction,

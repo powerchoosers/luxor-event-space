@@ -9,6 +9,7 @@ import {
   PortalTableCard,
 } from '@/components/portal/PortalUI'
 import type { Campaign } from '../page'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 interface EmailCampaignsTabProps {
   campaigns: Campaign[]
@@ -132,8 +133,8 @@ export function EmailCampaignsTab({
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400"><Mail size={13} /></div>
                       <div className="min-w-0">
-                        <p className="truncate font-bold leading-tight text-white">{campaign.name}</p>
-                        <p className="mt-0.5 truncate text-[10px] text-zinc-500">{campaign.subject}</p>
+                        <p className="truncate font-bold leading-tight text-white">{decodeHtmlEntities(campaign.name)}</p>
+                        <p className="mt-0.5 truncate text-[10px] text-zinc-500">{decodeHtmlEntities(campaign.subject)}</p>
                       </div>
                     </div>
                   </td>
