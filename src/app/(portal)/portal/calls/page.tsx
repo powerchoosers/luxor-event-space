@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   Voicemail,
+  FileText,
 } from 'lucide-react'
 import Link from 'next/link'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -133,6 +134,13 @@ export default function CallsPage() {
     voicemail: calls.filter((call) => call.is_voicemail).length,
   }), [calls])
 
+  // Voicemail transcript from metadata
+  const voicemailTranscript = selectedCall
+    ? (selectedCall.metadata?.voicemail_transcript as string | undefined) ||
+      (selectedCall.metadata?.transcript as string | undefined) ||
+      null
+    : null
+
   return (
     <PortalPageFrame>
       <PortalPageHeader
@@ -151,7 +159,8 @@ export default function CallsPage() {
         )}
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 shrink-0">
         <MetricCard label="All Calls" value={stats.total} icon={<Headphones size={15} />} />
         <MetricCard label="Inbound" value={stats.inbound} icon={<PhoneIncoming size={15} />} />
         <MetricCard label="Outbound" value={stats.outbound} icon={<PhoneOutgoing size={15} />} />
@@ -159,23 +168,45 @@ export default function CallsPage() {
         <MetricCard label="Voicemail" value={stats.voicemail} icon={<Voicemail size={15} />} />
       </div>
 
-      <div className="grid min-h-[34rem] flex-1 grid-cols-1 overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] lg:grid-cols-[minmax(20rem,0.9fr)_minmax(24rem,1.1fr)]">
-        <section className="flex min-h-0 flex-col border-b border-[color:var(--portal-border)] lg:border-b-0 lg:border-r">
-          <div className="space-y-3 border-b border-[color:var(--portal-border)] p-4">
+      {/* Main two-pane container — independently scrollable, fixed viewport height */}
+      <div
+        className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] grid grid-cols-1 lg:grid-cols-[minmax(20rem,0.9fr)_minmax(24rem,1.1fr)]"
+        style={{ height: 'calc(100vh - 19rem)' }}
+      >
+
+        {/* PANE 1: Call list */}
+        <section className="flex flex-col overflow-hidden border-b border-[color:var(--portal-border)] lg:border-b-0 lg:border-r">
+          {/* Search + filters — pinned */}
+          <div className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] p-4">
             <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3">
-              <Search size={14} className="text-zinc-600" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or number" className="h-10 min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-zinc-650" />
+              <Search size={14} className="text-[color:var(--portal-faint)]" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name or number"
+                className="h-10 min-w-0 flex-1 bg-transparent text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
+              />
             </div>
             <div className="flex gap-2 overflow-x-auto portal-scrollbar">
               {(['all', 'inbound', 'outbound', 'missed', 'voicemail'] as DirectionFilter[]).map((value) => (
-                <button key={value} type="button" onClick={() => setFilter(value)} className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-wider ${filter === value ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#f1d27a]' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}>
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                    filter === value
+                      ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]'
+                      : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                  }`}
+                >
                   {value}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar">
+          {/* Scrollable call list */}
+          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar">
             {loading ? (
               <div className="p-4 space-y-4">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -189,19 +220,47 @@ export default function CallsPage() {
                 ))}
               </div>
             ) : filteredCalls.length === 0 ? (
-              <div className="flex h-full min-h-64 flex-col items-center justify-center px-6 text-center"><Phone size={28} className="text-zinc-800" /><p className="mt-3 text-sm font-bold text-zinc-400">No calls found</p><p className="mt-1 text-xs text-zinc-600">Calls will appear here after the Twilio setup is connected.</p></div>
+              <div className="flex h-full min-h-64 flex-col items-center justify-center px-6 text-center">
+                <Phone size={28} className="text-[color:var(--portal-faint)]" />
+                <p className="mt-3 text-sm font-bold text-[color:var(--portal-muted)]">No calls found</p>
+                <p className="mt-1 text-xs text-[color:var(--portal-faint)]">Calls will appear here after the Twilio setup is connected.</p>
+              </div>
             ) : filteredCalls.map((call) => (
-              <button key={call.id} type="button" onClick={() => setSelectedId(call.id)} className={`flex w-full items-start gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors ${selectedId === call.id ? 'bg-[#caa24c]/7' : 'hover:bg-[color:var(--portal-soft)]'}`}>
-                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isMissed(call) ? 'border-red-500/20 bg-red-500/8 text-red-400' : call.direction === 'inbound' ? 'border-blue-500/20 bg-blue-500/8 text-blue-400' : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'}`}>
+              <button
+                key={call.id}
+                type="button"
+                onClick={() => setSelectedId(call.id)}
+                className={`flex w-full items-start gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors cursor-pointer ${
+                  selectedId === call.id
+                    ? 'bg-[#caa24c]/7 border-l-2 border-l-[#caa24c]'
+                    : 'border-l-2 border-l-transparent hover:bg-[color:var(--portal-soft)]'
+                }`}
+              >
+                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+                  isMissed(call)
+                    ? 'border-red-500/20 bg-red-500/8 text-red-400'
+                    : call.is_voicemail
+                      ? 'border-amber-500/20 bg-amber-500/8 text-amber-400'
+                      : call.direction === 'inbound'
+                        ? 'border-blue-500/20 bg-blue-500/8 text-blue-400'
+                        : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'
+                }`}>
                   {call.is_voicemail ? <Voicemail size={15} /> : call.direction === 'inbound' ? <PhoneIncoming size={15} /> : <PhoneOutgoing size={15} />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
-                    <p className={`truncate text-xs font-black ${!call.is_read && call.direction === 'inbound' ? 'text-white' : 'text-zinc-300'}`}>{call.contact_name || 'Unknown caller'}</p>
-                    {!call.is_read && call.direction === 'inbound' && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#caa24c]" />}
+                    <p className={`truncate text-xs font-black ${!call.is_read && call.direction === 'inbound' ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>
+                      {call.contact_name || 'Unknown caller'}
+                    </p>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {call.is_voicemail && <Voicemail size={11} className="text-amber-400" />}
+                      {!call.is_read && call.direction === 'inbound' && <span className="h-2 w-2 rounded-full bg-[#caa24c]" />}
+                    </div>
                   </div>
-                  <p className="mt-1 truncate font-mono text-[10px] text-zinc-600">{formatPhoneDisplay(call.direction === 'inbound' ? call.caller_number : call.callee_number)}</p>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-zinc-600">
+                  <p className="mt-1 truncate font-mono text-[10px] text-[color:var(--portal-faint)]">
+                    {formatPhoneDisplay(call.direction === 'inbound' ? call.caller_number : call.callee_number)}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-[color:var(--portal-faint)]">
                     <span className="capitalize">{call.status.replace('-', ' ')}</span>
                     <span>{formatRelativeDate(call.created_at)}</span>
                   </div>
@@ -211,18 +270,31 @@ export default function CallsPage() {
           </div>
         </section>
 
-        <section className="min-h-0 overflow-y-auto p-5 portal-scrollbar sm:p-7">
+        {/* PANE 2: Call detail — independently scrollable */}
+        <section className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar sm:p-7">
           {selectedCall ? (
             <div className="space-y-6">
+              {/* Header */}
               <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-5">
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{selectedCall.direction} call</p>
-                  <h2 className="mt-2 text-xl font-black text-white">{selectedCall.contact_name || 'Unknown caller'}</h2>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhoneDisplay(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}</p>
+                  <h2 className="mt-2 text-xl font-black text-[color:var(--portal-text)]">{selectedCall.contact_name || 'Unknown caller'}</h2>
+                  <p className="mt-1 font-mono text-xs text-[color:var(--portal-muted)]">
+                    {formatPhoneDisplay(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}
+                  </p>
                 </div>
-                <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wider ${isMissed(selectedCall) ? 'border-red-500/20 bg-red-500/8 text-red-400' : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'}`}>{selectedCall.status.replace('-', ' ')}</span>
+                <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wider ${
+                  isMissed(selectedCall)
+                    ? 'border-red-500/20 bg-red-500/8 text-red-400'
+                    : selectedCall.is_voicemail
+                      ? 'border-amber-500/20 bg-amber-500/8 text-amber-400'
+                      : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'
+                }`}>
+                  {selectedCall.is_voicemail ? 'voicemail' : selectedCall.status.replace('-', ' ')}
+                </span>
               </div>
 
+              {/* Meta grid */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Detail label="Started" value={formatDateTime(selectedCall.started_at)} />
                 <Detail label="Duration" value={formatDuration(selectedCall.duration_seconds)} />
@@ -230,34 +302,100 @@ export default function CallsPage() {
                 <Detail label="Phone" value={phoneState === 'ready' ? 'Browser ready' : 'Browser offline'} />
               </div>
 
+              {/* Matched lead link */}
               {selectedCall.inquiry_id && (
-                <Link href={`/portal/leads/${selectedCall.inquiry_id}`} className="flex items-center justify-between rounded-xl border border-[#caa24c]/15 bg-[#caa24c]/5 px-4 py-3 text-xs font-bold text-[#f1d27a] hover:border-[#caa24c]/30">
+                <Link
+                  href={`/portal/leads/${selectedCall.inquiry_id}`}
+                  className="flex items-center justify-between rounded-xl border border-[#caa24c]/15 bg-[#caa24c]/5 px-4 py-3 text-xs font-bold text-[#a8792f] dark:text-[#f1d27a] hover:border-[#caa24c]/30 transition-colors"
+                >
                   Open matched Luxor lead <span>→</span>
                 </Link>
               )}
 
+              {/* ── Voicemail player ── */}
               {selectedCall.recording_sid && (
-                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                  <div className="flex items-center gap-2"><Mic2 size={15} className="text-[#caa24c]" /><p className="text-xs font-black text-white">Voicemail recording</p></div>
-                  <audio controls preload="none" className="mt-3 w-full" src={`/api/twilio/recordings/${selectedCall.recording_sid}`}>Your browser does not support audio playback.</audio>
+                <div className="rounded-2xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] overflow-hidden">
+                  {/* Player header */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-[color:var(--portal-border)]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 text-[#caa24c]">
+                      <Mic2 size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black text-[color:var(--portal-text)]">
+                        {selectedCall.is_voicemail ? 'Voicemail Recording' : 'Call Recording'}
+                      </p>
+                      <p className="text-[10px] font-mono text-[color:var(--portal-muted)] mt-0.5">
+                        {selectedCall.recording_duration_seconds != null
+                          ? `${formatDuration(selectedCall.recording_duration_seconds)} · MP3`
+                          : 'Duration unknown · MP3'}
+                      </p>
+                    </div>
+                    {selectedCall.is_voicemail && (
+                      <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-amber-400">
+                        Voicemail
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Audio element */}
+                  <div className="px-5 py-4">
+                    <audio
+                      controls
+                      preload="metadata"
+                      className="w-full h-10 rounded-lg"
+                      src={`/api/twilio/recordings/${selectedCall.recording_sid}`}
+                    >
+                      Your browser does not support audio playback.
+                    </audio>
+                  </div>
+
+                  {/* Transcript (if available in metadata) */}
+                  {voicemailTranscript && (
+                    <div className="px-5 pb-5 space-y-2">
+                      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
+                        <FileText size={11} /> Transcript
+                      </div>
+                      <p className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-sm leading-relaxed text-[color:var(--portal-text)] font-normal italic">
+                        &ldquo;{voicemailTranscript}&rdquo;
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
+              {/* Call outcome */}
               <div className="space-y-2">
-                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Call outcome</label>
+                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Call outcome</label>
                 <PortalSelect value={outcome} onChange={setOutcome} options={OUTCOME_OPTIONS} />
               </div>
 
+              {/* Call notes */}
               <div className="space-y-2">
-                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Call notes</label>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="What was discussed and what happens next?" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-[#caa24c]/35" />
+                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Call notes</label>
+                <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  rows={5}
+                  placeholder="What was discussed and what happens next?"
+                  className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/35"
+                />
               </div>
-              <button type="button" onClick={() => void updateCall(selectedCall.id, { notes: notes.trim() || null, outcome: outcome || null })} disabled={saving} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68] disabled:opacity-50">
+
+              <button
+                type="button"
+                onClick={() => void updateCall(selectedCall.id, { notes: notes.trim() || null, outcome: outcome || null })}
+                disabled={saving}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68] disabled:opacity-50 transition-colors cursor-pointer"
+              >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Clock3 size={14} />} Save call details
               </button>
             </div>
           ) : (
-            <div className="flex min-h-80 flex-col items-center justify-center text-center"><Phone size={30} className="text-zinc-800" /><p className="mt-3 text-sm font-bold text-zinc-400">Select a call</p><p className="mt-1 text-xs text-zinc-600">Details, voicemail, and notes will appear here.</p></div>
+            <div className="flex min-h-80 flex-col items-center justify-center text-center">
+              <Phone size={30} className="text-[color:var(--portal-faint)]" />
+              <p className="mt-3 text-sm font-bold text-[color:var(--portal-muted)]">Select a call</p>
+              <p className="mt-1 text-xs text-[color:var(--portal-faint)]">Details, voicemail, and notes will appear here.</p>
+            </div>
           )}
         </section>
       </div>
@@ -266,11 +404,24 @@ export default function CallsPage() {
 }
 
 function MetricCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4"><div className="flex items-center justify-between text-[#caa24c]">{icon}<span className="font-mono text-xl font-black text-white">{value}</span></div><p className="mt-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">{label}</p></div>
+  return (
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+      <div className="flex items-center justify-between text-[#caa24c]">
+        {icon}
+        <span className="font-mono text-xl font-black text-[color:var(--portal-text)]">{value}</span>
+      </div>
+      <p className="mt-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
+    </div>
+  )
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3"><p className="text-[8px] font-black uppercase tracking-wider text-zinc-600">{label}</p><p className="mt-1 truncate text-[11px] font-bold capitalize text-zinc-300">{value}</p></div>
+  return (
+    <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+      <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-1 truncate text-[11px] font-bold capitalize text-[color:var(--portal-text)]">{value}</p>
+    </div>
+  )
 }
 
 function isMissed(call: LuxorCall) {

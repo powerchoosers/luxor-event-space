@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import Link from 'next/link'
-import { PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 export interface EmailMessageItem {
@@ -75,6 +75,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy] = useState<'newest' | 'oldest'>('newest')
+
+  // Pagination
+  const PAGE_SIZE = 25
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Selected email detail state
   const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
@@ -306,6 +310,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       })
   }, [messages, activeFolder, activeFilter, searchQuery, sortBy, starredIds, readIds])
 
+  // Reset to page 1 whenever filters/search changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeFolder, activeFilter, searchQuery])
+
+  const totalPages = Math.max(1, Math.ceil(filteredMessages.length / PAGE_SIZE))
+  const pagedMessages = filteredMessages.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
   // Matched inquiry for currently selected email
   const currentInquiry = useMemo(() => {
     if (thread?.inquiry) return thread.inquiry
@@ -472,7 +484,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               No emails match the selected filters or search terms.
             </div>
           ) : (
-            filteredMessages.map((msg) => {
+            pagedMessages.map((msg) => {
               const isSelected = msg.id === selectedId
               const isStarred = starredIds.has(msg.id)
               const isRead = readIds.has(msg.id)
@@ -536,6 +548,20 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             })
           )}
         </div>
+
+        {/* Pinned Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+            <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">
+              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredMessages.length)} of {filteredMessages.length}
+            </span>
+            <PortalPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
