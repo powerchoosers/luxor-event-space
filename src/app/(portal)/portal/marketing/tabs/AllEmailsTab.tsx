@@ -59,9 +59,10 @@ type FilterChip = 'all' | 'unread' | 'incoming' | 'outgoing' | 'campaigns' | 'at
 
 interface AllEmailsTabProps {
   inquiries?: LuxorInquiry[]
+  initialMessageId?: string
 }
 
-export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
+export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabProps) {
   const [messages, setMessages] = useState<EmailMessageItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,7 +75,7 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
   const [sortBy] = useState<'newest' | 'oldest'>('newest')
 
   // Selected email detail state
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [thread, setThread] = useState<EmailThreadData | null>(null)
@@ -115,8 +116,12 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
 
       const list = data.messages || []
       setMessages(list)
-      if (list.length > 0 && !selectedId) {
-        setSelectedId(list[0].id)
+      // Auto-select: prefer initialMessageId if given and found, else first message
+      if (!selectedId) {
+        const target = initialMessageId && list.some((m) => m.id === initialMessageId)
+          ? initialMessageId
+          : list[0]?.id || null
+        if (target) setSelectedId(target)
       }
     } catch (err) {
       console.error(err)

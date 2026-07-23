@@ -598,7 +598,7 @@ function MarketingPageContent() {
         )}
 
         {activeTab === 'emails' && (
-          <AllEmailsTab inquiries={inquiries} />
+          <AllEmailsTab inquiries={inquiries} initialMessageId={searchParams.get('messageId') || undefined} />
         )}
 
         {activeTab === 'sources' && (

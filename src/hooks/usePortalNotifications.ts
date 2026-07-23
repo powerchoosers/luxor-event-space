@@ -139,8 +139,10 @@ export function usePortalNotifications() {
             const subject = String(msg.subject || 'New Email Received')
             const senderName = String(msg.senderName || msg.sender || msg.fromAddress || 'Unknown sender')
             const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
+            const folderId = String(msg.folderId || '')
 
             const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
+            const folderQuery = folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''
             aggregated.push({
               id: emailId,
               type: 'email',
@@ -148,8 +150,8 @@ export function usePortalNotifications() {
               subtitle: `From: ${senderName}`,
               timestamp,
               isRead,
-              targetUrl: '/portal/messages?tab=emails',
-              metadata: { sender: msg.sender, fromAddress: msg.fromAddress },
+              targetUrl: `/portal/marketing?tab=emails&messageId=${encodeURIComponent(emailId)}${folderQuery}`,
+              metadata: { sender: msg.sender, fromAddress: msg.fromAddress, folderId },
             })
           })
       }

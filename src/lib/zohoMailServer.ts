@@ -463,40 +463,14 @@ export async function listLuxorZohoSentMessages(limit = 50) {
 
 export async function getLuxorZohoMessageDetail(messageId: string, folderId?: string) {
   if (!messageId) return null
-  const { accountId, baseUrl } = getZohoConfig()
+  const { accountId, baseUrl, allowedSenders } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
 
-  try {
-    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    })
-
-    const resultText = await response.text()
-    if (!response.ok) {
-      if (response.status === 401) cachedAccessToken = null
-      return null
-    }
-
-    const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
-    const data = result.data || {}
-    let fullContent = String(data.content || data.summary || '')
-    if (folderId) {
-      const contentResponse = await fetch(
-        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
-        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-      )
-      if (contentResponse.ok) {
-        const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
-        fullContent = String(contentResult.data?.content || fullContent)
-      }
-    }
-    const { allowedSenders } = getZohoConfig()
-    const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress || data.sender)) ? 'outgoing' as const : 'incoming' as const
-
+  // Helper to parse a Zoho message data payload into our detail shape
+  function parseMessageData(data: Record<string, unknown>, content: string) {
+    const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress as string || data.sender as string || ''))
+      ? 'outgoing' as const
+      : 'incoming' as const
     return {
       id: messageId,
       threadId: String(data.threadId || messageId),
@@ -506,11 +480,79 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
       to: String(data.toAddress || ''),
       cc: String(data.ccAddress || ''),
       receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
-      content: fullContent,
-      htmlContent: fullContent,
+      content,
+      htmlContent: content,
       hasAttachment: zohoBoolean(data.hasAttachment),
       direction,
     }
+  }
+
+  try {
+    // Strategy 1: If folderId is known, use the folder-specific endpoint which reliably returns content
+    if (folderId) {
+      try {
+        const folderDetailRes = await fetch(
+          `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}`,
+          { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+        )
+        if (folderDetailRes.ok) {
+          const folderResult = await folderDetailRes.json().catch(() => ({})) as { data?: Record<string, unknown> }
+          const data = folderResult.data || {}
+
+          // Also fetch full HTML content from the content sub-endpoint
+          let content = String(data.content || data.summary || '')
+          const contentRes = await fetch(
+            `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
+            { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+          )
+          if (contentRes.ok) {
+            const contentData = await contentRes.json().catch(() => ({})) as { data?: { content?: string } }
+            content = String(contentData.data?.content || content)
+          }
+
+          if (Object.keys(data).length > 0) {
+            return parseMessageData(data, content)
+          }
+        }
+      } catch (err) {
+        console.warn('Folder-specific Zoho message fetch failed, falling back to generic view:', err)
+      }
+    }
+
+    // Strategy 2: Generic /messages/view/{id} — always attempt as fallback
+    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) cachedAccessToken = null
+      return null
+    }
+
+    const resultText = await response.text()
+    const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
+    const data = result.data || {}
+
+    let fullContent = String(data.content || data.summary || '')
+
+    // If we have a folderId hint from the data, try the content endpoint
+    const resolvedFolderId = String(data.folderId || folderId || '')
+    if (resolvedFolderId) {
+      const contentResponse = await fetch(
+        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
+        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+      )
+      if (contentResponse.ok) {
+        const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
+        fullContent = String(contentResult.data?.content || fullContent)
+      }
+    }
+
+    return parseMessageData(data, fullContent)
   } catch (err) {
     console.error('Failed fetching Zoho message detail:', err)
     return null
