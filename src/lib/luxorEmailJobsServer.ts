@@ -402,6 +402,27 @@ export async function createLuxorEmailJob(data: {
   return created
 }
 
+export async function createUniqueLuxorEmailJob(data: Parameters<typeof createLuxorEmailJob>[0] & { automationKey: string }) {
+  const inquiryFilter = data.inquiryId ? `&inquiry_id=eq.${encodeURIComponent(data.inquiryId)}` : ''
+  const existing = await supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&status=eq.queued&job_type=eq.${encodeURIComponent(data.jobType)}${inquiryFilter}&metadata->>automation_key=eq.${encodeURIComponent(data.automationKey)}&limit=1`,
+  )
+  if (existing[0]) return existing[0]
+  const { automationKey, ...job } = data
+  return createLuxorEmailJob({
+    ...job,
+    metadata: { ...(job.metadata || {}), automation_key: automationKey },
+  })
+}
+
+export async function cancelQueuedLuxorEmailJobs(inquiryId: string, jobTypes: LuxorEmailJobKind[]) {
+  if (!inquiryId || !jobTypes.length) return
+  await supabaseRest(
+    `luxor_email_jobs?inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&job_type=in.(${jobTypes.map((kind) => encodeURIComponent(kind)).join(',')})`,
+    { method: 'PATCH', body: JSON.stringify({ status: 'cancelled', updated_at: new Date().toISOString() }) },
+  )
+}
+
 export async function listDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>(
     `luxor_email_jobs?select=*&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,

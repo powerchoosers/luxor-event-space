@@ -2,12 +2,13 @@ import 'server-only'
 
 import { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
-import { createPublicToken } from './luxorEmailJobsServer'
-import { updateLuxorBooking } from './luxorBookingsServer'
+import { cancelQueuedLuxorEmailJobs, createPublicToken } from './luxorEmailJobsServer'
+import { getLuxorBooking, updateLuxorBooking } from './luxorBookingsServer'
 import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuidePdf, parseClientName } from './luxorContractPdfServer'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
+import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 
 function defaultContractBody(booking: LuxorBooking) {
   const proposalItems = Array.isArray(booking.metadata?.proposalLineItems)
@@ -176,6 +177,21 @@ export async function signLuxorSignatureRequest(input: {
       contract_status: 'signed',
       contract_signed_at: signedAt,
     })
+
+    if (signature.inquiry_id) {
+      const [booking, inquiry] = await Promise.all([
+        getLuxorBooking(signature.booking_id),
+        getLuxorInquiry(signature.inquiry_id),
+      ])
+      if (inquiry && inquiry.status !== 'closed_lost') {
+        await updateLuxorInquiry(inquiry.id, {
+          status: 'booked',
+          pipeline_stage: booking?.security_deposit_status === 'collected' ? 'planning' : 'deposit',
+          metadata: { ...inquiry.metadata, contract_signed_at: signedAt },
+        })
+      }
+      await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder', 'contract_signature_reminder'])
+    }
 
     await recordLuxorSignatureEvent({
       signatureRequestId: signature.id,

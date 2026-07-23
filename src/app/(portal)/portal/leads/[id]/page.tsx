@@ -221,6 +221,7 @@ export default function LeadDetailPage({
   const [bookingPackageName, setBookingPackageName] = useState('')
   const [bookingContractTotal, setBookingContractTotal] = useState('')
   const [bookingDepositRequired, setBookingDepositRequired] = useState('')
+  const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
   const [submittingBooking, setSubmittingBooking] = useState(false)
@@ -1532,6 +1533,13 @@ export default function LeadDetailPage({
     setBookingPackageName(lead?.package_interest || '')
     setBookingContractTotal(suggestedContractTotal > 0 ? String(suggestedContractTotal) : '')
     setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.25)) : '')
+    if (targetDate) {
+      const dueDate = new Date(`${targetDate}T12:00:00`)
+      dueDate.setDate(dueDate.getDate() - 14)
+      setBookingFinalPaymentDueDate(dueDate.toISOString().slice(0, 10))
+    } else {
+      setBookingFinalPaymentDueDate('')
+    }
     setBookingNotes(lead?.message || '')
     setBookingStatus('tentative')
     setIsBookingModalOpen(true)
@@ -1567,6 +1575,7 @@ export default function LeadDetailPage({
           status: bookingStatus,
           contract_total: contractTotal,
           deposit_required: depositRequired,
+          final_payment_due_date: bookingFinalPaymentDueDate || null,
           notes: bookingNotes.trim() || lead.message,
           metadata: {
             proposalLineItems: invoiceItems,
@@ -1587,6 +1596,7 @@ export default function LeadDetailPage({
       setBookingPackageName('')
       setBookingContractTotal('')
       setBookingDepositRequired('')
+      setBookingFinalPaymentDueDate('')
       setBookingNotes('')
       setBookingStatus('tentative')
 
@@ -1602,6 +1612,14 @@ export default function LeadDetailPage({
   }
 
   const handleBookingMilestone = async (booking: LuxorBooking, milestone: 'planning' | 'event' | 'closing') => {
+    if (milestone === 'planning' && (!booking.event_date || !booking.start_time || !booking.end_time || !booking.final_payment_due_date)) {
+      notify({
+        title: 'Planning is not ready yet',
+        description: 'Add the event date, start time, end time, and final-payment due date before confirming planning.',
+        variant: 'error',
+      })
+      return
+    }
     try {
       setUpdatingStatus(true)
       const now = new Date().toISOString()
@@ -1742,6 +1760,8 @@ export default function LeadDetailPage({
     note.content.toLowerCase().includes('proposal')
   ))?.created_at || (lead.status === 'proposal_sent' ? lead.updated_at : null)
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
+  const proposalReminderJobs = tourEmailJobs.filter((job) => job.job_type === 'proposal_view_reminder' || job.job_type === 'proposal_payment_reminder')
+  const queuedProposalReminders = proposalReminderJobs.filter((job) => job.status === 'queued')
   const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
   const marketingRecentEvents = marketingEngagement?.recent_events ?? []
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
@@ -2555,9 +2575,9 @@ export default function LeadDetailPage({
                           <button
                             type="button"
                             onClick={() => handleGuidedStatusChange('tour_confirmed')}
-                            disabled={updatingStatus}
+                            disabled={updatingStatus || !lead.preferred_tour_date || !lead.preferred_tour_time}
                             aria-label="Move to the next step without sending an invite"
-                            title="Tour already scheduled — move to the next step without sending an invite"
+                            title={lead.preferred_tour_date && lead.preferred_tour_time ? 'Tour already scheduled — move to the next step without sending an invite' : 'Add a tour date and time first'}
                             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <CheckCircle2 size={15} className={updatingStatus ? 'animate-pulse' : ''} />
@@ -3152,7 +3172,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Planning</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">All event details, preferences, and logistics in one place.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={() => setActiveLeadTab('tasks')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
                         Planning Checklist
                       </button>
                     </div>
@@ -3390,7 +3410,7 @@ export default function LeadDetailPage({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                       {[
                         {
                           label: 'Proposal sent',
@@ -3419,6 +3439,13 @@ export default function LeadDetailPage({
                           detail: proposalInvoice ? `${proposalInvoice.line_items.length} line items` : 'No saved proposal',
                           icon: FileText,
                           tone: proposalAmount > 0 ? 'gold' : 'neutral',
+                        },
+                        {
+                          label: 'Follow-up',
+                          value: queuedProposalReminders.length ? `${queuedProposalReminders.length} scheduled` : proposalSentAt ? 'No reminder pending' : 'Not scheduled',
+                          detail: queuedProposalReminders[0] ? `Next ${formatRelativeTime(queuedProposalReminders[0].scheduled_for)}` : 'Reminders stop after open and payment',
+                          icon: Clock,
+                          tone: queuedProposalReminders.length ? 'gold' : 'neutral',
                         },
                       ].map((item) => {
                         const StatusIcon = item.icon
@@ -3513,8 +3540,8 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Contract</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Generate, sign, and manage legal agreements.</p>
                       </div>
-                      <button type="button" onClick={openBookingModal} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Contract Template
+                      <button type="button" onClick={() => scrollToSection('lead-booking')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                        Booking Details
                       </button>
                     </div>
 
@@ -3681,7 +3708,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Final Payment</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Track event balances and final payment settlements.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={() => setActiveLeadTab('documents')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
                         View Balance
                       </button>
                     </div>
@@ -3717,8 +3744,11 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                          {latestInvoice && proposalBalance > 0 ? (
+                            <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
+                          ) : null}
                           {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Mark Final Paid</button>
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
                           ) : null}
                           <button type="button" onClick={() => setActiveLeadTab('tasks')} className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Create Reminder Task</button>
                         </div>
@@ -3757,7 +3787,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Event Day</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Checklists, access details, and operations for event execution.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={() => setActiveLeadTab('timeline')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
                         Run of Show
                       </button>
                     </div>
@@ -3830,7 +3860,7 @@ export default function LeadDetailPage({
                         <h3 className="text-base font-black uppercase tracking-wider text-white">Closing</h3>
                         <p className="text-xs text-[color:var(--portal-muted)]">Post-event wrap-ups, reviews, and security deposits.</p>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
+                      <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">
                         Complete Lead
                       </button>
                     </div>
@@ -4118,10 +4148,10 @@ export default function LeadDetailPage({
                 nextStepButton = latestBooking ? 'Confirm Planning' : 'Create Booking'
                 nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'planning') : openBookingModal
               } else if (currentStage === 'final_payment') {
-                nextStepTitle = 'Record final payment'
-                nextStepDetail = 'Manually mark balance paid after payment is confirmed'
-                nextStepButton = latestBooking ? 'Mark Final Paid' : 'Create Booking'
-                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'final') : openBookingModal
+                nextStepTitle = 'Collect final payment'
+                nextStepDetail = latestInvoice ? 'Send the secure balance link; Stripe advances the stage after payment' : 'Create an invoice before collecting the balance'
+                nextStepButton = latestInvoice ? 'Send Secure Payment Link' : 'Create Invoice'
+                nextStepAction = latestInvoice ? () => openPaymentRequest(latestInvoice) : () => setIsInvoiceModalOpen(true)
               } else if (currentStage === 'event') {
                 nextStepTitle = 'Close out event'
                 nextStepDetail = 'Finish inspection, deposit return, and review readiness'
@@ -5390,6 +5420,17 @@ export default function LeadDetailPage({
               </div>
 
               <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Final Payment Due Date</label>
+                <PortalDatePicker
+                  value={bookingFinalPaymentDueDate}
+                  onChange={setBookingFinalPaymentDueDate}
+                  className="w-full"
+                  placeholder="Select final payment due date"
+                />
+                <p className="text-[10px] leading-4 text-zinc-600">This controls the balance status and final-payment reminder.</p>
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Package Name</label>
                 <input
                   type="text"
@@ -5447,7 +5488,7 @@ export default function LeadDetailPage({
 
               <button
                 type="submit"
-                disabled={submittingBooking || !bookingEventDate || !bookingContractTotal.trim()}
+                disabled={submittingBooking || !bookingEventDate || !bookingStartTime || !bookingEndTime || !bookingFinalPaymentDueDate || !bookingContractTotal.trim()}
                 className="w-full rounded-lg bg-blue-600 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-xl shadow-blue-600/20 transition-colors hover:bg-blue-500 disabled:opacity-40"
               >
                 {submittingBooking ? 'Saving Booking...' : 'Save Booking Record'}
@@ -5743,6 +5784,8 @@ function LeadLifecycleRail({
         label: 'Contract',
         subtext: latestBooking?.contract_status === 'signed'
           ? 'Signed'
+          : latestBooking?.contract_status === 'viewed'
+            ? 'Opened'
           : latestBooking?.contract_status === 'sent'
             ? 'Sent'
             : '',

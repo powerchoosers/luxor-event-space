@@ -1,6 +1,7 @@
 import { Check, CreditCard, FileText, ShieldCheck } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
   if (!invoice.proposal_viewed_at) {
     await updateInvoice(invoice.id, { proposal_viewed_at: new Date().toISOString() })
+    if (invoice.inquiry_id) {
+      await cancelQueuedLuxorEmailJobs(invoice.inquiry_id, ['proposal_view_reminder'])
+    }
   }
 
   return (

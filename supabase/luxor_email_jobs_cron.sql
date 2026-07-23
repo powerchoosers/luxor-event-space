@@ -67,11 +67,9 @@ notify pgrst, 'reload schema';
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
 
--- Supabase owns the complete scheduled-delivery path. pg_cron invokes the
--- Supabase Edge Function directly; Vercel is not part of reminder processing.
--- Create these Vault values once using the project's own URL and publishable key:
--- select vault.create_secret('https://project-ref.supabase.co', 'luxor_project_url');
--- select vault.create_secret('sb_publishable_...', 'luxor_publishable_key');
+-- pg_cron invokes the protected production worker. Store the same random value
+-- in Supabase Vault and the Vercel LUXOR_EMAIL_CRON_SECRET environment variable:
+-- select vault.create_secret('replace-with-a-long-random-secret', 'luxor_email_jobs_cron_secret');
 
 do $$
 declare
@@ -93,14 +91,13 @@ select cron.schedule(
   '* * * * *',
   $cron$
     select net.http_post(
-      url := (
-        select decrypted_secret from vault.decrypted_secrets
-        where name = 'luxor_project_url' limit 1
-      ) || '/functions/v1/process-luxor-email-jobs',
+      url := 'https://www.luxoratlaspalmas.com/api/cron/email-jobs',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'luxor_publishable_key' limit 1),
-        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'luxor_publishable_key' limit 1)
+        'x-cron-secret', (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'luxor_email_jobs_cron_secret' limit 1
+        )
       ),
       body := jsonb_build_object('source', 'supabase-pg-cron', 'requested_at', now()),
       timeout_milliseconds := 10000

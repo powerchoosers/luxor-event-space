@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent, signLuxorSignatureRequest, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -29,7 +31,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     }
 
-    if (signature.status === 'sent') await updateLuxorSignatureRequest(signature.id, { status: 'viewed' })
+    if (signature.status === 'sent') {
+      await Promise.all([
+        updateLuxorSignatureRequest(signature.id, { status: 'viewed' }),
+        updateLuxorBooking(signature.booking_id, { contract_status: 'viewed' }),
+      ])
+    }
+    if (signature.inquiry_id) await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder'])
     await recordLuxorSignatureEvent({
       signatureRequestId: signature.id,
       eventType: 'viewed',

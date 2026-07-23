@@ -9,6 +9,8 @@ import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorPaymentRequestEmail } from '@/lib/luxorProposalEmailServer'
 import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { buildFinalPaymentReminderEmail, buildProposalReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let invoiceId = 'unknown'
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       stripe_checkout_session_id: checkout.id,
       stripe_checkout_url: checkout.url,
     })
-    const email = buildLuxorPaymentRequestEmail({ invoice, inquiry, reviewUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
+    const email = await buildLuxorPaymentRequestEmail({ invoice, inquiry, reviewUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
     await sendLuxorZohoEmail({
       to: inquiry.email,
       subject: email.subject,
@@ -109,6 +111,65 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (inquiry.status !== 'proposal_sent') {
         await createNote(inquiry.id, 'Proposal sent. Lead advanced to Proposal.', 'status_change', session.email)
       }
+    }
+
+    try {
+      const isFinalBalanceRequest = Boolean(booking) && /remaining|balance/i.test(paymentLabel)
+      await cancelQueuedLuxorEmailJobs(inquiry.id, [
+        'proposal_view_reminder',
+        'proposal_payment_reminder',
+        'final_payment_reminder',
+      ])
+
+      if (isFinalBalanceRequest) {
+        const reminder = buildFinalPaymentReminderEmail({
+          inquiry,
+          invoice,
+          reviewUrl,
+          balance: paymentAmount,
+          dueDate: booking?.final_payment_due_date,
+        })
+        await createUniqueLuxorEmailJob({
+          inquiryId: inquiry.id,
+          bookingId: booking?.id,
+          jobType: 'final_payment_reminder',
+          recipientEmail: inquiry.email,
+          subject: reminder.subject,
+          body: reminder.body,
+          scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(),
+          automationKey: lifecycleAutomationKey('final_payment_reminder', checkout.id),
+          metadata: { invoice_id: invoice.id, checkout_session_id: checkout.id, reminder_sequence: 1 },
+        })
+      } else {
+        const viewReminder = buildProposalReminderEmail({ inquiry, invoice, reviewUrl, kind: 'view', paymentAmount })
+        const paymentReminder = buildProposalReminderEmail({ inquiry, invoice, reviewUrl, kind: 'payment', paymentAmount })
+        await Promise.all([
+          createUniqueLuxorEmailJob({
+            inquiryId: inquiry.id,
+            bookingId: booking?.id,
+            jobType: 'proposal_view_reminder',
+            recipientEmail: inquiry.email,
+            subject: viewReminder.subject,
+            body: viewReminder.body,
+            scheduledFor: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+            automationKey: lifecycleAutomationKey('proposal_view_reminder', checkout.id),
+            metadata: { invoice_id: invoice.id, checkout_session_id: checkout.id, reminder_sequence: 1 },
+          }),
+          createUniqueLuxorEmailJob({
+            inquiryId: inquiry.id,
+            bookingId: booking?.id,
+            jobType: 'proposal_payment_reminder',
+            recipientEmail: inquiry.email,
+            subject: paymentReminder.subject,
+            body: paymentReminder.body,
+            scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
+            automationKey: lifecycleAutomationKey('proposal_payment_reminder', checkout.id),
+            metadata: { invoice_id: invoice.id, checkout_session_id: checkout.id, reminder_sequence: 2 },
+          }),
+        ])
+      }
+    } catch (automationError) {
+      console.error('[invoice-payment-request] reminder queue failed after the proposal was delivered', automationError)
     }
     return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, checkoutUrl: checkout.url, paymentAmount, balanceDue })
   } catch (error) {

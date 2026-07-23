@@ -4,6 +4,7 @@ import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxo
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 
 function paymentKind(label: string | undefined) {
   const normalized = String(label || '').toLowerCase()
@@ -65,6 +66,11 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           latest_paid_invoice_id: invoice.id,
         },
       })
+      await cancelQueuedLuxorEmailJobs(inquiry.id, [
+        'proposal_view_reminder',
+        'proposal_payment_reminder',
+        ...(kind === 'final' || isFullyPaid ? ['final_payment_reminder' as const] : []),
+      ])
     }
   }
 
@@ -74,7 +80,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     if (booking) {
       const depositCovered = Number(booking.deposit_required || 0) > 0 && paidTotal + 0.005 >= Number(booking.deposit_required)
       const contractCovered = Number(booking.contract_total || 0) > 0 && paidTotal + 0.005 >= Number(booking.contract_total)
-      await updateLuxorBooking(booking.id, {
+      const updatedBooking = await updateLuxorBooking(booking.id, {
         security_deposit_status: depositCovered ? 'collected' : booking.security_deposit_status,
         status: depositCovered && booking.status === 'draft' ? 'tentative' : booking.status,
         metadata: {
@@ -83,6 +89,24 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           ...(contractCovered ? { final_payment_paid_at: paidAt } : {}),
         },
       })
+      if (inquiryId && updatedBooking) {
+        const inquiry = await getLuxorInquiry(inquiryId)
+        if (inquiry && inquiry.status !== 'closed_lost') {
+          const planningComplete = Boolean(updatedBooking.metadata?.planning_completed_at) || updatedBooking.status === 'confirmed'
+          const nextStage = updatedBooking.contract_status !== 'signed'
+            ? 'contract'
+            : planningComplete
+              ? (contractCovered ? 'event' : 'final_payment')
+              : depositCovered
+                ? 'planning'
+                : 'deposit'
+          await updateLuxorInquiry(inquiry.id, {
+            status: 'booked',
+            pipeline_stage: nextStage,
+            metadata: { ...inquiry.metadata, latest_payment_at: paidAt, latest_paid_invoice_id: invoice.id },
+          })
+        }
+      }
     }
   }
 }

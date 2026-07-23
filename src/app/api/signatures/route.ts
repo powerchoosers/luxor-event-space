@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
-import { buildSignatureEmail, buildSignatureEmailHtml, createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { buildSignatureEmail, buildSignatureEmailHtml, cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { buildContractReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorSignatureRequest, listLuxorSignatureRequests } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
@@ -77,6 +78,40 @@ export async function POST(request: NextRequest) {
     } catch (sendError) {
       await updateLuxorEmailJob(job.id, { status: 'failed', last_error: sendError instanceof Error ? sendError.message : 'Email send failed.' })
       throw sendError
+    }
+
+    if (signature.inquiry_id) {
+      try {
+        await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder', 'contract_signature_reminder'])
+        const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
+        const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })
+        await Promise.all([
+          createUniqueLuxorEmailJob({
+            inquiryId: signature.inquiry_id,
+            bookingId: signature.booking_id,
+            signatureRequestId: signature.id,
+            jobType: 'contract_view_reminder',
+            recipientEmail: signature.client_email,
+            subject: viewReminder.subject,
+            body: viewReminder.body,
+            scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(),
+            automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id),
+          }),
+          createUniqueLuxorEmailJob({
+            inquiryId: signature.inquiry_id,
+            bookingId: signature.booking_id,
+            signatureRequestId: signature.id,
+            jobType: 'contract_signature_reminder',
+            recipientEmail: signature.client_email,
+            subject: signatureReminder.subject,
+            body: signatureReminder.body,
+            scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(),
+            automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id),
+          }),
+        ])
+      } catch (automationError) {
+        console.error('Contract delivered, but reminders could not be queued:', automationError)
+      }
     }
 
     return NextResponse.json({ signature, job }, { status: 201 })
