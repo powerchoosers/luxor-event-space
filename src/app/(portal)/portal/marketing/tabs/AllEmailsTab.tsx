@@ -28,6 +28,7 @@ import {
   Minimize2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { AnimatePresence, motion } from 'framer-motion'
 import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
@@ -87,7 +88,7 @@ function saveMailbox(messages: EmailMessageItem[]) {
   }
 }
 
-let mailboxCache: EmailMessageItem[] | null = readSessionMailbox()
+let mailboxCache: EmailMessageItem[] | null = null
 let mailboxRequest: Promise<EmailMessageItem[]> | null = null
 const messageDetailCache = new Map<string, EmailMessageItem>()
 const threadCache = new Map<string, EmailThreadData>()
@@ -131,6 +132,8 @@ async function requestMailbox(force = false) {
 
 type ActiveFolder = 'all' | 'inbox' | 'sent' | 'campaigns' | 'starred'
 type FilterChip = 'all' | 'unread' | 'incoming' | 'outgoing' | 'campaigns' | 'attachments'
+
+const PANEL_TRANSITION = { duration: 0.32, ease: [0.23, 1, 0.32, 1] as const }
 
 interface AllEmailsTabProps {
   inquiries?: LuxorInquiry[]
@@ -196,6 +199,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }, [initialMessageId])
 
   useEffect(() => {
+    const savedMailbox = mailboxCache || readSessionMailbox()
+    if (savedMailbox) {
+      mailboxCache = savedMailbox
+      setMessages(savedMailbox)
+      setLoading(false)
+    }
     void loadEmails(false)
   }, [loadEmails])
 
@@ -455,7 +464,15 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   return (
     <div className="flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
-      {folderPaneOpen && !readerExpanded && <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex">
+      <AnimatePresence initial={false}>
+      {folderPaneOpen && !readerExpanded && <motion.div
+        key="mailbox-folders"
+        initial={{ width: 0, opacity: 0, x: -12 }}
+        animate={{ width: 'var(--folder-pane-width)', opacity: 1, x: 0 }}
+        exit={{ width: 0, opacity: 0, x: -12 }}
+        transition={PANEL_TRANSITION}
+        className="w-64 [--folder-pane-width:16rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex"
+      >
         {/* Scrollable folder list area */}
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4 space-y-6">
           {/* Primary Action Button */}
@@ -471,7 +488,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             <button
               type="button"
               onClick={() => setFolderPaneOpen(false)}
-              className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
+              className="rounded-xl bg-transparent p-3 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
               title="Collapse mailbox folders"
               aria-label="Collapse mailbox folders"
             >
@@ -542,10 +559,19 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </p>
           </div>
         </div>
-      </div>}
+      </motion.div>}
+      </AnimatePresence>
 
       {/* PANE 2: Message Threads List */}
-      {!readerExpanded && <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden">
+      <AnimatePresence initial={false}>
+      {!readerExpanded && <motion.div
+        key="message-list"
+        initial={{ width: 0, opacity: 0, x: -12 }}
+        animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
+        exit={{ width: 0, opacity: 0, x: -12 }}
+        transition={PANEL_TRANSITION}
+        className="w-full [--message-list-width:100%] md:w-80 md:[--message-list-width:20rem] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden"
+      >
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
           <div className="flex items-center justify-between gap-3">
@@ -554,7 +580,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 <button
                   type="button"
                   onClick={() => setFolderPaneOpen(true)}
-                  className="shrink-0 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                  className="shrink-0 rounded-lg bg-transparent p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
                   title="Show mailbox folders"
                   aria-label="Show mailbox folders"
                 >
@@ -706,7 +732,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             />
           </div>
         )}
-      </div>}
+      </motion.div>}
+      </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
@@ -747,7 +774,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                   <button
                     type="button"
                     onClick={() => setReaderExpanded((expanded) => !expanded)}
-                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
+                    className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                     title={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                     aria-label={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                   >
