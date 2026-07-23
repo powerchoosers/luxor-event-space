@@ -2085,7 +2085,7 @@ export default function LeadDetailPage({
             <SignalMetric
               label="Latest Touch"
               value={marketingLastTouchedAt ? formatRelativeTime(marketingLastTouchedAt) : 'None'}
-              detail={marketingTopCampaign?.campaign_name || marketingTopCampaign?.campaign_subject || 'No campaign activity'}
+              detail={decodeHtmlEntities(marketingTopCampaign?.campaign_name || marketingTopCampaign?.campaign_subject) || 'No campaign activity'}
             />
           </div>
 
@@ -2095,10 +2095,10 @@ export default function LeadDetailPage({
                 <div className="min-w-0">
                   <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Most Recent Campaign</p>
                   <p className="mt-1 text-sm font-bold text-white">
-                    {marketingTopCampaign.campaign_name || marketingTopCampaign.campaign_subject || 'Untitled campaign'}
+                    {decodeHtmlEntities(marketingTopCampaign.campaign_name || marketingTopCampaign.campaign_subject) || 'Untitled campaign'}
                   </p>
                   {marketingTopCampaign.campaign_subject && marketingTopCampaign.campaign_name !== marketingTopCampaign.campaign_subject ? (
-                    <p className="mt-1 text-[11px] text-zinc-400">{marketingTopCampaign.campaign_subject}</p>
+                    <p className="mt-1 text-[11px] text-zinc-400">{decodeHtmlEntities(marketingTopCampaign.campaign_subject)}</p>
                   ) : null}
                 </div>
                 <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[#caa24c]">
@@ -2155,7 +2155,7 @@ export default function LeadDetailPage({
                         </p>
                       </div>
                       <p className="mt-2 text-[11px] text-zinc-400">
-                        {event.campaign_name || event.campaign_subject || 'Unknown campaign'}
+                        {decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Unknown campaign'}
                       </p>
                       {event.url ? (
                         <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">{shortenUrl(event.url)}</p>
@@ -2308,11 +2308,49 @@ export default function LeadDetailPage({
                   <ChevronDown size={12} />
                 </button>
                 {showCallMenu ? (
-                  <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-48 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
-                    <button type="button" onClick={() => { setNoteType('call_log'); setShowCallMenu(false); scrollToSection('lead-activity') }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Log call notes</button>
-                    <button type="button" onClick={() => { setShowCallMenu(false); setTextPopupOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Open Twilio texts</button>
-                    <button type="button" onClick={async () => { await navigator.clipboard.writeText(lead.phone || ''); setShowCallMenu(false); notify({ title: 'Phone number copied', variant: 'success' }) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Copy phone number</button>
-                  </div>
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowCallMenu(false)} />
+                    <div
+                      data-portal-dropdown="true"
+                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteType('call_log')
+                          setShowCallMenu(false)
+                          scrollToSection('lead-activity')
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                      >
+                        <FileText size={13} className="text-[#caa24c]" />
+                        <span>Log call notes</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCallMenu(false)
+                          setTextPopupOpen(true)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                      >
+                        <MessageSquare size={13} className="text-[#caa24c]" />
+                        <span>Open Twilio texts</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(lead.phone || '')
+                          setShowCallMenu(false)
+                          notify({ title: 'Phone number copied', variant: 'success' })
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                      >
+                        <Copy size={13} className="text-[#caa24c]" />
+                        <span>Copy phone number</span>
+                      </button>
+                    </div>
+                  </>
                 ) : null}
               </div>
             )}
@@ -2344,10 +2382,36 @@ export default function LeadDetailPage({
                 <ChevronDown size={12} />
               </button>
               {showInvoiceMenu ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
-                  <button type="button" onClick={() => { setShowInvoiceMenu(false); setIsInvoiceModalOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">Draft custom invoice</button>
-                  <button type="button" onClick={() => { setShowInvoiceMenu(false); setActiveLeadTab('documents') }} className="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#f1d27a]">View invoices & documents</button>
-                </div>
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowInvoiceMenu(false)} />
+                  <div
+                    data-portal-dropdown="true"
+                    className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInvoiceMenu(false)
+                        setIsInvoiceModalOpen(true)
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <Plus size={13} className="text-[#caa24c]" />
+                      <span>Draft custom invoice</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInvoiceMenu(false)
+                        setActiveLeadTab('documents')
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <FileText size={13} className="text-[#caa24c]" />
+                      <span>View invoices & documents</span>
+                    </button>
+                  </div>
+                </>
               ) : null}
             </div>
           </div>
@@ -2718,7 +2782,7 @@ export default function LeadDetailPage({
                                   </span>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold text-white leading-tight truncate">
-                                      {isEmail ? entry.email.subject : isCall ? describeActivityEntry(entry) : entry.note.content.substring(0, 45)}
+                                      {isEmail ? decodeHtmlEntities(entry.email.subject) : isCall ? describeActivityEntry(entry) : decodeHtmlEntities(entry.note.content).substring(0, 45)}
                                     </p>
                                   </div>
                                 </div>
@@ -3038,12 +3102,12 @@ export default function LeadDetailPage({
                                       {formatTimelineDate(email.receivedAt || '')}
                                     </span>
                                   </div>
-                                  <p className="text-xs font-bold text-zinc-200">{email.subject || '(No Subject)'}</p>
+                                  <p className="text-xs font-bold text-zinc-200">{decodeHtmlEntities(email.subject) || '(No Subject)'}</p>
                                   <p className="text-[9px] text-zinc-500 truncate">
                                     {isOutgoing ? `To: ${email.to}` : `From: ${email.from}`}
                                   </p>
                                   {email.summary && (
-                                    <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{email.summary}</p>
+                                    <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{decodeHtmlEntities(email.summary)}</p>
                                   )}
                                 </div>
                               )
@@ -3793,14 +3857,14 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recommended Actions</p>
-                          <p className="mt-1 text-[10px] text-zinc-650 font-medium">Top priority first</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recommended Actions</p>
+                          <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] font-medium">Top priority first</p>
                         </div>
                       </div>
                       
                       <div className="space-y-3">
                         {recommendedActions.length === 0 ? (
-                          <p className="text-xs text-zinc-500 italic py-4">No recommended actions at this stage.</p>
+                          <p className="text-xs text-[color:var(--portal-muted)] italic py-4">No recommended actions at this stage.</p>
                         ) : (
                           recommendedActions.map((action, index) => (
                             <button
@@ -3808,18 +3872,18 @@ export default function LeadDetailPage({
                               type="button"
                               onClick={action.onClick}
                               disabled={action.disabled}
-                              className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/5 hover:border-[#caa24c]/20 transition-all duration-200 group cursor-pointer"
+                              className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/8 hover:border-[#caa24c]/30 transition-all duration-200 group cursor-pointer"
                             >
                               <div className="flex items-center gap-3">
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-[#caa24c] border border-zinc-800">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c] shadow-xs group-hover:border-[#caa24c]/50">
                                   {action.icon}
                                 </span>
                                 <div>
-                                  <p className="text-xs font-bold text-white group-hover:text-[#caa24c] transition-colors">{action.label}</p>
-                                  <p className="text-[10px] text-zinc-500 mt-0.5">{action.detail}</p>
+                                  <p className="text-xs font-bold text-[color:var(--portal-text)] group-hover:text-[#caa24c] transition-colors">{action.label}</p>
+                                  <p className="text-[10px] text-[color:var(--portal-muted)] mt-0.5">{action.detail}</p>
                                 </div>
                               </div>
-                              <span className="text-zinc-500 group-hover:text-white transition-colors">
+                              <span className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors">
                                 <ChevronRight size={14} />
                               </span>
                             </button>
@@ -4062,7 +4126,7 @@ export default function LeadDetailPage({
                             {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : <Check size={11} className="stroke-[3]" />}
                           </span>
                           <div>
-                            <p className="text-xs font-bold text-white leading-tight">{entry.kind === 'email' ? entry.email.subject : describeActivityEntry(entry)}</p>
+                            <p className="text-xs font-bold text-white leading-tight">{entry.kind === 'email' ? decodeHtmlEntities(entry.email.subject) : describeActivityEntry(entry)}</p>
                             <p className="text-[9px] text-zinc-500 mt-0.5">{formatTimelineDate(entry.createdAt)}</p>
                           </div>
                         </div>
@@ -4174,7 +4238,7 @@ export default function LeadDetailPage({
                       {tourEmailJobs.map((job) => (
                         <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-black/20 px-4 py-3">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-zinc-200">{job.subject}</p>
+                            <p className="truncate text-xs font-bold text-zinc-200">{decodeHtmlEntities(job.subject)}</p>
                             <p className="mt-1 text-[9px] uppercase tracking-wider text-zinc-600">
                               {job.job_type.replaceAll('_', ' ')} · {job.sent_at ? `Sent ${formatTimelineDate(job.sent_at)}` : `Scheduled ${formatTimelineDate(job.scheduled_for)}`}
                             </p>
@@ -4247,7 +4311,7 @@ export default function LeadDetailPage({
                               <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
                             </div>
                           </div>
-                          <p className="text-xs font-bold text-zinc-200">{email.subject || '(No subject)'}</p>
+                          <p className="text-xs font-bold text-zinc-200">{decodeHtmlEntities(email.subject) || '(No subject)'}</p>
                           <p className="mt-1 text-[10px] text-zinc-600">
                             From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
                           </p>
@@ -5758,7 +5822,7 @@ function ClientActionButton({
         loading ? 'opacity-100 ring-1 ring-[#caa24c]/25' : 'disabled:opacity-45'
       }`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors group-hover:text-[#a8792f]">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c] transition-colors group-hover:border-[#caa24c]/50 shadow-xs">
         {loading ? (
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#caa24c]/25 border-t-[#caa24c]" />
         ) : (
@@ -5766,7 +5830,7 @@ function ClientActionButton({
         )}
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold text-[color:var(--portal-text)] transition-colors">
+        <span className="block text-xs font-bold text-[color:var(--portal-text)] group-hover:text-[#caa24c] transition-colors">
           {loading ? 'Saving next step...' : label}
         </span>
         <span className="mt-1 block text-[9px] font-medium leading-4 text-[color:var(--portal-muted)]">
