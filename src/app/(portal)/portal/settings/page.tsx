@@ -610,7 +610,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={saving}
-              className="bg-[#caa24c] hover:bg-[#dfbd68] text-black text-xs font-black uppercase tracking-widest px-6 py-3 rounded-lg shadow-xl shadow-[#caa24c]/10 cursor-pointer disabled:opacity-40 hover:scale-105 active:scale-95 transition-all"
+              className="bg-[#caa24c] hover:bg-[#dfbd68] text-white text-xs font-black uppercase tracking-widest px-6 py-3 rounded-lg shadow-xl shadow-[#caa24c]/10 cursor-pointer disabled:opacity-40 hover:scale-105 active:scale-95 transition-all"
             >
               {saving ? 'Saving...' : 'Save Notification Recipients'}
             </button>

@@ -13,8 +13,7 @@ import {
   Users,
   Phone,
   Calendar,
-  X,
-  AlertCircle
+  Inbox
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -28,6 +27,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 
 // Tab Component Imports
 import { MarketingOverviewTab } from './tabs/MarketingOverviewTab'
+import { AllEmailsTab } from './tabs/AllEmailsTab'
 import { LeadSourcesTab } from './tabs/LeadSourcesTab'
 import { EmailCampaignsTab } from './tabs/EmailCampaignsTab'
 import { TextCampaignsTab } from './tabs/TextCampaignsTab'
@@ -36,7 +36,7 @@ import { ContactListsTab } from './tabs/ContactListsTab'
 import { CallCenterTab } from './tabs/CallCenterTab'
 import { MarketingCalendarTab } from './tabs/MarketingCalendarTab'
 
-import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
+import type { EmailTemplate } from './emailTemplates'
 import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 
 export type Campaign = {
@@ -475,6 +475,12 @@ function MarketingPageContent() {
   // Derive page headers
   const getHeaderInfo = () => {
     switch (activeTab) {
+      case 'emails':
+        return {
+          title: 'Sent & Received Emails',
+          desc: 'Unified inbox and sent stream for client emails, Zoho correspondence, and marketing campaign blasts.',
+          icon: <Inbox size={18} />
+        }
       case 'sources':
         return {
           title: 'Lead Sources',
@@ -530,7 +536,16 @@ function MarketingPageContent() {
   const header = getHeaderInfo()
 
   let headerActions: React.ReactNode
-  if (activeTab === 'email-campaigns') {
+  if (activeTab === 'emails') {
+    headerActions = (
+      <PortalButton
+        variant="primary"
+        onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
+      >
+        <Plus size={13} /> Compose Email
+      </PortalButton>
+    )
+  } else if (activeTab === 'email-campaigns') {
     headerActions = (
       <>
         <PortalButton onClick={() => loadCampaigns()} disabled={loadingCampaigns}>
@@ -562,7 +577,7 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame className={activeTab === 'contact-lists' ? 'flex-1 min-h-0 overflow-hidden' : ''}>
+    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' ? 'flex-1 min-h-0 overflow-hidden' : ''}>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
@@ -581,6 +596,10 @@ function MarketingPageContent() {
             onTabChange={handleTabChange}
             onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
           />
+        )}
+
+        {activeTab === 'emails' && (
+          <AllEmailsTab inquiries={inquiries} />
         )}
 
         {activeTab === 'sources' && (
@@ -609,6 +628,7 @@ function MarketingPageContent() {
 
         {activeTab === 'builder-automation' && (
           <EmailBuilderTab
+            key={builderSession}
             initialTemplate={builderTemplate}
             campaigns={campaigns}
             activityEvents={marketingActivity}
@@ -756,12 +776,6 @@ function mergeMarketingActivity(
   return Array.from(byId.values())
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 25)
-}
-
-function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
-  return inquiry.campaign_key === 'grand_opening_2026_07_25'
-    || inquiry.flow === 'grand_opening_rsvp'
-    || inquiry.source === 'grand_opening_rsvp'
 }
 
 function shortenUrl(url: string) {

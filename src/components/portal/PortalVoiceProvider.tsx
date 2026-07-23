@@ -503,16 +503,16 @@ export function PortalPhoneButton() {
     <button
       type="button"
       onClick={isPanelOpen ? closePanel : openPanel}
-      className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]"
+      className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
       aria-label={activeCall ? 'Open active call' : 'Open Luxor phone'}
       title={phoneState === 'ready' ? 'Luxor phone ready' : 'Open Luxor phone'}
     >
-      {activeCall ? <PhoneCall size={18} className="text-emerald-400" /> : <Phone size={18} className="text-zinc-400" />}
-      <span className={`absolute bottom-1 right-1 h-2 w-2 rounded-full border border-black ${
+      {activeCall ? <PhoneCall size={20} className="text-emerald-400" /> : <Phone size={20} className="text-zinc-400" />}
+      <span className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border border-zinc-950 ${
         phoneState === 'ready' ? 'bg-emerald-400' : phoneState === 'error' ? 'bg-red-400' : 'bg-zinc-600'
       }`} />
       {unreadCount > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-black bg-[#caa24c] px-1 font-mono text-[8px] font-black text-black">
+        <span className="absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-1 font-mono text-[9px] font-black text-black shadow-xs">
           {Math.min(unreadCount, 99)}
         </span>
       )}
@@ -662,7 +662,7 @@ function PortalPhonePanel({
                   {phoneError && <p className="mt-2 text-[10px] text-red-400">{phoneError}</p>}
                 </div>
               </div>
-              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50">
+              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-50">
                 {phoneState === 'starting' ? <Loader2 size={14} className="animate-spin" /> : <Phone size={14} />}
                 {phoneState === 'starting' ? 'Connecting' : 'Enable Phone'}
               </button>

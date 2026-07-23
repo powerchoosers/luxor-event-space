@@ -380,6 +380,88 @@ export async function listLuxorZohoInbox(limit = 25) {
   }))
 }
 
+export async function listLuxorZohoSentMessages(limit = 50) {
+  const { accountId, baseUrl, allowedSenders } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const primarySender = allowedSenders[0] || 'booking@luxoratlaspalmas.com'
+  const params = new URLSearchParams({
+    searchKey: `sender:${primarySender}`,
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+    start: '1',
+    includeto: 'true',
+  })
+
+  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  })
+
+  const resultText = await response.text()
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      cachedAccessToken = null
+    }
+    throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
+  }
+
+  const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+
+  return (result.data || []).map((message) => ({
+    id: message.messageId || message.message_id || '',
+    subject: message.subject || '(No subject)',
+    from: message.fromAddress || message.sender || primarySender,
+    to: message.toAddress || '',
+    cc: message.ccAddress || '',
+    receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
+    summary: message.summary || '',
+    hasAttachment: Boolean(message.hasAttachment),
+    direction: 'outgoing' as const,
+  }))
+}
+
+export async function getLuxorZohoMessageDetail(messageId: string) {
+  if (!messageId) return null
+  const { accountId, baseUrl } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+
+  try {
+    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${messageId}`, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    })
+
+    const resultText = await response.text()
+    if (!response.ok) {
+      if (response.status === 401) cachedAccessToken = null
+      return null
+    }
+
+    const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
+    const data = result.data || {}
+
+    return {
+      id: messageId,
+      subject: String(data.subject || '(No subject)'),
+      from: String(data.fromAddress || data.sender || ''),
+      to: String(data.toAddress || ''),
+      cc: String(data.ccAddress || ''),
+      receivedAt: String(data.receivedTime || data.receivedtime || data.sentDateInGMT || ''),
+      content: String(data.content || data.summary || ''),
+      hasAttachment: Boolean(data.hasAttachment),
+    }
+  } catch (err) {
+    console.error('Failed fetching Zoho message detail:', err)
+    return null
+  }
+}
+
 export async function listLuxorZohoMessagesForAddress(email: string, limit = 50) {
   const clientEmail = normalizeEmailAddress(email)
   if (!clientEmail) return []
@@ -411,7 +493,7 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
     throw new Error(`Zoho email search failed with ${response.status}: ${resultText}`)
   }
 
-  const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
+  const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
   const { allowedSenders } = getZohoConfig()
 
   return (result.data || []).map((message) => {
@@ -420,7 +502,7 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
     const fromEmail = normalizeEmailAddress(from)
 
     const isOurEmail = allowedSenders.includes(fromEmail)
-    const direction = isOurEmail ? 'outgoing' : 'incoming'
+    const direction = isOurEmail ? ('outgoing' as const) : ('incoming' as const)
 
     return {
       id: message.messageId || message.message_id || '',
@@ -435,3 +517,4 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
     }
   })
 }
+

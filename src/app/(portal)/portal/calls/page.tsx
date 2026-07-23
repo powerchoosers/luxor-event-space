@@ -242,7 +242,7 @@ export default function CallsPage() {
                 <label className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Call notes</label>
                 <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="What was discussed and what happens next?" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-[#caa24c]/35" />
               </div>
-              <button type="button" onClick={() => void updateCall(selectedCall.id, { notes: notes.trim() || null, outcome: outcome || null })} disabled={saving} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-black hover:bg-[#dfbd68] disabled:opacity-50">
+              <button type="button" onClick={() => void updateCall(selectedCall.id, { notes: notes.trim() || null, outcome: outcome || null })} disabled={saving} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68] disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Clock3 size={14} />} Save call details
               </button>
             </div>

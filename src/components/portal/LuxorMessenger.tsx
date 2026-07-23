@@ -212,7 +212,7 @@ export function LuxorMessenger() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="font-serif text-2xl font-semibold text-white">Text Messages</h1>
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-black hover:bg-[#dfbd68]"><Plus size={13}/> New</button>
+              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68]"><Plus size={13}/> New</button>
               <div className="relative" ref={lineOptionsRef}>
                 <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
                 <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-1.5 shadow-2xl backdrop-blur-xl">
@@ -243,7 +243,7 @@ export function LuxorMessenger() {
                 <span className="mt-0.5 block font-mono text-[9px] text-zinc-600">{formatPhoneDisplay(conversation.phoneNumber)}</span>
                 <span className="mt-1 flex items-center gap-2">
                   <span className={`min-w-0 flex-1 truncate text-[11px] ${conversation.unreadCount ? 'font-semibold text-zinc-300' : 'text-zinc-600'}`}>{conversation.latest?.direction === 'outbound' ? 'You: ' : ''}{conversation.latest?.body || 'Start a new conversation'}</span>
-                  {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1 font-mono text-[9px] font-black text-black">{conversation.unreadCount}</span> : null}
+                  {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1 font-mono text-[9px] font-black text-white">{conversation.unreadCount}</span> : null}
                 </span>
               </span>
             </button>
@@ -293,7 +293,7 @@ export function LuxorMessenger() {
                   <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} placeholder={`Message ${selectedConversation.contactName}`} className="portal-input-transparent max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-white outline-none placeholder:text-zinc-700" />
                   <div className="mt-1 flex items-center justify-between gap-2"><p className="font-mono text-[8px] text-zinc-700">{body.length} / 1600 · Enter to send · Shift+Enter for a new line</p><AnimatePresence>{isComposing ? <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1 text-[8px] text-[#caa24c]">Typing <TypingDots/></motion.span> : null}</AnimatePresence></div>
                 </div>
-                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-black transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
+                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
               </div>
             </div>
           </>

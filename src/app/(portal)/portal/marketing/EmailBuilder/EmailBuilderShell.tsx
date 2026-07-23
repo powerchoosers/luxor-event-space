@@ -284,7 +284,7 @@ function SaveTemplateModal({
             <button
               onClick={saveTemplate}
               disabled={saving || !name.trim() || !blocks.length}
-              className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-black transition-all hover:bg-[#d4b060] disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white transition-all hover:bg-[#d4b060] disabled:opacity-50"
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               Save Template
@@ -535,7 +535,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         <button
           onClick={() => setShowPreview(true)}
           disabled={blocks.length === 0}
-          className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-[11px] font-black uppercase tracking-[0.15em] text-black shadow-lg shadow-[#caa24c]/20 hover:bg-[#d4b060] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 flex-shrink-0"
+          className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-[11px] font-black uppercase tracking-[0.15em] text-white shadow-lg shadow-[#caa24c]/20 hover:bg-[#d4b060] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 flex-shrink-0"
         >
           <Eye size={14} />
           Preview & Send

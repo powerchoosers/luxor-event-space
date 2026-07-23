@@ -179,7 +179,7 @@ export function ProposalBuilderModal({
               onClick={() => setActiveView('builder')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
                 activeView === 'builder'
-                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  ? 'bg-[#caa24c] text-white shadow-sm'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
@@ -191,7 +191,7 @@ export function ProposalBuilderModal({
               onClick={() => setActiveView('details')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
                 activeView === 'details'
-                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  ? 'bg-[#caa24c] text-white shadow-sm'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
@@ -203,7 +203,7 @@ export function ProposalBuilderModal({
               onClick={() => setActiveView('preview')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
                 activeView === 'preview'
-                  ? 'bg-[#caa24c] text-black shadow-sm'
+                  ? 'bg-[#caa24c] text-white shadow-sm'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >

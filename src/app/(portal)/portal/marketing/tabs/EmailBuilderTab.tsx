@@ -241,7 +241,7 @@ export function EmailBuilderTab({
                     <p className="text-[8px] text-zinc-500 max-w-[140px] mx-auto">Create stunning emails with our drag and drop editor.</p>
                   </div>
                   
-                  <button className="relative z-20 rounded bg-[#caa24c] px-3 py-1 mx-auto text-[8px] font-black uppercase text-black">
+                  <button className="relative z-20 rounded bg-[#caa24c] px-3 py-1 mx-auto text-[8px] font-black uppercase text-white">
                     Book Tour Slot
                   </button>
                 </div>
@@ -430,7 +430,7 @@ export function EmailBuilderTab({
               <button
                 type="submit"
                 disabled={generatingElena}
-                className="rounded-lg bg-[#caa24c] px-5 py-2 text-xs font-black uppercase tracking-wider text-black flex items-center gap-2"
+                className="rounded-lg bg-[#caa24c] px-5 py-2 text-xs font-black uppercase tracking-wider text-white flex items-center gap-2"
               >
                 {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
               </button>

@@ -486,7 +486,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                 <button
                   type="button"
                   onClick={handleCreateSession}
-                  className="inline-flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-black px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer transition-all"
+                  className="inline-flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-white px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer transition-all"
                 >
                   <Plus size={11} strokeWidth={3} /> New Session
                 </button>
@@ -730,7 +730,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 <button
                                   type="button"
                                   onClick={() => handleConfirmAction(index, msg.confirmation!)}
-                                  className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-[#050505] px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                                  className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
                                 >
                                   Confirm Action
                                 </button>

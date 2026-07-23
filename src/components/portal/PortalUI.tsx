@@ -60,7 +60,7 @@ export function PortalButton({
   size?: PortalButtonSize
 }) {
   const variantClasses: Record<PortalButtonVariant, string> = {
-    primary: 'border-[#caa24c] bg-[#caa24c] text-black shadow-lg shadow-[#caa24c]/15 hover:border-[#dfbd68] hover:bg-[#dfbd68]',
+    primary: 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/15 hover:border-[#dfbd68] hover:bg-[#dfbd68]',
     secondary: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[color:var(--portal-text)]',
     ghost: 'border-transparent bg-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]',
     danger: 'border-red-500/25 bg-red-500/10 text-red-300 hover:border-red-500/40 hover:bg-red-500/15',

@@ -439,7 +439,7 @@ export default function CommunicationsPage() {
                     <button
                       type="submit"
                       disabled={sendingEmail || !selectedInquiry.email || !emailSubject.trim() || !emailContent.trim()}
-                      className="inline-flex items-center gap-2 rounded-md bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-black hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center gap-2 rounded-md bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Send size={13} />
                       {sendingEmail ? 'Sending' : 'Send Email'}
@@ -631,7 +631,7 @@ export default function CommunicationsPage() {
                     <button
                       type="submit"
                       disabled={submittingNote || !noteContent.trim()}
-                      className="bg-[#caa24c] hover:bg-[#f1d27a] text-black px-4 py-2 rounded text-xs font-bold uppercase tracking-widest disabled:opacity-40"
+                      className="bg-[#caa24c] hover:bg-[#f1d27a] text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-widest disabled:opacity-40"
                     >
                       Record Log
                     </button>

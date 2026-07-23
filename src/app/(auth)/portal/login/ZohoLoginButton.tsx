@@ -33,7 +33,7 @@ export function ZohoLoginButton() {
         type="button"
         onClick={() => setIsAuthenticating(true)}
         disabled={isAuthenticating}
-        className="group mt-7 flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-[#caa24c] px-5 text-sm font-black uppercase tracking-[0.18em] text-black shadow-lg shadow-[#caa24c]/10 transition-colors hover:bg-[#f1d27a] disabled:cursor-wait disabled:opacity-90"
+        className="group mt-7 flex h-14 w-full items-center justify-center gap-3 rounded-lg bg-[#caa24c] px-5 text-sm font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-[#caa24c]/10 transition-colors hover:bg-[#f1d27a] disabled:cursor-wait disabled:opacity-90"
       >
         {isAuthenticating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
         {isAuthenticating ? 'Authenticating' : 'Sign in with Zoho'}

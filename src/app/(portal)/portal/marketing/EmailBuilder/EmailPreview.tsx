@@ -656,7 +656,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                             type="button"
                             onClick={handleCreateList}
                             disabled={creatingList || !newListName.trim() || !selectedEmails.length}
-                            className="rounded-md bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-black disabled:opacity-40"
+                            className="rounded-md bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-40"
                           >
                             {creatingList ? 'Saving' : 'Create'}
                           </button>
@@ -730,7 +730,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                 <button
                   onClick={handleSend}
                   disabled={sendStatus === 'sending'}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 py-3.5 text-sm font-black uppercase tracking-[0.15em] text-black shadow-lg shadow-[#caa24c]/20 transition-all hover:bg-[#d4b060] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 py-3.5 text-sm font-black uppercase tracking-[0.15em] text-white shadow-lg shadow-[#caa24c]/20 transition-all hover:bg-[#d4b060] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
                 >
                   {sendStatus === 'sending' ? (
                     <><Loader2 size={16} className="animate-spin" /> {isScheduled ? 'Scheduling...' : 'Sending...'}</>

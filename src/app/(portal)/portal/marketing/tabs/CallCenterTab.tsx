@@ -306,7 +306,7 @@ export function CallCenterTab({
                         }`}
                       >
                         <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
-                          checked ? 'border-[#caa24c] bg-[#caa24c] text-black' : 'border-zinc-800 bg-zinc-900'
+                          checked ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-800 bg-zinc-900'
                         }`}>
                           {checked && <Check size={10} strokeWidth={3} />}
                         </div>
@@ -380,7 +380,7 @@ export function CallCenterTab({
               <button
                 onClick={handleLogOutcome}
                 disabled={savingOutcome || !activeOutcome}
-                className="flex items-center gap-2 rounded-xl bg-[#caa24c] disabled:bg-zinc-800 disabled:text-zinc-600 disabled:opacity-50 px-5 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-black shadow-xl shadow-[#caa24c]/10 hover:bg-[#dfbd68] transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-2 rounded-xl bg-[#caa24c] disabled:bg-zinc-800 disabled:text-zinc-600 disabled:opacity-50 px-5 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-white shadow-xl shadow-[#caa24c]/10 hover:bg-[#dfbd68] transition-all hover:scale-105 active:scale-95"
               >
                 {savingOutcome ? (
                   <>

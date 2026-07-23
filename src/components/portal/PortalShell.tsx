@@ -12,7 +12,6 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
-  Moon,
   Users,
   Sparkles,
   DollarSign,
@@ -26,7 +25,8 @@ import {
   Brush,
   BarChart3,
   Phone,
-  TrendingUp
+  TrendingUp,
+  Inbox,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -42,6 +42,8 @@ import { ToastProvider } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
 import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
+import { usePortalNotifications } from '@/hooks/usePortalNotifications'
+import { PortalNotificationModal } from '@/components/portal/PortalNotificationModal'
 
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
@@ -79,6 +81,7 @@ const operationsSubItems = [
 
 const marketingSubItems = [
   { href: '/portal/marketing?tab=overview', label: 'Marketing Overview', icon: BarChart3 },
+  { href: '/portal/marketing?tab=emails', label: 'All Sent & Received Emails', icon: Inbox },
   { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
   { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
   { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
@@ -133,8 +136,17 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     () => 'dark'
   )
 
-  // Notification State
-  const [notificationCount, setNotificationCount] = useState(0)
+  // Notification State & Popover Modal
+  const {
+    items: notificationItems,
+    unreadCount: notificationCount,
+    unreadCountsByType,
+    loading: notificationsLoading,
+    markAsRead,
+    markAllAsRead,
+    refresh: refreshNotifications,
+  } = usePortalNotifications()
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const knownUnreadTextIds = useRef<Set<string> | null>(null)
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
@@ -195,11 +207,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           const data = await res.json()
           setInquiries(data)
           
-          // Count 'new' or 'tour_requested' inquiries as unhandled notifications
-          const unhandled = data.filter((i: LuxorInquiry) => i.status === 'new' || i.status === 'tour_requested').length
           const messages = messageRes.ok ? await messageRes.json() as Array<{ id: string; direction: string; is_read: boolean; body: string; contact_name: string | null; from_number: string }> : []
-          const unreadTexts = messages.filter((message) => message.direction === 'inbound' && !message.is_read).length
-          setNotificationCount(unhandled + unreadTexts)
           const unreadMessages = messages.filter((message) => message.direction === 'inbound' && !message.is_read)
           if (knownUnreadTextIds.current) {
             const newMessages = unreadMessages.filter((message) => !knownUnreadTextIds.current?.has(message.id))
@@ -232,7 +240,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
       active = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     fetch('/api/portal/user-preferences')
@@ -493,17 +501,37 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             <PortalPhoneButton />
             
             {/* Bell Notifications */}
-            <Link href="/portal/messages" prefetch className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Notifications">
-              <Bell size={18} className="text-zinc-400 transition-colors" />
-              {notificationCount > 0 && (
-                <span className="absolute right-1.5 top-1.5 h-4 min-w-4 rounded-full border border-black bg-blue-600 text-[8px] font-black text-white flex items-center justify-center px-1 font-mono">
-                  {notificationCount}
-                </span>
-              )}
-            </Link>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+                className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <Bell size={20} className="text-zinc-400 transition-colors" />
+                {notificationCount > 0 && (
+                  <span className="portal-notification-number absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-zinc-950 bg-blue-600 px-1 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
+              </button>
 
-            <Link href="/portal/messages" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)]" aria-label="Text messages">
-              <MessageSquare size={18} className="text-zinc-400" />
+              <PortalNotificationModal
+                isOpen={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                items={notificationItems}
+                unreadCount={notificationCount}
+                unreadCountsByType={unreadCountsByType}
+                loading={notificationsLoading}
+                onMarkAsRead={markAsRead}
+                onMarkAllAsRead={markAllAsRead}
+                onRefresh={refreshNotifications}
+              />
+            </div>
+
+            <Link href="/portal/messages?tab=sms" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer" aria-label="Text messages">
+              <MessageSquare size={20} className="text-zinc-400" />
             </Link>
             
             <button

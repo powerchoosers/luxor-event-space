@@ -544,3 +544,45 @@ async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'fail
     },
   )
 }
+
+export type LuxorEmailCampaign = {
+  id: string
+  created_at: string
+  updated_at?: string
+  name: string
+  subject: string
+  status: string
+  audience_label?: string
+  recipient_count?: number
+  sent_count?: number
+  open_count?: number
+  click_count?: number
+  sent_at?: string | null
+}
+
+export async function listLuxorEmailCampaigns(options: { limit?: number } = {}): Promise<LuxorEmailCampaign[]> {
+  const limit = options.limit || 50
+  try {
+    const campaigns = await supabaseRest<LuxorEmailCampaign[]>(
+      `luxor_marketing_campaigns?select=*&order=created_at.desc&limit=${limit}`,
+    )
+    return Array.isArray(campaigns) ? campaigns : []
+  } catch (err) {
+    console.error('Failed to list email campaigns:', err)
+    return []
+  }
+}
+
+export async function getLuxorEmailCampaignReport(campaignId: string) {
+  if (!campaignId) return null
+  try {
+    const [campaign] = await supabaseRest<LuxorEmailCampaign[]>(
+      `luxor_marketing_campaigns?select=*&id=eq.${encodeURIComponent(campaignId)}`,
+    )
+    if (!campaign) return null
+    return { campaign }
+  } catch (err) {
+    console.error('Failed to get email campaign report:', err)
+    return null
+  }
+}
