@@ -324,15 +324,15 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
   }
 
   return (
-    <div className="flex flex-1 min-h-0 w-full overflow-hidden rounded-2xl border border-zinc-900 bg-black/40 shadow-2xl backdrop-blur-xl font-sans">
+    <div className="flex flex-1 min-h-0 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl backdrop-blur-xl font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
-      <div className="w-64 shrink-0 border-r border-zinc-900/70 bg-zinc-950/60 p-4 flex flex-col justify-between hidden md:flex">
+      <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 flex flex-col justify-between hidden md:flex">
         <div className="space-y-6">
           {/* Primary Action Button */}
           <button
             type="button"
             onClick={() => triggerCompose()}
-            className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#caa24c] to-[#d4b060] px-4 py-3 text-xs font-bold uppercase tracking-widest text-black shadow-lg shadow-[#caa24c]/10 hover:brightness-110 transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-[#caa24c] hover:bg-[#d4b060] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} className="stroke-[2.5]" />
             Compose Email
@@ -340,7 +340,7 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
 
           {/* Mailbox Navigation List */}
           <div className="space-y-1">
-            <p className="px-3 text-[9px] font-black uppercase tracking-[0.2em] text-zinc-550 mb-2">Mailboxes</p>
+            <p className="px-3 text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-faint)] mb-2">Mailboxes</p>
             
             <FolderNavItem
               icon={<Mail size={15} />}
@@ -381,22 +381,22 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
         </div>
 
         {/* Sync & Mailbox Footer */}
-        <div className="pt-4 border-t border-zinc-900/60 space-y-3">
-          <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+        <div className="pt-4 border-t border-[color:var(--portal-border)] space-y-3">
+          <div className="flex items-center justify-between text-[10px] font-mono text-[color:var(--portal-muted)]">
             <span>Zoho & Supabase Sync</span>
             <button
               type="button"
               onClick={() => loadEmails()}
               disabled={loading}
-              className="p-1 text-zinc-400 hover:text-white transition-colors"
+              className="p-1 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
               title="Refresh messages"
             >
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
-          <div className="rounded-lg border border-zinc-900 bg-zinc-950 p-2.5 text-[10px]">
-            <p className="font-bold text-zinc-300 truncate">booking@luxoratlaspalmas.com</p>
-            <p className="text-emerald-400 font-mono text-[9px] mt-0.5 flex items-center gap-1">
+          <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 p-2.5 text-[10px]">
+            <p className="font-bold text-[color:var(--portal-text)] truncate">booking@luxoratlaspalmas.com</p>
+            <p className="text-emerald-500 font-mono text-[9px] mt-0.5 flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active Connection
             </p>
           </div>
@@ -404,11 +404,11 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
       </div>
 
       {/* PANE 2: Message Threads List */}
-      <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-zinc-900/70 bg-black/50 flex flex-col min-h-0">
+      <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col min-h-0">
         {/* Search & Header */}
-        <div className="p-4 border-b border-zinc-900/70 space-y-3 shrink-0">
+        <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+            <h3 className="text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest flex items-center gap-2">
               <Inbox size={15} className="text-[#caa24c]" />
               {activeFolder === 'all' && 'All Messages'}
               {activeFolder === 'inbox' && 'Inbox Messages'}
@@ -416,18 +416,18 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
               {activeFolder === 'campaigns' && 'Campaign Blasts'}
               {activeFolder === 'starred' && 'Starred Messages'}
             </h3>
-            <span className="text-[10px] font-mono text-zinc-500">{filteredMessages.length} items</span>
+            <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">{filteredMessages.length} items</span>
           </div>
 
           {/* Search Input */}
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search subject, sender, text..."
-              className="w-full bg-zinc-950 border border-zinc-900 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-200 outline-none focus:border-[#caa24c]/40 placeholder:text-zinc-650"
+              className="w-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-xl pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
 
@@ -441,25 +441,25 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
         </div>
 
         {/* Message Item Stream */}
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-zinc-900/40">
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]">
           {loading && messages.length === 0 ? (
-            <div className="py-12 text-center text-xs text-zinc-550 font-mono animate-pulse">
+            <div className="py-12 text-center text-xs text-[color:var(--portal-muted)] font-mono animate-pulse">
               SYNCING EMAIL STREAM...
             </div>
           ) : error ? (
             <div className="p-6 text-center">
-              <p className="text-xs text-rose-300 leading-relaxed">{error}</p>
+              <p className="text-xs text-rose-400 leading-relaxed">{error}</p>
               {reconnectRequired && (
                 <a
                   href="/api/auth/zoho/login?setup=1"
-                  className="mt-3 inline-flex rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-200 hover:bg-rose-500/20"
+                  className="mt-3 inline-flex rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-400 hover:bg-rose-500/20"
                 >
                   Reconnect Zoho Permission
                 </a>
               )}
             </div>
           ) : filteredMessages.length === 0 ? (
-            <div className="py-12 px-6 text-center text-xs text-zinc-600">
+            <div className="py-12 px-6 text-center text-xs text-[color:var(--portal-muted)]">
               No emails match the selected filters or search terms.
             </div>
           ) : (
@@ -472,16 +472,16 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                 <div
                   key={msg.id}
                   onClick={() => setSelectedId(msg.id)}
-                  className={`p-4 flex flex-col gap-2 hover:bg-zinc-900/40 transition-all cursor-pointer relative group ${
+                  className={`p-4 flex flex-col gap-2 transition-all cursor-pointer relative group ${
                     isSelected
-                      ? 'bg-[#caa24c]/5 border-l-2 border-[#caa24c]'
-                      : 'border-l-2 border-transparent'
+                      ? 'bg-[#caa24c]/10 border-l-2 border-[#caa24c]'
+                      : 'border-l-2 border-transparent hover:bg-[color:var(--portal-soft)]/60'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <DirectionBadge direction={msg.direction} />
-                      <p className={`truncate text-xs font-bold ${isSelected ? 'text-[#f1d27a]' : isRead ? 'text-zinc-300' : 'text-white'}`}>
+                      <p className={`truncate text-xs font-bold ${isSelected ? 'text-[#a8792f] dark:text-[#f1d27a]' : isRead ? 'text-[color:var(--portal-muted)]' : 'text-[color:var(--portal-text)]'}`}>
                         {msg.direction === 'outgoing' ? `To: ${msg.to || 'Client'}` : msg.from || 'Unknown Sender'}
                       </p>
                     </div>
@@ -490,29 +490,29 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                       <button
                         type="button"
                         onClick={(e) => toggleStar(msg.id, e)}
-                        className={`p-1 transition-colors ${isStarred ? 'text-[#caa24c]' : 'text-zinc-700 hover:text-zinc-400'}`}
+                        className={`p-1 transition-colors ${isStarred ? 'text-[#caa24c]' : 'text-[color:var(--portal-faint)] hover:text-[color:var(--portal-muted)]'}`}
                       >
                         <Star size={13} className={isStarred ? 'fill-[#caa24c]' : ''} />
                       </button>
-                      <span className="text-[9px] font-mono text-zinc-600">
+                      <span className="text-[9px] font-mono text-[color:var(--portal-faint)]">
                         {formatEmailDate(msg.receivedAt)}
                       </span>
                     </div>
                   </div>
 
                   {/* Subject Line */}
-                  <h4 className={`text-xs truncate font-medium ${isSelected ? 'text-white' : 'text-zinc-300'}`}>
+                  <h4 className={`text-xs truncate font-medium ${isSelected ? 'text-[color:var(--portal-text)] font-bold' : 'text-[color:var(--portal-text)]'}`}>
                     {msg.subject || '(No Subject)'}
                   </h4>
 
                   {/* Snippet Preview */}
-                  <p className="text-[11px] text-zinc-500 line-clamp-2 leading-relaxed">
+                  <p className="text-[11px] text-[color:var(--portal-muted)] line-clamp-2 leading-relaxed">
                     {msg.summary || 'No preview available.'}
                   </p>
 
                   {/* Indicators */}
                   {msg.hasAttachment && (
-                    <div className="flex items-center gap-1 text-[9px] font-mono text-zinc-600 mt-1">
+                    <div className="flex items-center gap-1 text-[9px] font-mono text-[color:var(--portal-muted)] mt-1">
                       <Paperclip size={11} /> Has attachments
                     </div>
                   )}
@@ -524,22 +524,22 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
       </div>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className="flex-1 min-h-0 bg-zinc-950 flex flex-col hidden lg:flex">
+      <div className="flex-1 min-h-0 bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
         {selectedId && messageDetail ? (
           <>
             {/* Email Header Bar */}
-            <div className="p-6 border-b border-zinc-900 bg-zinc-950/80 space-y-4">
+            <div className="p-6 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <DirectionBadge direction={messageDetail.direction} />
                     {messageDetail.category && (
-                      <span className="text-[9px] font-mono uppercase bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">
+                      <span className="text-[9px] font-mono uppercase bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] px-2 py-0.5 rounded border border-[color:var(--portal-border)]">
                         {messageDetail.category}
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg font-bold text-white leading-tight">{messageDetail.subject}</h2>
+                  <h2 className="text-lg font-bold text-[color:var(--portal-text)] leading-tight">{messageDetail.subject}</h2>
                 </div>
 
                 {/* Main Action Buttons */}
@@ -553,14 +553,14 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                         `Re: ${messageDetail.subject}`
                       )
                     }
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-xs"
                   >
                     <Send size={13} /> Reply
                   </button>
                   <button
                     type="button"
                     onClick={(e) => toggleStar(messageDetail.id, e)}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 hover:text-white transition-colors"
+                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                     title="Star message"
                   >
                     <Star size={14} className={starredIds.has(messageDetail.id) ? 'fill-[#caa24c] text-[#caa24c]' : ''} />
@@ -568,7 +568,7 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={handlePrint}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 hover:text-white transition-colors"
+                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                     title="Print Email"
                   >
                     <Printer size={14} />
@@ -577,28 +577,28 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
               </div>
 
               {/* Sender / Recipient & Matched Lead Row */}
-              <div className="flex items-center justify-between gap-4 pt-2 border-t border-zinc-900/60">
+              <div className="flex items-center justify-between gap-4 pt-2 border-t border-[color:var(--portal-border)]">
                 <div className="flex items-center gap-3">
                   <PortalContactAvatar name={messageDetail.from} size="md" />
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-xs font-bold text-white">{messageDetail.from}</p>
+                      <p className="text-xs font-bold text-[color:var(--portal-text)]">{messageDetail.from}</p>
                       {currentInquiry && (
                         <Link
                           href={`/portal/leads/${currentInquiry.id}`}
-                          className="inline-flex items-center gap-1 rounded bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#f1d27a] border border-[#caa24c]/20 hover:bg-[#caa24c]/20"
+                          className="inline-flex items-center gap-1 rounded bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20 hover:bg-[#caa24c]/20"
                         >
                           View Lead File <ExternalLink size={10} />
                         </Link>
                       )}
                     </div>
-                    <p className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                    <p className="text-[10px] font-mono text-[color:var(--portal-muted)] mt-0.5">
                       To: {messageDetail.to} {messageDetail.cc ? `| CC: ${messageDetail.cc}` : ''}
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right font-mono text-[10px] text-zinc-500">
+                <div className="text-right font-mono text-[10px] text-[color:var(--portal-muted)]">
                   <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
                 </div>
               </div>
@@ -609,8 +609,8 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={() => setViewMode('html')}
-                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors ${
-                      viewMode === 'html' ? 'bg-[#caa24c]/20 text-[#f1d27a] border border-[#caa24c]/30' : 'text-zinc-500 hover:text-white'
+                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      viewMode === 'html' ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     HTML View
@@ -618,8 +618,8 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={() => setViewMode('text')}
-                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors ${
-                      viewMode === 'text' ? 'bg-[#caa24c]/20 text-[#f1d27a] border border-[#caa24c]/30' : 'text-zinc-500 hover:text-white'
+                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      viewMode === 'text' ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     Plain Text
@@ -627,8 +627,8 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={() => setBlockExternalImages(!blockExternalImages)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-mono transition-colors ${
-                      blockExternalImages ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : 'text-zinc-500 hover:text-zinc-300'
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-mono transition-colors cursor-pointer ${
+                      blockExternalImages ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     {blockExternalImages ? <ShieldAlert size={12} /> : <ShieldCheck size={12} />}
@@ -637,11 +637,11 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                 </div>
 
                 {/* Device Viewport Preview Mode */}
-                <div className="flex items-center gap-1 rounded-lg border border-zinc-900 bg-black/40 p-1">
+                <div className="flex items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
                   <button
                     type="button"
                     onClick={() => setViewportWidth('full')}
-                    className={`p-1.5 rounded ${viewportWidth === 'full' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'full' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                     title="Full Width View"
                   >
                     <Monitor size={13} />
@@ -649,7 +649,7 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={() => setViewportWidth('tablet')}
-                    className={`p-1.5 rounded ${viewportWidth === 'tablet' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'tablet' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                     title="Tablet Preview (768px)"
                   >
                     <Tablet size={13} />
@@ -657,7 +657,7 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                   <button
                     type="button"
                     onClick={() => setViewportWidth('mobile')}
-                    className={`p-1.5 rounded ${viewportWidth === 'mobile' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'mobile' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                     title="Mobile Preview (375px)"
                   >
                     <Smartphone size={13} />
@@ -667,10 +667,10 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
             </div>
 
             {/* Gmail-style conversation stream and inline reply */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-zinc-950">
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {(loadingDetail || loadingThread) ? (
-                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-900 bg-black/30 p-12 text-zinc-500 font-mono text-xs">
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-12 text-[color:var(--portal-muted)] font-mono text-xs">
                     <Loader2 size={15} className="animate-spin" /> LOADING FULL CONVERSATION...
                   </div>
                 ) : (
@@ -686,33 +686,33 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                 )}
 
                 {messageDetail.direction !== 'campaign' && (
-                  <div className="rounded-2xl border border-[#caa24c]/25 bg-black/55 p-4 shadow-xl">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-5 shadow-xl space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold text-white">Reply in this conversation</p>
-                        <p className="mt-1 text-[10px] text-zinc-500">
+                        <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply in this conversation</p>
+                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
                           To {thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)}
                           {thread?.messages?.length ? ` · ${thread.messages.length} messages in thread` : ''}
                         </p>
                       </div>
                       {currentInquiry && (
-                        <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#f1d27a] hover:text-white">
+                        <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:underline">
                           {currentInquiry.full_name} · View client file
                         </Link>
                       )}
                     </div>
-                    <div className="mb-3 flex gap-2">
+                    <div className="flex gap-2">
                       <input
                         value={replyInstruction}
                         onChange={(event) => setReplyInstruction(event.target.value)}
                         placeholder="Optional note for Elena: confirm the tour and ask about guest count..."
-                        className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-[#caa24c]/50"
+                        className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
                       />
                       <button
                         type="button"
                         onClick={() => void draftWithElena()}
                         disabled={draftingReply || loadingThread}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#f1d27a] hover:bg-[#caa24c]/20 disabled:opacity-50"
+                        className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 cursor-pointer disabled:opacity-50"
                       >
                         {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                         Draft with Elena
@@ -721,17 +721,17 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
                     <textarea
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
-                      rows={7}
+                      rows={6}
                       placeholder="Write your reply here, or ask Elena to draft it from the full email chain and client history."
-                      className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm leading-relaxed text-zinc-200 outline-none focus:border-[#caa24c]/50"
+                      className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
                     />
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                      <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-300' : 'text-zinc-500'}`}>{replyStatus}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-500 font-medium' : 'text-[color:var(--portal-muted)]'}`}>{replyStatus}</p>
                       <button
                         type="button"
                         onClick={() => void sendInlineReply()}
                         disabled={sendingReply || !replyText.trim()}
-                        className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-black hover:bg-[#d4b060] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {sendingReply ? <Loader2 size={14} className="animate-spin" /> : replyStatus?.startsWith('Reply sent') ? <Check size={14} /> : <Send size={14} />}
                         Send reply
@@ -744,8 +744,8 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
-            <Mail size={36} className="text-zinc-800" />
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-600">Select an email to view full content</p>
+            <Mail size={36} className="text-[color:var(--portal-faint)]" />
+            <p className="text-xs font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Select an email to view full content</p>
           </div>
         )}
       </div>
@@ -768,19 +768,19 @@ function ThreadMessage({
   const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
 
   return (
-    <article className={`overflow-hidden rounded-2xl border transition-colors ${expanded ? 'border-zinc-700 bg-zinc-900/45' : 'border-zinc-900 bg-black/30 hover:border-zinc-800'}`}>
-      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center gap-3 p-4 text-left">
+    <article className={`overflow-hidden rounded-2xl border transition-colors ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center gap-3 p-4 text-left cursor-pointer">
         <PortalContactAvatar name={message.from} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className="truncate text-xs font-bold text-white">{message.direction === 'outgoing' ? `Luxor to ${message.to}` : message.from}</p>
-            <p className="shrink-0 text-[9px] font-mono text-zinc-600">{formatEmailDateDetailed(message.receivedAt)}</p>
+            <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{message.direction === 'outgoing' ? `Luxor to ${message.to}` : message.from}</p>
+            <p className="shrink-0 text-[9px] font-mono text-[color:var(--portal-muted)]">{formatEmailDateDetailed(message.receivedAt)}</p>
           </div>
-          <p className="mt-1 truncate text-[10px] text-zinc-500">{expanded ? `To ${message.to}${message.cc ? ` · CC ${message.cc}` : ''}` : message.summary || message.subject}</p>
+          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${message.to}${message.cc ? ` · CC ${message.cc}` : ''}` : message.summary || message.subject}</p>
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-zinc-800/70 bg-white">
+        <div className="border-t border-[color:var(--portal-border)] bg-white">
           {viewMode === 'html' ? (
             <iframe
               srcDoc={html}
@@ -789,7 +789,7 @@ function ThreadMessage({
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             />
           ) : (
-            <div className="min-h-36 whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-zinc-800">
+            <div className="min-h-36 whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-zinc-800 bg-white">
               {message.content || message.summary || 'No message body available.'}
             </div>
           )}
@@ -826,15 +826,15 @@ function FolderNavItem({
       onClick={onClick}
       className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all cursor-pointer ${
         active
-          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-          : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-white'
+          ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30'
+          : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
       }`}
     >
       <div className="flex items-center gap-2.5">
-        <span className={active ? 'text-[#caa24c]' : 'text-zinc-500'}>{icon}</span>
+        <span className={active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}>{icon}</span>
         <span>{label}</span>
       </div>
-      <span className={`text-[10px] font-mono rounded-full px-2 py-0.5 ${active ? 'bg-[#caa24c]/20 text-[#f1d27a]' : 'bg-zinc-900 text-zinc-500'}`}>
+      <span className={`text-[10px] font-mono rounded-full px-2 py-0.5 ${active ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'}`}>
         {count}
       </span>
     </button>
@@ -848,8 +848,8 @@ function FilterChipItem({ label, active, onClick }: { label: string; active: boo
       onClick={onClick}
       className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
         active
-          ? 'bg-[#caa24c]/20 text-[#f1d27a] border border-[#caa24c]/30'
-          : 'bg-zinc-900/80 text-zinc-500 hover:text-zinc-300 border border-zinc-850'
+          ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/40 font-bold'
+          : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] border border-[color:var(--portal-border)]'
       }`}
     >
       {label}

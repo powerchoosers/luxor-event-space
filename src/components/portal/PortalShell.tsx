@@ -26,7 +26,6 @@ import {
   BarChart3,
   Phone,
   TrendingUp,
-  Inbox,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -59,6 +58,7 @@ const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
   { href: '/portal/calls', icon: <Phone size={18} />, label: 'Calls & Voicemail' },
+  { href: '/portal/marketing?tab=emails', icon: <Mail size={18} />, label: 'Emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
@@ -81,7 +81,7 @@ const operationsSubItems = [
 
 const marketingSubItems = [
   { href: '/portal/marketing?tab=overview', label: 'Marketing Overview', icon: BarChart3 },
-  { href: '/portal/marketing?tab=emails', label: 'All Sent & Received Emails', icon: Inbox },
+  { href: '/portal/marketing?tab=emails', label: 'Emails', icon: Mail },
   { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
   { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
   { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
@@ -513,7 +513,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               >
                 <Bell size={20} className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors" />
                 {notificationCount > 0 && (
-                  <span className="portal-notification-number absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-1 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
+                  <span className="portal-notification-number absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-0.5 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
                     {notificationCount > 99 ? '99+' : notificationCount}
                   </span>
                 )}

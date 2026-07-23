@@ -12,8 +12,7 @@ import {
   Sparkles,
   Users,
   Phone,
-  Calendar,
-  Inbox
+  Calendar
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -477,9 +476,9 @@ function MarketingPageContent() {
     switch (activeTab) {
       case 'emails':
         return {
-          title: 'Sent & Received Emails',
+          title: 'Emails',
           desc: 'Unified inbox and sent stream for client emails, Zoho correspondence, and marketing campaign blasts.',
-          icon: <Inbox size={18} />
+          icon: <Mail size={18} />
         }
       case 'sources':
         return {
