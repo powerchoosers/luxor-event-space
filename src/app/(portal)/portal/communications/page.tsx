@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar } from '@/components/portal/PortalUI'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
@@ -319,13 +320,26 @@ export default function CommunicationsPage() {
               </div>
             </div>
 
-            <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-zinc-900/30">
+            <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-[color:var(--portal-border)]">
               {loading ? (
-                <p className="text-center py-6 text-xs text-zinc-650 font-semibold tracking-wider">SYNCING QUEUE...</p>
+                <div className="p-4 space-y-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="h-3.5 w-28 rounded luxor-skeleton" />
+                        <div className="h-2.5 w-14 rounded luxor-skeleton" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="h-2.5 w-20 rounded luxor-skeleton" />
+                        <div className="h-4 w-16 rounded-full luxor-skeleton" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : error ? (
                 <p className="text-center py-6 text-xs text-red-300">{error}</p>
               ) : filteredInquiries.length === 0 ? (
-                <p className="text-center py-6 text-xs text-zinc-550">No clients match search parameters.</p>
+                <p className="text-center py-6 text-xs text-[color:var(--portal-muted)]">No clients match search parameters.</p>
               ) : (
                 filteredInquiries.map((inq) => {
                   const isActive = inq.id === selectedId
@@ -461,7 +475,17 @@ export default function CommunicationsPage() {
                   {!selectedInquiry.email ? (
                     <p className="text-xs text-zinc-600 italic">Add a client email address to see their sent and received Zoho messages.</p>
                   ) : loadingEmailMessages && emailMessages.length === 0 ? (
-                    <p className="text-xs text-zinc-650 italic">Loading emails for {selectedInquiry.email}...</p>
+                    <div className="space-y-2 py-1">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="h-3 w-36 rounded luxor-skeleton" />
+                            <div className="h-2.5 w-16 rounded luxor-skeleton" />
+                          </div>
+                          <div className="h-2.5 w-48 rounded luxor-skeleton" />
+                        </div>
+                      ))}
+                    </div>
                   ) : emailThreadError ? (
                     <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
                       <p className="text-xs leading-5 text-rose-300">{emailThreadError}</p>
@@ -490,7 +514,7 @@ export default function CommunicationsPage() {
                                 }`}>
                                   {message.direction === 'outgoing' ? 'Sent' : 'Received'}
                                 </span>
-                                <p className="truncate text-xs font-bold text-zinc-200">{message.subject}</p>
+                                <p className="truncate text-xs font-bold text-zinc-200">{decodeHtmlEntities(message.subject)}</p>
                               </div>
                               <p className="mt-1 truncate text-[10px] text-zinc-500">
                                 From {message.from || 'Unknown'} {message.to ? `to ${message.to}` : ''}
@@ -501,7 +525,7 @@ export default function CommunicationsPage() {
                             </span>
                           </div>
                           {message.summary ? (
-                            <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-400">{message.summary}</p>
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-400">{decodeHtmlEntities(message.summary)}</p>
                           ) : null}
                         </div>
                       ))}

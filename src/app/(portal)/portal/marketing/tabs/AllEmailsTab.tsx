@@ -26,6 +26,7 @@ import {
 import Link from 'next/link'
 import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 export interface EmailMessageItem {
   id: string
@@ -461,11 +462,19 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           </div>
         </div>
 
-        {/* Message Item Stream */}
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]">
           {loading && messages.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[color:var(--portal-muted)] font-mono animate-pulse">
-              SYNCING EMAIL STREAM...
+            <div className="p-4 space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="p-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="h-3 w-28 rounded luxor-skeleton" />
+                    <div className="h-2.5 w-12 rounded luxor-skeleton" />
+                  </div>
+                  <div className="h-3.5 w-48 rounded luxor-skeleton" />
+                  <div className="h-2.5 w-full rounded luxor-skeleton" />
+                </div>
+              ))}
             </div>
           ) : error ? (
             <div className="p-6 text-center">
@@ -529,12 +538,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
                   {/* Subject Line */}
                   <h4 className={`text-xs truncate font-medium ${isSelected ? 'text-[color:var(--portal-text)] font-bold' : 'text-[color:var(--portal-text)]'}`}>
-                    {msg.subject || '(No Subject)'}
+                    {decodeHtmlEntities(msg.subject) || '(No Subject)'}
                   </h4>
 
                   {/* Snippet Preview */}
                   <p className="text-[11px] text-[color:var(--portal-muted)] line-clamp-2 leading-relaxed">
-                    {msg.summary || 'No preview available.'}
+                    {decodeHtmlEntities(msg.summary) || 'No preview available.'}
                   </p>
 
                   {/* Indicators */}
@@ -580,7 +589,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg font-bold text-[color:var(--portal-text)] leading-tight">{messageDetail.subject}</h2>
+                  <h2 className="text-lg font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(messageDetail.subject)}</h2>
                 </div>
 
                 {/* Main Action Buttons */}
@@ -783,6 +792,25 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               </div>
             )}
           </>
+        ) : loadingDetail ? (
+          <div className="flex-1 flex flex-col p-8 space-y-6">
+            <div className="space-y-3 border-b border-[color:var(--portal-border)] pb-6">
+              <div className="h-6 w-3/4 rounded-lg luxor-skeleton" />
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full luxor-skeleton" />
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="h-3.5 w-36 rounded luxor-skeleton" />
+                  <div className="h-2.5 w-48 rounded luxor-skeleton" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              <div className="h-3.5 w-full rounded luxor-skeleton" />
+              <div className="h-3.5 w-11/12 rounded luxor-skeleton" />
+              <div className="h-3.5 w-4/5 rounded luxor-skeleton" />
+              <div className="h-3.5 w-full rounded luxor-skeleton" />
+            </div>
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
             <Mail size={36} className="text-[color:var(--portal-faint)]" />
@@ -817,7 +845,7 @@ function ThreadMessage({
             <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{message.direction === 'outgoing' ? `Luxor to ${message.to}` : message.from}</p>
             <p className="shrink-0 text-[9px] font-mono text-[color:var(--portal-muted)]">{formatEmailDateDetailed(message.receivedAt)}</p>
           </div>
-          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${message.to}${message.cc ? ` · CC ${message.cc}` : ''}` : message.summary || message.subject}</p>
+          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${message.to}${message.cc ? ` · CC ${message.cc}` : ''}` : decodeHtmlEntities(message.summary || message.subject)}</p>
         </div>
       </button>
       {expanded && (

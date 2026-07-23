@@ -23,6 +23,7 @@ import {
   PortalCloseButton
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 // Tab Component Imports
 import { MarketingOverviewTab } from './tabs/MarketingOverviewTab'
@@ -115,8 +116,27 @@ export default function MarketingPage() {
   return (
     <Suspense fallback={
       <PortalPageFrame>
-        <div className="flex h-[400px] items-center justify-center text-xs text-zinc-550 font-bold uppercase tracking-widest font-mono">
-          Loading Marketing Command...
+        <div className="space-y-6">
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-5">
+            <div className="space-y-2">
+              <div className="h-6 w-48 rounded-lg luxor-skeleton" />
+              <div className="h-3 w-80 rounded luxor-skeleton" />
+            </div>
+            <div className="h-9 w-32 rounded-xl luxor-skeleton" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-2">
+                <div className="h-2.5 w-16 rounded luxor-skeleton" />
+                <div className="h-6 w-20 rounded luxor-skeleton" />
+                <div className="h-2 w-24 rounded luxor-skeleton" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="h-64 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2 luxor-skeleton" />
+            <div className="h-64 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 luxor-skeleton" />
+          </div>
         </div>
       </PortalPageFrame>
     }>
@@ -679,8 +699,8 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
       <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
         <div className="min-w-0">
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Campaign Report</p>
-          <h3 className="mt-1 truncate text-lg font-bold text-white">{campaign.name}</h3>
-          <p className="mt-1 truncate text-xs text-zinc-500">{campaign.subject}</p>
+          <h3 className="mt-1 truncate text-lg font-bold text-white">{decodeHtmlEntities(campaign.name)}</h3>
+          <p className="mt-1 truncate text-xs text-zinc-500">{decodeHtmlEntities(campaign.subject)}</p>
         </div>
         <PortalCloseButton onClick={onClose} aria-label="Close report" />
       </div>

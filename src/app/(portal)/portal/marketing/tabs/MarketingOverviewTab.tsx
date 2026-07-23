@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent, MarketingList } from '../page'
 
 interface MarketingOverviewTabProps {
@@ -215,8 +216,8 @@ export function MarketingOverviewTab({
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-[#caa24c]"><Mail size={18} /></div>
                 <div className="min-w-0">
                   <PortalStatusBadge status={topCampaign.status} />
-                  <h4 className="mt-2 truncate text-xs font-bold text-white">{topCampaign.name}</h4>
-                  <p className="mt-0.5 truncate text-[9px] text-zinc-550">{topCampaign.subject}</p>
+                  <h4 className="mt-2 truncate text-xs font-bold text-white">{decodeHtmlEntities(topCampaign.name)}</h4>
+                  <p className="mt-0.5 truncate text-[9px] text-zinc-550">{decodeHtmlEntities(topCampaign.subject)}</p>
                   <p className="mt-1 font-mono text-[9px] text-zinc-600">{formatCampaignDate(topCampaign)}</p>
                 </div>
               </div>
@@ -245,7 +246,7 @@ export function MarketingOverviewTab({
                     <span className="mt-0.5 text-[#caa24c]">{event.event_type === 'click' ? <MousePointerClick size={13} /> : <MailOpen size={13} />}</span>
                     <div className="min-w-0">
                       <p className="truncate text-xs font-bold text-white">{event.recipient_name || event.recipient_email || 'Recipient name unavailable'}</p>
-                      <p className="mt-0.5 truncate text-[9px] text-zinc-500">{formatStatus(event.event_type)} · {event.campaign_name || event.campaign_subject || 'Campaign name unavailable'}</p>
+                      <p className="mt-0.5 truncate text-[9px] text-zinc-500">{formatStatus(event.event_type)} · {decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</p>
                     </div>
                   </div>
                   <span className="shrink-0 font-mono text-[9px] text-zinc-600">{formatDate(event.created_at)}</span>
@@ -302,13 +303,17 @@ export function MarketingOverviewTab({
 
 function StatsCard({ label, value, icon, detail }: { label: string; value: string; icon: React.ReactNode; detail: string }) {
   return (
-    <div className="luxor-glass-card rounded-2xl border border-zinc-900/80 bg-zinc-950/20 p-5 transition-all hover:border-zinc-800">
-      <div className="flex items-center justify-between text-zinc-500">
+    <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 transition-all hover:border-[#caa24c]/20">
+      <div className="flex items-center justify-between text-[color:var(--portal-muted)]">
         <span className="text-[8.5px] font-black uppercase tracking-wider leading-none">{label}</span>
         <span className="text-[#caa24c]">{icon}</span>
       </div>
-      <h3 className="mt-3.5 font-mono text-xl font-bold leading-none text-white">{value}</h3>
-      <p className="mt-2.5 text-[8px] font-bold leading-4 text-zinc-600">{detail}</p>
+      {value === '…' ? (
+        <div className="mt-3.5 h-6 w-16 rounded luxor-skeleton" />
+      ) : (
+        <h3 className="mt-3.5 font-mono text-xl font-bold leading-none text-[color:var(--portal-text)]">{value}</h3>
+      )}
+      <p className="mt-2.5 text-[8px] font-bold leading-4 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
 }
