@@ -163,6 +163,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [thread, setThread] = useState<EmailThreadData | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
+  const [threadError, setThreadError] = useState<string | null>(null)
+  const [threadRetryKey, setThreadRetryKey] = useState(0)
   const [replyText, setReplyText] = useState('')
   const [replyInstruction, setReplyInstruction] = useState('')
   const [draftingReply, setDraftingReply] = useState(false)
@@ -267,12 +269,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     const threadId = messageDetail?.threadId
     if (!threadId || messageDetail?.direction === 'campaign') {
       setThread(null)
+      setThreadError(null)
       return
     }
     let current = true
     const cached = threadCache.get(threadId)
     if (cached) setThread(cached)
     setLoadingThread(!cached)
+    setThreadError(null)
     setReplyStatus(null)
     fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, { cache: 'no-store' })
       .then(async (response) => {
@@ -285,11 +289,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       })
       .catch((error) => {
         console.error(error)
+        if (current) setThreadError(error instanceof Error ? error.message : 'Unable to load the rest of this conversation.')
         if (current && !cached) setThread(null)
       })
       .finally(() => { if (current) setLoadingThread(false) })
     return () => { current = false }
-  }, [messageDetail?.threadId, messageDetail?.direction])
+  }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
 
   const draftWithElena = async () => {
     if (!thread?.threadId) return
@@ -455,6 +460,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     setSelectedMessageKey(messageKey(message))
     setMessageDetail(messageDetailCache.get(detailCacheKey(message.id, message.folderId)) || message)
     setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
+    setThreadError(null)
     setReplyOpen(false)
     setReplyText('')
     setReplyInstruction('')
@@ -884,21 +890,33 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             {/* Scrollable email thread — grows to fill, reply pinned below */}
             <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
-                {(loadingDetail || loadingThread) ? (
-                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-12 text-[color:var(--portal-muted)] font-mono text-xs">
-                    <Loader2 size={15} className="animate-spin" /> LOADING FULL CONVERSATION...
+                {loadingThread && !thread && (
+                  <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
+                    <Loader2 size={12} className="animate-spin text-[#caa24c]" />
+                    Loading earlier messages in the background. This email is ready now.
                   </div>
-                ) : (
-                  (thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
-                    <ThreadMessage
-                      key={`${messageKey(message)}:${index}`}
-                      message={message}
-                      expanded={message.id === selectedId || index === all.length - 1}
-                      viewMode={viewMode}
-                      blockExternalImages={blockExternalImages}
-                    />
-                  ))
                 )}
+                {threadError && !loadingThread && !thread && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-700 dark:text-amber-300">
+                    <span className="truncate">This email is available, but Zoho paused the rest of the conversation.</span>
+                    <button
+                      type="button"
+                      onClick={() => setThreadRetryKey((key) => key + 1)}
+                      className="shrink-0 font-bold uppercase tracking-wider hover:underline"
+                    >
+                      Retry thread
+                    </button>
+                  </div>
+                )}
+                {(thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
+                  <ThreadMessage
+                    key={`${messageKey(message)}:${index}`}
+                    message={message}
+                    expanded={message.id === selectedId || index === all.length - 1}
+                    viewMode={viewMode}
+                    blockExternalImages={blockExternalImages}
+                  />
+                ))}
               </div>
             </div>
 
