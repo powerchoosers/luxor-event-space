@@ -108,6 +108,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const searchParams = useSearchParams()
   const usesInternalTableScroll =
     pathname === '/portal/leads' ||
+    pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && searchParams?.get('tab') === 'contact-lists')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))

@@ -55,14 +55,14 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                 key={message.id}
                 className={`max-w-[88%] rounded-2xl px-4 py-3 ${
                   message.direction === 'outbound'
-                    ? 'ml-auto bg-[#caa24c] text-white'
-                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-zinc-200'
+                    ? 'ml-auto bg-[#caa24c] text-white shadow-md'
+                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
                 }`}
               >
                 <p className="whitespace-pre-wrap text-sm">{message.body || '(Media message)'}</p>
                 <p
                   className={`mt-1 text-[8px] font-black uppercase tracking-wider ${
-                    message.direction === 'outbound' ? 'text-white/70' : 'text-zinc-600'
+                    message.direction === 'outbound' ? 'text-white/80' : 'text-[color:var(--portal-muted)]'
                   }`}
                 >
                   {message.direction === 'outbound' ? message.status : 'received'} · {new Date(message.created_at).toLocaleString()}
@@ -71,7 +71,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             ))}
           </AnimatePresence>
         ) : (
-          <p className="py-10 text-center text-xs text-zinc-600">No texts with this client yet.</p>
+          <p className="py-10 text-center text-xs text-[color:var(--portal-muted)]">No texts with this client yet.</p>
         )}
       </div>
       <div className="mt-4">
@@ -82,13 +82,13 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             disabled={!phone || sending}
             rows={3}
             placeholder={phone ? `Message ${contactName || phone}` : 'This lead has no mobile number'}
-            className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-white outline-none focus:border-[#caa24c]/40 disabled:opacity-50"
+            className="portal-input-transparent min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)] disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => void send()}
             disabled={!phone || !body.trim() || sending}
-            className="flex w-12 items-center justify-center rounded-xl bg-[#caa24c] text-white disabled:opacity-40"
+            className="flex w-12 items-center justify-center rounded-xl bg-[#caa24c] text-white disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 transition-colors hover:bg-[#dfbd68]"
           >
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
