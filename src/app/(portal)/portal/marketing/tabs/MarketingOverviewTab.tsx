@@ -275,7 +275,7 @@ export function MarketingOverviewTab({
                   <CalendarClock size={15} className="shrink-0 text-[#caa24c]" />
                   <PortalStatusBadge status={campaign.status} />
                 </div>
-                <p className="mt-3 truncate text-xs font-bold text-white">{campaign.name}</p>
+                <p className="mt-3 truncate text-xs font-bold text-white">{decodeHtmlEntities(campaign.name)}</p>
                 <p className="mt-1 font-mono text-[9px] text-zinc-500">{campaign.scheduled_for ? formatDateTime(campaign.scheduled_for) : 'Send date not set'}</p>
                 <p className="mt-2 text-[9px] text-zinc-600">{campaign.queued_count.toLocaleString()} queued recipient{campaign.queued_count === 1 ? '' : 's'}</p>
               </div>

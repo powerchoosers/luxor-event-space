@@ -853,7 +853,7 @@ function ThreadMessage({
           {viewMode === 'html' ? (
             <iframe
               srcDoc={html}
-              title={`${message.subject} — ${message.id}`}
+              title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
               className="h-[420px] w-full border-0"
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             />

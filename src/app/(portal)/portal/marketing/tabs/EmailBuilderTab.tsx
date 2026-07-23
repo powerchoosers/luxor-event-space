@@ -292,7 +292,7 @@ export function EmailBuilderTab({
                           <Workflow size={13} />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-white leading-tight">{campaign.name}</p>
+                          <p className="text-xs font-bold text-white leading-tight">{decodeHtmlEntities(campaign.name)}</p>
                           <p className="text-[9.5px] font-mono text-zinc-500 mt-1 font-bold">
                             {campaign.recipient_count} recipients • {campaign.open_rate}% open • {campaign.click_rate}% click
                           </p>
@@ -368,7 +368,7 @@ export function EmailBuilderTab({
                 <div className="h-1.5 w-full" style={{ background: tpl.previewColor || '#caa24c' }} />
                 <div className="p-5">
                   <div className="mb-2 flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{tpl.name}</h4>
+                    <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{decodeHtmlEntities(tpl.name)}</h4>
                     <span className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border-zinc-700 text-zinc-450 bg-zinc-800/10">
                       {tpl.category}
                     </span>

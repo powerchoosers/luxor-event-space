@@ -149,13 +149,13 @@ export function EmailCampaignsTab({
                   <td className="px-4 py-4 text-right font-mono text-zinc-350">{campaign.unsubscribe_count.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button type="button" onClick={() => onReport(campaign.id)} disabled={reportBusy} aria-label={`Open report for ${campaign.name}`} className="rounded p-1 text-zinc-500 transition-colors hover:text-white disabled:opacity-50">
+                      <button type="button" onClick={() => onReport(campaign.id)} disabled={reportBusy} aria-label={`Open report for ${decodeHtmlEntities(campaign.name)}`} className="rounded p-1 text-zinc-500 transition-colors hover:text-white disabled:opacity-50">
                         {reportBusy ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
                       </button>
                       {canManageQueue ? (
                         <>
-                          <button type="button" onClick={() => onSendNow(campaign.id)} disabled={rowBusy} aria-label={`Send ${campaign.name} now`} className="rounded p-1 text-emerald-500 transition-colors hover:text-emerald-300 disabled:opacity-50"><Send size={13} /></button>
-                          <button type="button" onClick={() => onCancel(campaign.id)} disabled={rowBusy} aria-label={`Cancel ${campaign.name}`} className="rounded p-1 text-rose-500 transition-colors hover:text-rose-300 disabled:opacity-50"><X size={13} /></button>
+                          <button type="button" onClick={() => onSendNow(campaign.id)} disabled={rowBusy} aria-label={`Send ${decodeHtmlEntities(campaign.name)} now`} className="rounded p-1 text-emerald-500 transition-colors hover:text-emerald-300 disabled:opacity-50"><Send size={13} /></button>
+                          <button type="button" onClick={() => onCancel(campaign.id)} disabled={rowBusy} aria-label={`Cancel ${decodeHtmlEntities(campaign.name)}`} className="rounded p-1 text-rose-500 transition-colors hover:text-rose-300 disabled:opacity-50"><X size={13} /></button>
                         </>
                       ) : null}
                     </div>

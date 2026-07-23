@@ -11,14 +11,15 @@ export function decodeHtmlEntities(value: string | null | undefined): string {
     if (!text.includes('&')) break
     const previous = text
     text = text
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      .replace(/&#39;/gi, "'")
       .replace(/&#x27;/gi, "'")
       .replace(/&#x2f;/gi, '/')
-      .replace(/&nbsp;/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
       .replace(/&rsquo;/gi, "'")
       .replace(/&lsquo;/gi, "'")
       .replace(/&rdquo;/gi, '"')

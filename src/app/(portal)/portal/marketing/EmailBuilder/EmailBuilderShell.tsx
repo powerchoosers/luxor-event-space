@@ -12,6 +12,7 @@ import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lu
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence } from 'framer-motion'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -142,12 +143,12 @@ function TemplatePicker({
                       <div className="h-2 w-full" style={{ background: tpl.previewColor }} />
                       <div className="p-4">
                         <div className="mb-2 flex items-start justify-between gap-2">
-                          <h4 className="text-xs font-bold text-white/90 group-hover:text-white">{tpl.name}</h4>
+                          <h4 className="text-xs font-bold text-white/90 group-hover:text-white">{decodeHtmlEntities(tpl.name)}</h4>
                           <span className="shrink-0 rounded-sm border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-[#f1d27a]">
                             Saved
                           </span>
                         </div>
-                        <p className="min-h-8 text-[11px] leading-relaxed text-zinc-500">{tpl.description || tpl.subject || 'Custom saved email layout.'}</p>
+                        <p className="min-h-8 text-[11px] leading-relaxed text-zinc-500">{decodeHtmlEntities(tpl.description || tpl.subject) || 'Custom saved email layout.'}</p>
                         <p className="mt-3 font-mono text-[10px] text-zinc-700">{tpl.blocks.length} blocks</p>
                       </div>
                     </button>
@@ -184,7 +185,7 @@ function TemplatePicker({
               <div className="h-2 w-full" style={{ background: tpl.previewColor }} />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <h4 className="text-xs font-bold text-white/90 group-hover:text-white transition-colors">{tpl.name}</h4>
+                  <h4 className="text-xs font-bold text-white/90 group-hover:text-white transition-colors">{decodeHtmlEntities(tpl.name)}</h4>
                   <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-sm border flex-shrink-0"
                     style={{ color: tpl.previewColor, borderColor: `${tpl.previewColor}40`, background: `${tpl.previewColor}15` }}>
                     {CATEGORY_LABELS[tpl.category] ?? tpl.category}

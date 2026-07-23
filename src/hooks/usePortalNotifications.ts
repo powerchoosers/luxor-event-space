@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'invoice_paid' | 'bill_due'
 
@@ -136,7 +137,7 @@ export function usePortalNotifications() {
           .filter((msg: RawRecord) => !isInternalEmail(msg))
           .forEach((msg: RawRecord, idx: number) => {
             const emailId = String(msg.messageId || msg.id || `email_${idx}_${msg.dateSent || ''}`)
-            const subject = String(msg.subject || 'New Email Received')
+            const subject = decodeHtmlEntities(String(msg.subject || 'New Email Received'))
             const senderName = String(msg.senderName || msg.sender || msg.fromAddress || 'Unknown sender')
             const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
             const folderId = String(msg.folderId || '')
