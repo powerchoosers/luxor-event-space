@@ -22,6 +22,10 @@ import {
   Check,
   BrainCircuit,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
@@ -57,6 +61,39 @@ interface EmailThreadData {
   bookings: Array<{ id: string; status: string; event_date: string | null; package_name: string | null }>
 }
 
+let mailboxCache: EmailMessageItem[] | null = null
+let mailboxRequest: Promise<EmailMessageItem[]> | null = null
+const messageDetailCache = new Map<string, EmailMessageItem>()
+const threadCache = new Map<string, EmailThreadData>()
+
+async function requestMailbox(force = false) {
+  if (mailboxRequest && !force) return mailboxRequest
+
+  const request = fetch('/api/email/inbox?limit=100&folder=all', { cache: 'no-store' })
+    .then(async (response) => {
+      const data = (await response.json().catch(() => ({}))) as {
+        messages?: EmailMessageItem[]
+        error?: string
+        reconnectRequired?: boolean
+      }
+      if (!response.ok) {
+        const error = new Error(data.error || 'Failed to load email inbox.') as Error & { reconnectRequired?: boolean }
+        error.reconnectRequired = Boolean(data.reconnectRequired)
+        throw error
+      }
+      const messages = data.messages || []
+      mailboxCache = messages
+      return messages
+    })
+
+  mailboxRequest = request
+  try {
+    return await request
+  } finally {
+    if (mailboxRequest === request) mailboxRequest = null
+  }
+}
+
 type ActiveFolder = 'all' | 'inbox' | 'sent' | 'campaigns' | 'starred'
 type FilterChip = 'all' | 'unread' | 'incoming' | 'outgoing' | 'campaigns' | 'attachments'
 
@@ -66,8 +103,8 @@ interface AllEmailsTabProps {
 }
 
 export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabProps) {
-  const [messages, setMessages] = useState<EmailMessageItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [messages, setMessages] = useState<EmailMessageItem[]>(() => mailboxCache || [])
+  const [loading, setLoading] = useState(() => !mailboxCache)
   const [error, setError] = useState<string | null>(null)
   const [reconnectRequired, setReconnectRequired] = useState(false)
 
@@ -98,50 +135,42 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
   const [viewportWidth, setViewportWidth] = useState<'full' | 'tablet' | 'mobile'>('full')
   const [blockExternalImages, setBlockExternalImages] = useState(false)
+  const [folderPaneOpen, setFolderPaneOpen] = useState(true)
+  const [readerExpanded, setReaderExpanded] = useState(false)
 
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
 
   // Load emails list from API
-  const loadEmails = useCallback(async () => {
+  const loadEmails = useCallback(async (force = false) => {
     setLoading(true)
     setError(null)
     setReconnectRequired(false)
     try {
-      const folderParam = activeFolder === 'starred' ? 'all' : activeFolder
-      const res = await fetch(`/api/email/inbox?limit=100&folder=${folderParam}`, { cache: 'no-store' })
-      const data = (await res.json().catch(() => ({}))) as {
-        messages?: EmailMessageItem[]
-        error?: string
-        reconnectRequired?: boolean
-      }
-
-      if (!res.ok) {
-        setReconnectRequired(Boolean(data.reconnectRequired))
-        throw new Error(data.error || 'Failed to load email inbox.')
-      }
-
-      const list = data.messages || []
+      const list = await requestMailbox(force)
       setMessages(list)
-      // Auto-select: prefer initialMessageId if given and found, else first message
-      if (!selectedId) {
+      setSelectedId((current) => {
+        if (current) return current
         const target = initialMessageId && list.some((m) => m.id === initialMessageId)
           ? initialMessageId
           : list[0]?.id || null
-        if (target) setSelectedId(target)
-      }
+        return target
+      })
     } catch (err) {
       console.error(err)
+      setReconnectRequired(Boolean((err as Error & { reconnectRequired?: boolean }).reconnectRequired))
       setError(err instanceof Error ? err.message : 'Unable to load email client messages.')
     } finally {
       setLoading(false)
     }
-  }, [activeFolder, selectedId])
+  }, [initialMessageId])
 
   useEffect(() => {
-    void loadEmails()
+    void loadEmails(false)
   }, [loadEmails])
+
+  const selectedFolderId = messages.find((message) => message.id === selectedId)?.folderId
 
   // Fetch full message detail when selection changes
   useEffect(() => {
@@ -152,25 +181,27 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
     let isCurrent = true
     const fetchDetail = async () => {
-      setLoadingDetail(true)
+      const cached = messageDetailCache.get(selectedId)
+      if (cached) setMessageDetail(cached)
+      else setMessageDetail(mailboxCache?.find((message) => message.id === selectedId) || null)
+      setLoadingDetail(!cached)
       try {
-        const summary = messages.find((message) => message.id === selectedId)
-        const folderQuery = summary?.folderId ? `?folderId=${encodeURIComponent(summary.folderId)}` : ''
+        const folderQuery = selectedFolderId ? `?folderId=${encodeURIComponent(selectedFolderId)}` : ''
         const res = await fetch(`/api/email/messages/${encodeURIComponent(selectedId)}${folderQuery}`, { cache: 'no-store' })
         if (res.ok) {
           const detail = (await res.json()) as EmailMessageItem
           if (isCurrent) {
+            messageDetailCache.set(selectedId, detail)
             setMessageDetail(detail)
             setReadIds((prev) => new Set(prev).add(selectedId))
           }
         } else {
-          // Fallback to item in list
-          const fallback = messages.find((m) => m.id === selectedId) || null
+          const fallback = messageDetailCache.get(selectedId) || mailboxCache?.find((m) => m.id === selectedId) || null
           if (isCurrent) setMessageDetail(fallback)
         }
       } catch (err) {
         console.error('Error loading email message detail:', err)
-        const fallback = messages.find((m) => m.id === selectedId) || null
+        const fallback = messageDetailCache.get(selectedId) || mailboxCache?.find((m) => m.id === selectedId) || null
         if (isCurrent) setMessageDetail(fallback)
       } finally {
         if (isCurrent) setLoadingDetail(false)
@@ -181,7 +212,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     return () => {
       isCurrent = false
     }
-  }, [selectedId, messages])
+  }, [selectedId, selectedFolderId])
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
@@ -190,17 +221,22 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       return
     }
     let current = true
-    setLoadingThread(true)
+    const cached = threadCache.get(threadId)
+    if (cached) setThread(cached)
+    setLoadingThread(!cached)
     setReplyStatus(null)
     fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, { cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json() as EmailThreadData & { error?: string }
         if (!response.ok) throw new Error(data.error || 'Unable to load conversation.')
-        if (current) setThread(data)
+        if (current) {
+          threadCache.set(threadId, data)
+          setThread(data)
+        }
       })
       .catch((error) => {
         console.error(error)
-        if (current) setThread(null)
+        if (current && !cached) setThread(null)
       })
       .finally(() => { if (current) setLoadingThread(false) })
     return () => { current = false }
@@ -236,14 +272,35 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       const response = await fetch(`/api/email/messages/${encodeURIComponent(replyTo.id)}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: replyText, inquiryId: thread?.inquiry?.id || currentInquiry?.id || null }),
+        body: JSON.stringify({
+          content: replyText,
+          folderId: replyTo.folderId || null,
+          inquiryId: thread?.inquiry?.id || currentInquiry?.id || null,
+        }),
       })
-      const data = await response.json() as { error?: string }
+      const data = await response.json() as { error?: string; message?: EmailMessageItem }
       if (!response.ok) throw new Error(data.error || 'Reply could not be sent.')
+      if (data.message) {
+        const sentMessage = data.message
+        setThread((current) => {
+          if (!current) return current
+          const next = {
+            ...current,
+            messages: [...current.messages.filter((message) => message.id !== sentMessage.id), sentMessage],
+          }
+          threadCache.set(current.threadId, next)
+          return next
+        })
+        setMessages((current) => {
+          const next = [sentMessage, ...current.filter((message) => message.id !== sentMessage.id)]
+          mailboxCache = next
+          return next
+        })
+        messageDetailCache.set(sentMessage.id, sentMessage)
+      }
       setReplyText('')
       setReplyInstruction('')
       setReplyStatus('Reply sent and added to the client activity log.')
-      await loadEmails()
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Reply could not be sent.')
     } finally {
@@ -344,21 +401,42 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     window.print()
   }
 
+  const selectMessage = (message: EmailMessageItem) => {
+    setSelectedId(message.id)
+    setMessageDetail(messageDetailCache.get(message.id) || message)
+    setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
+    setReplyOpen(false)
+    setReplyText('')
+    setReplyInstruction('')
+    setReplyStatus(null)
+  }
+
   return (
     <div className="flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
-      <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex flex-col overflow-hidden hidden md:flex">
+      {folderPaneOpen && !readerExpanded && <div className="w-64 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex">
         {/* Scrollable folder list area */}
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4 space-y-6">
           {/* Primary Action Button */}
-          <button
-            type="button"
-            onClick={() => triggerCompose()}
-            className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-[#caa24c] hover:bg-[#d4b060] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all cursor-pointer"
-          >
-            <Plus size={16} className="stroke-[2.5]" />
-            Compose Email
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => triggerCompose()}
+              className="min-w-0 flex-1 flex items-center justify-center gap-2.5 rounded-xl bg-[#caa24c] hover:bg-[#d4b060] px-3 py-3 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all cursor-pointer"
+            >
+              <Plus size={16} className="shrink-0 stroke-[2.5]" />
+              Compose
+            </button>
+            <button
+              type="button"
+              onClick={() => setFolderPaneOpen(false)}
+              className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
+              title="Collapse mailbox folders"
+              aria-label="Collapse mailbox folders"
+            >
+              <PanelLeftClose size={15} />
+            </button>
+          </div>
 
           {/* Mailbox Navigation List */}
           <div className="space-y-1">
@@ -408,7 +486,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             <span>Zoho & Supabase Sync</span>
             <button
               type="button"
-              onClick={() => loadEmails()}
+              onClick={() => void loadEmails(true)}
               disabled={loading}
               className="p-1 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
               title="Refresh messages"
@@ -423,14 +501,25 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </p>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* PANE 2: Message Threads List */}
-      <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden">
+      {!readerExpanded && <div className="w-full md:w-80 lg:w-96 shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden">
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest flex items-center gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="min-w-0 text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest flex items-center gap-2">
+              {!folderPaneOpen && (
+                <button
+                  type="button"
+                  onClick={() => setFolderPaneOpen(true)}
+                  className="shrink-0 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                  title="Show mailbox folders"
+                  aria-label="Show mailbox folders"
+                >
+                  <PanelLeftOpen size={14} />
+                </button>
+              )}
               <Inbox size={15} className="text-[#caa24c]" />
               {activeFolder === 'all' && 'All Messages'}
               {activeFolder === 'inbox' && 'Inbox Messages'}
@@ -460,6 +549,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             <FilterChipItem label="Outgoing" active={activeFilter === 'outgoing'} onClick={() => setActiveFilter('outgoing')} />
             <FilterChipItem label="Campaigns" active={activeFilter === 'campaigns'} onClick={() => setActiveFilter('campaigns')} />
           </div>
+
+          {error && messages.length > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[9px] text-amber-600 dark:text-amber-300">
+              <span className="truncate">Showing saved messages. Zoho sync needs another try.</span>
+              {reconnectRequired ? (
+                <a href="/api/auth/zoho/login?setup=1" className="shrink-0 font-bold uppercase tracking-wider hover:underline">Reconnect</a>
+              ) : (
+                <button type="button" onClick={() => void loadEmails(true)} className="shrink-0 font-bold uppercase tracking-wider hover:underline">Retry</button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]">
@@ -476,7 +576,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
               ))}
             </div>
-          ) : error ? (
+          ) : error && messages.length === 0 ? (
             <div className="p-6 text-center">
               <p className="text-xs text-rose-400 leading-relaxed">{error}</p>
               {reconnectRequired && (
@@ -501,13 +601,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               return (
                 <div
                   key={msg.id}
-                  onClick={() => {
-                    setSelectedId(msg.id)
-                    setReplyOpen(false)
-                    setReplyText('')
-                    setReplyInstruction('')
-                    setReplyStatus(null)
-                  }}
+                  onClick={() => selectMessage(msg)}
                   className={`p-4 flex flex-col gap-2 transition-all cursor-pointer relative group ${
                     isSelected
                       ? 'bg-[#caa24c]/10 border-l-2 border-[#caa24c]'
@@ -571,7 +665,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             />
           </div>
         )}
-      </div>
+      </div>}
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
@@ -608,6 +702,15 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     title="Star message"
                   >
                     <Star size={14} className={starredIds.has(messageDetail.id) ? 'fill-[#caa24c] text-[#caa24c]' : ''} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReaderExpanded((expanded) => !expanded)}
+                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
+                    title={readerExpanded ? 'Restore message list' : 'Expand email reader'}
+                    aria-label={readerExpanded ? 'Restore message list' : 'Expand email reader'}
+                  >
+                    {readerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                   </button>
                   <button
                     type="button"
@@ -834,7 +937,19 @@ function ThreadMessage({
   blockExternalImages: boolean
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
+  const [frameHeight, setFrameHeight] = useState(260)
   const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
+
+  const resizeFrame = (frame: HTMLIFrameElement) => {
+    const document = frame.contentDocument
+    if (!document) return
+    const height = Math.max(
+      document.body?.scrollHeight || 0,
+      document.documentElement?.scrollHeight || 0,
+      220,
+    )
+    setFrameHeight(height + 8)
+  }
 
   return (
     <article className={`overflow-hidden rounded-2xl border transition-colors ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
@@ -854,7 +969,10 @@ function ThreadMessage({
             <iframe
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
-              className="h-[420px] w-full border-0"
+              className="w-full border-0"
+              style={{ height: frameHeight }}
+              scrolling="no"
+              onLoad={(event) => resizeFrame(event.currentTarget)}
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             />
           ) : (
@@ -873,7 +991,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:#18181b;background:#fff;font-size:14px;line-height:1.6;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:#8a6426}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>html{overflow:hidden;scrollbar-width:thin;scrollbar-color:#caa24c #f4efe7}*{box-sizing:border-box}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:#f4efe7}::-webkit-scrollbar-thumb{background:#caa24c;border:2px solid #f4efe7;border-radius:999px}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:#18181b;background:#fff;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:#8a6426}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}</style></head><body>${content}</body></html>`
 }
 
 function FolderNavItem({

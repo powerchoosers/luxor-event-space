@@ -687,13 +687,23 @@ export async function listLuxorZohoThread(threadId: string, limit = 50): Promise
   return detailed.sort((a, b) => new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime())
 }
 
-export async function replyLuxorZohoEmail(input: { messageId: string; content: string; from?: string }) {
+export async function replyLuxorZohoEmail(input: {
+  messageId: string
+  content: string
+  to: string
+  subject: string
+  from?: string
+}) {
   const { accountId, baseUrl, allowedSenders, loginEmail } = getZohoConfig()
   const messageId = input.messageId.trim()
   const content = input.content.trim()
   const from = normalizeEmailAddress(input.from) || loginEmail
+  const to = normalizeEmailAddress(input.to)
+  const subject = input.subject.trim()
   if (!messageId) throw new Error('The email being replied to is missing.')
   if (!content) throw new Error('Please add a reply message.')
+  if (!to) throw new Error('The reply recipient is missing or invalid.')
+  if (!subject) throw new Error('The reply subject is missing.')
   if (!allowedSenders.includes(from)) throw new Error(`Sender must be one of: ${allowedSenders.join(', ')}.`)
   const accessToken = await getZohoAccessToken()
   const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content)
@@ -706,6 +716,8 @@ export async function replyLuxorZohoEmail(input: { messageId: string; content: s
     },
     body: JSON.stringify({
       fromAddress: from,
+      toAddress: to,
+      subject,
       content: looksLikeHtml ? content : plainTextToHtml(content),
       mailFormat: 'html',
       action: 'reply',
@@ -716,5 +728,12 @@ export async function replyLuxorZohoEmail(input: { messageId: string; content: s
     if (response.status === 401) cachedAccessToken = null
     throw new Error(`Zoho reply failed with ${response.status}: ${resultText}`)
   }
-  return { success: true, from }
+  const result = resultText ? (JSON.parse(resultText) as ZohoSendResponse) : {}
+  return {
+    success: true,
+    messageId: result.data?.messageId || result.data?.message_id || null,
+    from,
+    to,
+    subject,
+  }
 }

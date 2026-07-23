@@ -42,9 +42,13 @@ export async function GET(request: NextRequest) {
       category?: string
       isRead?: boolean
     }> = []
+    let zohoMailboxAttempts = 0
+    let zohoMailboxFailures = 0
+    let firstZohoMailboxError: unknown = null
 
     // Fetch inbox messages if applicable
     if (folder === 'inbox' || folder === 'all') {
+      zohoMailboxAttempts += 1
       try {
         const inboxItems = await listLuxorZohoInbox(safeLimit)
         inboxItems.forEach((msg) => {
@@ -55,12 +59,15 @@ export async function GET(request: NextRequest) {
           })
         })
       } catch (err) {
+        zohoMailboxFailures += 1
+        firstZohoMailboxError ||= err
         console.warn('Failed to load Zoho inbox messages:', err)
       }
     }
 
     // Fetch sent messages if applicable
     if (folder === 'sent' || folder === 'all') {
+      zohoMailboxAttempts += 1
       try {
         const sentItems = await listLuxorZohoSentMessages(safeLimit)
         sentItems.forEach((msg) => {
@@ -71,8 +78,18 @@ export async function GET(request: NextRequest) {
           })
         })
       } catch (err) {
+        zohoMailboxFailures += 1
+        firstZohoMailboxError ||= err
         console.warn('Failed to load Zoho sent messages:', err)
       }
+    }
+
+    // Do not return a successful-but-empty mailbox when Zoho failed entirely.
+    // The client can then keep showing its last known-good mailbox instead of wiping the UI.
+    if (zohoMailboxAttempts > 0 && zohoMailboxFailures === zohoMailboxAttempts) {
+      throw firstZohoMailboxError instanceof Error
+        ? firstZohoMailboxError
+        : new Error('Zoho Mail is temporarily unavailable.')
     }
 
     // Fetch marketing campaign emails if applicable
@@ -125,4 +142,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
