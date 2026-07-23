@@ -5301,14 +5301,19 @@ export default function LeadDetailPage({
     </PortalPageFrame>
   )
 }
-
 function ClientDossierLoading() {
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
       {/* 1. Header Back & Status */}
       <div className="mb-4 flex shrink-0 items-center justify-between">
-        <div className="h-4 w-40 luxor-skeleton rounded" />
-        <div className="h-6 w-20 luxor-skeleton rounded-full animate-pulse" />
+        <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#caa24c]">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#caa24c] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#caa24c]" />
+          </span>
+          <span className="uppercase tracking-widest text-[10px]">Syncing Client Dossier Telemetry...</span>
+        </div>
+        <div className="h-6 w-24 luxor-skeleton rounded-full animate-pulse" />
       </div>
 
       {/* 2. Top Header Card */}

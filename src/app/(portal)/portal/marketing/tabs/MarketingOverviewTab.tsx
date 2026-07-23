@@ -324,8 +324,13 @@ function MetricBlock({ label, value }: { label: string; value: string }) {
 
 function DataEmptyState({ loading, message }: { loading: boolean; message: string }) {
   return (
-    <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-zinc-850 bg-zinc-950/20 p-5 text-center text-xs leading-5 text-zinc-600">
-      {loading ? 'Loading Supabase data…' : message}
+    <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-center text-xs leading-5 text-[color:var(--portal-muted)]">
+      {loading ? (
+        <div className="w-full max-w-xs space-y-2">
+          <div className="h-3 w-full rounded luxor-skeleton" />
+          <div className="h-3 w-3/4 mx-auto rounded luxor-skeleton" />
+        </div>
+      ) : message}
     </div>
   )
 }

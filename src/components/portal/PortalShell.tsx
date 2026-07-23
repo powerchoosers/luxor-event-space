@@ -26,6 +26,8 @@ import {
   BarChart3,
   Phone,
   TrendingUp,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -534,6 +536,25 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             <Link href="/portal/messages?tab=sms" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer" aria-label="Text messages">
               <MessageSquare size={20} className="text-zinc-400" />
             </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = portalTheme === 'light' ? 'dark' : 'light'
+                window.localStorage.setItem('luxor-portal-theme', next)
+                window.dispatchEvent(new Event('luxor-portal-theme'))
+                fetch('/api/portal/user-preferences', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ theme: next }),
+                }).catch(() => {})
+              }}
+              className="rounded-full p-2 text-[color:var(--portal-muted)] hover:text-[#caa24c] hover:bg-[color:var(--portal-soft)] transition-colors cursor-pointer"
+              aria-label={`Switch to ${portalTheme === 'light' ? 'Obsidian Dark' : 'Champagne Light'} mode`}
+              title={`Switch to ${portalTheme === 'light' ? 'Obsidian Dark' : 'Champagne Light'} mode`}
+            >
+              {portalTheme === 'light' ? <Moon size={19} /> : <Sun size={19} />}
+            </button>
             
             <button
               type="button"
