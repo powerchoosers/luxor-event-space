@@ -4,7 +4,7 @@ import { getLuxorZohoMessageDetail } from '@/lib/zohoMailServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -74,7 +74,8 @@ export async function GET(
     }
 
     // Otherwise fetch from Zoho Mail API
-    const detail = await getLuxorZohoMessageDetail(id)
+    const folderId = new URL(request.url).searchParams.get('folderId') || undefined
+    const detail = await getLuxorZohoMessageDetail(id, folderId)
     if (!detail) {
       return NextResponse.json({
         id,

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Inbox,
   Send,
@@ -18,6 +18,8 @@ import {
   Printer,
   ShieldCheck,
   ShieldAlert,
+  Loader2,
+  Check,
 } from 'lucide-react'
 import Link from 'next/link'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
@@ -39,6 +41,17 @@ export interface EmailMessageItem {
   category?: string
   isStarred?: boolean
   isRead?: boolean
+  threadId?: string
+  folderId?: string
+}
+
+interface EmailThreadData {
+  threadId: string
+  clientEmail: string
+  messages: EmailMessageItem[]
+  inquiry: LuxorInquiry | null
+  notes: Array<{ id: string; content: string; author: string; created_at: string }>
+  bookings: Array<{ id: string; status: string; event_date: string | null; package_name: string | null }>
 }
 
 type ActiveFolder = 'all' | 'inbox' | 'sent' | 'campaigns' | 'starred'
@@ -64,12 +77,18 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [thread, setThread] = useState<EmailThreadData | null>(null)
+  const [loadingThread, setLoadingThread] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [replyInstruction, setReplyInstruction] = useState('')
+  const [draftingReply, setDraftingReply] = useState(false)
+  const [sendingReply, setSendingReply] = useState(false)
+  const [replyStatus, setReplyStatus] = useState<string | null>(null)
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
   const [viewportWidth, setViewportWidth] = useState<'full' | 'tablet' | 'mobile'>('full')
   const [blockExternalImages, setBlockExternalImages] = useState(false)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
@@ -122,7 +141,9 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
     const fetchDetail = async () => {
       setLoadingDetail(true)
       try {
-        const res = await fetch(`/api/email/messages/${encodeURIComponent(selectedId)}`, { cache: 'no-store' })
+        const summary = messages.find((message) => message.id === selectedId)
+        const folderQuery = summary?.folderId ? `?folderId=${encodeURIComponent(summary.folderId)}` : ''
+        const res = await fetch(`/api/email/messages/${encodeURIComponent(selectedId)}${folderQuery}`, { cache: 'no-store' })
         if (res.ok) {
           const detail = (await res.json()) as EmailMessageItem
           if (isCurrent) {
@@ -148,6 +169,74 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
       isCurrent = false
     }
   }, [selectedId, messages])
+
+  useEffect(() => {
+    const threadId = messageDetail?.threadId
+    if (!threadId || messageDetail?.direction === 'campaign') {
+      setThread(null)
+      return
+    }
+    let current = true
+    setLoadingThread(true)
+    setReplyStatus(null)
+    fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json() as EmailThreadData & { error?: string }
+        if (!response.ok) throw new Error(data.error || 'Unable to load conversation.')
+        if (current) setThread(data)
+      })
+      .catch((error) => {
+        console.error(error)
+        if (current) setThread(null)
+      })
+      .finally(() => { if (current) setLoadingThread(false) })
+    return () => { current = false }
+  }, [messageDetail?.threadId, messageDetail?.direction])
+
+  const draftWithElena = async () => {
+    if (!thread?.threadId) return
+    setDraftingReply(true)
+    setReplyStatus(null)
+    try {
+      const response = await fetch(`/api/email/threads/${encodeURIComponent(thread.threadId)}/elena-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: replyInstruction }),
+      })
+      const data = await response.json() as { draft?: string; error?: string }
+      if (!response.ok || !data.draft) throw new Error(data.error || 'Elena could not draft a reply.')
+      setReplyText(data.draft)
+      setReplyStatus('Elena drafted this from the full conversation and client record. Review it before sending.')
+    } catch (error) {
+      setReplyStatus(error instanceof Error ? error.message : 'Elena could not draft a reply.')
+    } finally {
+      setDraftingReply(false)
+    }
+  }
+
+  const sendInlineReply = async () => {
+    const replyTo = [...(thread?.messages || [])].reverse().find((message) => message.direction === 'incoming') || messageDetail
+    if (!replyTo?.id || !replyText.trim()) return
+    setSendingReply(true)
+    setReplyStatus(null)
+    try {
+      const response = await fetch(`/api/email/messages/${encodeURIComponent(replyTo.id)}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: replyText, inquiryId: thread?.inquiry?.id || currentInquiry?.id || null }),
+      })
+      const data = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(data.error || 'Reply could not be sent.')
+      setReplyText('')
+      setReplyInstruction('')
+      setReplyStatus('Reply sent and added to the client activity log.')
+      await loadEmails()
+    } catch (error) {
+      setReplyStatus(error instanceof Error ? error.message : 'Reply could not be sent.')
+    } finally {
+      setSendingReply(false)
+    }
+  }
 
   // Toggle star status
   const toggleStar = (id: string, e?: React.MouseEvent) => {
@@ -211,12 +300,13 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
 
   // Matched inquiry for currently selected email
   const currentInquiry = useMemo(() => {
+    if (thread?.inquiry) return thread.inquiry
     if (!messageDetail) return null
     const targetEmail = (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to).toLowerCase()
     return (
       inquiries.find((inq) => inq.email && targetEmail.includes(inq.email.toLowerCase())) || null
     )
-  }, [messageDetail, inquiries])
+  }, [messageDetail, inquiries, thread?.inquiry])
 
   // Count stats
   const stats = useMemo(() => {
@@ -230,50 +320,8 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
 
   // Print selected email
   const handlePrint = () => {
-    if (!iframeRef.current?.contentWindow) {
-      window.print()
-      return
-    }
-    iframeRef.current.contentWindow.focus()
-    iframeRef.current.contentWindow.print()
+    window.print()
   }
-
-  // Prepared HTML content for iframe rendering
-  const renderedHtml = useMemo(() => {
-    if (!messageDetail) return ''
-    let html = messageDetail.htmlContent || messageDetail.content || `<p style="font-family: sans-serif; color: #52525b;">${escapeHtml(messageDetail.summary)}</p>`
-    
-    if (blockExternalImages) {
-      html = html.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border: 1px dashed #a1a1aa; padding: 8px; font-size: 11px; color: #71717a; text-align: center;">[External Image Blocked]</div>')
-    }
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-              margin: 0;
-              padding: 20px;
-              color: #18181b;
-              background-color: #ffffff;
-              font-size: 14px;
-              line-height: 1.6;
-            }
-            img { max-width: 100%; height: auto; }
-            a { color: #a8792f; text-decoration: underline; }
-            blockquote { border-left: 3px solid #caa24c; margin: 12px 0; padding-left: 12px; color: #52525b; }
-          </style>
-        </head>
-        <body>
-          ${html}
-        </body>
-      </html>
-    `
-  }, [messageDetail, blockExternalImages])
 
   return (
     <div className="flex flex-1 min-h-0 w-full overflow-hidden rounded-2xl border border-zinc-900 bg-black/40 shadow-2xl backdrop-blur-xl font-sans">
@@ -618,28 +666,77 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
               </div>
             </div>
 
-            {/* Email Render Frame */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-6 portal-scrollbar flex justify-center bg-zinc-950">
-              <div
-                className={`transition-all duration-300 h-full w-full bg-white rounded-xl shadow-2xl overflow-hidden border border-zinc-800 ${
-                  viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-full'
-                }`}
-              >
-                {loadingDetail ? (
-                  <div className="flex h-full items-center justify-center p-12 text-zinc-500 font-mono text-xs animate-pulse">
-                    LOADING MESSAGE CONTENT...
+            {/* Gmail-style conversation stream and inline reply */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-zinc-950">
+              <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
+                {(loadingDetail || loadingThread) ? (
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-900 bg-black/30 p-12 text-zinc-500 font-mono text-xs">
+                    <Loader2 size={15} className="animate-spin" /> LOADING FULL CONVERSATION...
                   </div>
-                ) : viewMode === 'html' ? (
-                  <iframe
-                    ref={iframeRef}
-                    srcDoc={renderedHtml}
-                    title={messageDetail.subject}
-                    className="w-full h-full min-h-[500px] border-0"
-                    sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-                  />
                 ) : (
-                  <div className="p-6 font-mono text-xs leading-relaxed whitespace-pre-wrap text-zinc-800 bg-white">
-                    {messageDetail.content || messageDetail.summary}
+                  (thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
+                    <ThreadMessage
+                      key={message.id}
+                      message={message}
+                      expanded={message.id === selectedId || index === all.length - 1}
+                      viewMode={viewMode}
+                      blockExternalImages={blockExternalImages}
+                    />
+                  ))
+                )}
+
+                {messageDetail.direction !== 'campaign' && (
+                  <div className="rounded-2xl border border-[#caa24c]/25 bg-black/55 p-4 shadow-xl">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-white">Reply in this conversation</p>
+                        <p className="mt-1 text-[10px] text-zinc-500">
+                          To {thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)}
+                          {thread?.messages?.length ? ` · ${thread.messages.length} messages in thread` : ''}
+                        </p>
+                      </div>
+                      {currentInquiry && (
+                        <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#f1d27a] hover:text-white">
+                          {currentInquiry.full_name} · View client file
+                        </Link>
+                      )}
+                    </div>
+                    <div className="mb-3 flex gap-2">
+                      <input
+                        value={replyInstruction}
+                        onChange={(event) => setReplyInstruction(event.target.value)}
+                        placeholder="Optional note for Elena: confirm the tour and ask about guest count..."
+                        className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-[#caa24c]/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void draftWithElena()}
+                        disabled={draftingReply || loadingThread}
+                        className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#f1d27a] hover:bg-[#caa24c]/20 disabled:opacity-50"
+                      >
+                        {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                        Draft with Elena
+                      </button>
+                    </div>
+                    <textarea
+                      value={replyText}
+                      onChange={(event) => setReplyText(event.target.value)}
+                      rows={7}
+                      placeholder="Write your reply here, or ask Elena to draft it from the full email chain and client history."
+                      className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm leading-relaxed text-zinc-200 outline-none focus:border-[#caa24c]/50"
+                    />
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-300' : 'text-zinc-500'}`}>{replyStatus}</p>
+                      <button
+                        type="button"
+                        onClick={() => void sendInlineReply()}
+                        disabled={sendingReply || !replyText.trim()}
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-black hover:bg-[#d4b060] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {sendingReply ? <Loader2 size={14} className="animate-spin" /> : replyStatus?.startsWith('Reply sent') ? <Check size={14} /> : <Send size={14} />}
+                        Send reply
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -654,6 +751,60 @@ export function AllEmailsTab({ inquiries = [] }: AllEmailsTabProps) {
       </div>
     </div>
   )
+}
+
+function ThreadMessage({
+  message,
+  expanded: initiallyExpanded,
+  viewMode,
+  blockExternalImages,
+}: {
+  message: EmailMessageItem
+  expanded: boolean
+  viewMode: 'html' | 'text'
+  blockExternalImages: boolean
+}) {
+  const [expanded, setExpanded] = useState(initiallyExpanded)
+  const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
+
+  return (
+    <article className={`overflow-hidden rounded-2xl border transition-colors ${expanded ? 'border-zinc-700 bg-zinc-900/45' : 'border-zinc-900 bg-black/30 hover:border-zinc-800'}`}>
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center gap-3 p-4 text-left">
+        <PortalContactAvatar name={message.from} size="md" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate text-xs font-bold text-white">{message.direction === 'outgoing' ? `Luxor to ${message.to}` : message.from}</p>
+            <p className="shrink-0 text-[9px] font-mono text-zinc-600">{formatEmailDateDetailed(message.receivedAt)}</p>
+          </div>
+          <p className="mt-1 truncate text-[10px] text-zinc-500">{expanded ? `To ${message.to}${message.cc ? ` · CC ${message.cc}` : ''}` : message.summary || message.subject}</p>
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-zinc-800/70 bg-white">
+          {viewMode === 'html' ? (
+            <iframe
+              srcDoc={html}
+              title={`${message.subject} — ${message.id}`}
+              className="h-[420px] w-full border-0"
+              sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+            />
+          ) : (
+            <div className="min-h-36 whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-zinc-800">
+              {message.content || message.summary || 'No message body available.'}
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  )
+}
+
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean) {
+  let content = message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`
+  if (blockExternalImages) {
+    content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:#18181b;background:#fff;font-size:14px;line-height:1.6;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:#8a6426}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}</style></head><body>${content}</body></html>`
 }
 
 function FolderNavItem({

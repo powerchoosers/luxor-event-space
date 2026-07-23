@@ -35,6 +35,26 @@ type ZohoMessageSummary = {
   sentDateInGMT?: string
   summary?: string
   hasAttachment?: boolean
+  folderId?: string
+  threadId?: string
+  status?: string
+}
+
+export type LuxorZohoMessage = {
+  id: string
+  threadId: string
+  folderId: string
+  subject: string
+  from: string
+  to: string
+  cc: string
+  receivedAt: string | null
+  summary: string
+  content?: string
+  htmlContent?: string | null
+  hasAttachment: boolean
+  isRead?: boolean
+  direction?: 'incoming' | 'outgoing'
 }
 
 const DEFAULT_LOGIN_EMAIL = 'booking@luxoratlaspalmas.com'
@@ -143,6 +163,18 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+function normalizeZohoDate(value: unknown) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const numeric = Number(raw)
+  const date = Number.isFinite(numeric) && numeric > 0 ? new Date(numeric) : new Date(raw)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function zohoBoolean(value: unknown) {
+  return value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true'
 }
 
 export async function sendLuxorZohoEmail(input: {
@@ -371,12 +403,15 @@ export async function listLuxorZohoInbox(limit = 25) {
 
   return (result.data || []).map((message) => ({
     id: message.messageId || message.message_id || '',
+    threadId: message.threadId || message.messageId || message.message_id || '',
+    folderId: message.folderId || '',
     subject: message.subject || '(No subject)',
     from: message.fromAddress || message.sender || 'Unknown sender',
     to: message.toAddress || '',
-    receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
+    receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
     summary: message.summary || '',
-    hasAttachment: Boolean(message.hasAttachment),
+    hasAttachment: zohoBoolean(message.hasAttachment),
+    isRead: String(message.status || '') === '1',
   }))
 }
 
@@ -412,24 +447,27 @@ export async function listLuxorZohoSentMessages(limit = 50) {
 
   return (result.data || []).map((message) => ({
     id: message.messageId || message.message_id || '',
+    threadId: message.threadId || message.messageId || message.message_id || '',
+    folderId: message.folderId || '',
     subject: message.subject || '(No subject)',
     from: message.fromAddress || message.sender || primarySender,
     to: message.toAddress || '',
     cc: message.ccAddress || '',
-    receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
+    receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
     summary: message.summary || '',
-    hasAttachment: Boolean(message.hasAttachment),
+    hasAttachment: zohoBoolean(message.hasAttachment),
     direction: 'outgoing' as const,
+    isRead: true,
   }))
 }
 
-export async function getLuxorZohoMessageDetail(messageId: string) {
+export async function getLuxorZohoMessageDetail(messageId: string, folderId?: string) {
   if (!messageId) return null
   const { accountId, baseUrl } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
 
   try {
-    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${messageId}`, {
+    const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
       headers: {
         Authorization: `Zoho-oauthtoken ${accessToken}`,
         Accept: 'application/json',
@@ -445,16 +483,33 @@ export async function getLuxorZohoMessageDetail(messageId: string) {
 
     const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
     const data = result.data || {}
+    let fullContent = String(data.content || data.summary || '')
+    if (folderId) {
+      const contentResponse = await fetch(
+        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
+        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
+      )
+      if (contentResponse.ok) {
+        const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
+        fullContent = String(contentResult.data?.content || fullContent)
+      }
+    }
+    const { allowedSenders } = getZohoConfig()
+    const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress || data.sender)) ? 'outgoing' as const : 'incoming' as const
 
     return {
       id: messageId,
+      threadId: String(data.threadId || messageId),
+      folderId: String(data.folderId || folderId || ''),
       subject: String(data.subject || '(No subject)'),
       from: String(data.fromAddress || data.sender || ''),
       to: String(data.toAddress || ''),
       cc: String(data.ccAddress || ''),
-      receivedAt: String(data.receivedTime || data.receivedtime || data.sentDateInGMT || ''),
-      content: String(data.content || data.summary || ''),
-      hasAttachment: Boolean(data.hasAttachment),
+      receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
+      content: fullContent,
+      htmlContent: fullContent,
+      hasAttachment: zohoBoolean(data.hasAttachment),
+      direction,
     }
   } catch (err) {
     console.error('Failed fetching Zoho message detail:', err)
@@ -506,15 +561,94 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
 
     return {
       id: message.messageId || message.message_id || '',
+      threadId: message.threadId || message.messageId || message.message_id || '',
+      folderId: message.folderId || '',
       subject: message.subject || '(No subject)',
       from,
       to,
       cc: message.ccAddress || '',
-      receivedAt: message.receivedTime || message.receivedtime || message.sentDateInGMT || null,
+      receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
       summary: message.summary || '',
-      hasAttachment: Boolean(message.hasAttachment),
+      hasAttachment: zohoBoolean(message.hasAttachment),
       direction,
+      isRead: direction === 'outgoing' || String(message.status || '') === '1',
     }
   })
 }
 
+export async function listLuxorZohoThread(threadId: string, limit = 50): Promise<LuxorZohoMessage[]> {
+  if (!threadId.trim()) return []
+  const { accountId, baseUrl, allowedSenders } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const params = new URLSearchParams({
+    threadId: threadId.trim(),
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+    includeto: 'true',
+  })
+  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+    cache: 'no-store',
+  })
+  const resultText = await response.text()
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho thread fetch failed with ${response.status}: ${resultText}`)
+  }
+  const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+  const summaries = (result.data || []).map((message) => {
+    const from = message.fromAddress || message.sender || ''
+    const direction = allowedSenders.includes(normalizeEmailAddress(from)) ? 'outgoing' as const : 'incoming' as const
+    return {
+      id: message.messageId || message.message_id || '',
+      threadId: message.threadId || threadId,
+      folderId: message.folderId || '',
+      subject: message.subject || '(No subject)',
+      from,
+      to: message.toAddress || '',
+      cc: message.ccAddress || '',
+      receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
+      summary: message.summary || '',
+      hasAttachment: zohoBoolean(message.hasAttachment),
+      isRead: direction === 'outgoing' || String(message.status || '') === '1',
+      direction,
+    }
+  }).filter((message) => message.id)
+
+  const detailed = await Promise.all(summaries.map(async (message) => {
+    const detail = await getLuxorZohoMessageDetail(message.id, message.folderId)
+    return detail ? { ...message, ...detail, direction: message.direction } : message
+  }))
+  return detailed.sort((a, b) => new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime())
+}
+
+export async function replyLuxorZohoEmail(input: { messageId: string; content: string; from?: string }) {
+  const { accountId, baseUrl, allowedSenders, loginEmail } = getZohoConfig()
+  const messageId = input.messageId.trim()
+  const content = input.content.trim()
+  const from = normalizeEmailAddress(input.from) || loginEmail
+  if (!messageId) throw new Error('The email being replied to is missing.')
+  if (!content) throw new Error('Please add a reply message.')
+  if (!allowedSenders.includes(from)) throw new Error(`Sender must be one of: ${allowedSenders.join(', ')}.`)
+  const accessToken = await getZohoAccessToken()
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(content)
+  const response = await fetch(`${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fromAddress: from,
+      content: looksLikeHtml ? content : plainTextToHtml(content),
+      mailFormat: 'html',
+      action: 'reply',
+    }),
+  })
+  const resultText = await response.text()
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho reply failed with ${response.status}: ${resultText}`)
+  }
+  return { success: true, from }
+}

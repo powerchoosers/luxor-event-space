@@ -111,7 +111,7 @@ body[data-portal-theme='light'] .bg-\[\#0c0c0c\]\/85 {
   background-color: var(--portal-soft) !important;
 }
 
-body[data-portal-theme='light'] .text-white:not(:is(button, a, [role="button"], .portal-notification-number, [data-notification-number], .bg-\[\#caa24c\], .bg-\[\#caa24c\] *, .bg-amber-400, .bg-amber-400 *, .bg-amber-500, .bg-amber-500 *, .bg-blue-600, .bg-blue-600 *)),
+body[data-portal-theme='light'] .text-white,
 body[data-portal-theme='light'] .text-white\/95,
 body[data-portal-theme='light'] .text-white\/90,
 body[data-portal-theme='light'] .text-white\/80,
@@ -153,40 +153,29 @@ body[data-portal-theme='light'] .group:hover .group-hover\:text-\[\#f1d27a\] {
   color: #a8792f !important;
 }
 
-/* Light mode overrides for gold background buttons and notification numbers */
+/* Light mode overrides for EXACT solid gold buttons and notification numbers ONLY */
 body[data-portal-theme='light'] .portal-notification-number,
+body[data-portal-theme='light'] .portal-notification-number *,
 body[data-portal-theme='light'] .portal-notification-badge,
 body[data-portal-theme='light'] [data-notification-number],
-body[data-portal-theme='light'] span[class*="bg-blue-600"],
-body[data-portal-theme='light'] span[class*="bg-blue-500"],
 body[data-portal-theme='light'] .bg-blue-600,
 body[data-portal-theme='light'] .bg-blue-600 *,
 body[data-portal-theme='light'] .bg-blue-500,
 body[data-portal-theme='light'] .bg-blue-500 *,
-body[data-portal-theme='light'] .bg-indigo-600,
-body[data-portal-theme='light'] .bg-indigo-600 *,
-body[data-portal-theme='light'] .from-blue-600,
-body[data-portal-theme='light'] .from-blue-600 *,
-body[data-portal-theme='light'] .from-indigo-600,
-body[data-portal-theme='light'] .from-indigo-600 *,
-body[data-portal-theme='light'] .hover\:text-white:hover,
-body[data-portal-theme='light'] .group:hover .group-hover\:text-white,
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"])[class*="bg-[#caa24c]"],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"])[class*="bg-[#dfbd68]"],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"])[class*="bg-[#f1d27a]"],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"])[class*="bg-amber"],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#caa24c\],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#dfbd68\],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#f1d27a\],
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-400,
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-500,
-body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600,
-body[data-portal-theme='light'] [class*="bg-[#caa24c]"] :is(button, a, span, p, div, svg, strong, b, font, code),
-body[data-portal-theme='light'] [class*="bg-[#dfbd68]"] :is(button, a, span, p, div, svg, strong, b, font, code),
-body[data-portal-theme='light'] [class*="bg-[#f1d27a]"] :is(button, a, span, p, div, svg, strong, b, font, code),
-body[data-portal-theme='light'] [class*="bg-amber"] :is(button, a, span, p, div, svg, strong, b, font, code),
 body[data-portal-theme='light'] .portal-gold-button,
-body[data-portal-theme='light'] .portal-gold-button * {
+body[data-portal-theme='light'] .portal-gold-button *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#caa24c\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#caa24c\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#dfbd68\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#dfbd68\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#f1d27a\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#f1d27a\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-400,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-400 *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-500,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-500 *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600 * {
   color: #ffffff !important;
 }
 
