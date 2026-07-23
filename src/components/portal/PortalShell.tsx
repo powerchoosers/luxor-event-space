@@ -147,6 +147,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     refresh: refreshNotifications,
   } = usePortalNotifications()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const bellButtonRef = useRef<HTMLButtonElement>(null)
   const knownUnreadTextIds = useRef<Set<string> | null>(null)
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
@@ -503,15 +504,16 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             {/* Bell Notifications */}
             <div className="relative">
               <button
+                ref={bellButtonRef}
                 type="button"
                 onClick={() => setNotificationsOpen((prev) => !prev)}
                 className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
                 aria-label="Notifications"
                 title="Notifications"
               >
-                <Bell size={20} className="text-zinc-400 transition-colors" />
+                <Bell size={20} className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors" />
                 {notificationCount > 0 && (
-                  <span className="portal-notification-number absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-zinc-950 bg-blue-600 px-1 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
+                  <span className="portal-notification-number absolute -right-1.5 -top-1.5 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-1 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
                     {notificationCount > 99 ? '99+' : notificationCount}
                   </span>
                 )}
@@ -519,6 +521,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
 
               <PortalNotificationModal
                 isOpen={notificationsOpen}
+                triggerRef={bellButtonRef}
                 onClose={() => setNotificationsOpen(false)}
                 items={notificationItems}
                 unreadCount={notificationCount}
