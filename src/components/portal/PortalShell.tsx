@@ -93,9 +93,11 @@ const marketingSubItems = [
 
 export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
   return (
-    <Suspense fallback={null}>
-      <PortalShellContent session={session}>{children}</PortalShellContent>
-    </Suspense>
+    <ToastProvider>
+      <Suspense fallback={null}>
+        <PortalShellContent session={session}>{children}</PortalShellContent>
+      </Suspense>
+    </ToastProvider>
   )
 }
 
@@ -263,7 +265,6 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <ToastProvider>
       <PortalVoiceProvider>
       <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto portal-scrollbar ${
         portalTheme === 'light'
@@ -608,7 +609,6 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         )}
       </AnimatePresence>
       </PortalVoiceProvider>
-      </ToastProvider>
     </body>
   )
 }
