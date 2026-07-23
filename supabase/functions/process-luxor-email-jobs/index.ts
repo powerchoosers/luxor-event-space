@@ -29,6 +29,11 @@ let cachedAccessToken: { token: string; expiresAt: number } | null = null
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405)
 
+  // New Supabase publishable keys are not JWTs, so this function is deployed
+  // without gateway JWT verification. Authenticate the database cron request
+  // here before claiming or sending any queued work.
+  if (!isAuthorizedCronRequest(request)) return json({ error: "Unauthorized." }, 401)
+
   try {
     const missing = Object.entries({
       SUPABASE_URL,
@@ -76,6 +81,12 @@ Deno.serve(async (request) => {
     return json({ error: safeError(error) }, 500)
   }
 })
+
+function isAuthorizedCronRequest(request: Request) {
+  const suppliedSecret = request.headers.get("x-cron-secret") || ""
+  const expectedSecret = Deno.env.get("LUXOR_EMAIL_CRON_SECRET") || ""
+  return Boolean(expectedSecret) && suppliedSecret === expectedSecret
+}
 
 async function sendZohoEmail(job: EmailJob) {
   const metadata = job.metadata && typeof job.metadata === "object" ? job.metadata : {}

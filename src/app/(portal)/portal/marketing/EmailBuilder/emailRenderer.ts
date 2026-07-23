@@ -56,6 +56,8 @@ function wrapEmail(rows: string): string {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <!--[if mso]>
   <noscript><xml><o:OfficeDocumentSettings>
@@ -63,19 +65,33 @@ function wrapEmail(rows: string): string {
   </o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; display: block; }
     a { color: #caa24c; }
+    @media (prefers-color-scheme: dark) {
+      body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+      .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,0.22) !important; }
+      .luxor-header { background-color: #080605 !important; }
+      .luxor-hero { background-color: #120d0a !important; }
+      .luxor-title { color: #f7efe3 !important; }
+      .luxor-gold { color: #caa24c !important; }
+      .luxor-muted { color: #d7c29a !important; }
+    }
+    [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+    [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+    [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+    [data-ogsc] .luxor-gold { color: #caa24c !important; }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;">
+<body class="luxor-bg" style="margin:0;padding:0;background-color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;color-scheme:light dark;">
   <!-- Outer wrapper -->
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
     <tr>
       <td align="center" style="padding:28px 16px;">
         <!-- Email container: 600px, dark-and-gold brand -->
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card"
           style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
           ${rows}
         </table>

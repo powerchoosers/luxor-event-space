@@ -140,17 +140,38 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
     ['Location', FALLBACK_LOCATION],
   ]
 
-  return `<!doctype html><html><body style="margin:0;background:#050505;color:#f7efe3;font-family:Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#050505"><tr><td align="center" style="padding:24px 12px;">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#0a0807;border:1px solid rgba(202,162,76,.28);">
+  return `<!doctype html><html lang="en"><head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <style>
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
+      body, table, td, p, a, h1 { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+      @media (prefers-color-scheme: dark) {
+        body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+        .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,.28) !important; }
+        .luxor-title { color: #f7efe3 !important; }
+        .luxor-gold { color: #caa24c !important; }
+        .luxor-muted { color: #d7c29a !important; }
+        .luxor-box { background-color: #0f0c09 !important; }
+      }
+      [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+      [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+      [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+      [data-ogsc] .luxor-gold { color: #caa24c !important; }
+    </style>
+  </head><body class="luxor-bg" style="margin:0;background-color:#050505;color:#f7efe3;font-family:Arial,sans-serif;color-scheme:light dark;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;"><tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="luxor-card" style="max-width:600px;width:100%;background-color:#0a0807;border:1px solid rgba(202,162,76,.28);">
       <tr><td style="height:3px;background:#caa24c"></td></tr>
       <tr><td><img src="${escapeHtml(heroUrl)}" width="600" alt="${escapeHtml(context.inquiry.event_type || 'Celebration')} inspiration at Luxor Event Space" style="display:block;width:100%;height:260px;object-fit:cover;border:0;" /></td></tr>
-      <tr><td style="padding:34px 42px 12px;"><p style="margin:0 0 12px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;">Your Private Tour</p><h1 style="margin:0;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.2;color:#f7efe3;">A closer look at your celebration</h1></td></tr>
-      <tr><td style="padding:12px 42px;color:#d7c29a;font-size:15px;line-height:1.75;"><p>${escapeHtml(copy.greeting)}</p><p>${escapeHtml(copy.introduction)}</p></td></tr>
-      <tr><td style="padding:8px 42px 20px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(202,162,76,.2);background:#0f0c09;">${detailRows.map(([label, value]) => `<tr><td style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#8d7d64;font-size:10px;text-transform:uppercase;letter-spacing:.16em;width:28%;">${escapeHtml(label)}</td><td style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#f7efe3;font-size:13px;">${escapeHtml(value)}</td></tr>`).join('')}</table></td></tr>
-      <tr><td style="padding:0 42px 24px;color:#d7c29a;font-size:14px;line-height:1.75;"><p>${escapeHtml(copy.preparation)}</p><p>${escapeHtml(copy.closing)}</p></td></tr>
+      <tr><td style="padding:34px 42px 12px;"><p class="luxor-gold" style="margin:0 0 12px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;">Your Private Tour</p><h1 class="luxor-title" style="margin:0;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.2;color:#f7efe3;">A closer look at your celebration</h1></td></tr>
+      <tr><td class="luxor-muted" style="padding:12px 42px;color:#d7c29a;font-size:15px;line-height:1.75;"><p style="margin:0 0 12px;color:#d7c29a;">${escapeHtml(copy.greeting)}</p><p style="margin:0;color:#d7c29a;">${escapeHtml(copy.introduction)}</p></td></tr>
+      <tr><td style="padding:8px 42px 20px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="luxor-box" style="border:1px solid rgba(202,162,76,.2);background-color:#0f0c09;">${detailRows.map(([label, value]) => `<tr><td style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#8d7d64;font-size:10px;text-transform:uppercase;letter-spacing:.16em;width:28%;">${escapeHtml(label)}</td><td class="luxor-title" style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#f7efe3;font-size:13px;">${escapeHtml(value)}</td></tr>`).join('')}</table></td></tr>
+      <tr><td class="luxor-muted" style="padding:0 42px 24px;color:#d7c29a;font-size:14px;line-height:1.75;"><p style="margin:0 0 12px;color:#d7c29a;">${escapeHtml(copy.preparation)}</p><p style="margin:0;color:#d7c29a;">${escapeHtml(copy.closing)}</p></td></tr>
       ${context.responseUrl ? `<tr><td align="center" style="padding:0 42px 34px;"><a href="${escapeHtml(context.responseUrl)}" style="display:inline-block;background:#caa24c;color:#050505;text-decoration:none;padding:14px 24px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;">Confirm or reschedule</a></td></tr>` : ''}
-      <tr><td align="center" style="padding:28px 42px;border-top:1px solid rgba(202,162,76,.16);color:#8d7d64;font-size:11px;line-height:1.7;"><strong style="font-family:Georgia,serif;color:#caa24c;font-size:22px;letter-spacing:.12em;">LUXOR</strong><br/>803 Castroville Rd #402, San Antonio, TX 78237<br/>booking@luxoratlaspalmas.com</td></tr>
+      <tr><td align="center" style="padding:28px 42px;border-top:1px solid rgba(202,162,76,.16);color:#8d7d64;font-size:11px;line-height:1.7;"><strong class="luxor-gold" style="font-family:Georgia,serif;color:#caa24c;font-size:22px;letter-spacing:.12em;">LUXOR</strong><br/>803 Castroville Rd #402, San Antonio, TX 78237<br/><a href="mailto:booking@luxoratlaspalmas.com" style="color:#8d7d64;text-decoration:none;">booking@luxoratlaspalmas.com</a></td></tr>
     </table>
   </td></tr></table></body></html>`
 }

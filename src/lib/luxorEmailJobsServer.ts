@@ -139,27 +139,46 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
   <title>Your Luxor RSVP Is Confirmed</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body, table, td, p, a, h1 { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    @media (prefers-color-scheme: dark) {
+      body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+      .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,0.22) !important; }
+      .luxor-header { background-color: #080605 !important; }
+      .luxor-hero { background-color: #120d0a !important; }
+      .luxor-title { color: #f7efe3 !important; }
+      .luxor-gold { color: #caa24c !important; }
+      .luxor-muted { color: #d7c29a !important; }
+    }
+    [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+    [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+    [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+    [data-ogsc] .luxor-gold { color: #caa24c !important; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505">
+<body class="luxor-bg" style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;color:#f7efe3;color-scheme:light dark;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
     <tr>
       <td align="center" style="padding:28px 16px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
           <tr>
             <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
           </tr>
           <tr>
-            <td style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
-              <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+            <td class="luxor-header" style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
               <p style="margin:6px 0 0;font-size:8px;letter-spacing:0.42em;color:rgba(202,162,76,0.62);text-transform:uppercase;">At Las Palmas Events</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:60px 48px 34px;text-align:center;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
-              <p style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Grand Opening Showcase</p>
-              <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:44px;font-weight:600;line-height:1.05;color:#f7efe3;">Your RSVP Is Confirmed</h1>
-              <p style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
+            <td class="luxor-hero" style="padding:60px 48px 34px;text-align:center;background-color:#120d0a;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
+              <p class="luxor-gold" style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Grand Opening Showcase</p>
+              <h1 class="luxor-title" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:44px;font-weight:600;line-height:1.05;color:#f7efe3;">Your RSVP Is Confirmed</h1>
+              <p class="luxor-muted" style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 Hi ${escapeHtml(firstName)}, we saved your spot for the Luxor Grand Opening Showcase on ${LUXOR_GRAND_OPENING.dateLabel}, from <strong style="color:#f1d27a;">${LUXOR_GRAND_OPENING.timeLabel}</strong>.
               </p>
             </td>
@@ -172,13 +191,13 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td width="48%" style="width:48%;vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);">
-                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Attending</p>
-                    <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:1.1;color:#f7efe3;">${attendeeCount}</p>
+                    <p class="luxor-gold" style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Attending</p>
+                    <p class="luxor-title" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:1.1;color:#f7efe3;">${attendeeCount}</p>
                   </td>
                   <td width="4%" style="width:4%;">&nbsp;</td>
                   <td width="48%" style="width:48%;vertical-align:top;padding-left:16px;">
-                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Interest</p>
-                    <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${escapeHtml(interestLine)}</p>
+                    <p class="luxor-gold" style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Interest</p>
+                    <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${escapeHtml(interestLine)}</p>
                   </td>
                 </tr>
               </table>
@@ -186,10 +205,10 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
           </tr>
           <tr>
             <td style="padding:0 48px 18px;">
-              <p style="margin:0 0 14px;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+              <p class="luxor-muted" style="margin:0 0 14px;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 You can expect venue tours, vendor connections, tastings, giveaways, and a closer look at what Luxor offers for weddings, quinceañeras, private celebrations, and more.
               </p>
-              <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+              <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 If your plans change or you want to talk with the team before the event, use one of the links below.
               </p>
             </td>
@@ -201,16 +220,16 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
             </td>
           </tr>
           <tr>
-            <td style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
-              <p style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
-              <p style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
+            <td class="luxor-header" style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p class="luxor-muted" style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
                 803 Castroville Rd #402, San Antonio, TX 78237<br />
                 Private venue tours by appointment.<br />
                 <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
                 <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
               </p>
               ${socialEmailIconsHtml()}
-              <p style="margin:0;font-size:9px;line-height:1.7;color:rgba(215,194,154,0.32);">
+              <p class="luxor-muted" style="margin:0;font-size:9px;line-height:1.7;color:rgba(215,194,154,0.32);">
                 This RSVP confirmation was sent because you reserved a spot for the Luxor Grand Opening Showcase.
               </p>
             </td>
@@ -234,27 +253,46 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
   <title>Your Inquiry is Received</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body, table, td, p, a, h1 { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    @media (prefers-color-scheme: dark) {
+      body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+      .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,0.22) !important; }
+      .luxor-header { background-color: #080605 !important; }
+      .luxor-hero { background-color: #120d0a !important; }
+      .luxor-title { color: #f7efe3 !important; }
+      .luxor-gold { color: #caa24c !important; }
+      .luxor-muted { color: #d7c29a !important; }
+    }
+    [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+    [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+    [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+    [data-ogsc] .luxor-gold { color: #caa24c !important; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505">
+<body class="luxor-bg" style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;color:#f7efe3;color-scheme:light dark;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
     <tr>
       <td align="center" style="padding:28px 16px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
           <tr>
             <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
           </tr>
           <tr>
-            <td style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
-              <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+            <td class="luxor-header" style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
               <p style="margin:6px 0 0;font-size:8px;letter-spacing:0.42em;color:rgba(202,162,76,0.62);text-transform:uppercase;">At Las Palmas Events</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:60px 48px 34px;text-align:center;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
-              <p style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Inquiry Confirmed</p>
-              <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:600;line-height:1.1;color:#f7efe3;">We Have Received Your Inquiry</h1>
-              <p style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
+            <td class="luxor-hero" style="padding:60px 48px 34px;text-align:center;background-color:#120d0a;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
+              <p class="luxor-gold" style="margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Inquiry Confirmed</p>
+              <h1 class="luxor-title" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:600;line-height:1.1;color:#f7efe3;">We Have Received Your Inquiry</h1>
+              <p class="luxor-muted" style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 Hi ${escapeHtml(firstName)}, thank you for reaching out to Luxor Event Space. We have received your event details and a coordinator will connect with you shortly.
               </p>
             </td>
@@ -267,13 +305,13 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td width="48%" style="width:48%;vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);">
-                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Event Type</p>
-                    <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${escapeHtml(inquiry.event_type || 'Private Event')}</p>
+                    <p class="luxor-gold" style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Event Type</p>
+                    <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${escapeHtml(inquiry.event_type || 'Private Event')}</p>
                   </td>
                   <td width="4%" style="width:4%">&nbsp;</td>
                   <td width="48%" style="width:48%;vertical-align:top;padding-left:16px;">
-                    <p style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Guest Count</p>
-                    <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${inquiry.guest_count || 'N/A'}</p>
+                    <p class="luxor-gold" style="margin:0 0 10px;font-size:9px;font-weight:700;letter-spacing:0.32em;text-transform:uppercase;color:#caa24c;">Guest Count</p>
+                    <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">${inquiry.guest_count || 'N/A'}</p>
                   </td>
                 </tr>
               </table>
@@ -281,10 +319,10 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
           </tr>
           <tr>
             <td style="padding:0 48px 18px;">
-              <p style="margin:0 0 14px;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+              <p class="luxor-muted" style="margin:0 0 14px;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 Our team is currently reviewing your event notes to prepare custom package options. We will get in touch via email or phone within 24 business hours.
               </p>
-              <p style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
+              <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
                 If you would like to schedule a private tour of the space in the meantime, please use the link below.
               </p>
             </td>
@@ -296,9 +334,9 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
             </td>
           </tr>
           <tr>
-            <td style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
-              <p style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
-              <p style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
+            <td class="luxor-header" style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p class="luxor-muted" style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
                 803 Castroville Rd #402, San Antonio, TX 78237<br />
                 Private venue tours by appointment.<br />
                 <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
