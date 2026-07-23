@@ -324,19 +324,19 @@ export default function SettingsPage() {
               {/* Brand Assets Manager */}
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6">
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Brand Assets Manager</h3>
-                  <p className="text-[10px] text-zinc-550 mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Brand Assets Manager</h3>
+                  <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
                 </div>
 
                 {/* Upload Form */}
-                <div className="border border-[color:var(--portal-border)] bg-black/30 rounded-xl p-4 space-y-4">
+                <div className="border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-xl p-4 space-y-4">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Upload New Asset</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
                     {/* File Input */}
                     <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase font-bold text-zinc-550">Image File</label>
-                      <div className="relative border border-dashed border-[color:var(--portal-border)] rounded-lg bg-black/50 p-3 flex flex-col items-center justify-center text-center cursor-pointer min-h-[80px]">
+                      <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Image File</label>
+                      <div className="relative border border-dashed border-[color:var(--portal-border)] rounded-lg bg-[color:var(--portal-card)] p-3 flex flex-col items-center justify-center text-center cursor-pointer min-h-[80px]">
                         <input
                           type="file"
                           accept="image/*"
@@ -350,8 +350,8 @@ export default function SettingsPage() {
                           }}
                           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                         />
-                        <Upload size={16} className="text-zinc-550 mb-1" />
-                        <p className="text-[10px] text-zinc-400 font-medium truncate max-w-full px-2">
+                        <Upload size={16} className="text-[color:var(--portal-muted)] mb-1" />
+                        <p className="text-[10px] text-[color:var(--portal-text)] font-medium truncate max-w-full px-2">
                           {assetFile ? assetFile.name : 'Choose file...'}
                         </p>
                       </div>
@@ -360,13 +360,13 @@ export default function SettingsPage() {
                     {/* Meta Fields */}
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <label className="text-[9px] uppercase font-bold text-zinc-550">Asset Name</label>
+                        <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Asset Name</label>
                         <input
                           type="text"
                           value={assetName}
                           onChange={e => setAssetName(e.target.value)}
                           placeholder="e.g. Logo Header Gold"
-                          className="w-full bg-black border border-[color:var(--portal-border)] rounded-md px-3 py-1.5 text-xs text-zinc-300 outline-none"
+                          className="w-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-md px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -420,21 +420,21 @@ export default function SettingsPage() {
                       {assets.map(asset => (
                         <div
                           key={asset.id}
-                          className="flex items-center gap-3 border border-[color:var(--portal-border)] bg-black/20 rounded-xl p-3 hover:border-zinc-800 transition-colors"
+                          className="flex items-center gap-3 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-xl p-3 hover:border-[#caa24c]/30 transition-colors"
                         >
                           {/* Image box */}
-                          <div className="w-12 h-12 bg-black border border-zinc-900 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+                          <div className="w-12 h-12 bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-lg overflow-hidden flex items-center justify-center shrink-0">
                             <img src={asset.url} alt={asset.name} className="max-w-full max-h-full object-contain" />
                           </div>
 
                           {/* Info */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-zinc-200 truncate">{asset.name}</p>
+                            <p className="text-xs font-bold text-[color:var(--portal-text)] truncate">{asset.name}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="rounded bg-zinc-950 border border-zinc-900 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-zinc-500">
+                              <span className="rounded bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
                                 {asset.category}
                               </span>
-                              <span className="text-[8px] text-zinc-650 font-mono">
+                              <span className="text-[8px] text-[color:var(--portal-faint)] font-mono">
                                 {new Date(asset.created_at).toLocaleDateString()}
                               </span>
                             </div>
@@ -446,7 +446,7 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => handleCopyUrl(asset.id, asset.url)}
                               title="Copy Public URL"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-900 bg-black/40 text-zinc-400 hover:text-[#caa24c] hover:border-[#caa24c]/20 transition-all cursor-pointer"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[#caa24c] hover:border-[#caa24c]/30 transition-all cursor-pointer"
                             >
                               {copiedId === asset.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
                             </button>
@@ -454,7 +454,7 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => handleDeleteAsset(asset.id)}
                               title="Delete Brand Asset"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-900 bg-black/40 text-zinc-400 hover:text-red-400 hover:border-red-500/20 transition-all cursor-pointer"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -474,15 +474,15 @@ export default function SettingsPage() {
           {activeTab === 'notifications' && (
             <div className="space-y-6">
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Automated Notifications</h3>
-                <div className="rounded-xl border border-zinc-800 bg-black/20 p-4">
-                  <p className="text-xs font-bold text-white">New inquiry email alerts are active when Zoho is configured.</p>
-                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Tour emails can be queued from the calendar and client dossier. General reminder switches are hidden until each automation has a saved setting and a verified delivery job.</p>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Notifications</h3>
+                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                  <p className="text-xs font-bold text-[color:var(--portal-text)]">New inquiry email alerts are active when Zoho is configured.</p>
+                  <p className="mt-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">Tour emails can be queued from the calendar and client dossier. General reminder switches are hidden until each automation has a saved setting and a verified delivery job.</p>
                 </div>
               </div>
 
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Internal Notification Recipients</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Internal Notification Recipients</h3>
                 <div className="space-y-4">
                   <p className="text-xs text-zinc-400">Configure target email addresses to receive branded alerts and AI-summarized dossiers when inquiries are submitted.</p>
                   <div className="space-y-1.5">

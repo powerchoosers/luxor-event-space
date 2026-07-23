@@ -331,11 +331,11 @@ export default function EventsPage() {
 
 function IncompleteState({ booking, title, description, tab }: { booking: BookingWithPayments; title: string; description: string; tab: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 bg-black/20 p-6 text-center">
-      <AlertCircle size={28} className="mx-auto text-amber-400" />
-      <p className="mt-3 text-xs font-bold text-white">{title}</p>
-      <p className="mx-auto mt-2 max-w-md text-[10px] leading-relaxed text-zinc-500">{description}</p>
-      {booking.inquiry_id && <Link href={`/portal/leads/${booking.inquiry_id}?tab=${tab}`} className="mt-4 inline-flex items-center gap-1 rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#f1d27a]">Open client dossier <ChevronRight size={12} /></Link>}
+    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-6 text-center">
+      <AlertCircle size={28} className="mx-auto text-amber-500" />
+      <p className="mt-3 text-xs font-bold text-[color:var(--portal-text)]">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{description}</p>
+      {booking.inquiry_id && <Link href={`/portal/leads/${booking.inquiry_id}?tab=${tab}`} className="mt-4 inline-flex items-center gap-1 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a]">Open client dossier <ChevronRight size={12} /></Link>}
     </div>
   )
 }

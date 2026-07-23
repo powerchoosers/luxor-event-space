@@ -92,7 +92,7 @@ export default function InvoicesPage() {
         title="Revenue & Invoicing"
         description="Financial command center for tracking Luxor's event contract performance."
         actions={
-          <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-450">
+          <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {invoices.length} total invoice records
           </div>
         }
@@ -248,7 +248,7 @@ function StatsPanel({
           {trend}
         </span>
       </div>
-      <h3 className="text-2xl font-bold text-white font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300 relative z-10">
+      <h3 className="text-2xl font-bold text-[color:var(--portal-text)] font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300 relative z-10">
         {value}
       </h3>
     </div>

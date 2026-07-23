@@ -287,7 +287,7 @@ export default function CommunicationsPage() {
         title="Communications"
         description="Review client email history, send Zoho replies, and record follow-up notes from one contained workspace."
         actions={
-          <div className="rounded-lg border border-zinc-900 bg-black/60 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+          <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {inquiries.length} client email channels
           </div>
         }
@@ -302,20 +302,20 @@ export default function CommunicationsPage() {
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-12">
         {/* Left Side: Queue */}
         <div className="flex min-h-0 flex-col gap-6 overflow-hidden lg:col-span-4">
-          <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-black/40 shadow-2xl backdrop-blur-xl">
-            <div className="p-5 border-b border-zinc-900/50 flex flex-col gap-4">
-              <h3 className="font-semibold text-white/90 flex items-center gap-2">
-                <History size={16} className="text-zinc-500" />
+          <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl backdrop-blur-xl">
+            <div className="p-5 border-b border-[color:var(--portal-border)] flex flex-col gap-4">
+              <h3 className="font-semibold text-[color:var(--portal-text)] flex items-center gap-2">
+                <History size={16} className="text-[color:var(--portal-muted)]" />
                 Comms Queue
               </h3>
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search history..."
-                  className="w-full bg-zinc-950 border border-zinc-900 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-300 font-medium placeholder:text-zinc-700"
+                  className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-lg pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] font-medium placeholder:text-[color:var(--portal-faint)] outline-none focus:border-[#caa24c]/40"
                 />
               </div>
             </div>
@@ -347,19 +347,19 @@ export default function CommunicationsPage() {
                     <div
                       key={inq.id}
                       onClick={() => setSelectedId(inq.id)}
-                      className={`p-5 flex flex-col gap-2 hover:bg-zinc-900/30 transition-all cursor-pointer group ${
-                        isActive ? 'bg-[#caa24c]/5 border-l-2 border-[#caa24c]' : 'border-l-2 border-transparent'
+                      className={`p-5 flex flex-col gap-2 hover:bg-[color:var(--portal-soft)]/60 transition-all cursor-pointer group ${
+                        isActive ? 'bg-[#caa24c]/10 border-l-2 border-[#caa24c]' : 'border-l-2 border-transparent'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <h4 className={`text-xs font-bold uppercase tracking-widest ${isActive ? 'text-white' : 'text-zinc-350'} group-hover:text-[#f1d27a] transition-colors`}>
+                        <h4 className={`text-xs font-bold uppercase tracking-widest ${isActive ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'} group-hover:text-[#caa24c] transition-colors`}>
                           {inq.full_name}
                         </h4>
-                        <span className="text-[9px] font-mono text-zinc-600">
+                        <span className="text-[9px] font-mono text-[color:var(--portal-faint)]">
                           {new Date(inq.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-zinc-550 group-hover:text-zinc-400">
+                      <div className="flex items-center justify-between text-[11px] text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
                         <span className="font-semibold">{inq.event_type || 'Quinceañera'}</span>
                         <PortalStatusBadge status={inq.status} />
                       </div>
@@ -374,19 +374,19 @@ export default function CommunicationsPage() {
         {/* Right Side: Conversation Frame */}
         <div className="flex min-h-0 flex-col gap-6 overflow-hidden lg:col-span-8">
           {selectedInquiry ? (
-            <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-900 bg-black/50 p-1 shadow-2xl">
+            <div className="nodal-void-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-2xl">
               {/* Header */}
-              <div className="bg-[#0c0c0c] rounded-t-xl py-3.5 px-6 border-b border-zinc-900 flex items-center justify-between">
+              <div className="bg-[color:var(--portal-soft)] rounded-t-xl py-3.5 px-6 border-b border-[color:var(--portal-border)] flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <PortalContactAvatar name={selectedInquiry.full_name} avatarUrl={selectedInquiry.metadata?.avatar_url as string | null} size="md" />
                   <div>
                     <Link
                       href={`/portal/leads/${selectedInquiry.id}`}
-                      className="text-xs font-bold text-white uppercase tracking-widest leading-none hover:text-[#f1d27a] inline-flex items-center gap-1"
+                      className="text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest leading-none hover:text-[#caa24c] inline-flex items-center gap-1 transition-colors"
                     >
-                      {selectedInquiry.full_name} <ExternalLink size={12} className="text-zinc-650" />
+                      {selectedInquiry.full_name} <ExternalLink size={12} className="text-[color:var(--portal-muted)]" />
                     </Link>
-                    <p className="text-[10px] text-zinc-500 font-medium mt-1">
+                    <p className="text-[10px] text-[color:var(--portal-muted)] font-medium mt-1">
                       {selectedInquiry.email || selectedInquiry.phone || 'No direct contact'}
                     </p>
                   </div>
@@ -404,20 +404,20 @@ export default function CommunicationsPage() {
               </div>
 
               {/* Chat Timeline & Log Feed */}
-              <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-transparent to-black/20 p-6 space-y-6">
-                <form onSubmit={handleSendEmail} className="rounded-xl border border-[#caa24c]/16 bg-black/35 p-4 space-y-3">
+              <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
+                <form onSubmit={handleSendEmail} className="rounded-xl border border-[#caa24c]/20 bg-[color:var(--portal-soft)] p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Mail size={15} className="text-[#f1d27a]" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450">Send Zoho Email</span>
+                      <Mail size={15} className="text-[#caa24c]" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Send Zoho Email</span>
                     </div>
                     <PortalSelect
                       value={sendFrom}
                       onChange={setSendFrom}
                       className="ml-auto w-[260px]"
                       options={[
-                        { value: 'hello@luxoratlaspalmas.com', label: 'hello@luxoratlaspalmas.com' },
-                        { value: 'booking@luxoratlaspalmas.com', label: 'booking@luxoratlaspalmas.com' },
+                        { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email' },
+                        { value: 'booking@luxoratlaspalmas.com', label: 'Booking Email' },
                       ]}
                     />
                   </div>
@@ -427,14 +427,14 @@ export default function CommunicationsPage() {
                       type="email"
                       value={selectedInquiry.email || ''}
                       readOnly
-                      className="rounded-md border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs text-zinc-500 outline-none"
+                      className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-muted)] outline-none"
                       placeholder="Client has no email"
                     />
                     <input
                       type="text"
                       value={emailSubject}
                       onChange={(event) => setEmailSubject(event.target.value)}
-                      className="rounded-md border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]"
+                      className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
                       placeholder="Subject"
                     />
                   </div>
@@ -442,26 +442,26 @@ export default function CommunicationsPage() {
                   <textarea
                     value={emailContent}
                     onChange={(event) => setEmailContent(event.target.value)}
-                    className="min-h-28 w-full resize-none rounded-md border border-zinc-900 bg-zinc-950 px-3 py-3 text-xs leading-5 text-zinc-300 outline-none focus:border-[#caa24c]"
+                    className="min-h-28 w-full resize-none rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
                     placeholder="Write the message to send through Zoho..."
                   />
 
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className={`text-[11px] font-medium ${emailSendStatus?.startsWith('Email sent') ? 'text-emerald-300' : 'text-zinc-500'}`}>
+                    <p className={`text-[11px] font-medium ${emailSendStatus?.startsWith('Email sent') ? 'text-emerald-500' : 'text-[color:var(--portal-muted)]'}`}>
                       {emailSendStatus || (selectedInquiry.email ? `Ready to send to ${selectedInquiry.email}` : 'Add a client email before sending.')}
                     </p>
                     <button
                       type="submit"
                       disabled={sendingEmail || !selectedInquiry.email || !emailSubject.trim() || !emailContent.trim()}
-                      className="inline-flex items-center gap-2 rounded-md bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center gap-2 rounded-md bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <Send size={13} />
-                      {sendingEmail ? 'Sending' : 'Send Email'}
+                      <Send size={13} className="text-white" />
+                      <span className="text-white font-bold">{sendingEmail ? 'Sending' : 'Send Email'}</span>
                     </button>
                   </div>
                 </form>
 
-                <div className="rounded-xl border border-zinc-900 bg-black/30 p-4">
+                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Mail size={15} className="text-[#f1d27a]" />

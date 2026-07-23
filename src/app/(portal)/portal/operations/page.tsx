@@ -781,11 +781,11 @@ function OperationsPageContent() {
       {activeTab === 'cleaning' && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 max-w-2xl">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Post-Event Cleaning Audit Checklist</h3>
-            <div className="rounded-xl border border-dashed border-zinc-800 bg-black/20 p-6 text-center">
-              <AlertTriangle size={28} className="mx-auto text-amber-400" />
-              <p className="mt-3 text-xs font-bold text-white">Event-linked cleaning audits are not connected yet.</p>
-              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">The previous checklist and photo uploader were visual-only and did not save. Use maintenance tasks until cleaning records and attachments are tied to individual events.</p>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Post-Event Cleaning Audit Checklist</h3>
+            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-6 text-center">
+              <AlertTriangle size={28} className="mx-auto text-amber-500" />
+              <p className="mt-3 text-xs font-bold text-[color:var(--portal-text)]">Event-linked cleaning audits are not connected yet.</p>
+              <p className="mt-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">The previous checklist and photo uploader were visual-only and did not save. Use maintenance tasks until cleaning records and attachments are tied to individual events.</p>
             </div>
           </div>
         </div>
@@ -796,7 +796,7 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-center max-w-lg">
             <Users size={36} className="text-[#caa24c] mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Employee Scheduling & Rota Portal</h3>
+            <h3 className="text-sm font-bold text-[color:var(--portal-text)] uppercase tracking-wider">Employee Scheduling & Rota Portal</h3>
             <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
               Staff availability management, timesheet submission approvals, and payroll ledger integration will be deployed in Version 2.0.
             </p>
