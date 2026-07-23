@@ -44,6 +44,7 @@ import {
   PartyPopper,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
@@ -4762,71 +4763,71 @@ export default function LeadDetailPage({
       </AnimatePresence>
 
       <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
-        <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#080706]">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-900 bg-white/[0.02] px-5 py-4 sm:px-6">
+        <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-card)] text-[color:var(--portal-text)]">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Schedule Tour & Send Invite</h3>
-              <p className="mt-1 text-[11px] leading-4 text-zinc-500">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase sends the reminders.</p>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Schedule Tour & Send Invite</h3>
+              <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase sends the reminders.</p>
             </div>
             <PortalCloseButton onClick={() => setIsTourScheduleModalOpen(false)} aria-label="Close tour scheduler" className="shrink-0" />
           </div>
 
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 pb-7 portal-scrollbar sm:p-6 sm:pb-8">
-            <div className="overflow-hidden rounded-xl border border-[#caa24c]/20 bg-black">
-            <img src={getEventPreviewImage(lead.event_type)} alt={`${lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-75" />
-            <div className="px-4 py-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email image selected from event type</p>
-              <p className="mt-1 text-xs font-semibold text-zinc-200">{lead.event_type || 'Private Event'} inspiration</p>
-            </div>
+            <div className="overflow-hidden rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-soft)] shadow-md">
+              <img src={getEventPreviewImage(lead.event_type)} alt={`${lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-90" />
+              <div className="px-4 py-3 bg-[color:var(--portal-card)] border-t border-[color:var(--portal-border)]">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email image selected from event type</p>
+                <p className="mt-1 text-xs font-bold text-[color:var(--portal-text)]">{lead.event_type || 'Private Event'} inspiration</p>
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Tour date</label>
-              <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full" placeholder="Choose tour date" />
+              <div>
+                <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Tour date</label>
+                <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full" placeholder="Choose tour date" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Start time</label>
+                <PortalSelect value={tourScheduleTime} onChange={setTourScheduleTime} options={EVENT_TIME_OPTIONS} className="w-full" placeholder="Choose tour time" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Meeting type</label>
+                <PortalSelect value={tourMeetingType} onChange={setTourMeetingType} options={[
+                  { value: 'Private Venue Tour', label: 'Private Venue Tour' },
+                  { value: 'Wedding Walkthrough', label: 'Wedding Walkthrough' },
+                  { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
+                  { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
+                  { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
+                ]} className="w-full" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Duration</label>
+                <PortalSelect value={tourScheduleDuration} onChange={setTourScheduleDuration} options={[
+                  { value: '30', label: '30 minutes' },
+                  { value: '45', label: '45 minutes' },
+                  { value: '60', label: '60 minutes' },
+                  { value: '90', label: '90 minutes' },
+                ]} className="w-full" />
+              </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Start time</label>
-              <PortalSelect value={tourScheduleTime} onChange={setTourScheduleTime} options={EVENT_TIME_OPTIONS} className="w-full" placeholder="Choose tour time" />
+              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Details Elena AI may mention to the client</label>
+              <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
+              <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
             </div>
-            <div>
-              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Meeting type</label>
-              <PortalSelect value={tourMeetingType} onChange={setTourMeetingType} options={[
-                { value: 'Private Venue Tour', label: 'Private Venue Tour' },
-                { value: 'Wedding Walkthrough', label: 'Wedding Walkthrough' },
-                { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
-                { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
-                { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
-              ]} className="w-full" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Duration</label>
-              <PortalSelect value={tourScheduleDuration} onChange={setTourScheduleDuration} options={[
-                { value: '30', label: '30 minutes' },
-                { value: '45', label: '45 minutes' },
-                { value: '60', label: '60 minutes' },
-                { value: '90', label: '90 minutes' },
-              ]} className="w-full" />
-            </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-zinc-500">Details Elena AI may mention to the client</label>
-              <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-zinc-800 bg-black/40 px-3 py-3 text-xs leading-5 text-zinc-200 outline-none focus:border-[#caa24c]/40" />
-              <p className="mt-2 text-[10px] leading-4 text-zinc-600">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
-            </div>
-            <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3 text-[10px] leading-5 text-blue-200/80">
+            <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 px-4 py-3 text-[10px] font-semibold leading-5 text-blue-950 dark:text-blue-200/90 shadow-xs">
               This sends one native Zoho calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-zinc-900 bg-[#0b0908]/98 px-5 py-4 shadow-[0_-18px_36px_rgba(0,0,0,0.38)] sm:px-6">
-            <div className="hidden text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-600 sm:block">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 shadow-[0_-18px_36px_rgba(0,0,0,0.12)] sm:px-6">
+            <div className="hidden text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:block">
               {!lead.email ? 'Add a client email first' : !tourScheduleDate || !tourScheduleTime ? 'Date and time are required' : 'Ready to send'}
             </div>
             <div className="flex w-full items-center gap-2 sm:w-auto">
-              <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} disabled={schedulingTour} className="min-h-11 flex-1 rounded-xl border border-zinc-800 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40 sm:flex-none">
+              <button type="button" onClick={() => setIsTourScheduleModalOpen(false)} disabled={schedulingTour} className="min-h-11 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] disabled:opacity-40 sm:flex-none">
                 Cancel
               </button>
-              <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="inline-flex min-h-11 flex-[1.7] items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-xl shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none">
+              <button type="submit" disabled={schedulingTour || !lead.email || !tourScheduleDate || !tourScheduleTime} className="inline-flex min-h-11 flex-[1.7] items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-xl shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 sm:flex-none">
                 <Send size={13} /> {schedulingTour ? 'Creating Invite...' : 'Send Invite & Schedule'}
               </button>
             </div>
@@ -4836,20 +4837,20 @@ export default function LeadDetailPage({
 
       {/* Vendor picker modal */}
       <PortalModal isOpen={isVendorModalOpen} onClose={() => setIsVendorModalOpen(false)} maxWidth="max-w-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
           <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Add Vendors</h3>
-            <p className="mt-1 text-[11px] text-zinc-500">Link existing operation vendors to this lead.</p>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Add Vendors</h3>
+            <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Link existing operation vendors to this lead.</p>
           </div>
           <PortalCloseButton onClick={() => setIsVendorModalOpen(false)} aria-label="Close vendor picker" />
         </div>
-        <div className="max-h-[70vh] overflow-y-auto bg-[#080706] p-6 portal-scrollbar">
+        <div className="max-h-[70vh] overflow-y-auto bg-[color:var(--portal-card)] p-6 portal-scrollbar">
           {loadingVendors ? (
-            <div className="rounded-xl border border-dashed border-zinc-900 p-6 text-center text-xs text-zinc-500">Loading vendors...</div>
+            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">Loading vendors...</div>
           ) : allVendors.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-900 p-6 text-center text-xs leading-5 text-zinc-500">
-              <p className="font-semibold text-zinc-300">No vendor records found.</p>
-              <p className="mt-1 text-zinc-600">Add vendors in Operations first, then link them here.</p>
+            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs leading-5 text-[color:var(--portal-muted)]">
+              <p className="font-semibold text-[color:var(--portal-text)]">No vendor records found.</p>
+              <p className="mt-1 text-[color:var(--portal-muted)]">Add vendors in Operations first, then link them here.</p>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -4862,19 +4863,19 @@ export default function LeadDetailPage({
                     onClick={() => toggleVendorSelection(vendor.id)}
                     className={`flex items-center justify-between gap-4 rounded-xl border p-4 text-left transition-colors ${
                       isLinked
-                        ? 'border-[#caa24c]/35 bg-[#caa24c]/10'
-                        : 'border-zinc-900 bg-zinc-950/35 hover:border-[#caa24c]/20 hover:bg-[#caa24c]/5'
+                        ? 'border-[#caa24c]/40 bg-[#caa24c]/10'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/30'
                     }`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-white">{vendor.name}</p>
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">{vendor.vendor_type}</p>
-                      <p className="mt-1 text-[10px] text-zinc-500">{[vendor.phone, vendor.email].filter(Boolean).join(' • ') || 'No contact details'}</p>
+                      <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{vendor.name}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{vendor.vendor_type}</p>
+                      <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{[vendor.phone, vendor.email].filter(Boolean).join(' • ') || 'No contact details'}</p>
                     </div>
                     <span className={`rounded border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
                       isLinked
-                        ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]'
-                        : 'border-zinc-800 text-zinc-500'
+                        ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#caa24c]'
+                        : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'
                     }`}>
                       {isLinked ? 'Linked' : 'Add'}
                     </span>
@@ -4888,48 +4889,48 @@ export default function LeadDetailPage({
 
       {/* Timeline item modal */}
       <PortalModal isOpen={isTimelineModalOpen} onClose={() => setIsTimelineModalOpen(false)} maxWidth="max-w-lg">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
           <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">{timelineEditIndex === null ? 'Add Timeline Step' : 'Edit Timeline Step'}</h3>
-            <p className="mt-1 text-[11px] text-zinc-500">Build a simple run of show for this event.</p>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{timelineEditIndex === null ? 'Add Timeline Step' : 'Edit Timeline Step'}</h3>
+            <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Build a simple run of show for this event.</p>
           </div>
           <PortalCloseButton onClick={() => setIsTimelineModalOpen(false)} aria-label="Close timeline step modal" />
         </div>
-        <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[#080706] p-6">
+        <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[color:var(--portal-card)] p-6">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Time</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Time</label>
             <input
               type="text"
               required
               value={timelineTime}
               onChange={(event) => setTimelineTime(event.target.value)}
               placeholder="e.g. 4:00 PM"
-              className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/50"
+              className="portal-input-transparent w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Step Title</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Step Title</label>
             <input
               type="text"
               required
               value={timelineTitle}
               onChange={(event) => setTimelineTitle(event.target.value)}
               placeholder="e.g. Vendor load-in"
-              className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/50"
+              className="portal-input-transparent w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Description</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Description</label>
             <textarea
               value={timelineDescription}
               onChange={(event) => setTimelineDescription(event.target.value)}
               placeholder="Optional details, owner, or notes..."
-              className="h-24 w-full rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300 outline-none focus:border-[#caa24c]/50"
+              className="portal-input-transparent h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
           <button
             type="submit"
-            className="w-full rounded-lg bg-[#caa24c] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68]"
+            className="w-full rounded-xl bg-[#caa24c] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68]"
           >
             {timelineEditIndex === null ? 'Add Step' : 'Save Step'}
           </button>
@@ -4953,7 +4954,6 @@ export default function LeadDetailPage({
                 <div><span className="block text-[color:var(--portal-muted)]">Paid</span><span className="font-mono text-emerald-700 dark:text-emerald-400">{formatMoney(getInvoicePaidTotal(paymentRequestInvoice.id))}</span></div>
                 <div><span className="block text-[color:var(--portal-muted)]">Balance</span><span className="font-mono text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(getInvoiceBalance(paymentRequestInvoice))}</span></div>
               </div>
-              <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Payment to request</label>
                 <PortalSelect
                   value={paymentRequestKind}
