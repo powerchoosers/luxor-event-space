@@ -485,7 +485,6 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   const canUndo = historyIdx > 0
 
   return (
-    <div className="flex flex-col h-full gap-0">
     <div className="flex flex-col h-full gap-0 p-3">
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 mb-3 shadow-xs">
