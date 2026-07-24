@@ -6,8 +6,11 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   const suppliedSecret = request.headers.get('x-cron-secret') || ''
-  const expectedSecret = process.env.LUXOR_TEXT_CRON_SECRET || process.env.LUXOR_EMAIL_CRON_SECRET || ''
-  if (!expectedSecret || suppliedSecret !== expectedSecret) {
+  const acceptedSecrets = [
+    process.env.LUXOR_TEXT_CRON_SECRET,
+    process.env.LUXOR_EMAIL_CRON_SECRET,
+  ].map((value) => value?.trim()).filter((value): value is string => Boolean(value))
+  if (!suppliedSecret || !acceptedSecrets.includes(suppliedSecret)) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
   if (!isWithinSmsSendWindow()) {
