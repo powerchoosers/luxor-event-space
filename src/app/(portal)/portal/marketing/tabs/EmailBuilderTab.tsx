@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   PenSquare,
   BrainCircuit,
@@ -191,7 +192,14 @@ export function EmailBuilderTab({
   // If live email builder canvas is activated
   if (showCanvas) {
     return (
-      <div className="h-full min-h-[500px] border border-[color:var(--portal-border)] rounded-2xl overflow-hidden bg-[color:var(--portal-card)] flex flex-col shadow-lg">
+      <motion.div
+        key="canvas-workspace"
+        initial={{ opacity: 0, scale: 0.99 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.99 }}
+        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+        className="h-full min-h-[500px] border border-[color:var(--portal-border)] rounded-2xl overflow-hidden bg-[color:var(--portal-card)] flex flex-col shadow-lg"
+      >
         <div className="bg-[color:var(--portal-soft)] px-5 py-3 border-b border-[color:var(--portal-border)] flex justify-between items-center shrink-0">
           <span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
             Email Builder Workspace
@@ -209,7 +217,7 @@ export function EmailBuilderTab({
             initialTemplate={builderTemplate}
           />
         </div>
-      </div>
+      </motion.div>
     )
   }
 
@@ -224,224 +232,246 @@ export function EmailBuilderTab({
 
       {/* Main split grid layout with independent column scrolling */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {activeSubTab === 'builder' && (
-          <div className="h-full grid grid-cols-1 gap-5 lg:grid-cols-4 overflow-hidden">
-            
-            {/* Column 1: Email Builder Preview */}
-            <div className="space-y-4 overflow-y-auto portal-scrollbar pr-1">
-              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Builder</h4>
-                
-                {/* Visual template flyer preview */}
-                <div className="relative group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 h-52 flex flex-col justify-between p-4 text-center shadow-inner">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10 z-10" />
+        <AnimatePresence mode="wait">
+          {activeSubTab === 'builder' && (
+            <motion.div
+              key="builder-subtab"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="h-full grid grid-cols-1 gap-5 lg:grid-cols-4 overflow-hidden"
+            >
+              {/* Column 1: Email Builder Preview */}
+              <div className="space-y-4 overflow-y-auto portal-scrollbar pr-1">
+                <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Builder</h4>
                   
-                  <span className="relative z-20 text-[7px] tracking-widest uppercase font-black text-[#caa24c]">Luxor Las Palmas</span>
-                  <div className="relative z-20 space-y-1 my-auto">
-                    <h5 className="text-xs font-black text-white uppercase tracking-wider leading-tight">Your Dream Event Starts Here</h5>
-                    <p className="text-[8px] text-zinc-400 max-w-[140px] mx-auto">Create stunning emails with our drag and drop editor.</p>
+                  {/* Visual template flyer preview */}
+                  <div className="relative group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 h-52 flex flex-col justify-between p-4 text-center shadow-inner">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10 z-10" />
+                    
+                    <span className="relative z-20 text-[7px] tracking-widest uppercase font-black text-[#caa24c]">Luxor Las Palmas</span>
+                    <div className="relative z-20 space-y-1 my-auto">
+                      <h5 className="text-xs font-black text-white uppercase tracking-wider leading-tight">Your Dream Event Starts Here</h5>
+                      <p className="text-[8px] text-zinc-400 max-w-[140px] mx-auto">Create stunning emails with our drag and drop editor.</p>
+                    </div>
+                    
+                    <button className="relative z-20 rounded-lg bg-[#caa24c] px-3.5 py-1.5 mx-auto text-[8px] font-black uppercase text-white shadow-md">
+                      Book Tour Slot
+                    </button>
                   </div>
-                  
-                  <button className="relative z-20 rounded-lg bg-[#caa24c] px-3.5 py-1.5 mx-auto text-[8px] font-black uppercase text-white shadow-md">
-                    Book Tour Slot
-                  </button>
-                </div>
 
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={() => handleStartCanvas(EMAIL_TEMPLATES[0])}
-                    className="w-full rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] py-2.5 text-[10px] font-black uppercase text-white tracking-widest transition-all shadow-md shadow-[#caa24c]/15 text-center cursor-pointer active:scale-95"
-                  >
-                    Create New Email
-                  </button>
-                  <button
-                    onClick={() => handleStartCanvas(null)}
-                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/10 hover:border-[#caa24c]/30 py-2.5 text-[10px] font-black uppercase text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] tracking-widest transition-all text-center cursor-pointer active:scale-95"
-                  >
-                    Use Blank Template
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Actions Card */}
-              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-3">
-                <h4 className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] border-b border-[color:var(--portal-border)] pb-2">Quick Actions</h4>
-                <div className="space-y-2 text-xs font-bold text-[color:var(--portal-text)]">
-                  <QuickLink label="Start Blank Email" onClick={() => handleStartCanvas(null)} />
-                  <QuickLink label="Browse Templates" onClick={() => setActiveSubTab('templates')} />
-                  <QuickLink label="Draft with Elena" onClick={() => setActiveSubTab('elena-ai')} />
-                </div>
-              </div>
-            </div>
-
-            {/* Column 2: Supabase-backed automated campaigns */}
-            <div className="lg:col-span-2 space-y-4 overflow-y-auto portal-scrollbar px-1">
-              <div className="rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b border-[color:var(--portal-border)] pb-3">
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Campaigns</h3>
-                    <p className="text-[9px] text-[color:var(--portal-muted)] mt-0.5">Campaigns whose saved audience is marked as automated.</p>
+                  <div className="space-y-2 pt-2">
+                    <button
+                      onClick={() => handleStartCanvas(EMAIL_TEMPLATES[0])}
+                      className="w-full rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] py-2.5 text-[10px] font-black uppercase text-white tracking-widest transition-all shadow-md shadow-[#caa24c]/15 text-center cursor-pointer active:scale-95"
+                    >
+                      Create New Email
+                    </button>
+                    <button
+                      onClick={() => handleStartCanvas(null)}
+                      className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/10 hover:border-[#caa24c]/30 py-2.5 text-[10px] font-black uppercase text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] tracking-widest transition-all text-center cursor-pointer active:scale-95"
+                    >
+                      Use Blank Template
+                    </button>
                   </div>
                 </div>
 
-                <div className="divide-y divide-[color:var(--portal-border)] flex flex-col">
-                  {automatedCampaigns.length ? automatedCampaigns.map((campaign) => (
-                    <div key={campaign.id} className="flex justify-between items-center py-3.5 first:pt-0 last:pb-0 gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#a8792f] dark:text-[#f1d27a] shrink-0">
-                          <Workflow size={13} />
+                {/* Quick Actions Card */}
+                <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-3">
+                  <h4 className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] border-b border-[color:var(--portal-border)] pb-2">Quick Actions</h4>
+                  <div className="space-y-2 text-xs font-bold text-[color:var(--portal-text)]">
+                    <QuickLink label="Start Blank Email" onClick={() => handleStartCanvas(null)} />
+                    <QuickLink label="Browse Templates" onClick={() => setActiveSubTab('templates')} />
+                    <QuickLink label="Draft with Elena" onClick={() => setActiveSubTab('elena-ai')} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 2: Supabase-backed automated campaigns */}
+              <div className="lg:col-span-2 space-y-4 overflow-y-auto portal-scrollbar px-1">
+                <div className="rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                  <div className="flex justify-between items-center border-b border-[color:var(--portal-border)] pb-3">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Campaigns</h3>
+                      <p className="text-[9px] text-[color:var(--portal-muted)] mt-0.5">Campaigns whose saved audience is marked as automated.</p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-[color:var(--portal-border)] flex flex-col">
+                    {automatedCampaigns.length ? automatedCampaigns.map((campaign) => (
+                      <div key={campaign.id} className="flex justify-between items-center py-3.5 first:pt-0 last:pb-0 gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#a8792f] dark:text-[#f1d27a] shrink-0">
+                            <Workflow size={13} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(campaign.name)}</p>
+                            <p className="text-[9.5px] font-mono text-[color:var(--portal-muted)] mt-1 font-bold">
+                              {campaign.recipient_count} recipients • {campaign.open_rate}% open • {campaign.click_rate}% click
+                            </p>
+                          </div>
                         </div>
+                        <span className="rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{campaign.status}</span>
+                      </div>
+                    )) : (
+                      <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">
+                        No Supabase campaign is marked as an automation.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 3: Real campaign performance and activity */}
+              <div className="space-y-5 overflow-y-auto portal-scrollbar pl-1">
+                <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracked Campaign Performance</h4>
+                  <div className="grid grid-cols-2 gap-3 text-left">
+                    {performanceKPIs.map((kpi) => (
+                      <div key={kpi.label} className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-xl p-3">
+                        <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{kpi.label}</span>
+                        <p className="font-mono text-base font-black text-[color:var(--portal-text)] mt-1 leading-none">{kpi.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Campaign Activity</h4>
+                    <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{activityEvents.length} tracked</span>
+                  </div>
+                  <div className="space-y-3 text-[10px] font-bold">
+                    {activityEvents.length ? activityEvents.slice(0, 5).map((event) => (
+                      <div key={event.id} className="flex justify-between items-center gap-3 py-1.5 border-b border-[color:var(--portal-border)] last:border-b-0">
                         <div>
-                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(campaign.name)}</p>
-                          <p className="text-[9.5px] font-mono text-[color:var(--portal-muted)] mt-1 font-bold">
-                            {campaign.recipient_count} recipients • {campaign.open_rate}% open • {campaign.click_rate}% click
-                          </p>
+                          <span className="text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
+                          <p className="text-[9px] text-[color:var(--portal-muted)] font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
                         </div>
+                        <span className="font-mono text-[9px] text-[color:var(--portal-muted)] shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>
                       </div>
-                      <span className="rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{campaign.status}</span>
-                    </div>
-                  )) : (
-                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">
-                      No Supabase campaign is marked as an automation.
-                    </div>
-                  )}
+                    )) : (
+                      <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-5 text-center text-xs text-[color:var(--portal-muted)]">No opens, clicks, or unsubscribes have been tracked.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracking Coverage</h4>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <TrackingMetric label="Campaigns" value={campaigns.length} />
+                    <TrackingMetric label="Sent" value={campaignTotals.sent} />
+                    <TrackingMetric label="Events" value={activityEvents.length} />
+                  </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
+          )}
 
-            {/* Column 3: Real campaign performance and activity */}
-            <div className="space-y-5 overflow-y-auto portal-scrollbar pl-1">
-              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracked Campaign Performance</h4>
-                <div className="grid grid-cols-2 gap-3 text-left">
-                  {performanceKPIs.map((kpi) => (
-                    <div key={kpi.label} className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-xl p-3">
-                      <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{kpi.label}</span>
-                      <p className="font-mono text-base font-black text-[color:var(--portal-text)] mt-1 leading-none">{kpi.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Campaign Activity</h4>
-                  <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{activityEvents.length} tracked</span>
-                </div>
-                <div className="space-y-3 text-[10px] font-bold">
-                  {activityEvents.length ? activityEvents.slice(0, 5).map((event) => (
-                    <div key={event.id} className="flex justify-between items-center gap-3 py-1.5 border-b border-[color:var(--portal-border)] last:border-b-0">
-                      <div>
-                        <span className="text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
-                        <p className="text-[9px] text-[color:var(--portal-muted)] font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
+          {/* Templates subtab */}
+          {activeSubTab === 'templates' && (
+            <motion.div
+              key="templates-subtab"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="h-full overflow-y-auto portal-scrollbar pr-1"
+            >
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {EMAIL_TEMPLATES.map((tpl) => (
+                  <button
+                    type="button"
+                    key={tpl.id}
+                    onClick={() => handleSelectTemplate(tpl)}
+                    className="group cursor-pointer overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/40 shadow-sm"
+                  >
+                    <div className="h-1.5 w-full" style={{ background: tpl.previewColor || '#caa24c' }} />
+                    <div className="p-5">
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <h4 className="text-sm font-bold text-[color:var(--portal-text)] transition-colors group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{decodeHtmlEntities(tpl.name)}</h4>
+                        <span className="shrink-0 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
+                          {tpl.category}
+                        </span>
                       </div>
-                      <span className="font-mono text-[9px] text-[color:var(--portal-muted)] shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>
-                    </div>
-                  )) : (
-                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-5 text-center text-xs text-[color:var(--portal-muted)]">No opens, clicks, or unsubscribes have been tracked.</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracking Coverage</h4>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <TrackingMetric label="Campaigns" value={campaigns.length} />
-                  <TrackingMetric label="Sent" value={campaignTotals.sent} />
-                  <TrackingMetric label="Events" value={activityEvents.length} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Templates subtab */}
-        {activeSubTab === 'templates' && (
-          <div className="h-full overflow-y-auto portal-scrollbar pr-1">
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {EMAIL_TEMPLATES.map((tpl) => (
-                <button
-                  type="button"
-                  key={tpl.id}
-                  onClick={() => handleSelectTemplate(tpl)}
-                  className="group cursor-pointer overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/40 shadow-sm"
-                >
-                  <div className="h-1.5 w-full" style={{ background: tpl.previewColor || '#caa24c' }} />
-                  <div className="p-5">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <h4 className="text-sm font-bold text-[color:var(--portal-text)] transition-colors group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{decodeHtmlEntities(tpl.name)}</h4>
-                      <span className="shrink-0 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
-                        {tpl.category}
+                      <p className="mb-4 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{tpl.description}</p>
+                      <span className="text-[10px] font-black uppercase text-[#a8792f] dark:text-[#caa24c] tracking-widest group-hover:underline">
+                        Use Template &rarr;
                       </span>
                     </div>
-                    <p className="mb-4 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{tpl.description}</p>
-                    <span className="text-[10px] font-black uppercase text-[#a8792f] dark:text-[#caa24c] tracking-widest group-hover:underline">
-                      Use Template &rarr;
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
-        {/* Elena AI tab */}
-        {activeSubTab === 'elena-ai' && (
-          <div className="h-full overflow-y-auto portal-scrollbar pr-1">
-            <div className="max-w-3xl rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[color:var(--portal-text)]">Generate with Elena AI</h3>
-              
-              {activeLead && (
-                <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 p-3.5 flex items-start gap-2.5">
-                  <BrainCircuit size={15} className="text-[#a8792f] dark:text-[#caa24c] shrink-0 mt-0.5" />
-                  <div className="text-xs leading-normal text-[color:var(--portal-text)]">
-                    <span className="font-bold">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#a8792f] dark:text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
+          {/* Elena AI tab */}
+          {activeSubTab === 'elena-ai' && (
+            <motion.div
+              key="elena-subtab"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="h-full overflow-y-auto portal-scrollbar pr-1"
+            >
+              <div className="max-w-3xl rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[color:var(--portal-text)]">Generate with Elena AI</h3>
+                
+                {activeLead && (
+                  <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 p-3.5 flex items-start gap-2.5">
+                    <BrainCircuit size={15} className="text-[#a8792f] dark:text-[#caa24c] shrink-0 mt-0.5" />
+                    <div className="text-xs leading-normal text-[color:var(--portal-text)]">
+                      <span className="font-bold">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#a8792f] dark:text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <form onSubmit={handleGenerateElenaDraft} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
-                    Email Tone of Voice
-                  </label>
-                  <select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
-                    className="w-full sm:w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 cursor-pointer"
+                <form onSubmit={handleGenerateElenaDraft} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
+                      Email Tone of Voice
+                    </label>
+                    <select
+                      value={tone}
+                      onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
+                      className="w-full sm:w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 cursor-pointer"
+                    >
+                      <option value="friendly">💅 Warm & Friendly</option>
+                      <option value="professional">💼 Corporate & Professional</option>
+                      <option value="urgent">🔥 Urgent (FOMO)</option>
+                      <option value="elegant">✨ Luxurious & Elegant</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
+                      Your Instructions
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={elenaPromptText}
+                      onChange={(e) => setElenaPromptText(e.target.value)}
+                      placeholder="Describe what you want Elena to draft..."
+                      className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={generatingElena}
+                    className="rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#caa24c]/15 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
                   >
-                    <option value="friendly">💅 Warm & Friendly</option>
-                    <option value="professional">💼 Corporate & Professional</option>
-                    <option value="urgent">🔥 Urgent (FOMO)</option>
-                    <option value="elegant">✨ Luxurious & Elegant</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
-                    Your Instructions
-                  </label>
-                  <textarea
-                    required
-                    rows={4}
-                    value={elenaPromptText}
-                    onChange={(e) => setElenaPromptText(e.target.value)}
-                    placeholder="Describe what you want Elena to draft..."
-                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={generatingElena}
-                  className="rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#caa24c]/15 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                >
-                  {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
+                    {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

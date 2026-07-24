@@ -11,7 +11,7 @@ import { EmailPreview } from './EmailPreview'
 import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 // ─── Default block factories ──────────────────────────────────────────────────
@@ -543,16 +543,25 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         </button>
       </div>
 
-      {/* ── Three-panel layout ───────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 gap-3.5 overflow-hidden">
-        
+      {/* ── Three-panel workspace ──────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 flex gap-3.5 overflow-hidden">
         {/* Left: Palette */}
-        <div className="w-60 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs">
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
+          className="w-60 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs"
+        >
           <BlockPalette onAdd={handleAddBlock} />
-        </div>
+        </motion.div>
 
         {/* Center: Canvas */}
-        <div className="flex-1 min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden flex flex-col shadow-xs">
+        <motion.div
+          initial={{ opacity: 0, y: 8, scale: 0.995 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+          className="flex-1 min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden flex flex-col shadow-xs"
+        >
           <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Canvas · 600px email width</p>
             {blocks.length > 0 && (
@@ -569,10 +578,15 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
             onReorder={handleReorder}
             onChange={handleBlockChange}
           />
-        </div>
+        </motion.div>
 
         {/* Right: Inspector */}
-        <div className="w-80 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs">
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22, delay: 0.08, ease: [0.23, 1, 0.32, 1] }}
+          className="w-80 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs"
+        >
           {selectedBlock ? (
             <BlockInspector
               block={selectedBlock}
@@ -591,7 +605,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
               <p className="text-xs text-[color:var(--portal-muted)] font-medium">Select a block<br />to edit its content</p>
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* Modals */}

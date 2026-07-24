@@ -24,6 +24,7 @@ import {
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Tab Component Imports
 import { MarketingOverviewTab } from './tabs/MarketingOverviewTab'
@@ -607,82 +608,93 @@ function MarketingPageContent() {
       )}
 
       <div className="flex-grow flex flex-col min-h-0 overflow-hidden mt-1">
-        {activeTab === 'overview' && (
-          <MarketingOverviewTab
-            inquiries={inquiries}
-            campaigns={campaigns}
-            activityEvents={marketingActivity}
-            marketingLists={marketingLists}
-            loading={loadingCampaigns || loadingInquiries || loadingLists}
-            onTabChange={handleTabChange}
-            onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="h-full flex flex-col min-h-0 overflow-hidden"
+          >
+            {activeTab === 'overview' && (
+              <MarketingOverviewTab
+                inquiries={inquiries}
+                campaigns={campaigns}
+                activityEvents={marketingActivity}
+                marketingLists={marketingLists}
+                loading={loadingCampaigns || loadingInquiries || loadingLists}
+                onTabChange={handleTabChange}
+                onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
+              />
+            )}
 
-        {activeTab === 'emails' && (
-          <AllEmailsTab inquiries={inquiries} initialMessageId={searchParams.get('messageId') || undefined} />
-        )}
+            {activeTab === 'emails' && (
+              <AllEmailsTab inquiries={inquiries} initialMessageId={searchParams.get('messageId') || undefined} />
+            )}
 
-        {activeTab === 'sources' && (
-          <LeadSourcesTab
-            inquiries={inquiries}
-            onFilterSource={handleFilterSource}
-          />
-        )}
+            {activeTab === 'sources' && (
+              <LeadSourcesTab
+                inquiries={inquiries}
+                onFilterSource={handleFilterSource}
+              />
+            )}
 
-        {activeTab === 'email-campaigns' && (
-          <EmailCampaignsTab
-            campaigns={campaigns}
-            loading={loadingCampaigns}
-            error={error}
-            busyId={busyId}
-            detailLoadingId={detailLoadingId}
-            onReport={openCampaignReport}
-            onCancel={cancelCampaign}
-            onSendNow={sendCampaignNow}
-          />
-        )}
+            {activeTab === 'email-campaigns' && (
+              <EmailCampaignsTab
+                campaigns={campaigns}
+                loading={loadingCampaigns}
+                error={error}
+                busyId={busyId}
+                detailLoadingId={detailLoadingId}
+                onReport={openCampaignReport}
+                onCancel={cancelCampaign}
+                onSendNow={sendCampaignNow}
+              />
+            )}
 
-        {activeTab === 'text-campaigns' && (
-          <TextCampaignsTab />
-        )}
+            {activeTab === 'text-campaigns' && (
+              <TextCampaignsTab />
+            )}
 
-        {activeTab === 'builder-automation' && (
-          <EmailBuilderTab
-            key={builderSession}
-            initialTemplate={builderTemplate}
-            campaigns={campaigns}
-            activityEvents={marketingActivity}
-            onOpenBlankBuilder={openBlankBuilder}
-            onOpenTemplateInBuilder={openTemplateInBuilder}
-          />
-        )}
+            {activeTab === 'builder-automation' && (
+              <EmailBuilderTab
+                key={builderSession}
+                initialTemplate={builderTemplate}
+                campaigns={campaigns}
+                activityEvents={marketingActivity}
+                onOpenBlankBuilder={openBlankBuilder}
+                onOpenTemplateInBuilder={openTemplateInBuilder}
+              />
+            )}
 
-        {activeTab === 'contact-lists' && (
-          <ContactListsTab
-            inquiries={inquiries}
-            marketingLists={marketingLists}
-            initialSourceFilter={initialSourceFilter}
-            onAddContact={handleAddContact}
-            isAddModalOpen={isAddContactModalOpen}
-            onAddModalOpenChange={setIsAddContactModalOpen}
-          />
-        )}
+            {activeTab === 'contact-lists' && (
+              <ContactListsTab
+                inquiries={inquiries}
+                marketingLists={marketingLists}
+                initialSourceFilter={initialSourceFilter}
+                onAddContact={handleAddContact}
+                isAddModalOpen={isAddContactModalOpen}
+                onAddModalOpenChange={setIsAddContactModalOpen}
+              />
+            )}
 
-        {activeTab === 'call-center' && (
-          <CallCenterTab
-            inquiries={inquiries}
-            onUpdateInquiryStatus={handleUpdateInquiryStatus}
-            onAddNote={handleAddNote}
-          />
-        )}
+            {activeTab === 'call-center' && (
+              <CallCenterTab
+                inquiries={inquiries}
+                onUpdateInquiryStatus={handleUpdateInquiryStatus}
+                onAddNote={handleAddNote}
+              />
+            )}
 
-        {activeTab === 'calendar' && (
-          <MarketingCalendarTab
-            campaigns={campaigns}
-            loading={loadingCampaigns}
-          />
-        )}
+            {activeTab === 'calendar' && (
+              <MarketingCalendarTab
+                campaigns={campaigns}
+                loading={loadingCampaigns}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
