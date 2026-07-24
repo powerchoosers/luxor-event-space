@@ -2613,7 +2613,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <ClipboardCheck size={18} />
                           </span>
                           <div className="min-w-0">
@@ -2960,7 +2960,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <Calendar size={18} />
                           </span>
                           <div>
@@ -3279,7 +3279,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <Sliders size={18} />
                           </span>
                           <div>
@@ -3525,7 +3525,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md"><Send size={18} /></span>
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs"><Send size={18} /></span>
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
@@ -3663,7 +3663,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <FileText size={18} />
                           </span>
                           <div>
@@ -3781,7 +3781,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <DollarSign size={18} />
                           </span>
                           <div>
@@ -3879,7 +3879,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <CreditCard size={18} />
                           </span>
                           <div>
@@ -3979,7 +3979,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <Flame size={18} />
                           </span>
                           <div>
@@ -4064,7 +4064,7 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white shadow-md">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
                             <CheckCircle size={18} />
                           </span>
                           <div>
@@ -6107,14 +6107,15 @@ function LeadLifecycleRail({
               className="relative flex flex-col items-center flex-1 cursor-pointer focus:outline-none group/step"
             >
               <div className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
-                isDone
-                  ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20'
-                  : isCurrent
-                  ? 'border-2 border-[#caa24c] bg-white dark:bg-zinc-950 text-[#caa24c] ring-4 ring-[#caa24c]/10'
+                isCurrent
+                  ? 'border-2 border-[#caa24c] bg-[#caa24c] text-white ring-4 ring-[#caa24c]/25 shadow-lg shadow-[#caa24c]/20 font-bold'
+                  : isDone
+                  ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20 font-bold'
                   : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650'
               }`}>
                 <StageIcon
                   size={14}
+                  className="text-white"
                   strokeWidth={isDone || isCurrent ? 2.5 : 2}
                   aria-hidden="true"
                 />
@@ -6122,14 +6123,14 @@ function LeadLifecycleRail({
 
               <span className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] ${
                 isCurrent
-                  ? 'text-[#a8792f]'
+                  ? 'text-[#a8792f] dark:text-[#caa24c]'
                   : isDone
-                  ? 'text-white/95'
-                  : 'text-zinc-550 group-hover/step:text-zinc-400'
+                  ? 'text-[color:var(--portal-text)]'
+                  : 'text-zinc-550 dark:text-zinc-500 group-hover/step:text-zinc-400'
               }`}>
                 {step.label}
               </span>
-              <span className="mt-1 h-3 text-[9px] font-medium text-zinc-400 dark:text-zinc-600">
+              <span className="mt-1 h-3 text-[9px] font-medium text-[color:var(--portal-muted)]">
                 {step.subtext}
               </span>
             </button>
