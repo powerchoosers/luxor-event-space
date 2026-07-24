@@ -65,6 +65,13 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 - The gallery page uses a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves the experience beyond the current custom implementation.
 - Keep new packages conservative. Prefer existing Next.js, React, Tailwind, Framer Motion, and Lucide patterns unless a package solves a real interaction or accessibility problem.
 - Make sure all dropdowns and calendars in the portal use React elements (e.g. PortalSelect and PortalDatePicker from '@/components/portal/PortalUI') instead of native browser elements.
+- Arianna Patterson is the Luxor owner and the primary day-to-day portal user; Lewis directs implementation. Do not treat this as a replacement for approved-Zoho-email access control, and do not change access just because a name appears in content.
+- The public website is intentionally dark, quiet, and luxurious. Preserve its dark-first visual language; do not import portal light-theme treatments into public pages.
+- The owner portal supports both themes, but Arianna prefers light mode. Treat light mode as the first visual QA pass and dark mode as equally required: use `--portal-*` tokens and shared portal components, avoid hard-coded black/white/zinc surfaces, and verify readable text, borders, hover, focus, selected, disabled, empty, and loading states in both.
+- Portal pagination must use accessible previous/next arrow icon buttons with labels and a visible current page. Do not introduce text-only “Next” or “Previous” pagination controls.
+- Keep the two Elena experiences separate: public-site Elena is a client-facing concierge for venue questions and tour inquiries; portal Elena is an authenticated internal executive assistant. Portal Elena may read business data automatically, but any database write requires a clear user confirmation and must stay server-authorized.
+- Supabase is the production source of truth for Luxor records and workflows. Use the repository server helpers and checked-in migrations; preserve linked IDs and metadata, verify the Luxor tables and RLS before database changes, and do not make destructive production edits without Lewis’s explicit request.
+- Zoho handles approved portal identity and Luxor mailbox delivery. Use the approved sender allowlist, and route automated mail through `luxor_email_jobs` so it can be scheduled, deduplicated, retried, and recorded; do not bypass the queue for an automation.
 - If README and AGENTS disagree, follow AGENTS and the source files.
 
 ## Commit And Push
@@ -78,6 +85,7 @@ Only commit or push when the user explicitly requests it.
 5. Push the deployment branch with `git push origin main` when the user explicitly requests a direct main-branch push.
 
 Never commit `.env*`, credentials, `node_modules`, `.next`, local Codex state, browser logs, or QA screenshots. The root `.gitignore` covers these files.
+Generated build folders such as `.next-build-qa` are disposable and must stay ignored. If they interfere with local linting or validation, remove the generated folder rather than changing source to accommodate it.
 
 ## Deployment
 
