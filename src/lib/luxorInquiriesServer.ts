@@ -113,8 +113,10 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
           disclosure_version: '2026-07-23',
         },
       })
+      const { queueInquiryTextJobs } = await import('./luxorTextCampaignsServer')
+      await queueInquiryTextJobs(created)
     } catch (consentError) {
-      console.error('Inquiry created but SMS consent could not be recorded:', consentError)
+      console.error('Inquiry created but its SMS consent or confirmation jobs could not be recorded:', consentError)
     }
   }
 
