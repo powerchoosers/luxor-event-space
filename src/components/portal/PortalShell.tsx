@@ -293,7 +293,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                   alt=""
                   width={1254}
                   height={1254}
-                  className="h-auto w-[2.65rem] max-w-none object-contain"
+                  className="h-auto w-[2.5rem] max-w-none object-contain"
                   priority
                 />
               </div>
