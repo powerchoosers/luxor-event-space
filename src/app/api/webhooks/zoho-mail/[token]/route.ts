@@ -24,18 +24,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     const storedSecret = await getZohoWebhookSecret()
     const signingSecret = storedSecret || suppliedSecret
 
-    if (!signingSecret || !suppliedSignature || !verifyZohoWebhookSignature(signingSecret, rawBody, suppliedSignature)) {
-      console.warn(JSON.stringify({
-        level: 'warning',
-        message: 'Rejected Zoho Mail webhook signature',
-        route: '/api/webhooks/zoho-mail/[token]',
-        requestId,
-      }))
-      return NextResponse.json({ error: 'Invalid webhook signature.' }, { status: 401 })
-    }
-
-    if (!storedSecret) {
-      await initializeZohoWebhookSecret(signingSecret)
+    // Zoho's first save-time verification sends x-hook-secret so the receiver
+    // can initialize the signing secret; subsequent delivery requests include
+    // x-hook-signature and must always pass HMAC verification.
+    if (!storedSecret && suppliedSecret && !suppliedSignature) {
+      await initializeZohoWebhookSecret(suppliedSecret)
       console.log(JSON.stringify({
         level: 'info',
         message: 'Zoho Mail webhook initialized',
@@ -44,6 +37,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
         durationMs: Date.now() - startedAt,
       }))
       return NextResponse.json({ success: true, initialized: true })
+    }
+
+    if (!signingSecret || !suppliedSignature || !verifyZohoWebhookSignature(signingSecret, rawBody, suppliedSignature)) {
+      console.warn(JSON.stringify({
+        level: 'warning',
+        message: 'Rejected Zoho Mail webhook signature',
+        route: '/api/webhooks/zoho-mail/[token]',
+        requestId,
+      }))
+      return NextResponse.json({ error: 'Invalid webhook signature.' }, { status: 401 })
     }
 
     const event = parseZohoEmailWebhook(rawBody)
