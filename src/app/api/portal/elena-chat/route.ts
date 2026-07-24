@@ -23,6 +23,18 @@ type ChatMessage = {
     query: string
     summary: string
   }
+  emailDraft?: {
+    recipientEmail: string
+    recipientName?: string
+    inquiryId?: string
+    subject: string
+    body: string
+    templateType?: string
+  }
+  crmUpdateCard?: Record<string, unknown>
+  contractCard?: Record<string, unknown>
+  invoiceCard?: Record<string, unknown>
+  taskCard?: Record<string, unknown>
 }
 
 const SYSTEM_PROMPT = `You are Elena, the internal AI concierge, COO, CFO, Chief of Marketing, and business mentor all-in-one for the Luxor Event Space Owner Portal.
@@ -216,6 +228,11 @@ Always use SQL queries to answer questions about the database. Do not make up da
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
 - When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
+- When the owner asks you to draft, write, compose, or send an email to a client or lead, call "prepare_email_draft". This presents an interactive mini email composer card inside Elena Chat where the owner can edit the subject and body inline, preview the rendered HTML email with Arianna Patterson's signature, and send with one click.
+- When the owner asks you to update lead/booking fields (such as pipeline stage, status, target date, guest count), call "prepare_crm_update_card".
+- When the owner asks you to send or resend a contract or digital agreement, call "prepare_contract_card".
+- When the owner asks you to send or resend an invoice, payment link, or proposal, call "prepare_invoice_card".
+- When the owner asks you to create a task, reminder, or follow-up note, call "prepare_task_card".
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
@@ -297,6 +314,109 @@ const TOOLS_DEFINITION = [
           summary: { type: 'string', description: 'A clear confirmation summary naming the client and showing the message purpose.' }
         },
         required: ['inquiryId', 'phone', 'contactName', 'body', 'summary']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_email_draft',
+      description: 'Prepare an interactive mini email draft for the owner inside Elena Chat. Call this tool whenever the owner asks to draft, compose, write, or send an email to a lead or client.',
+      parameters: {
+        type: 'object',
+        properties: {
+          recipientEmail: { type: 'string', description: 'The recipient email address. Query lead first if unknown.' },
+          recipientName: { type: 'string', description: 'The recipient full name.' },
+          inquiryId: { type: 'string', description: 'The linked lead/inquiry UUID if available.' },
+          subject: { type: 'string', description: 'A clear, professional email subject line.' },
+          body: { type: 'string', description: 'The plain text email message body with paragraph breaks.' },
+          templateType: { type: 'string', enum: ['conversational', 'marketing'], description: 'Defaults to conversational for direct 1-on-1 emails.' }
+        },
+        required: ['subject', 'body']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_crm_update_card',
+      description: 'Prepare an interactive CRM lead/booking field updater container for the owner.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string' },
+          bookingId: { type: 'string' },
+          clientName: { type: 'string' },
+          currentPipelineStage: { type: 'string' },
+          currentStatus: { type: 'string' },
+          targetDate: { type: 'string' },
+          guestCount: { type: 'number' },
+          eventType: { type: 'string' }
+        },
+        required: ['clientName']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_contract_card',
+      description: 'Prepare an interactive contract signature request container in Elena Chat to send or resend a contract link.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string' },
+          bookingId: { type: 'string' },
+          clientName: { type: 'string' },
+          clientEmail: { type: 'string' },
+          eventType: { type: 'string' },
+          eventDate: { type: 'string' },
+          contractTotal: { type: 'number' },
+          depositRequired: { type: 'number' },
+          signingStatus: { type: 'string' },
+          signingUrl: { type: 'string' }
+        },
+        required: ['clientName', 'clientEmail']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_invoice_card',
+      description: 'Prepare an interactive invoice and payment link container in Elena Chat.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: { type: 'string' },
+          inquiryId: { type: 'string' },
+          clientName: { type: 'string' },
+          clientEmail: { type: 'string' },
+          total: { type: 'number' },
+          paidTotal: { type: 'number' },
+          balanceDue: { type: 'number' },
+          status: { type: 'string' },
+          checkoutUrl: { type: 'string' }
+        },
+        required: ['invoiceId', 'clientName', 'total', 'balanceDue', 'status']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_task_card',
+      description: 'Prepare an interactive CRM operational task container in Elena Chat.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high'] },
+          dueDate: { type: 'string' }
+        },
+        required: ['title']
       }
     }
   }
@@ -526,6 +646,11 @@ export async function POST(request: Request) {
     let finalContent = 'I encountered an issue processing your request.'
     let confirmationPayload: { query: string; summary: string } | null = null
     let textCampaignDraft: { name: string; bodyTemplate: string; campaignType: string } | null = null
+    let emailDraftPayload: { recipientEmail: string; recipientName?: string; inquiryId?: string; subject: string; body: string; templateType?: string } | null = null
+    let crmUpdatePayload: Record<string, unknown> | null = null
+    let contractPayload: Record<string, unknown> | null = null
+    let invoicePayload: Record<string, unknown> | null = null
+    let taskPayload: Record<string, unknown> | null = null
 
     while (loopCount < maxLoops) {
       loopCount++
@@ -700,6 +825,110 @@ export async function POST(request: Request) {
               })
             }
           }
+          // E. Interactive mini email draft
+          else if (toolCall.function?.name === 'prepare_email_draft') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+
+              emailDraftPayload = {
+                recipientEmail: String(args.recipientEmail || ''),
+                recipientName: String(args.recipientName || ''),
+                inquiryId: String(args.inquiryId || ''),
+                subject: String(args.subject || ''),
+                body: String(args.body || ''),
+                templateType: args.templateType === 'marketing' ? 'marketing' : 'conversational'
+              }
+
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_email_draft',
+                content: JSON.stringify({
+                  ok: true,
+                  message: 'Email draft card prepared and loaded into Elena Chat for inline editing and approval.'
+                })
+              })
+            } catch (emailErr) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_email_draft',
+                content: JSON.stringify({
+                  error: emailErr instanceof Error ? emailErr.message : 'Invalid email draft request.'
+                })
+              })
+            }
+          }
+          // F. CRM Update card
+          else if (toolCall.function?.name === 'prepare_crm_update_card') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              crmUpdatePayload = args
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_crm_update_card',
+                content: JSON.stringify({ ok: true, message: 'CRM Lead Update container loaded in Elena Chat.' })
+              })
+            } catch (err) {
+              console.error(err)
+            }
+          }
+          // G. Contract signature card
+          else if (toolCall.function?.name === 'prepare_contract_card') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              contractPayload = args
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_contract_card',
+                content: JSON.stringify({ ok: true, message: 'Contract Signature container loaded in Elena Chat.' })
+              })
+            } catch (err) {
+              console.error(err)
+            }
+          }
+          // H. Invoice & Payment link card
+          else if (toolCall.function?.name === 'prepare_invoice_card') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              invoicePayload = args
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_invoice_card',
+                content: JSON.stringify({ ok: true, message: 'Invoice & Payment Link container loaded in Elena Chat.' })
+              })
+            } catch (err) {
+              console.error(err)
+            }
+          }
+          // I. Task card
+          else if (toolCall.function?.name === 'prepare_task_card') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              taskPayload = args
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_task_card',
+                content: JSON.stringify({ ok: true, message: 'CRM Operational Task container loaded in Elena Chat.' })
+              })
+            } catch (err) {
+              console.error(err)
+            }
+          }
         }
 
         // If we need user confirmation, halt execution and report to client
@@ -719,7 +948,12 @@ export async function POST(request: Request) {
         role: 'assistant' as const,
         content: finalContent,
         executedQueries,
-        confirmation: confirmationPayload || undefined
+        confirmation: confirmationPayload || undefined,
+        emailDraft: emailDraftPayload || undefined,
+        crmUpdateCard: crmUpdatePayload || undefined,
+        contractCard: contractPayload || undefined,
+        invoiceCard: invoicePayload || undefined,
+        taskCard: taskPayload || undefined
       }
     ]
 
@@ -734,7 +968,12 @@ export async function POST(request: Request) {
       reply: finalContent,
       confirmation: confirmationPayload || undefined,
       executedQueries,
-      textCampaignDraft: textCampaignDraft || undefined
+      textCampaignDraft: textCampaignDraft || undefined,
+      emailDraft: emailDraftPayload || undefined,
+      crmUpdateCard: crmUpdatePayload || undefined,
+      contractCard: contractPayload || undefined,
+      invoiceCard: invoicePayload || undefined,
+      taskCard: taskPayload || undefined
     })
   } catch (err: unknown) {
     console.error('Internal Elena API error:', err)

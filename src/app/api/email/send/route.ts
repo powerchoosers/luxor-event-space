@@ -3,6 +3,7 @@ import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { instrumentMarketingHtml } from '@/lib/luxorMarketingServer'
+import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { LuxorMarketingCampaign, LuxorMarketingRecipient } from '@/lib/luxorInquiryTypes'
 import crypto from 'crypto'
 
@@ -14,9 +15,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { to, subject, content, from, fromName, track, campaignName } = body
+    const { to, subject, content, from, fromName, track, campaignName, format, recipientName } = body
 
-    let finalContent = content
+    let finalContent = String(content || '')
+
+    // Convert plain text or explicitly requested conversational format to HTML
+    if (format === 'conversational' || (!finalContent.toLowerCase().includes('<!doctype html') && !finalContent.toLowerCase().includes('<html'))) {
+      finalContent = buildConversationalEmailHtml({
+        to: String(to || ''),
+        recipientName: typeof recipientName === 'string' ? recipientName : undefined,
+        subject: String(subject || ''),
+        body: finalContent,
+        senderName: typeof fromName === 'string' && fromName ? fromName : 'Arianna Patterson',
+      })
+    }
     let trackingToken = ''
 
     if (track) {

@@ -17,6 +17,17 @@ import {
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalCloseButton } from './PortalUI'
+import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
+import {
+  ElenaLeadUpdateCard,
+  ElenaContractCard,
+  ElenaInvoiceCard,
+  ElenaTaskCard,
+  LeadUpdatePayload,
+  ContractCardPayload,
+  InvoiceCardPayload,
+  TaskCardPayload
+} from './ElenaCRMContainers'
 
 type ExecutedQuery = {
   query: string
@@ -33,6 +44,11 @@ type Message = {
   }
   isConfirmed?: boolean
   isCancelled?: boolean
+  emailDraft?: EmailDraftPayload
+  crmUpdateCard?: LeadUpdatePayload
+  contractCard?: ContractCardPayload
+  invoiceCard?: InvoiceCardPayload
+  taskCard?: TaskCardPayload
 }
 
 interface ChatSession {
@@ -320,6 +336,11 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           bodyTemplate: string
           campaignType: string
         }
+        emailDraft?: EmailDraftPayload
+        crmUpdateCard?: LeadUpdatePayload
+        contractCard?: ContractCardPayload
+        invoiceCard?: InvoiceCardPayload
+        taskCard?: TaskCardPayload
       }
 
       if (data.textCampaignDraft) {
@@ -333,7 +354,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           role: 'assistant',
           content: data.reply,
           executedQueries: data.executedQueries,
-          confirmation: data.confirmation
+          confirmation: data.confirmation,
+          emailDraft: data.emailDraft,
+          crmUpdateCard: data.crmUpdateCard,
+          contractCard: data.contractCard,
+          invoiceCard: data.invoiceCard,
+          taskCard: data.taskCard
         }
       ])
       
@@ -767,6 +793,87 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-550 font-medium flex items-center gap-1.5">
                             <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
                             Action Cancelled
+                          </div>
+                        )}
+
+                        {/* Render Mini Email Draft Card */}
+                        {msg.emailDraft && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaEmailDraftCard
+                              draft={msg.emailDraft}
+                              onSendSuccess={(recipient, subj) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  {
+                                    role: 'assistant',
+                                    content: `Done bestie! I successfully sent the email to **${recipient}** with subject *"${subj}"*! 💌✨`
+                                  }
+                                ])
+                              }}
+                              onRegenerateRequest={(instruction) => {
+                                handleSend(`Please refine the email draft: ${instruction}`)
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Render CRM Lead Update Card */}
+                        {msg.crmUpdateCard && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaLeadUpdateCard
+                              payload={msg.crmUpdateCard}
+                              onSuccess={(successMsg) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: successMsg }
+                                ])
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Render Contract Signature Card */}
+                        {msg.contractCard && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaContractCard
+                              payload={msg.contractCard}
+                              onSuccess={(successMsg) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: successMsg }
+                                ])
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Render Invoice & Payment Link Card */}
+                        {msg.invoiceCard && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaInvoiceCard
+                              payload={msg.invoiceCard}
+                              onSuccess={(successMsg) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: successMsg }
+                                ])
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Render Task Card */}
+                        {msg.taskCard && (
+                          <div className="w-[96%] mt-2 pl-8">
+                            <ElenaTaskCard
+                              payload={msg.taskCard}
+                              onSuccess={(successMsg) => {
+                                setMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: successMsg }
+                                ])
+                              }}
+                            />
                           </div>
                         )}
                       </motion.div>
