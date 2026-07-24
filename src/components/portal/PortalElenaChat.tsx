@@ -468,6 +468,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               src="/luxor-concierge.png" 
               alt="Elena Assistant" 
               fill 
+              sizes="40px"
               className="object-cover"
             />
           </div>
@@ -628,7 +629,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                 <div className="flex flex-col items-center justify-center text-center px-2 py-2 space-y-4 my-auto">
                   <div className="relative">
                     <div className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
-                      <Image src="/luxor-concierge.png" alt="Elena AI" fill className="object-cover" />
+                      <Image src="/luxor-concierge.png" alt="Elena AI" fill sizes="56px" className="object-cover" />
                     </div>
                     <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#050505] bg-green-500" />
                   </div>
@@ -734,7 +735,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         >
                           {msg.role === 'assistant' && (
                             <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                              <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                              <Image src="/luxor-concierge.png" alt="Elena" fill sizes="24px" className="object-cover" />
                             </div>
                           )}
                           <div 
@@ -903,7 +904,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         className="flex items-start gap-2 max-w-[80%]"
                       >
                         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                          <Image src="/luxor-concierge.png" alt="Elena" fill className="object-cover" />
+                          <Image src="/luxor-concierge.png" alt="Elena" fill sizes="24px" className="object-cover" />
                         </div>
                         <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
                           <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
