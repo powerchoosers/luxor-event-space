@@ -30,7 +30,7 @@ export function LuxorWordmark({
     <div className={`luxor-live-lockup max-w-full ${horizontal ? `!flex-row items-center !gap-3.5 text-left ${align === 'center' ? 'justify-center' : ''}` : align === 'center' ? 'items-center text-center' : 'items-start text-left'} ${className}`}>
       {mark ? (
         <Image
-          src="/luxor-portal-mark-gold.png"
+          src="/luxor-portal-mark-gold-tight.png"
           alt=""
           width={255}
           height={190}
@@ -61,7 +61,7 @@ export function LuxorAxisLockup({
   return (
     <div className={`luxor-axis-lockup ${size === 'hero' ? 'luxor-axis-lockup--hero' : ''} ${className}`}>
       <Image
-        src="/luxor-portal-mark-gold.png"
+        src="/luxor-portal-mark-gold-tight.png"
         alt=""
         width={1254}
         height={1254}

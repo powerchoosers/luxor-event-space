@@ -27,7 +27,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
       <section className="relative hidden min-h-screen px-10 py-10 lg:flex lg:flex-col">
         <Link href="/" className="inline-flex w-fit items-center gap-4">
           <span className="flex h-14 w-14 items-center justify-center rounded-md border border-[#caa24c]/28 bg-[#caa24c]/8">
-            <Image src="/luxor-portal-mark-gold.png" alt="" width={34} height={34} className="opacity-90" priority />
+            <Image src="/luxor-portal-mark-gold-tight.png" alt="" width={34} height={34} className="opacity-90" priority />
           </span>
           <span>
             <span className="block font-serif text-4xl tracking-[0.22em] text-[#d7b45b]">LUXOR</span>

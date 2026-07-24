@@ -788,7 +788,7 @@ export default async function PortalOverview() {
       {/* Brand Tagline Footer */}
       <div className="flex flex-col items-center justify-center pt-8 border-t border-[color:var(--portal-border)] mt-12 mb-6">
         <Image
-          src="/luxor-portal-mark-gold.png"
+          src="/luxor-portal-mark-gold-tight.png"
           alt="Luxor Palm Logo"
           width={40}
           height={32}

@@ -289,7 +289,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                 }`}
               >
                 <Image
-                  src="/luxor-portal-mark-gold.png"
+                  src="/luxor-portal-mark-gold-tight.png"
                   alt=""
                   width={1254}
                   height={1254}

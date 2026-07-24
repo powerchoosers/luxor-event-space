@@ -296,7 +296,7 @@ function renderSpacer(block: SpacerBlock): string {
 }
 
 function renderFooter(block: FooterBlock): string {
-  const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold.png`
+  const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`
   const instagramIconUrl = `${SITE_BASE_URL}/social-instagram.png`
   const facebookIconUrl = `${SITE_BASE_URL}/social-facebook.png`
   const tiktokIconUrl = `${SITE_BASE_URL}/social-tiktok.png`
@@ -404,7 +404,7 @@ function renderFooter(block: FooterBlock): string {
 
 
 function renderEmailHeader(): string {
-  const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold.png`
+  const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`
   return `
   <!-- Top gold shimmer bar -->
   <tr>
