@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -13,6 +14,7 @@ type ToastInput = {
   durationMs?: number
   action?: ReactNode
   icon?: ReactNode
+  onClick?: () => void
 }
 
 type Toast = ToastInput & {
@@ -52,6 +54,11 @@ const variantStyles: Record<ToastVariant, { icon: ReactNode; className: string; 
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const canUsePortal = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  )
 
   const dismiss = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id))
@@ -80,7 +87,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-5 sm:top-5">
+      {canUsePortal ? createPortal(<div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-5 sm:top-5">
         <AnimatePresence mode="popLayout" initial={false}>
           {toasts.map((toast) => {
             const style = variantStyles[toast.variant || 'info']
@@ -96,13 +103,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   ease: [0.23, 1, 0.32, 1],
                   layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] },
                 }}
-                className={`pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-11 shadow-2xl backdrop-blur-xl ${style.className}`}
-                role="status"
+                className={`pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-11 shadow-2xl backdrop-blur-xl ${toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''} ${style.className}`}
+                role={toast.onClick ? 'button' : 'status'}
+                tabIndex={toast.onClick ? 0 : undefined}
+                onClick={toast.onClick}
+                onKeyDown={(event) => {
+                  if (toast.onClick && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault()
+                    toast.onClick()
+                  }
+                }}
                 aria-live="polite"
               >
                 <button
                   type="button"
-                  onClick={() => dismiss(toast.id)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    dismiss(toast.id)
+                  }}
                   className="absolute right-2.5 top-2.5 rounded-lg p-1 text-[color:var(--portal-muted)] opacity-70 transition-all hover:text-[color:var(--portal-text)] hover:opacity-100 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer"
                   aria-label="Close notification"
                 >
@@ -128,7 +146,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )
           })}
         </AnimatePresence>
-      </div>
+      </div>, document.body) : null}
     </ToastContext.Provider>
   )
 }

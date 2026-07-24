@@ -126,6 +126,7 @@ export async function updateInvoice(
     | 'payment_requested_label'
     | 'stripe_checkout_session_id'
     | 'stripe_checkout_url'
+    | 'stripe_checkout_opened_at'
   >>
 ) {
   const [updated] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}`, {

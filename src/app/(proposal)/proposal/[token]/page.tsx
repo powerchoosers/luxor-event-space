@@ -94,7 +94,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               {balanceDue <= 0 ? (
                 <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-6 text-xs font-black uppercase tracking-wider text-emerald-300"><Check size={16} /> Paid in full</span>
               ) : invoice.stripe_checkout_url ? (
-                <a href={invoice.stripe_checkout_url} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
+                <a href={`/api/public/proposals/${encodeURIComponent(token)}/checkout`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
               ) : (
                 <p className="max-w-xs text-xs leading-5 text-zinc-400">Contact Luxor for a refreshed secure payment link.</p>
               )}

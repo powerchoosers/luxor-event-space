@@ -44,6 +44,12 @@ import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/Port
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import { PortalNotificationModal } from '@/components/portal/PortalNotificationModal'
 
+type PortalUserProfile = {
+  displayName: string
+  email: string
+  avatarUrl: string | null
+}
+
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),
   {
@@ -90,17 +96,17 @@ const marketingSubItems = [
   { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },
 ]
 
-export function PortalShell({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
+export function PortalShell({ children, session, initialProfile }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session }: { children: React.ReactNode; session: LuxorPortalSession }) {
+function PortalShellContent({ children, session, initialProfile }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile }) {
   const pathname = usePathname()
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
@@ -113,6 +119,38 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing'))
   const [elenaOpen, setElenaOpen] = useState(false)
+  const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
+
+  const loadUserProfile = useCallback(async () => {
+    try {
+      const response = await fetch('/api/portal/user-preferences')
+      if (!response.ok) return
+      const data = await response.json()
+      setUserProfile({
+        displayName: typeof data.display_name === 'string' && data.display_name.trim() ? data.display_name.trim() : session.email.split('@')[0],
+        email: typeof data.email === 'string' && data.email.trim() ? data.email.trim() : session.email,
+        avatarUrl: typeof data.avatar_url === 'string' && data.avatar_url.trim() ? data.avatar_url.trim() : null,
+      })
+    } catch (error) {
+      console.error('Failed to load portal profile:', error)
+    }
+  }, [session.email])
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void loadUserProfile(), 0)
+    window.addEventListener('luxor:profile-updated', loadUserProfile)
+    return () => {
+      window.clearTimeout(initialLoad)
+      window.removeEventListener('luxor:profile-updated', loadUserProfile)
+    }
+  }, [loadUserProfile])
+
+  const userInitials = userProfile.displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'LE'
 
   const [prevPathname, setPrevPathname] = useState(pathname)
   if (pathname !== prevPathname) {
@@ -160,6 +198,8 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
     return registerToastCallback((item) => {
       const variantMap: Record<string, 'success' | 'warning' | 'info' | 'error'> = {
         invoice_paid: 'success',
+        proposal_opened: 'info',
+        checkout_opened: 'info',
         bill_due: 'warning',
         form: 'info',
         call: 'warning',
@@ -174,10 +214,14 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
         description: item.subtitle,
         variant: variantMap[item.type] ?? 'info',
         durationMs: 8000,
+        onClick: () => router.push(item.targetUrl),
         action: (
           <button
             type="button"
-            onClick={() => router.push(item.targetUrl)}
+            onClick={(event) => {
+              event.stopPropagation()
+              router.push(item.targetUrl)
+            }}
             className="mt-1 text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 cursor-pointer"
           >
             View →
@@ -596,11 +640,15 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             <div className="mx-1 hidden h-8 w-px bg-[color:var(--portal-border)] sm:block" />
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
-                <p className="text-xs font-semibold leading-none text-white">{session.email}</p>
-                <p className="mt-1 text-[10px] font-medium uppercase leading-none tracking-tighter text-zinc-500">Zoho Authorized</p>
+                <p className="text-xs font-semibold leading-none text-[color:var(--portal-text)]">{userProfile.displayName}</p>
+                <p className="mt-1 text-[10px] leading-none text-[color:var(--portal-muted)]">{userProfile.email}</p>
               </div>
-              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ring-2 ring-[color:var(--portal-soft)]">
-                <div className="h-full w-full bg-gradient-to-br from-blue-400 to-indigo-600 opacity-80" />
+              <div
+                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)]"
+                style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
+                aria-label={userProfile.displayName}
+              >
+                {userProfile.avatarUrl ? null : userInitials}
               </div>
             </div>
           </div>

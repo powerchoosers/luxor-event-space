@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Mail, Send, Eye, X, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 
@@ -11,6 +11,12 @@ export interface EmailDraftPayload {
   subject: string
   body: string
   templateType?: 'conversational' | 'marketing'
+  senderProfile?: {
+    email: string
+    displayName: string
+    roleTitle: string
+    avatarUrl: string | null
+  }
 }
 
 interface ElenaEmailDraftCardProps {
@@ -33,14 +39,52 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
 
   const [refinePrompt, setRefinePrompt] = useState('')
   const [showRefineInput, setShowRefineInput] = useState(false)
+  const [senderProfile, setSenderProfile] = useState(draft.senderProfile || {
+    email: 'booking@luxoratlaspalmas.com',
+    displayName: 'Luxor Event Space',
+    roleTitle: 'Venue Team',
+    avatarUrl: null,
+  })
+
+  useEffect(() => {
+    if (draft.senderProfile) return
+
+    let active = true
+    void fetch('/api/portal/user-preferences')
+      .then((response) => response.json())
+      .then((data) => {
+        if (!active || typeof data.display_name !== 'string' || !data.display_name.trim()) return
+        const nextProfile = {
+          email: typeof data.email === 'string' && data.email.trim() ? data.email.trim() : 'booking@luxoratlaspalmas.com',
+          displayName: data.display_name.trim(),
+          roleTitle: typeof data.role_title === 'string' && data.role_title.trim() ? data.role_title.trim() : 'Luxor Event Space Team',
+          avatarUrl: typeof data.avatar_url === 'string' && data.avatar_url.trim() ? data.avatar_url.trim() : null,
+        }
+        setSenderProfile(nextProfile)
+        setBody((current) => current.replace(/\[(?:your\s+)?name\]/gi, nextProfile.displayName))
+      })
+      .catch((error) => console.error('Failed to hydrate email sender profile:', error))
+
+    return () => {
+      active = false
+    }
+  }, [draft.senderProfile])
+  const senderInitials = senderProfile.displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'LE'
 
   const renderedHtml = buildConversationalEmailHtml({
     to: recipientEmail || 'client@example.com',
     recipientName: recipientName || undefined,
     subject: subject || 'Message from Luxor Event Space',
     body: body || '',
-    senderName: 'Arianna Patterson',
-    senderRole: 'Owner & Managing Director',
+    senderName: senderProfile.displayName,
+    senderRole: senderProfile.roleTitle,
+    senderEmail: senderProfile.email,
+    senderImageUrl: senderProfile.avatarUrl,
   })
 
   const handleSend = async () => {
@@ -59,7 +103,6 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
           subject: subject.trim(),
           content: body.trim(),
           format: 'conversational',
-          fromName: 'Arianna Patterson',
           track: trackEmail,
         }),
       })
@@ -91,16 +134,16 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
   }
 
   return (
-    <div className="w-full mt-3 overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-[#0a0807]/90 shadow-xl backdrop-blur-md">
+    <div className="portal-render-surface mt-3 w-full overflow-hidden rounded-[1.35rem] border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans shadow-[0_22px_60px_-42px_rgba(55,38,16,0.55)]">
       {/* Card Top Header Bar */}
-      <div className="flex items-center justify-between border-b border-[#caa24c]/15 bg-[#caa24c]/5 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 text-[#f1d27a]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
             <Mail size={14} />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-zinc-200">Elena Email Draft</h4>
-            <p className="text-[10px] text-zinc-400">Conversational 1-on-1 • Arianna Patterson Signature</p>
+            <h4 className="text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--portal-text)]">Elena Email Draft</h4>
+            <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Personal email • {senderProfile.displayName} signature</p>
           </div>
         </div>
 
@@ -108,7 +151,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
           <button
             type="button"
             onClick={() => setIsPreviewOpen(true)}
-            className="inline-flex items-center gap-1 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1 text-[11px] font-medium text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/8 px-3 py-1.5 text-[11px] font-semibold text-[#8c6529] transition-all hover:border-[#caa24c]/45 hover:bg-[#caa24c]/14 dark:text-[#f1d27a] cursor-pointer"
             title="Preview full HTML email rendered with signature"
           >
             <Eye size={12} />
@@ -119,7 +162,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
             <button
               type="button"
               onClick={() => setShowRefineInput((prev) => !prev)}
-              className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-[11px] font-medium text-zinc-400 hover:text-white transition-all cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:text-[#a8792f] cursor-pointer"
               title="Ask Elena to refine this draft"
             >
               <RefreshCw size={11} />
@@ -130,17 +173,17 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
 
       {/* Refine prompt input field */}
       {showRefineInput && (
-        <form onSubmit={handleRefineSubmit} className="flex items-center gap-2 border-b border-zinc-800/80 bg-zinc-950/80 p-2.5">
+        <form onSubmit={handleRefineSubmit} className="flex items-center gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
           <input
             type="text"
             placeholder="Tell Elena how to tweak this (e.g. 'Make it shorter' or 'Add pricing details')..."
             value={refinePrompt}
             onChange={(e) => setRefinePrompt(e.target.value)}
-            className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c]"
+            className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/10"
           />
           <button
             type="submit"
-            className="rounded-md bg-[#caa24c] px-3 py-1.5 text-[11px] font-bold text-zinc-950 hover:bg-[#f1d27a] transition-all cursor-pointer"
+            className="portal-gold-button rounded-xl bg-[#caa24c] px-3.5 py-2 text-[11px] font-bold text-white hover:bg-[#b58c39] transition-all cursor-pointer"
           >
             Refine
           </button>
@@ -148,58 +191,61 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
       )}
 
       {/* Main Composer Editable Form */}
-      <div className="p-4 space-y-3">
+      <div className="space-y-3.5 p-4">
         {/* Recipient Field */}
-        <div className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 w-12 shrink-0">To:</span>
+        <label className="group flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 transition-colors focus-within:border-[#caa24c]/45 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/8">
+          <span className="w-12 shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">To</span>
           <input
             type="email"
             value={recipientEmail}
             onChange={(e) => setRecipientEmail(e.target.value)}
             placeholder="recipient@example.com"
             disabled={isSent}
-            className="flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600 disabled:opacity-60"
+            className="portal-input-transparent min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] disabled:opacity-60"
           />
-        </div>
+        </label>
 
         {/* Subject Field */}
-        <div className="flex items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 w-12 shrink-0">Subject:</span>
+        <label className="group flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 transition-colors focus-within:border-[#caa24c]/45 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/8">
+          <span className="w-12 shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Subject</span>
           <input
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Email subject..."
             disabled={isSent}
-            className="flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600 font-medium disabled:opacity-60"
+            className="portal-input-transparent min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] disabled:opacity-60"
           />
-        </div>
+        </label>
 
         {/* Body Textarea */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 p-3">
+        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5 transition-colors focus-within:border-[#caa24c]/45 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/8">
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={6}
             disabled={isSent}
             placeholder="Email body copy..."
-            className="w-[#100%] w-full bg-transparent text-xs text-zinc-300 outline-none placeholder:text-zinc-600 resize-y leading-relaxed font-sans disabled:opacity-60"
+            className="portal-input-transparent portal-scrollbar min-h-36 w-full resize-none bg-transparent text-[13px] leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] disabled:opacity-60"
           />
         </div>
 
         {/* Signature Preview Badge */}
-        <div className="flex items-center justify-between rounded-xl border border-zinc-850 bg-zinc-950/40 p-3">
+        <div className="flex flex-col gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             {/* AP Glyph Icon */}
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] text-zinc-950 font-serif font-bold text-xs shadow-md shrink-0">
-              AP
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-sm font-bold tracking-wide text-[#18130d] shadow-md"
+              style={senderProfile.avatarUrl ? { backgroundImage: `url(${senderProfile.avatarUrl})` } : undefined}
+            >
+              {senderProfile.avatarUrl ? <span className="sr-only">{senderProfile.displayName}</span> : senderInitials}
             </div>
             <div>
-              <p className="text-xs font-semibold text-zinc-200">Arianna Patterson</p>
-              <p className="text-[10px] text-[#caa24c]">Owner & Managing Director • Luxor Event Space</p>
+              <p className="text-[13px] font-semibold text-[color:var(--portal-text)]">{senderProfile.displayName}</p>
+              <p className="mt-0.5 text-[10px] leading-4 text-[#9a6e28] dark:text-[#caa24c]">{senderProfile.roleTitle} • Luxor Event Space</p>
             </div>
           </div>
-          <span className="text-[10px] font-mono text-zinc-500">booking@luxoratlaspalmas.com</span>
+          <span className="break-all text-[10px] text-[color:var(--portal-muted)] sm:text-right">{senderProfile.email}</span>
         </div>
 
         {/* Error Alert */}
@@ -220,13 +266,13 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
 
         {/* Bottom Actions Bar */}
         <div className="flex items-center justify-between pt-1">
-          <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
+          <label className="flex items-center gap-2 text-[11px] text-[color:var(--portal-muted)] cursor-pointer">
             <input
               type="checkbox"
               checked={trackEmail}
               onChange={(e) => setTrackEmail(e.target.checked)}
               disabled={isSent}
-              className="accent-[#caa24c] rounded cursor-pointer"
+              className="h-3.5 w-3.5 cursor-pointer rounded border-[color:var(--portal-border)] accent-[#caa24c]"
             />
             <span>Track Opens & Clicks</span>
           </label>
@@ -237,7 +283,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
                 type="button"
                 onClick={handleSend}
                 disabled={isSending || !recipientEmail.trim() || !subject.trim() || !body.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-2 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+                className="portal-gold-button inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#b58c39] disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
               >
                 {isSending ? (
                   <>
@@ -263,12 +309,12 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
       {/* HTML Render Preview Modal */}
       {isPreviewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="relative flex h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-[#caa24c]/30 bg-[#121212] shadow-2xl overflow-hidden">
+          <div className="relative flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3.5 bg-zinc-950">
+            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3.5">
               <div className="flex items-center gap-2">
                 <Eye size={16} className="text-[#caa24c]" />
-                <h3 className="text-sm font-semibold text-zinc-200">Email Render Preview (Zoho Outgoing)</h3>
+                <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Outgoing Email Preview</h3>
               </div>
               <button
                 type="button"
@@ -280,7 +326,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
             </div>
 
             {/* Rendered HTML Iframe Preview */}
-            <div className="flex-1 bg-zinc-900 p-4 overflow-hidden">
+            <div className="flex-1 overflow-hidden bg-[color:var(--portal-soft)] p-4">
               <iframe
                 title="Email Preview"
                 srcDoc={renderedHtml}
@@ -289,8 +335,8 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-zinc-800 px-5 py-3 bg-zinc-950">
-              <span className="text-xs text-zinc-400">Recipient: <strong className="text-zinc-200">{recipientEmail}</strong></span>
+            <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+              <span className="text-xs text-[color:var(--portal-muted)]">Recipient: <strong className="text-[color:var(--portal-text)]">{recipientEmail}</strong></span>
               <button
                 type="button"
                 onClick={() => setIsPreviewOpen(false)}

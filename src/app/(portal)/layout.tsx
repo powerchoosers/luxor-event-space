@@ -4,6 +4,7 @@ import React from "react";
 import { PortalShell } from "@/components/portal/PortalShell";
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { redirect } from 'next/navigation'
+import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import '../globals.css'
 
 const manrope = Manrope({
@@ -39,12 +40,14 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
     redirect('/portal/login')
   }
 
+  const userProfile = await getLuxorUserProfile(session.email)
+
   return (
     <html
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell session={session}>{children}</PortalShell>
+      <PortalShell session={session} initialProfile={userProfile}>{children}</PortalShell>
     </html>
   );
 }

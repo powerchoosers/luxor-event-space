@@ -7,6 +7,7 @@ import { listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,14 +53,25 @@ export async function POST(request: NextRequest) {
 
     let booking = await createLuxorBooking(body)
     if (booking.invoice_id && Number(booking.deposit_required || 0) > 0) {
-      const paidPayments = await listPaidPaymentsByInvoice(booking.invoice_id)
+      const bookingInvoiceId = booking.invoice_id
+      const paidPayments = await listPaidPaymentsByInvoice(bookingInvoiceId)
       const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
       if (paidTotal + 0.005 >= Number(booking.deposit_required)) {
+        const fullyPaid = Number(booking.contract_total || 0) > 0 && paidTotal + 0.005 >= Number(booking.contract_total)
+        const latestPaidAt = paidPayments.find((payment) => payment.paid_at)?.paid_at || new Date().toISOString()
         booking = await updateLuxorBooking(booking.id, {
           security_deposit_status: 'collected',
-          metadata: { ...booking.metadata, deposit_paid_before_booking: true },
+          metadata: {
+            ...booking.metadata,
+            deposit_paid_before_booking: true,
+            ...(fullyPaid ? { final_payment_paid_at: latestPaidAt, final_payment_paid_before_booking: true } : {}),
+          },
         }) || booking
       }
+      await supabaseRest<null>(`luxor_payments?invoice_id=eq.${encodeURIComponent(bookingInvoiceId)}&booking_id=is.null`, {
+        method: 'PATCH',
+        body: JSON.stringify({ booking_id: booking.id }),
+      })
     }
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
@@ -154,11 +166,11 @@ function pipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<typeof 
   const metadata = booking.metadata || {}
   if (metadata.closeout_completed_at || booking.status === 'completed') return 'closing'
   if (metadata.event_completed_at) return 'closing'
-  if (metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at) return 'event'
-  if (metadata.planning_completed_at || booking.status === 'confirmed') return 'final_payment'
-  if (booking.contract_status === 'signed' && booking.security_deposit_status === 'collected') return 'planning'
-  if (booking.contract_status === 'signed') return 'deposit'
-  return 'contract'
+  if (booking.contract_status !== 'signed') return 'contract'
+  if (booking.security_deposit_status !== 'collected') return 'deposit'
+  if (!metadata.planning_completed_at) return 'planning'
+  if (!(metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at)) return 'final_payment'
+  return 'event'
 }
 
 async function syncBookingEmailAutomations(input: {

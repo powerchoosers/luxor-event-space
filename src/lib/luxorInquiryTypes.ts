@@ -142,6 +142,7 @@ export type LuxorInvoice = {
   payment_requested_label?: string | null
   stripe_checkout_session_id?: string | null
   stripe_checkout_url?: string | null
+  stripe_checkout_opened_at?: string | null
 }
 
 export type LuxorDocumentType = 'proposal' | 'invoice' | 'contract' | 'guest_guide' | 'executed_contract' | 'contract_audit'

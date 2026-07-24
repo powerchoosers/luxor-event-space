@@ -20,15 +20,24 @@ export async function POST(request: NextRequest) {
     const name = formData.get('name') as string | null
     const category = formData.get('category') as string | null
     const makeBrandAsset = formData.get('makeBrandAsset') === 'true'
+    const profileImage = formData.get('profileImage') === 'true'
 
     if (!file || typeof file.arrayBuffer !== 'function') {
       return NextResponse.json({ error: 'No valid file uploaded.' }, { status: 400 })
     }
 
+    if (profileImage && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return NextResponse.json({ error: 'Profile photos must be JPG, PNG, or WebP images.' }, { status: 400 })
+    }
+
+    if (profileImage && file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Profile photos must be 5 MB or smaller.' }, { status: 400 })
+    }
+
     // Prepare buffer and clean filename
     const buffer = Buffer.from(await file.arrayBuffer())
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const filename = `${Date.now()}-${sanitizedName}`
+    const filename = `${profileImage ? 'profiles/' : ''}${Date.now()}-${sanitizedName}`
 
     // Get Supabase credentials
     const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '')

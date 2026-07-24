@@ -19,7 +19,9 @@ import {
   Loader2,
   Check,
   Sun,
-  Moon
+  Moon,
+  Camera,
+  UserRound
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -63,6 +65,11 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [notificationEmails, setNotificationEmails] = useState('booking@luxoratlaspalmas.com')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [roleTitle, setRoleTitle] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploadingProfileImage, setUploadingProfileImage] = useState(false)
 
   useEffect(() => {
     // Try to load initial theme from local storage for fast render
@@ -83,6 +90,10 @@ export default function SettingsPage() {
         if (data.notification_emails) {
           setNotificationEmails(data.notification_emails)
         }
+        setProfileEmail(typeof data.email === 'string' ? data.email : '')
+        setDisplayName(typeof data.display_name === 'string' ? data.display_name : '')
+        setRoleTitle(typeof data.role_title === 'string' ? data.role_title : '')
+        setAvatarUrl(typeof data.avatar_url === 'string' ? data.avatar_url : null)
       })
       .catch(err => console.error('Failed to sync settings from Supabase:', err))
   }, [])
@@ -200,6 +211,9 @@ export default function SettingsPage() {
         body: JSON.stringify({
           theme,
           notification_emails: notificationEmails,
+          display_name: displayName,
+          role_title: roleTitle,
+          avatar_url: avatarUrl,
         }),
       })
 
@@ -209,10 +223,33 @@ export default function SettingsPage() {
       }
 
       notify({ title: 'Settings saved successfully.', variant: 'success' })
+      window.dispatchEvent(new Event('luxor:profile-updated'))
     } catch (err) {
       notify({ title: err instanceof Error ? err.message : 'Unable to save settings.', variant: 'error' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleProfileImageUpload = async (file: File | undefined) => {
+    if (!file) return
+
+    setUploadingProfileImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('profileImage', 'true')
+
+      const res = await fetch('/api/portal/upload', { method: 'POST', body: formData })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Profile image upload failed.')
+
+      setAvatarUrl(payload.url)
+      notify({ title: 'Photo uploaded. Save your profile to apply it.', variant: 'success' })
+    } catch (err) {
+      notify({ title: err instanceof Error ? err.message : 'Profile image upload failed.', variant: 'error' })
+    } finally {
+      setUploadingProfileImage(false)
     }
   }
 
@@ -502,10 +539,55 @@ export default function SettingsPage() {
 
           {/* TEAM & PERMISSIONS */}
           {activeTab === 'team' && (
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Team Access Roster</h3>
-              <p className="text-xs leading-relaxed text-zinc-400">Portal access is currently controlled by the approved Zoho email list in the server configuration. Named roles and per-page permissions are not implemented yet, so the portal no longer displays a fictional roster.</p>
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-200">Anyone on the approved email list has broad owner-workspace access. Add role-based permissions before inviting sales, event staff, or bookkeepers.</div>
+            <div className="space-y-6">
+              <div className="luxor-glass-card space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Your Email Identity</h3>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Elena uses this profile in email drafts, outgoing signatures, and the portal header.</p>
+                </div>
+
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                  <div
+                    className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-xl font-bold text-[#18130d] shadow-lg"
+                    style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}
+                  >
+                    {avatarUrl ? <span className="sr-only">{displayName || 'Profile photo'}</span> : (displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || <UserRound size={24} />)}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
+                      {uploadingProfileImage ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} className="text-[#a8792f]" />}
+                      {uploadingProfileImage ? 'Uploading...' : avatarUrl ? 'Change Photo' : 'Add Profile Photo'}
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingProfileImage} onChange={(event) => void handleProfileImageUpload(event.target.files?.[0])} />
+                    </label>
+                    {avatarUrl ? (
+                      <button type="button" onClick={() => setAvatarUrl(null)} className="block text-[10px] font-semibold text-[color:var(--portal-muted)] hover:text-red-500">Remove photo</button>
+                    ) : null}
+                    <p className="text-[10px] leading-4 text-[color:var(--portal-faint)]">Square JPG, PNG, or WebP. This photo will appear in email signatures.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Sender Name</span>
+                    <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={100} placeholder="Your full name" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50 focus:ring-2 focus:ring-[#caa24c]/10" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Title</span>
+                    <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} maxLength={120} placeholder="Owner & Managing Director" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50 focus:ring-2 focus:ring-[#caa24c]/10" />
+                  </label>
+                </div>
+
+                <label className="block space-y-1.5">
+                  <span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Signed-in Email</span>
+                  <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-muted)]">{profileEmail || 'Loading...'}</div>
+                </label>
+              </div>
+
+              <div className="luxor-glass-card space-y-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Portal Access</h3>
+                <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">Portal access is controlled by the approved Zoho email list. Profile names and titles do not change anyone&apos;s permissions.</p>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-700 dark:text-amber-200">Anyone on the approved email list currently has broad owner-workspace access.</div>
+              </div>
             </div>
           )}
 
@@ -606,13 +688,13 @@ export default function SettingsPage() {
           </PortalTabTransition>
 
           {/* Submit button */}
-          {activeTab === 'notifications' && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
+          {(activeTab === 'notifications' || activeTab === 'team') && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
             <button
               type="submit"
               disabled={saving}
               className="bg-[#caa24c] hover:bg-[#dfbd68] text-white text-xs font-black uppercase tracking-widest px-6 py-3 rounded-lg shadow-xl shadow-[#caa24c]/10 cursor-pointer disabled:opacity-40 hover:scale-105 active:scale-95 transition-all"
             >
-              {saving ? 'Saving...' : 'Save Notification Recipients'}
+              {saving ? 'Saving...' : activeTab === 'team' ? 'Save My Profile' : 'Save Notification Recipients'}
             </button>
           </div>}
         </form>

@@ -890,6 +890,17 @@ export default function LeadDetailPage({
     fetchAllData()
   }, [id])
 
+  // The Luxor tables are private behind RLS, so browser Realtime may not receive
+  // their row payloads. Keep the payment/open cards current through the
+  // portal-authenticated API even when the WebSocket is unavailable.
+  useEffect(() => {
+    if (!id) return
+    const intervalId = window.setInterval(() => {
+      void fetchAllData(false)
+    }, 5_000)
+    return () => window.clearInterval(intervalId)
+  }, [id])
+
   // Sub-100ms Supabase Realtime WebSocket listener for instant Lead Dossier UI & field updates (opens, clicks, payments, SMS, calls)
   useEffect(() => {
     if (!id) return
@@ -6779,7 +6790,7 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
-  const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || latestBooking?.status === 'confirmed' || isLegacyComplete
+  const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || isLegacyComplete
   const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || Boolean(bookingMetadata.final_payment_paid_at) || isLegacyComplete
   const eventCompleted = Boolean(bookingMetadata.event_completed_at) || isLegacyComplete
   const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || isLegacyComplete
@@ -6803,7 +6814,7 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     {
       id: 'contract',
       isCompleted: latestBooking?.contract_status === 'signed',
-      isActive: latestBooking?.contract_status === 'sent' || (lead.status === 'booked' && !latestBooking) || (lead.status === 'proposal_sent' && !!latestBooking),
+      isActive: Boolean(latestBooking) && latestBooking?.contract_status !== 'signed',
     },
     {
       id: 'deposit',

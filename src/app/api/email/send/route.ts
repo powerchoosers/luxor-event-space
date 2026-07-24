@@ -6,6 +6,7 @@ import { instrumentMarketingHtml } from '@/lib/luxorMarketingServer'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { LuxorMarketingCampaign, LuxorMarketingRecipient } from '@/lib/luxorInquiryTypes'
 import crypto from 'crypto'
+import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +16,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { to, subject, content, from, fromName, track, campaignName, format, recipientName } = body
+    const { to, subject, content, from, track, campaignName, format, recipientName } = body
+    const senderProfile = await getLuxorUserProfile(session.email)
+    const signatureEmail = typeof from === 'string' && from.trim()
+      ? from.trim().toLowerCase()
+      : session.mailboxAddress || senderProfile.email
 
     let finalContent = String(content || '')
 
@@ -26,7 +31,10 @@ export async function POST(request: NextRequest) {
         recipientName: typeof recipientName === 'string' ? recipientName : undefined,
         subject: String(subject || ''),
         body: finalContent,
-        senderName: typeof fromName === 'string' && fromName ? fromName : 'Arianna Patterson',
+        senderName: senderProfile.displayName,
+        senderRole: senderProfile.roleTitle,
+        senderEmail: signatureEmail,
+        senderImageUrl: senderProfile.avatarUrl,
       })
     }
     let trackingToken = ''
@@ -63,7 +71,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           campaign_id: campaign.id,
           email: String(to || '').trim().toLowerCase(),
-          name: fromName || null,
+          name: typeof recipientName === 'string' ? recipientName : null,
           status: 'sent',
           tracking_token: trackingToken,
           sent_at: new Date().toISOString(),
@@ -76,7 +84,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 4. Instrument HTML content with open/click tracking token
-      finalContent = instrumentMarketingHtml(content, trackingToken)
+      finalContent = instrumentMarketingHtml(finalContent, trackingToken)
     }
 
     const result = await sendLuxorZohoEmail({
@@ -84,7 +92,7 @@ export async function POST(request: NextRequest) {
       subject: String(subject || ''),
       content: String(finalContent || ''),
       from: typeof from === 'string' ? from : undefined,
-      fromName: typeof fromName === 'string' ? fromName : undefined,
+      fromName: senderProfile.displayName,
     })
 
     return NextResponse.json({ success: true, ...result, trackingToken })

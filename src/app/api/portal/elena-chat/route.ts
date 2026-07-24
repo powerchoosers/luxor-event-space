@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
+import { getLuxorUserProfile, LuxorUserProfile } from '@/lib/luxorUserProfileServer'
 
 type ToolCall = {
   id: string
@@ -228,7 +229,7 @@ Always use SQL queries to answer questions about the database. Do not make up da
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
 - When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
-- When the owner asks you to draft, write, compose, or send an email to a client or lead, call "prepare_email_draft". This presents an interactive mini email composer card inside Elena Chat where the owner can edit the subject and body inline, preview the rendered HTML email with Arianna Patterson's signature, and send with one click.
+- When the owner asks you to draft, write, compose, or send an email to a client or lead, call "prepare_email_draft". This presents an interactive mini email composer card inside Elena Chat where the owner can edit the subject and body inline, preview the rendered HTML email with the signed-in user's saved signature, and send with one click. Use the sender identity provided in the system context. Never output placeholders such as [Your Name].
 - When the owner asks you to update lead/booking fields (such as pipeline stage, status, target date, guest count), call "prepare_crm_update_card".
 - When the owner asks you to send or resend a contract or digital agreement, call "prepare_contract_card".
 - When the owner asks you to send or resend an invoice, payment link, or proposal, call "prepare_invoice_card".
@@ -515,6 +516,7 @@ export async function POST(request: Request) {
     }
 
     const executedQueries: Array<{ query: string; result: unknown }> = []
+    const senderProfile = await getLuxorUserProfile(session.email)
 
     // 1. If this is a direct confirmation execute request
     if (confirmQuery && confirmSummary) {
@@ -618,7 +620,11 @@ export async function POST(request: Request) {
 
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT }
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'system',
+        content: `SIGNED-IN SENDER PROFILE: Name: "${senderProfile.displayName}". Title: "${senderProfile.roleTitle}". Email: "${senderProfile.email}". When drafting an email, use this identity for any sign-off and never invent a different sender. The rendered email adds this saved signature automatically.`
+      }
     ]
 
     // Context Injection: Parse Path for Leads details
@@ -646,7 +652,7 @@ export async function POST(request: Request) {
     let finalContent = 'I encountered an issue processing your request.'
     let confirmationPayload: { query: string; summary: string } | null = null
     let textCampaignDraft: { name: string; bodyTemplate: string; campaignType: string } | null = null
-    let emailDraftPayload: { recipientEmail: string; recipientName?: string; inquiryId?: string; subject: string; body: string; templateType?: string } | null = null
+    let emailDraftPayload: { recipientEmail: string; recipientName?: string; inquiryId?: string; subject: string; body: string; templateType?: string; senderProfile: LuxorUserProfile } | null = null
     let crmUpdatePayload: Record<string, unknown> | null = null
     let contractPayload: Record<string, unknown> | null = null
     let invoicePayload: Record<string, unknown> | null = null
@@ -837,8 +843,9 @@ export async function POST(request: Request) {
                 recipientName: String(args.recipientName || ''),
                 inquiryId: String(args.inquiryId || ''),
                 subject: String(args.subject || ''),
-                body: String(args.body || ''),
-                templateType: args.templateType === 'marketing' ? 'marketing' : 'conversational'
+                body: String(args.body || '').replace(/\[(?:your\s+)?name\]/gi, senderProfile.displayName),
+                templateType: args.templateType === 'marketing' ? 'marketing' : 'conversational',
+                senderProfile,
               }
 
               openrouterMessages.push({

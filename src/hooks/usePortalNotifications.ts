@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open'
 
 export interface PortalNotificationItem {
   id: string
@@ -342,11 +342,15 @@ export function usePortalNotifications() {
             const invoiceInquiryId = String(invoiceById.get(invoiceId)?.inquiry_id || '')
             const inquiry = inquiryId || invoiceInquiryId ? null : inquiryByEmail.get(normalizeEmail(payment.metadata && (payment.metadata as RawRecord).email))
             const resolvedInquiryId = inquiryId || invoiceInquiryId || String(inquiry?.id || '')
+            const invoice = invoiceById.get(invoiceId)
+            const clientName = String(invoice?.client_name || inquiry?.full_name || 'Client')
+            const paymentMetadata = payment.metadata as RawRecord | undefined
+            const paymentLabel = String(paymentMetadata?.payment_label || 'Stripe payment')
             aggregated.push({
               id: `payment_${paymentId}`,
               type: 'invoice_paid',
-              title: 'Payment received',
-              subtitle: `$${Number(payment.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} received${payment.payment_method ? ` via ${String(payment.payment_method)}` : ''}`,
+              title: `Payment received: ${clientName}`,
+              subtitle: `${paymentLabel} · $${Number(payment.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payment.payment_method ? ` via ${String(payment.payment_method).replaceAll('_', ' ')}` : ''}`,
               timestamp: String(payment.paid_at || payment.updated_at || payment.created_at || new Date().toISOString()),
               isRead: currentReadIds.has(`payment_${paymentId}`),
               targetUrl: leadUrl(resolvedInquiryId, 'documents'),
@@ -369,6 +373,34 @@ export function usePortalNotifications() {
             const isPaid = inv.status === 'paid'
             const isRead = currentReadIds.has(`${invId}_paid`) || currentReadIds.has(invId)
             const inquiryId = String(inv.inquiry_id || '')
+            const proposalViewedAt = inv.proposal_viewed_at ? String(inv.proposal_viewed_at) : ''
+            if (proposalViewedAt) {
+              const openedId = `proposal_opened_${String(inv.id)}`
+              aggregated.push({
+                id: openedId,
+                type: 'proposal_opened',
+                title: `Proposal opened: ${clientName}`,
+                subtitle: `${eventType} proposal · $${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                timestamp: proposalViewedAt,
+                isRead: currentReadIds.has(openedId),
+                targetUrl: inquiryId ? `${leadUrl(inquiryId)}?tab=overview&stage=proposal` : '/portal/leads',
+                metadata: { invoiceId: inv.id, inquiryId },
+              })
+            }
+            const checkoutOpenedAt = inv.stripe_checkout_opened_at ? String(inv.stripe_checkout_opened_at) : ''
+            if (checkoutOpenedAt) {
+              const checkoutOpenedId = `checkout_opened_${String(inv.id)}`
+              aggregated.push({
+                id: checkoutOpenedId,
+                type: 'checkout_opened',
+                title: `Stripe Checkout opened: ${clientName}`,
+                subtitle: `${String(inv.payment_requested_label || 'Payment request')} · $${Number(inv.payment_requested_amount || total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                timestamp: checkoutOpenedAt,
+                isRead: currentReadIds.has(checkoutOpenedId),
+                targetUrl: inquiryId ? `${leadUrl(inquiryId)}?tab=overview&stage=proposal` : '/portal/leads',
+                metadata: { invoiceId: inv.id, inquiryId },
+              })
+            }
             if (isPaid && !paidInvoiceIds.has(String(inv.id || ''))) {
               aggregated.push({
                 id: `${invId}_paid`,
@@ -527,9 +559,10 @@ export function usePortalNotifications() {
     fetchNotifications(false)
   }, [fetchNotifications])
 
-  // Fast-poll every 15s for instant updates on RSVPs, bookings, emails, etc.
+  // Secure polling is the fallback for private RLS-protected rows that cannot be
+  // delivered to the browser's anonymous Realtime connection.
   useEffect(() => {
-    const generalInterval = setInterval(() => fetchNotifications(true), 15_000)
+    const generalInterval = setInterval(() => fetchNotifications(true), 5_000)
     return () => clearInterval(generalInterval)
   }, [fetchNotifications])
 
@@ -631,6 +664,8 @@ export function usePortalNotifications() {
       form: 0,
       booking: 0,
       invoice_paid: 0,
+      proposal_opened: 0,
+      checkout_opened: 0,
       bill_due: 0,
       contract: 0,
       email_open: 0,
