@@ -439,7 +439,7 @@ async function saveChatSessionMessages(
       const current = await supabaseRest<Array<{ title: string }>>(
         `luxor_elena_chats?id=eq.${chatId}&user_email=eq.${encodeURIComponent(userEmail)}&select=title`
       )
-      if (current && current.length > 0 && current[0].title === 'New Chat Session') {
+      if (current && current.length > 0 && (!current[0].title || current[0].title === 'New Chat Session')) {
         try {
           const titleRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -451,11 +451,11 @@ async function saveChatSessionMessages(
             },
             body: JSON.stringify({
               model: 'google/gemini-2.5-flash',
-              temperature: 0.5,
+              temperature: 0.3,
               messages: [
                 {
                   role: 'system',
-                  content: 'Generate a short, punchy 3-to-5 word title for a chat conversation based on the user\'s query. Do not include quote marks, quotes, or punctuation. Return ONLY the title text.'
+                  content: 'Generate a short, punchy 3-to-5 word title summarizing the user\'s query topic. Do not include quote marks, quotes, or punctuation. Return ONLY the title text.'
                 },
                 {
                   role: 'user',
@@ -958,8 +958,8 @@ export async function POST(request: Request) {
     ]
 
     if (chatId) {
-      const isFirstUserMessage = messages.length === 2 && messages[1].role === 'user'
-      const firstUserMessage = isFirstUserMessage ? (messages[1].content || undefined) : undefined
+      const firstUserMsgObj = updatedMessages.find((m) => m.role === 'user')
+      const firstUserMessage = firstUserMsgObj?.content || undefined
 
       await saveChatSessionMessages(chatId, session.email, updatedMessages, apiKey, firstUserMessage)
     }

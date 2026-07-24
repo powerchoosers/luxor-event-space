@@ -483,7 +483,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           <button 
             type="button"
             onClick={handleCreateSession}
-            className="rounded-lg border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white p-1.5 transition-colors cursor-pointer"
+            className="rounded-lg p-1.5 text-zinc-500 opacity-80 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 cursor-pointer"
             title="Start New Chat Session"
             aria-label="Start New Chat Session"
           >
@@ -492,10 +492,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           <button 
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
-            className={`rounded-lg border p-1.5 transition-colors cursor-pointer ${
+            className={`rounded-lg p-1.5 transition-all cursor-pointer ${
               showSessionsList 
-                ? 'border-[#caa24c]/35 bg-[#caa24c]/5 text-[#f1d27a]' 
-                : 'border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white'
+                ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' 
+                : 'text-zinc-500 opacity-80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100'
             }`}
             title="Chat History Sessions"
             aria-label="Chat History Sessions"
@@ -590,18 +590,18 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                               setEditingSessionId(session.id)
                               setEditTitleInput(session.title)
                             }}
-                            className="text-zinc-500 hover:text-[#caa24c] p-1 rounded hover:bg-zinc-900 cursor-pointer"
+                            className="rounded-lg p-1 text-zinc-500 opacity-70 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] hover:opacity-100 cursor-pointer"
                             title="Rename Session"
                           >
-                            <Edit2 size={12} />
+                            <Edit2 size={13} />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteSession(session.id)}
-                            className="text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-zinc-900 cursor-pointer"
+                            className="rounded-lg p-1 text-zinc-500 opacity-70 transition-all hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 hover:opacity-100 cursor-pointer"
                             title="Delete Session"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       )}
@@ -643,11 +643,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <div className="w-full space-y-2 pt-1">
                     <div className="flex items-center justify-between px-1">
                       <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Smart Suggestions</p>
-                      {isLoadingSuggestions && (
-                        <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
-                          <Loader2 size={10} className="animate-spin" /> Querying CRM...
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isLoadingSuggestions ? (
+                          <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
+                            <Loader2 size={10} className="animate-spin" /> Querying CRM...
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={loadSmartSuggestions}
+                            className="flex items-center gap-1 text-[9px] text-zinc-500 hover:text-[#caa24c] transition-colors cursor-pointer"
+                            title="Refresh and cycle new AI suggestions"
+                          >
+                            <RefreshCw size={10} />
+                            <span>Cycle Prompts</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="grid gap-2">
                       <AnimatePresence mode="wait">
