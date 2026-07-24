@@ -40,6 +40,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
 
   const websiteUrl = absoluteUrl('/')
   const visitUrl = absoluteUrl('/visit')
+  const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent('803 Castroville Rd #402, San Antonio, TX 78237')
   const initials = senderName
     .split(/\s+/)
     .filter(Boolean)
@@ -98,7 +99,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
                     <span style="display:block;font-family:Arial,'Helvetica Neue',sans-serif;font-size:8px;font-weight:600;letter-spacing:0.34em;color:#8b8175;text-transform:uppercase;margin-top:3px;">EVENT SPACE</span>
                   </td>
                   <td align="right" style="vertical-align:middle;">
-                    <a href="${visitUrl}" target="_blank" style="font-family:Arial,'Helvetica Neue',sans-serif;font-size:10px;font-weight:700;color:#9f742b;text-decoration:none;letter-spacing:0.12em;text-transform:uppercase;">Book A Tour &rarr;</a>
+                    <a href="${visitUrl}" target="_blank" style="font-family:Arial,'Helvetica Neue',sans-serif;font-size:10px;font-weight:700;color:#9f742b;text-decoration:none;letter-spacing:0.12em;text-transform:uppercase;">Book A Tour</a>
                   </td>
                 </tr>
               </table>
@@ -117,23 +118,23 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
             <td style="padding:0 36px 34px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fbf8f2;border:1px solid #eadfca;border-left:3px solid #caa24c;border-radius:10px;">
                 <tr>
-                  <td width="72" style="width:72px;vertical-align:middle;padding:18px 0 18px 18px;">
+                  <td width="72" style="width:72px;vertical-align:top;padding:18px 0 18px 18px;">
                     ${safeSenderImageUrl
                       ? `<img src="${escapeHtml(safeSenderImageUrl)}" width="54" height="54" alt="${escapeHtml(senderName)}" style="display:block;width:54px;height:54px;border-radius:50%;object-fit:cover;border:1px solid #dfc98f;box-shadow:0 4px 12px rgba(117,81,25,0.16);" />`
                       : `<div style="width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#f1d27a 0%,#caa24c 52%,#9b6d24 100%);display:block;text-align:center;line-height:54px;box-shadow:0 4px 12px rgba(117,81,25,0.18);"><span style="font-family:Georgia,'Times New Roman',serif;font-size:21px;font-weight:700;color:#18130d;letter-spacing:0.06em;">${escapeHtml(initials)}</span></div>`}
                   </td>
-                  <td style="vertical-align:middle;padding:18px 18px 18px 0;">
-                    <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:600;color:#241c14;line-height:1.2;letter-spacing:0.01em;">
+                  <td style="vertical-align:top;padding:18px 18px 18px 12px;">
+                    <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:17px;font-weight:600;color:#241c14;line-height:1.25;letter-spacing:0.01em;">
                       ${escapeHtml(senderName)}
                     </p>
                     <p style="margin:3px 0 9px;font-family:Arial,'Helvetica Neue',sans-serif;font-size:11px;font-weight:700;color:#9f742b;letter-spacing:0.04em;">
                       ${escapeHtml(senderRole)} &bull; Luxor Event Space
                     </p>
-                    <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:11px;line-height:1.65;color:#71675c;">
-                      📞 <a href="tel:${escapeHtml(senderPhone).replace(/\D/g, '')}" style="color:#52525b;text-decoration:none;">${escapeHtml(senderPhone)}</a> &nbsp;|&nbsp; 
-                      ✉️ <a href="mailto:${escapeHtml(senderEmail)}" style="color:#caa24c;text-decoration:none;">${escapeHtml(senderEmail)}</a><br />
-                      📍 803 Castroville Rd #402, San Antonio, TX 78237<br />
-                      🌐 <a href="${websiteUrl}" style="color:#71717a;text-decoration:none;">luxoratlaspalmas.com</a>
+                    <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:11px;line-height:1.7;color:#71675c;word-break:break-word;">
+                      <a href="tel:${escapeHtml(senderPhone).replace(/\D/g, '')}" style="color:#52525b;text-decoration:none;">${escapeHtml(senderPhone)}</a><br />
+                      <a href="mailto:${escapeHtml(senderEmail)}" style="color:#caa24c;text-decoration:none;">${escapeHtml(senderEmail)}</a><br />
+                      San Antonio, TX<br />
+                      <a href="${websiteUrl}" style="color:#71717a;text-decoration:none;">luxoratlaspalmas.com</a>
                     </p>
                   </td>
                 </tr>
@@ -145,7 +146,8 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
           <tr>
             <td style="background-color:#faf7f1;padding:16px 36px;border-top:1px solid #eee5d6;text-align:center;">
               <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:10px;color:#95897c;line-height:1.55;letter-spacing:0.02em;">
-                Luxor Event Space &bull; Premier Venue for Weddings, Quinceañeras & Milestone Celebrations
+                Luxor Event Space &bull; Premier Venue for Weddings, Quinceañeras & Milestone Celebrations<br />
+                <a href="${mapUrl}" target="_blank" style="color:#9f742b;text-decoration:none;">View our location in Google Maps</a>
               </p>
             </td>
           </tr>
