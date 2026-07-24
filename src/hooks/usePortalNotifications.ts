@@ -78,10 +78,13 @@ function isInternalEmail(msg: Record<string, unknown>): boolean {
   // Drop emails where the sender is our own mailbox (internal self-emails)
   if (INTERNAL_EMAIL_ADDRESSES.some((addr) => from.includes(addr))) return true
 
-  // Drop emails where the recipient is our own mailbox and sender is also our mailbox (internal)
+  // Drop system daemons, bounce notifications, and mailer-daemon emails
   if (
-    INTERNAL_EMAIL_ADDRESSES.some((addr) => to.includes(addr)) &&
-    INTERNAL_EMAIL_ADDRESSES.some((addr) => from.includes(addr))
+    from.includes('mailer-daemon') ||
+    from.includes('postmaster') ||
+    from.includes('bounce@') ||
+    from.includes('no-reply') ||
+    from.includes('noreply')
   ) {
     return true
   }
