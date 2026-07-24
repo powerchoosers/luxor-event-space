@@ -112,7 +112,7 @@ function PrimaryButton({ href, children }: { href: string; children: React.React
 
 function CenteredLuxorLockup() {
   return (
-    <LuxorAxisLockup className="mx-auto w-full max-w-[360px] sm:max-w-[460px]" />
+    <LuxorAxisLockup size="hero" className="mx-auto w-full max-w-[420px] sm:max-w-[560px]" />
   )
 }
 

@@ -373,6 +373,14 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
     text-align: center;
   }
 
+  .luxor-axis-lockup--hero .luxor-axis-word {
+    font-size: 4rem;
+  }
+
+  .luxor-axis-lockup--hero .luxor-axis-subline {
+    font-size: 0.68rem;
+  }
+
   .luxor-axis-word {
     display: grid;
     grid-template-columns: repeat(5, 0.72em);
@@ -409,6 +417,14 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
       font-size: 0.86rem;
       letter-spacing: 0.62em;
     }
+
+    .luxor-axis-lockup--hero .luxor-axis-word {
+      font-size: 6.8rem;
+    }
+
+    .luxor-axis-lockup--hero .luxor-axis-subline {
+      font-size: 0.98rem;
+    }
   }
 
   @media (min-width: 1024px) {
@@ -418,6 +434,14 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
 
     .luxor-axis-subline {
       font-size: 1rem;
+    }
+
+    .luxor-axis-lockup--hero .luxor-axis-word {
+      font-size: 8rem;
+    }
+
+    .luxor-axis-lockup--hero .luxor-axis-subline {
+      font-size: 1.08rem;
     }
   }
 

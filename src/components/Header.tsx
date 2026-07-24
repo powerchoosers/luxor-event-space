@@ -71,7 +71,7 @@ export const Header = () => {
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 lg:px-8 h-full">
         <Link href="/" className="group transition-transform duration-300 hover:scale-[1.015]">
-          <LuxorWordmark compact horizontal subline={false} />
+          <LuxorWordmark compact horizontal subline={false} markClassName="!h-12 !w-12" />
         </Link>
 
         {/* Desktop Nav */}

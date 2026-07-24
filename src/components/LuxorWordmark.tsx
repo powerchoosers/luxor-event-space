@@ -14,6 +14,7 @@ type LuxorAxisLockupProps = {
   className?: string
   dividerClassName?: string
   showDivider?: boolean
+  size?: 'default' | 'hero'
 }
 
 export function LuxorWordmark({
@@ -55,15 +56,16 @@ export function LuxorAxisLockup({
   className = '',
   dividerClassName = 'text-[#caa24c]',
   showDivider = true,
+  size = 'default',
 }: LuxorAxisLockupProps) {
   return (
-    <div className={`luxor-axis-lockup ${className}`}>
+    <div className={`luxor-axis-lockup ${size === 'hero' ? 'luxor-axis-lockup--hero' : ''} ${className}`}>
       <Image
         src="/luxor-portal-mark-gold.png"
         alt=""
-        width={255}
-        height={190}
-        className="h-14 w-auto object-contain sm:h-16"
+        width={1254}
+        height={1254}
+        className={size === 'hero' ? 'h-20 w-20 object-contain sm:h-24 sm:w-24' : 'h-14 w-14 object-contain sm:h-16 sm:w-16'}
       />
       <div className="leading-none">
         <p className="luxor-axis-word" aria-label="LUXOR">
