@@ -6114,8 +6114,9 @@ function LeadLifecycleRail({
                   : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650'
               }`}>
                 <StageIcon
-                  size={14}
-                  className="text-white"
+                  size={15}
+                  color={isDone || isCurrent ? '#ffffff' : 'currentColor'}
+                  style={isDone || isCurrent ? { stroke: '#ffffff', color: '#ffffff' } : undefined}
                   strokeWidth={isDone || isCurrent ? 2.5 : 2}
                   aria-hidden="true"
                 />
