@@ -9,6 +9,8 @@ import crypto from 'crypto'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now()
+  const requestId = request.headers.get('x-vercel-id')
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
@@ -95,12 +97,41 @@ export async function POST(request: NextRequest) {
       fromName: senderProfile.displayName,
     })
 
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'Zoho email send completed',
+      route: '/api/email/send',
+      requestId,
+      tracked: Boolean(track),
+      durationMs: Date.now() - startedAt,
+    }))
+
     return NextResponse.json({ success: true, ...result, trackingToken })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send email.'
     const missingConfig = message.includes('Missing Zoho email credentials')
+    const rateLimited = /too many requests|rate.?limit|429/i.test(message)
 
-    console.error('Luxor Zoho email send failed:', message)
+    console.error(JSON.stringify({
+      level: rateLimited ? 'warning' : 'error',
+      message: 'Zoho email send failed',
+      route: '/api/email/send',
+      requestId,
+      rateLimited,
+      durationMs: Date.now() - startedAt,
+    }))
+
+    if (rateLimited) {
+      return NextResponse.json(
+        {
+          error: 'Zoho is temporarily pacing email activity. Your draft is safe—please wait about a minute before sending again.',
+          code: 'ZOHO_RATE_LIMITED',
+          retryAfterSeconds: 60,
+        },
+        { status: 429, headers: { 'Retry-After': '60' } },
+      )
+    }
+
     return NextResponse.json({ error: message }, { status: missingConfig ? 500 : 400 })
   }
 }

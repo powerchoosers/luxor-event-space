@@ -19,6 +19,7 @@ export interface PortalNotificationItem {
 
 const READ_STORAGE_KEY = 'luxor_read_notification_ids_v1'
 const NOTIFIED_TOAST_STORAGE_KEY = 'luxor_notified_toast_ids_v1'
+const GENERAL_POLL_INTERVAL_MS = 30_000
 
 // Internal/self email addresses to filter out — never show emails to/from ourselves
 const INTERNAL_EMAIL_ADDRESSES = [
@@ -122,22 +123,23 @@ export function usePortalNotifications() {
   const seenIdsRef = useRef<Set<string> | null>(null)
   const notifiedToastIdsRef = useRef<Set<string> | null>(null)
   const previousEmailItemsRef = useRef<PortalNotificationItem[]>([])
-  const pollCountRef = useRef(0)
+  const fetchInFlightRef = useRef(false)
   // Callback fired for each new item (used by PortalShell to fire toasts)
   const onNewItemRef = useRef<((item: NotificationToastPayload) => void) | null>(null)
 
-  const fetchNotifications = useCallback(async (silent = false) => {
+  const fetchNotifications = useCallback(async (silent = false, refreshEmails = false) => {
+    if (fetchInFlightRef.current) return
+    fetchInFlightRef.current = true
     try {
       if (!silent) setLoading(true)
       const currentReadIds = getStoredReadIds()
 
-      pollCountRef.current += 1
-      const shouldFetchEmails = !silent || pollCountRef.current % 6 === 1
+      const shouldFetchEmails = !silent || refreshEmails
 
       const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         shouldFetchEmails
-          ? fetch('/api/email/inbox?limit=25&folder=inbox', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+          ? fetch('/api/email/events?limit=25', { headers: { Accept: 'application/json' }, cache: 'no-store' })
           : Promise.resolve(null),
         fetch('/api/twilio/messages?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/calls?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
@@ -220,6 +222,7 @@ export function usePortalNotifications() {
               const senderName = String(msg.senderName || msg.sender || msg.fromAddress || msg.from || 'Unknown sender')
               const timestamp = String(msg.receivedAt || msg.dateSent || new Date().toISOString())
               const folderId = String(msg.folderId || '')
+              const zohoMessageId = String(msg.messageId || '').trim()
 
               const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
               const folderQuery = folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''
@@ -230,13 +233,19 @@ export function usePortalNotifications() {
                 subtitle: `From: ${senderName}`,
                 timestamp,
                 isRead,
-                targetUrl: `/portal/marketing?tab=emails&messageId=${encodeURIComponent(rawId || emailId)}${folderQuery}`,
+                targetUrl: zohoMessageId
+                  ? `/portal/marketing?tab=emails&messageId=${encodeURIComponent(zohoMessageId)}${folderQuery}`
+                  : '/portal/marketing?tab=emails',
                 metadata: { sender: msg.sender, fromAddress: msg.fromAddress || msg.from, folderId },
               })
             })
         }
-        previousEmailItemsRef.current = emailItems
-        aggregated.push(...emailItems)
+        if (emailsRes.status === 'fulfilled' && emailsRes.value && emailsRes.value.ok) {
+          previousEmailItemsRef.current = emailItems
+          aggregated.push(...emailItems)
+        } else {
+          aggregated.push(...previousEmailItemsRef.current)
+        }
       } else {
         // Retain previous email items on intermediate 15s polls
         aggregated.push(...previousEmailItemsRef.current.map((item) => ({
@@ -551,6 +560,7 @@ export function usePortalNotifications() {
       setError(err instanceof Error ? err.message : 'Failed to sync notifications.')
     } finally {
       setLoading(false)
+      fetchInFlightRef.current = false
     }
   }, [])
 
@@ -559,10 +569,39 @@ export function usePortalNotifications() {
     fetchNotifications(false)
   }, [fetchNotifications])
 
+  // Zoho posts incoming mail to the server, which stores the protected details in
+  // Supabase and broadcasts only an opaque arrival signal to authenticated portal pages.
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    let active = true
+
+    void fetch('/api/portal/zoho-webhook-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!active || typeof data?.realtimeChannel !== 'string') return
+        channel = supabase
+          .channel(data.realtimeChannel)
+          .on('broadcast', { event: 'email-arrived' }, () => {
+            void fetchNotifications(true, true)
+          })
+          .subscribe()
+      })
+      .catch((error) => console.warn('Failed to connect email arrival notifications:', error))
+
+    return () => {
+      active = false
+      if (channel) void supabase.removeChannel(channel)
+    }
+  }, [fetchNotifications])
+
   // Secure polling is the fallback for private RLS-protected rows that cannot be
   // delivered to the browser's anonymous Realtime connection.
   useEffect(() => {
-    const generalInterval = setInterval(() => fetchNotifications(true), 5_000)
+    const generalInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchNotifications(true)
+    }, GENERAL_POLL_INTERVAL_MS)
     return () => clearInterval(generalInterval)
   }, [fetchNotifications])
 

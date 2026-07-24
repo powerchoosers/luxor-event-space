@@ -99,7 +99,7 @@ function releaseZohoReadSlot() {
 function retryAfterMilliseconds(response: Response, attempt: number) {
   const retryAfter = response.headers.get('retry-after')
   const seconds = retryAfter ? Number.parseFloat(retryAfter) : Number.NaN
-  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 30_000)
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 5 * 60_000)
   return [1_200, 3_000, 7_000][attempt] || 10_000
 }
 
@@ -123,15 +123,20 @@ async function fetchZohoMailRead(url: string, init: RequestInit = {}) {
 
       const responseText = await response.clone().text().catch(() => '')
       const rateLimited = response.status === 429 || /too many requests|rate.?limit/i.test(responseText)
-      const transient = rateLimited || (response.status >= 500 && response.status <= 504)
+      if (rateLimited) {
+        // Do not retry a rate-limited request inside the same function invocation.
+        // Repeated retries extend Zoho's lock and multiply traffic across Vercel instances.
+        zohoReadCooldownUntil = Date.now() + Math.max(retryAfterMilliseconds(response, attempt), 60_000)
+        return response
+      }
+
+      const transient = response.status >= 500 && response.status <= 504
       if (!transient || attempt === 3) {
-        if (rateLimited) zohoReadCooldownUntil = Date.now() + 30_000
         return response
       }
 
       const delay = retryAfterMilliseconds(response, attempt)
-      if (rateLimited) zohoReadCooldownUntil = Date.now() + delay
-      await (rateLimited ? waitForZohoReadCooldown() : wait(delay))
+      await wait(delay)
       if (zohoReadCooldownUntil <= Date.now()) zohoReadCooldownUntil = 0
     }
     throw new Error('Zoho Mail request failed without a response.')

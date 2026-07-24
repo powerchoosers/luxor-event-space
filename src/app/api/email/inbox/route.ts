@@ -5,6 +5,8 @@ import { listMarketingCampaigns, type MarketingCampaignSummary } from '@/lib/lux
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 
 export async function GET(request: NextRequest) {
+  const startedAt = Date.now()
+  const requestId = request.headers.get('x-vercel-id')
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
@@ -15,7 +17,18 @@ export async function GET(request: NextRequest) {
     const limit = Number.parseInt(searchParams.get('limit') || '50', 10)
     const email = searchParams.get('email') || ''
     const folder = (searchParams.get('folder') || 'all').toLowerCase()
+    const source = searchParams.get('source') || 'email-client'
     const safeLimit = Number.isFinite(limit) ? limit : 50
+
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'Zoho mailbox request started',
+      route: '/api/email/inbox',
+      requestId,
+      source,
+      folder,
+      addressLookup: Boolean(email),
+    }))
 
     if (email) {
       const messages = await listLuxorZohoMessagesForAddress(email, safeLimit)
@@ -122,6 +135,17 @@ export async function GET(request: NextRequest) {
       return timeB - timeA
     })
 
+    console.log(JSON.stringify({
+      level: 'info',
+      message: 'Zoho mailbox request completed',
+      route: '/api/email/inbox',
+      requestId,
+      source,
+      folder,
+      messageCount: Math.min(messages.length, safeLimit),
+      durationMs: Date.now() - startedAt,
+    }))
+
     return NextResponse.json({
       mailbox: session.mailboxAddress || session.email,
       folder,
@@ -131,6 +155,15 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Failed to fetch email inbox.'
     const scopeError = message.includes('INVALID_OAUTHSCOPE')
     const rateLimited = /too many requests|rate.?limit|briefly rate limiting/i.test(message)
+
+    console.error(JSON.stringify({
+      level: rateLimited ? 'warning' : 'error',
+      message: 'Zoho mailbox request failed',
+      route: '/api/email/inbox',
+      requestId,
+      rateLimited,
+      durationMs: Date.now() - startedAt,
+    }))
 
     return NextResponse.json(
       {

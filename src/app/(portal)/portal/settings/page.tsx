@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Settings,
   Building,
@@ -70,6 +70,10 @@ export default function SettingsPage() {
   const [roleTitle, setRoleTitle] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploadingProfileImage, setUploadingProfileImage] = useState(false)
+  const [zohoWebhookUrl, setZohoWebhookUrl] = useState('')
+  const [zohoWebhookInitialized, setZohoWebhookInitialized] = useState(false)
+  const [loadingZohoWebhook, setLoadingZohoWebhook] = useState(false)
+  const zohoWebhookLoadAttemptedRef = useRef(false)
 
   useEffect(() => {
     // Try to load initial theme from local storage for fast render
@@ -97,6 +101,30 @@ export default function SettingsPage() {
       })
       .catch(err => console.error('Failed to sync settings from Supabase:', err))
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'integrations' || zohoWebhookLoadAttemptedRef.current) return
+    zohoWebhookLoadAttemptedRef.current = true
+    setLoadingZohoWebhook(true)
+    fetch('/api/portal/zoho-webhook-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.error || 'Could not load the Zoho webhook configuration.')
+        setZohoWebhookUrl(typeof payload.webhookUrl === 'string' ? payload.webhookUrl : '')
+        setZohoWebhookInitialized(Boolean(payload.initialized))
+      })
+      .catch((error) => notify({
+        title: error instanceof Error ? error.message : 'Could not load the Zoho webhook configuration.',
+        variant: 'error',
+      }))
+      .finally(() => setLoadingZohoWebhook(false))
+  }, [activeTab, notify])
+
+  const copyZohoWebhookUrl = async () => {
+    if (!zohoWebhookUrl) return
+    await navigator.clipboard.writeText(zohoWebhookUrl)
+    notify({ title: 'Zoho webhook URL copied.', variant: 'success' })
+  }
 
   const handleUpdateTheme = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
@@ -594,6 +622,47 @@ export default function SettingsPage() {
           {/* INTEGRATIONS */}
           {activeTab === 'integrations' && (
             <div className="space-y-6">
+            <div className="luxor-glass-card space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Real-Time Zoho Email Notifications</h3>
+                  <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
+                    Zoho sends Luxor one signed event when an email arrives. This replaces continuous Zoho inbox polling and protects the mailbox API allowance.
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                  zohoWebhookInitialized
+                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]'
+                }`}>
+                  {zohoWebhookInitialized ? 'Connected' : 'Awaiting Zoho'}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">Secure Webhook URL</p>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-[10px] text-[color:var(--portal-text)]">
+                    {loadingZohoWebhook ? 'Preparing secure URL…' : zohoWebhookUrl || 'Unavailable'}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void copyZohoWebhookUrl()}
+                    disabled={!zohoWebhookUrl}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 text-[10px] font-bold text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 disabled:cursor-not-allowed disabled:opacity-45 dark:text-[#f1d27a]"
+                  >
+                    <Copy size={13} /> Copy
+                  </button>
+                </div>
+              </div>
+
+              <ol className="space-y-2 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
+                <li><strong className="text-[color:var(--portal-text)]">1.</strong> In Zoho Mail, open Settings → Integrations → Developer Space → Outgoing Webhooks.</li>
+                <li><strong className="text-[color:var(--portal-text)]">2.</strong> Add a Mail webhook, paste the secure URL, and choose incoming mail.</li>
+                <li><strong className="text-[color:var(--portal-text)]">3.</strong> Turn on Limited Data List so Zoho sends only sender, recipient, subject, and time—never the email body.</li>
+                <li><strong className="text-[color:var(--portal-text)]">4.</strong> Save it. Zoho&apos;s first signed request will automatically change this status to Connected.</li>
+              </ol>
+            </div>
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">External API Channels</h3>
               <div className="space-y-4">
