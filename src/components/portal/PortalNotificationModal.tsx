@@ -187,15 +187,12 @@ export function PortalNotificationModal({
           <motion.div
             key="notification-popover"
             ref={containerRef}
-            initial={{ opacity: 0, y: -8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.96 }}
-            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-x-3 top-16 z-50 flex max-h-[85vh] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl sm:absolute sm:right-1/2 sm:translate-x-1/2 sm:top-[calc(100%+0.75rem)] sm:left-auto sm:w-[460px] sm:max-w-[calc(100vw-2rem)]"
+            initial={{ opacity: 0, x: 12, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 12, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="fixed right-4 top-20 z-[90] flex max-h-[85vh] w-[min(28rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl"
           >
-            {/* Top caret pointer centered under Bell Icon */}
-            <div className="hidden sm:block absolute -top-2 left-1/2 -translate-x-1/2 h-0 w-0 border-x-8 border-x-transparent border-b-8 border-b-[color:var(--portal-border)] z-10" />
-            <div className="hidden sm:block absolute -top-1.5 left-1/2 -translate-x-1/2 h-0 w-0 border-x-7 border-x-transparent border-b-7 border-b-[color:var(--portal-card)] z-10" />
 
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-4 py-3.5">

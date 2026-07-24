@@ -419,7 +419,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
       </aside>
 
       <main className={`flex h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <header className={`z-30 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
+        <header className={`z-50 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-[#caa24c]/10 bg-[#050505]/75'

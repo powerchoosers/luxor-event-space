@@ -512,7 +512,7 @@ export function PortalPhoneButton() {
         phoneState === 'ready' ? 'bg-emerald-400' : phoneState === 'error' ? 'bg-red-400' : 'bg-zinc-600'
       }`} />
       {unreadCount > 0 && (
-        <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-0.5 font-mono text-[9px] font-black text-black shadow-xs">
+        <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-0.5 font-mono text-[9px] font-black text-white shadow-xs">
           {Math.min(unreadCount, 99)}
         </span>
       )}
