@@ -503,13 +503,19 @@ export async function listLuxorZohoInbox(limit = 25) {
     const items = await inboxListingRequest
     cachedInboxListing = {
       items,
-      expiresAt: Date.now() + 60_000,
-      staleUntil: Date.now() + 5 * 60_000,
+      expiresAt: Date.now() + 90_000,
+      staleUntil: Date.now() + 60 * 60_000,
     }
     return items.slice(0, safeLimit)
   } catch (error) {
-    if (cachedInboxListing && cachedInboxListing.staleUntil > Date.now()) {
+    if (cachedInboxListing) {
+      console.warn('[Zoho Inbox] Fetch error or rate limit, serving cached inbox listing:', error instanceof Error ? error.message : error)
       return cachedInboxListing.items.slice(0, safeLimit)
+    }
+    const isRateLimited = error instanceof Error && /too many requests|rate.?limit|429/i.test(error.message)
+    if (isRateLimited) {
+      console.warn('[Zoho Inbox] Rate limited without cached items, returning empty inbox gracefully.')
+      return []
     }
     throw error
   } finally {
@@ -565,13 +571,19 @@ export async function listLuxorZohoSentMessages(limit = 50) {
     const items = await sentListingRequest
     cachedSentListing = {
       items,
-      expiresAt: Date.now() + 60_000,
-      staleUntil: Date.now() + 5 * 60_000,
+      expiresAt: Date.now() + 90_000,
+      staleUntil: Date.now() + 60 * 60_000,
     }
     return items.slice(0, safeLimit)
   } catch (error) {
-    if (cachedSentListing && cachedSentListing.staleUntil > Date.now()) {
+    if (cachedSentListing) {
+      console.warn('[Zoho Sent] Fetch error or rate limit, serving cached sent listing:', error instanceof Error ? error.message : error)
       return cachedSentListing.items.slice(0, safeLimit)
+    }
+    const isRateLimited = error instanceof Error && /too many requests|rate.?limit|429/i.test(error.message)
+    if (isRateLimited) {
+      console.warn('[Zoho Sent] Rate limited without cached items, returning empty sent list gracefully.')
+      return []
     }
     throw error
   } finally {

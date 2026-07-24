@@ -115,11 +115,11 @@ export function usePortalNotifications() {
   const [items, setItems] = useState<PortalNotificationItem[]>([])
   const [, setReadIds] = useState<Set<string>>(() => getStoredReadIds())
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Track IDs from last poll & persistent toast notifications fired
+  const [error, setError] = useState<string | null>(null)  // Track IDs from last poll & persistent toast notifications fired
   const seenIdsRef = useRef<Set<string> | null>(null)
   const notifiedToastIdsRef = useRef<Set<string> | null>(null)
+  const previousEmailItemsRef = useRef<PortalNotificationItem[]>([])
+  const pollCountRef = useRef(0)
   // Callback fired for each new item (used by PortalShell to fire toasts)
   const onNewItemRef = useRef<((item: NotificationToastPayload) => void) | null>(null)
 
@@ -128,9 +128,14 @@ export function usePortalNotifications() {
       if (!silent) setLoading(true)
       const currentReadIds = getStoredReadIds()
 
+      pollCountRef.current += 1
+      const shouldFetchEmails = !silent || pollCountRef.current % 6 === 1
+
       const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/email/inbox?limit=25&folder=inbox', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        shouldFetchEmails
+          ? fetch('/api/email/inbox?limit=25&folder=inbox', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+          : Promise.resolve(null),
         fetch('/api/twilio/messages?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/twilio/calls?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/invoices', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
@@ -195,31 +200,46 @@ export function usePortalNotifications() {
       }
 
       // 2. Incoming Emails (filter out internal/sent emails)
-      if (emailsRes.status === 'fulfilled' && emailsRes.value.ok) {
-        const data = await emailsRes.value.json()
-        const messages = Array.isArray(data.messages) ? data.messages : []
-        messages
-          .filter((msg: RawRecord) => !isInternalEmail(msg))
-          .forEach((msg: RawRecord, idx: number) => {
-            const emailId = String(msg.id || msg.messageId || `email_${idx}_${msg.dateSent || ''}`)
-            const subject = decodeHtmlEntities(String(msg.subject || 'New Email Received'))
-            const senderName = String(msg.senderName || msg.sender || msg.fromAddress || msg.from || 'Unknown sender')
-            const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
-            const folderId = String(msg.folderId || '')
+      if (shouldFetchEmails) {
+        const emailItems: PortalNotificationItem[] = []
+        if (emailsRes.status === 'fulfilled' && emailsRes.value && emailsRes.value.ok) {
+          const data = await emailsRes.value.json()
+          const messages = Array.isArray(data.messages) ? data.messages : []
 
-            const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
-            const folderQuery = folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''
-            aggregated.push({
-              id: emailId,
-              type: 'email',
-              title: subject,
-              subtitle: `From: ${senderName}`,
-              timestamp,
-              isRead,
-              targetUrl: `/portal/marketing?tab=emails&messageId=${encodeURIComponent(emailId)}${folderQuery}`,
-              metadata: { sender: msg.sender, fromAddress: msg.fromAddress || msg.from, folderId },
+          messages
+            .filter((msg: RawRecord) => !isInternalEmail(msg))
+            .forEach((msg: RawRecord) => {
+              const rawId = String(msg.id || msg.messageId || '').trim()
+              const emailId = rawId
+                ? `email_${rawId}`
+                : `email_${String(msg.fromAddress || msg.from || 'unknown')}_${String(msg.receivedAt || msg.dateSent || '')}`
+              const subject = decodeHtmlEntities(String(msg.subject || 'New Email Received'))
+              const senderName = String(msg.senderName || msg.sender || msg.fromAddress || msg.from || 'Unknown sender')
+              const timestamp = String(msg.receivedAt || msg.dateSent || new Date().toISOString())
+              const folderId = String(msg.folderId || '')
+
+              const isRead = currentReadIds.has(emailId) || Boolean(msg.isRead)
+              const folderQuery = folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''
+              emailItems.push({
+                id: emailId,
+                type: 'email',
+                title: subject,
+                subtitle: `From: ${senderName}`,
+                timestamp,
+                isRead,
+                targetUrl: `/portal/marketing?tab=emails&messageId=${encodeURIComponent(rawId || emailId)}${folderQuery}`,
+                metadata: { sender: msg.sender, fromAddress: msg.fromAddress || msg.from, folderId },
+              })
             })
-          })
+        }
+        previousEmailItemsRef.current = emailItems
+        aggregated.push(...emailItems)
+      } else {
+        // Retain previous email items on intermediate 15s polls
+        aggregated.push(...previousEmailItemsRef.current.map((item) => ({
+          ...item,
+          isRead: currentReadIds.has(item.id) || item.isRead,
+        })))
       }
 
       // 3. SMS Messages (inbound only)
@@ -461,14 +481,11 @@ export function usePortalNotifications() {
       const isFirstLoad = previousIds === null
       const now = Date.now()
 
-      // On initial page mount, mark all historical existing items older than 3 minutes as already notified
-      // so initial portal load doesn't flood the UI with old toasts
+      // On initial page mount, mark ALL existing historical items as already notified
+      // so opening/reloading the portal never floods the UI with popups for existing items
       if (isFirstLoad) {
         aggregated.forEach((item) => {
-          const itemAgeMs = now - new Date(item.timestamp).getTime()
-          if (isNaN(itemAgeMs) || itemAgeMs > 180_000) {
-            notifiedToastIds.add(item.id)
-          }
+          notifiedToastIds.add(item.id)
         })
         saveStoredNotifiedIds(notifiedToastIds)
       }

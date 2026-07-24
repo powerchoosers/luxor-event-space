@@ -509,7 +509,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl font-sans text-[color:var(--portal-text)]">
+    <div className="portal-surface flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl font-sans text-[color:var(--portal-text)] [mask-image:linear-gradient(white,white)] [-webkit-mask-image:-webkit-radial-gradient(white,white)] [transform:translateZ(0)] isolation-auto">
       {/* PANE 1: Mailbox Folders & Navigation */}
       <AnimatePresence initial={false}>
       {folderPaneOpen && !readerExpanded && <motion.div
@@ -518,7 +518,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         animate={{ width: 'var(--folder-pane-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
         transition={PANEL_TRANSITION}
-        className="w-64 [--folder-pane-width:16rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex"
+        className="w-64 [--folder-pane-width:16rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex rounded-l-2xl"
       >
         {/* Scrollable folder list area */}
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4 space-y-6">
@@ -617,7 +617,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
         transition={PANEL_TRANSITION}
-        className="w-full [--message-list-width:100%] md:w-80 md:[--message-list-width:20rem] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden"
+        className="w-full [--message-list-width:100%] md:w-80 md:[--message-list-width:20rem] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden rounded-l-2xl md:rounded-l-none"
       >
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
@@ -783,7 +783,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex">
+      <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex rounded-r-2xl">
         {selectedId && messageDetail ? (
           <>
             {/* Email Header Bar */}
