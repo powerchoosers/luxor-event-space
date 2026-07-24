@@ -282,18 +282,18 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           }`}>
             <Link href="/portal" className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
               <div
-                className={`relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_5px_16px_-9px_rgba(111,77,20,0.55)] ring-1 ring-[#caa24c]/10 transition-colors ${
+                className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_5px_16px_-9px_rgba(111,77,20,0.55)] ring-1 ring-[#caa24c]/10 transition-colors ${
                   portalTheme === 'light'
-                    ? 'border-[#a87928] bg-[#fffaf0]'
+                    ? 'border-[#caa24c] bg-[#fffaf0]'
                     : 'border-[#caa24c]/75 bg-[#080706]'
                 }`}
               >
                 <Image
-                  src="/luxor-palm-mark.png"
+                  src="/luxor-portal-mark-gold.png"
                   alt=""
-                  width={255}
-                  height={190}
-                  className="h-auto w-[2.65rem] max-w-none scale-[1.12] object-contain object-[center_42%]"
+                  width={1254}
+                  height={1254}
+                  className="h-auto w-[2.35rem] max-w-none object-contain"
                   priority
                 />
               </div>

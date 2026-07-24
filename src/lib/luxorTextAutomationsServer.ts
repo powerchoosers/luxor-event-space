@@ -9,7 +9,14 @@ import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from './luxorTw
 
 type ConsentStatus = 'unknown' | 'opted_in' | 'opted_out'
 type AutomationType = 'missed_call' | 'inbound_acknowledgment'
-type ConsentRow = { phone_number: string; status: ConsentStatus; updated_at: string }
+type ConsentRow = {
+  phone_number: string
+  status: ConsentStatus
+  updated_at: string
+  consent_scopes?: string[]
+  proof?: Record<string, unknown>
+  last_confirmed_at?: string | null
+}
 type AutomationEvent = { id: string; status: 'pending' | 'sent' | 'skipped' | 'failed' }
 
 export function getSmsControlType(body: string, twilioOptOutType?: string | null) {
@@ -22,11 +29,19 @@ export function getSmsControlType(body: string, twilioOptOutType?: string | null
   return null
 }
 
-export async function recordLuxorSmsConsent(phone: string, controlType: 'STOP' | 'START', source: string) {
+export async function recordLuxorSmsConsent(
+  phone: string,
+  controlType: 'STOP' | 'START',
+  source: string,
+  options: { scopes?: string[]; proof?: Record<string, unknown> } = {},
+) {
   const phoneNumber = normalizePhoneNumber(phone)
   if (!phoneNumber) return null
   const timestamp = new Date().toISOString()
   const status: ConsentStatus = controlType === 'STOP' ? 'opted_out' : 'opted_in'
+  const consentScopes = status === 'opted_in'
+    ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice']
+    : []
   const [saved] = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
@@ -36,17 +51,47 @@ export async function recordLuxorSmsConsent(phone: string, controlType: 'STOP' |
       source,
       opted_out_at: status === 'opted_out' ? timestamp : null,
       opted_in_at: status === 'opted_in' ? timestamp : null,
+      consent_scopes: consentScopes,
+      proof: {
+        ...(options.proof || {}),
+        source,
+        captured_at: timestamp,
+      },
+      last_confirmed_at: status === 'opted_in' ? timestamp : null,
       updated_at: timestamp,
     }),
   })
   return saved ?? null
 }
 
+export async function getLuxorSmsConsent(phone: string) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) return null
+  const [consent] = await supabaseRest<ConsentRow[]>(
+    `luxor_sms_consents?select=phone_number,status,updated_at,consent_scopes,proof,last_confirmed_at&phone_number=eq.${encodeURIComponent(phoneNumber)}&limit=1`,
+  )
+  return consent ?? null
+}
+
 export async function assertLuxorSmsAllowed(phone: string) {
   const phoneNumber = normalizePhoneNumber(phone)
   if (!phoneNumber) throw new Error('Enter a valid mobile phone number.')
-  const [consent] = await supabaseRest<ConsentRow[]>(`luxor_sms_consents?select=phone_number,status,updated_at&phone_number=eq.${encodeURIComponent(phoneNumber)}&limit=1`)
+  const consent = await getLuxorSmsConsent(phoneNumber)
   if (consent?.status === 'opted_out') throw new Error('This person opted out of Luxor text messages. They must text START before the CRM can message them again.')
+  return phoneNumber
+}
+
+export async function assertLuxorAutomatedSmsAllowed(phone: string, requiredScope = 'customer_care') {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) throw new Error('Enter a valid mobile phone number.')
+  const consent = await getLuxorSmsConsent(phoneNumber)
+  if (consent?.status !== 'opted_in') {
+    throw new Error('Automated texts require a recorded customer opt-in.')
+  }
+  const scopes = Array.isArray(consent.consent_scopes) ? consent.consent_scopes : []
+  if (scopes.length && !scopes.includes(requiredScope) && !scopes.includes('customer_care')) {
+    throw new Error(`This customer has not opted in to ${requiredScope.replace(/_/g, ' ')} texts.`)
+  }
   return phoneNumber
 }
 

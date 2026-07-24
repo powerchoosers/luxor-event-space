@@ -6,6 +6,7 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
+import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -76,6 +77,11 @@ export async function POST(request: NextRequest) {
           await createNote(inquiry.id, 'Booking record created. Lead advanced to Contract.', 'status_change', session.email)
         }
         await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder'])
+        try {
+          await queueBookingTextJobs(booking, inquiry)
+        } catch (automationError) {
+          console.error('Booking created, but its text reminders could not be queued:', automationError)
+        }
       }
     }
     return NextResponse.json(booking, { status: 201 })
@@ -121,6 +127,11 @@ export async function PATCH(request: NextRequest) {
           await syncBookingEmailAutomations({ inquiry, booking, previous: existing })
         } catch (automationError) {
           console.error('Booking advanced, but its reminder automation could not be updated:', automationError)
+        }
+        try {
+          await queueBookingTextJobs(booking, inquiry)
+        } catch (automationError) {
+          console.error('Booking advanced, but its text reminders could not be updated:', automationError)
         }
       }
     }

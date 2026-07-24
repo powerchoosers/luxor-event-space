@@ -3,6 +3,7 @@ import { readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 import { saveInboundLuxorMessage } from '@/lib/luxorMessagesServer'
 import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
 import { getSmsControlType, recordLuxorSmsConsent, sendLuxorAutomatedText } from '@/lib/luxorTextAutomationsServer'
+import { recordTextCampaignReply } from '@/lib/luxorTextCampaignsServer'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
   const mediaUrls = Array.from({ length: Number.parseInt(params.NumMedia || '0', 10) || 0 }, (_, index) => params[`MediaUrl${index}`]).filter((url): url is string => Boolean(url))
   const message = await saveInboundLuxorMessage({ sid: params.MessageSid, from: params.From, to: params.To, body: params.Body || '', mediaUrls })
   const controlType = getSmsControlType(params.Body || '', params.OptOutType)
+  await recordTextCampaignReply(params.From, controlType === 'STOP')
   if (controlType === 'STOP' || controlType === 'START') {
     await recordLuxorSmsConsent(params.From, controlType, params.OptOutType ? 'twilio_advanced_opt_out' : 'inbound_keyword')
   } else if (!controlType) {

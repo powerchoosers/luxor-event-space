@@ -105,7 +105,14 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
 
   if (created?.phone && row.metadata?.smsConsent) {
     try {
-      await recordLuxorSmsConsent(created.phone, 'START', 'website_inquiry_form')
+      await recordLuxorSmsConsent(created.phone, 'START', 'website_inquiry_form', {
+        scopes: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice'],
+        proof: {
+          inquiry_id: created.id,
+          page_path: created.page_path,
+          disclosure_version: '2026-07-23',
+        },
+      })
     } catch (consentError) {
       console.error('Inquiry created but SMS consent could not be recorded:', consentError)
     }

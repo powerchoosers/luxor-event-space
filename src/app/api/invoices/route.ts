@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { listInvoices, listInvoicesByInquiry, createInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,6 +82,17 @@ export async function POST(request: NextRequest) {
       notes,
     })
 
+    if (invoice.inquiry_id) {
+      try {
+        const inquiry = await getLuxorInquiry(invoice.inquiry_id)
+        if (inquiry) {
+          await queueInvoiceReminderTexts(invoice, { phone: inquiry.phone, name: inquiry.name })
+        }
+      } catch (automationError) {
+        console.error('Invoice created, but its text reminders could not be queued:', automationError)
+      }
+    }
+
     return NextResponse.json(invoice, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create invoice.'
@@ -102,6 +115,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updatedInvoice = await updateInvoice(id, updates)
+    if (updatedInvoice?.inquiry_id) {
+      try {
+        const inquiry = await getLuxorInquiry(updatedInvoice.inquiry_id)
+        if (inquiry) {
+          await queueInvoiceReminderTexts(updatedInvoice, { phone: inquiry.phone, name: inquiry.name })
+        }
+      } catch (automationError) {
+        console.error('Invoice updated, but its text reminders could not be queued:', automationError)
+      }
+    }
     return NextResponse.json(updatedInvoice)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update invoice.'

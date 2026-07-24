@@ -3,6 +3,9 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 import { LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { getLuxorBooking } from '@/lib/luxorBookingsServer'
+import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -62,6 +65,21 @@ export async function POST(request: NextRequest) {
         metadata,
       }),
     })
+
+    if (created?.status === 'paid') {
+      try {
+        const booking = created.booking_id ? await getLuxorBooking(created.booking_id) : null
+        const inquiryId = created.inquiry_id || booking?.inquiry_id || null
+        const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+        await queuePaymentConfirmationText(created, {
+          phone: inquiry?.phone,
+          name: inquiry?.name || booking?.client_name || 'there',
+          inquiryId,
+        })
+      } catch (automationError) {
+        console.error('Payment saved, but its text confirmation could not be queued:', automationError)
+      }
+    }
 
     return NextResponse.json(created, { status: 201 })
   } catch (error) {
