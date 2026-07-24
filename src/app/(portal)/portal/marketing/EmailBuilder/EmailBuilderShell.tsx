@@ -486,12 +486,13 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
 
   return (
     <div className="flex flex-col h-full gap-0">
+    <div className="flex flex-col h-full gap-0 p-3">
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center gap-3 rounded-2xl border border-zinc-800/60 bg-zinc-900/30 px-4 py-3 mb-4">
+      <div className="flex-shrink-0 flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 mb-3 shadow-xs">
         {/* Subject line */}
         <div className="flex-1 relative">
           <input
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors font-medium"
+            className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors font-medium"
             placeholder="Email subject line..."
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -501,7 +502,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         {/* Template picker trigger */}
         <button
           onClick={() => setShowTemplates(true)}
-          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white hover:border-zinc-600 transition-all flex-shrink-0"
+          className="flex items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[#caa24c]/10 hover:text-[#a8792f] transition-all flex-shrink-0 cursor-pointer"
         >
           <Sparkles size={13} />
           Templates
@@ -511,7 +512,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         <button
           onClick={() => setShowSaveTemplate(true)}
           disabled={blocks.length === 0}
-          className="flex flex-shrink-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400 transition-all hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:bg-[#caa24c]/10 hover:text-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
         >
           <Save size={13} />
           Save Template
@@ -522,13 +523,13 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
           onClick={undo}
           disabled={!canUndo}
           title="Undo"
-          className="p-2.5 rounded-lg border border-zinc-800 text-zinc-600 hover:text-zinc-300 hover:border-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0"
+          className="p-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:border-[#caa24c]/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0 cursor-pointer"
         >
           <RotateCcw size={15} />
         </button>
 
         {/* Block count */}
-        <div className="text-[10px] text-zinc-600 font-mono flex-shrink-0 hidden md:block">
+        <div className="text-[10px] text-[color:var(--portal-muted)] font-mono flex-shrink-0 hidden md:block">
           {blocks.length} block{blocks.length !== 1 ? 's' : ''}
         </div>
 
@@ -536,7 +537,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         <button
           onClick={() => setShowPreview(true)}
           disabled={blocks.length === 0}
-          className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-[11px] font-black uppercase tracking-[0.15em] text-white shadow-lg shadow-[#caa24c]/20 hover:bg-[#d4b060] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 flex-shrink-0"
+          className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-md shadow-[#caa24c]/20 hover:bg-[#dfbd68] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 flex-shrink-0 cursor-pointer"
         >
           <Eye size={14} />
           Preview & Send
@@ -544,19 +545,19 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
       </div>
 
       {/* ── Three-panel layout ───────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 gap-4">
+      <div className="flex flex-1 min-h-0 gap-3.5 overflow-hidden">
         
         {/* Left: Palette */}
-        <div className="w-56 flex-shrink-0 rounded-2xl border border-zinc-800/60 bg-zinc-900/20 overflow-hidden">
+        <div className="w-60 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs">
           <BlockPalette onAdd={handleAddBlock} />
         </div>
 
         {/* Center: Canvas */}
-        <div className="flex-1 min-w-0 rounded-2xl border border-zinc-800/60 bg-zinc-900/10 overflow-hidden flex flex-col">
-          <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-zinc-800/40 bg-zinc-900/30">
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Canvas · 600px email width</p>
+        <div className="flex-1 min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden flex flex-col shadow-xs">
+          <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Canvas · 600px email width</p>
             {blocks.length > 0 && (
-              <button onClick={() => { setBlocks([]); pushHistory([]); setSelectedId(null) }} className="text-[9px] text-zinc-700 hover:text-rose-400 uppercase tracking-widest font-bold transition-colors">
+              <button onClick={() => { setBlocks([]); pushHistory([]); setSelectedId(null) }} className="text-[9px] text-[color:var(--portal-muted)] hover:text-rose-500 uppercase tracking-widest font-bold transition-colors cursor-pointer">
                 Clear all
               </button>
             )}
@@ -572,7 +573,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         </div>
 
         {/* Right: Inspector */}
-        <div className="w-72 flex-shrink-0 rounded-2xl border border-zinc-800/60 bg-zinc-900/20 overflow-hidden">
+        <div className="w-80 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs">
           {selectedBlock ? (
             <BlockInspector
               block={selectedBlock}
@@ -583,12 +584,12 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
-              <div className="w-10 h-10 rounded-xl border border-zinc-800 flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-700">
+              <div className="w-10 h-10 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[color:var(--portal-muted)]">
                   <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                 </svg>
               </div>
-              <p className="text-xs text-zinc-600 font-medium">Select a block<br />to edit its content</p>
+              <p className="text-xs text-[color:var(--portal-muted)] font-medium">Select a block<br />to edit its content</p>
             </div>
           )}
         </div>

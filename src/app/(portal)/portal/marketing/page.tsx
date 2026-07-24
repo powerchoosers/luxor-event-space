@@ -596,15 +596,17 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
-      <PortalPageHeader
-        icon={header.icon}
-        title={header.title}
-        description={header.desc}
-        actions={headerActions}
-      />
+    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' || activeTab === 'builder-automation' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
+      {activeTab !== 'builder-automation' && (
+        <PortalPageHeader
+          icon={header.icon}
+          title={header.title}
+          description={header.desc}
+          actions={headerActions}
+        />
+      )}
 
-      <div className="flex-grow flex flex-col min-h-0 overflow-hidden mt-2">
+      <div className="flex-grow flex flex-col min-h-0 overflow-hidden mt-1">
         {activeTab === 'overview' && (
           <MarketingOverviewTab
             inquiries={inquiries}

@@ -11,8 +11,8 @@ interface InspectorProps {
   onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void
 }
 
-const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 mb-1.5'
-const inputCls = 'w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors'
+const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] mb-1.5'
+const inputCls = 'w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors'
 const fieldCls = 'space-y-1.5'
 const textAlignOptions = [
   { value: 'left', label: 'Left' },
@@ -320,11 +320,11 @@ export function BlockInspector({ block, onChange, onBrowseImage }: InspectorProp
 
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b border-zinc-800/60 px-5 py-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Inspector</p>
-        <h3 className="text-sm font-bold text-white/90 mt-1">{titles[block.type] ?? 'Block'}</h3>
+      <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-3.5">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Inspector</p>
+        <h3 className="text-sm font-bold text-[color:var(--portal-text)] mt-0.5">{titles[block.type] ?? 'Block'}</h3>
       </div>
-      <div className="flex-1 overflow-y-auto portal-scrollbar px-5 py-5">
+      <div className="flex-1 overflow-y-auto portal-scrollbar px-5 py-5 space-y-4">
         {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} onBrowseImage={onBrowseImage} />}
         {block.type === 'text'        && <TextInspector block={block} onChange={onChange as (b: TextBlock) => void} />}
         {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} onBrowseImage={onBrowseImage} />}

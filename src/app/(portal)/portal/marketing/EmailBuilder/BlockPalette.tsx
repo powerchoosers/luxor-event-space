@@ -79,16 +79,16 @@ interface BlockPaletteProps {
 export function BlockPalette({ onAdd }: BlockPaletteProps) {
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b border-zinc-800/60 px-5 py-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Blocks</p>
-        <p className="text-[11px] text-zinc-600 mt-1">Click to add to canvas</p>
+      <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-3.5">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Blocks</p>
+        <p className="text-[11px] text-[color:var(--portal-muted)] mt-0.5">Click to add to canvas</p>
       </div>
-      <div className="flex-1 overflow-y-auto portal-scrollbar px-4 py-4 space-y-2">
+      <div className="flex-1 overflow-y-auto portal-scrollbar px-3.5 py-3.5 space-y-2">
         {PALETTE_BLOCKS.map((block) => (
           <button
             key={block.type}
             onClick={() => onAdd(block.type)}
-            className="w-full flex items-center gap-3 rounded-xl border border-zinc-800/60 bg-zinc-900/30 px-4 py-3 text-left transition-all hover:border-zinc-700 hover:bg-zinc-800/40 hover:scale-[1.015] active:scale-[0.99] group"
+            className="w-full flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-3 text-left transition-all hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:scale-[1.015] active:scale-[0.99] group cursor-pointer"
           >
             <div
               className="flex-shrink-0 rounded-lg p-2 transition-transform group-hover:scale-110"
@@ -97,10 +97,10 @@ export function BlockPalette({ onAdd }: BlockPaletteProps) {
               {block.icon}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-white/90 leading-tight">{block.label}</p>
-              <p className="text-[10px] text-zinc-600 leading-tight mt-0.5 truncate">{block.description}</p>
+              <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{block.label}</p>
+              <p className="text-[10px] text-[color:var(--portal-muted)] leading-tight mt-0.5 truncate">{block.description}</p>
             </div>
-            <div className="ml-auto text-zinc-700 group-hover:text-zinc-400 transition-colors flex-shrink-0">
+            <div className="ml-auto text-[color:var(--portal-muted)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a] transition-colors flex-shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M12 5v14M5 12h14" />
               </svg>
@@ -110,8 +110,8 @@ export function BlockPalette({ onAdd }: BlockPaletteProps) {
       </div>
 
       {/* Drag hint */}
-      <div className="px-4 pb-4 pt-2 border-t border-zinc-800/40 mt-2">
-        <p className="text-[9px] text-zinc-700 text-center uppercase tracking-widest">Drag blocks on canvas to reorder</p>
+      <div className="px-4 pb-3.5 pt-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 mt-1">
+        <p className="text-[9px] text-[color:var(--portal-muted)] text-center uppercase tracking-widest">Drag blocks on canvas to reorder</p>
       </div>
     </div>
   )

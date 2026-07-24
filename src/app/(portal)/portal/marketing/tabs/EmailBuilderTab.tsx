@@ -191,14 +191,14 @@ export function EmailBuilderTab({
   // If live email builder canvas is activated
   if (showCanvas) {
     return (
-      <div className="h-full min-h-[500px] border border-zinc-900/60 rounded-2xl overflow-hidden bg-black/40 flex flex-col">
-        <div className="bg-zinc-950 px-4 py-2 border-b border-zinc-900 flex justify-between items-center shrink-0">
-          <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+      <div className="h-full min-h-[500px] border border-[color:var(--portal-border)] rounded-2xl overflow-hidden bg-[color:var(--portal-card)] flex flex-col shadow-lg">
+        <div className="bg-[color:var(--portal-soft)] px-5 py-3 border-b border-[color:var(--portal-border)] flex justify-between items-center shrink-0">
+          <span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
             Email Builder Workspace
           </span>
           <button
             onClick={() => setShowCanvas(false)}
-            className="rounded px-2.5 py-1 text-[9px] font-black uppercase bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
+            className="rounded-lg px-3 py-1.5 text-[9px] font-black uppercase bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-[color:var(--portal-text)] hover:bg-[#caa24c]/10 hover:text-[#a8792f] transition-all cursor-pointer"
           >
             Close Canvas
           </button>
@@ -214,35 +214,35 @@ export function EmailBuilderTab({
   }
 
   return (
-    <div className="space-y-6 flex flex-col h-full min-h-0 overflow-hidden">
-      {/* 7 top tabs matching mockup layout */}
-      <div className="flex items-center gap-1.5 border-b border-zinc-900 pb-3 overflow-x-auto portal-scrollbar w-full">
+    <div className="space-y-4 flex flex-col h-full min-h-0 overflow-hidden">
+      {/* Top subtabs navigation */}
+      <div className="flex items-center gap-2 border-b border-[color:var(--portal-border)] pb-3 overflow-x-auto portal-scrollbar w-full shrink-0">
         <TabBtn active={activeSubTab === 'builder'} onClick={() => setActiveSubTab('builder')} label="Builder" />
         <TabBtn active={activeSubTab === 'templates'} onClick={() => setActiveSubTab('templates')} label="Templates" />
         <TabBtn active={activeSubTab === 'elena-ai'} onClick={() => setActiveSubTab('elena-ai')} label="Elena AI Assistant" />
       </div>
 
-      {/* Main split grid layout */}
-      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar">
+      {/* Main split grid layout with independent column scrolling */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeSubTab === 'builder' && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          <div className="h-full grid grid-cols-1 gap-5 lg:grid-cols-4 overflow-hidden">
             
             {/* Column 1: Email Builder Preview */}
-            <div className="space-y-4">
-              <div className="luxor-glass-card rounded-2xl p-5 border border-zinc-900 bg-zinc-950/20 space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Email Builder</h4>
+            <div className="space-y-4 overflow-y-auto portal-scrollbar pr-1">
+              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Builder</h4>
                 
                 {/* Visual template flyer preview */}
-                <div className="relative group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 h-52 flex flex-col justify-between p-4 text-center">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10 z-10" />
+                <div className="relative group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 h-52 flex flex-col justify-between p-4 text-center shadow-inner">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10 z-10" />
                   
                   <span className="relative z-20 text-[7px] tracking-widest uppercase font-black text-[#caa24c]">Luxor Las Palmas</span>
                   <div className="relative z-20 space-y-1 my-auto">
                     <h5 className="text-xs font-black text-white uppercase tracking-wider leading-tight">Your Dream Event Starts Here</h5>
-                    <p className="text-[8px] text-zinc-500 max-w-[140px] mx-auto">Create stunning emails with our drag and drop editor.</p>
+                    <p className="text-[8px] text-zinc-400 max-w-[140px] mx-auto">Create stunning emails with our drag and drop editor.</p>
                   </div>
                   
-                  <button className="relative z-20 rounded bg-[#caa24c] px-3 py-1 mx-auto text-[8px] font-black uppercase text-white">
+                  <button className="relative z-20 rounded-lg bg-[#caa24c] px-3.5 py-1.5 mx-auto text-[8px] font-black uppercase text-white shadow-md">
                     Book Tour Slot
                   </button>
                 </div>
@@ -250,13 +250,13 @@ export function EmailBuilderTab({
                 <div className="space-y-2 pt-2">
                   <button
                     onClick={() => handleStartCanvas(EMAIL_TEMPLATES[0])}
-                    className="w-full rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 py-2.5 text-[9px] font-black uppercase text-white tracking-widest transition-all text-center"
+                    className="w-full rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] py-2.5 text-[10px] font-black uppercase text-white tracking-widest transition-all shadow-md shadow-[#caa24c]/15 text-center cursor-pointer active:scale-95"
                   >
                     Create New Email
                   </button>
                   <button
                     onClick={() => handleStartCanvas(null)}
-                    className="w-full rounded-lg bg-zinc-950 border border-zinc-900 hover:border-zinc-800 py-2.5 text-[9px] font-black uppercase text-zinc-400 tracking-widest transition-all text-center"
+                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/10 hover:border-[#caa24c]/30 py-2.5 text-[10px] font-black uppercase text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] tracking-widest transition-all text-center cursor-pointer active:scale-95"
                   >
                     Use Blank Template
                   </button>
@@ -264,9 +264,9 @@ export function EmailBuilderTab({
               </div>
 
               {/* Quick Actions Card */}
-              <div className="luxor-glass-card rounded-2xl p-5 border border-zinc-900 bg-zinc-950/20 space-y-3">
-                <h4 className="text-[9px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-900 pb-2">Quick Actions</h4>
-                <div className="space-y-2 text-xs font-bold text-zinc-400">
+              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-3">
+                <h4 className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] border-b border-[color:var(--portal-border)] pb-2">Quick Actions</h4>
+                <div className="space-y-2 text-xs font-bold text-[color:var(--portal-text)]">
                   <QuickLink label="Start Blank Email" onClick={() => handleStartCanvas(null)} />
                   <QuickLink label="Browse Templates" onClick={() => setActiveSubTab('templates')} />
                   <QuickLink label="Draft with Elena" onClick={() => setActiveSubTab('elena-ai')} />
@@ -274,34 +274,34 @@ export function EmailBuilderTab({
               </div>
             </div>
 
-            {/* Supabase-backed automated campaigns */}
-            <div className="lg:col-span-2 space-y-4">
-              <div className="luxor-glass-card rounded-2xl p-6 border border-zinc-900 bg-zinc-950/20 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+            {/* Column 2: Supabase-backed automated campaigns */}
+            <div className="lg:col-span-2 space-y-4 overflow-y-auto portal-scrollbar px-1">
+              <div className="rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                <div className="flex justify-between items-center border-b border-[color:var(--portal-border)] pb-3">
                   <div>
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Automated Campaigns</h3>
-                    <p className="text-[9px] text-zinc-500 mt-0.5">Campaigns whose saved audience is marked as automated.</p>
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Campaigns</h3>
+                    <p className="text-[9px] text-[color:var(--portal-muted)] mt-0.5">Campaigns whose saved audience is marked as automated.</p>
                   </div>
                 </div>
 
-                <div className="divide-y divide-zinc-900/60 flex flex-col">
+                <div className="divide-y divide-[color:var(--portal-border)] flex flex-col">
                   {automatedCampaigns.length ? automatedCampaigns.map((campaign) => (
                     <div key={campaign.id} className="flex justify-between items-center py-3.5 first:pt-0 last:pb-0 gap-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-950 border border-zinc-800 text-[#caa24c] shrink-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#caa24c]/10 border border-[#caa24c]/25 text-[#a8792f] dark:text-[#f1d27a] shrink-0">
                           <Workflow size={13} />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-white leading-tight">{decodeHtmlEntities(campaign.name)}</p>
-                          <p className="text-[9.5px] font-mono text-zinc-500 mt-1 font-bold">
+                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(campaign.name)}</p>
+                          <p className="text-[9.5px] font-mono text-[color:var(--portal-muted)] mt-1 font-bold">
                             {campaign.recipient_count} recipients • {campaign.open_rate}% open • {campaign.click_rate}% click
                           </p>
                         </div>
                       </div>
-                      <span className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-zinc-400">{campaign.status}</span>
+                      <span className="rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{campaign.status}</span>
                     </div>
                   )) : (
-                    <div className="rounded-xl border border-dashed border-zinc-850 p-6 text-center text-xs text-zinc-600">
+                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">
                       No Supabase campaign is marked as an automation.
                     </div>
                   )}
@@ -309,42 +309,42 @@ export function EmailBuilderTab({
               </div>
             </div>
 
-            {/* Real campaign performance and activity */}
-            <div className="space-y-6">
-              <div className="luxor-glass-card rounded-2xl p-5 border border-zinc-900 bg-zinc-950/20 space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-white">Tracked Campaign Performance</h4>
+            {/* Column 3: Real campaign performance and activity */}
+            <div className="space-y-5 overflow-y-auto portal-scrollbar pl-1">
+              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracked Campaign Performance</h4>
                 <div className="grid grid-cols-2 gap-3 text-left">
                   {performanceKPIs.map((kpi) => (
-                    <div key={kpi.label} className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-3">
-                      <span className="text-[8px] font-bold text-zinc-550 uppercase tracking-widest">{kpi.label}</span>
-                      <p className="font-mono text-base font-black text-white mt-1 leading-none">{kpi.value}</p>
+                    <div key={kpi.label} className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-xl p-3">
+                      <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{kpi.label}</span>
+                      <p className="font-mono text-base font-black text-[color:var(--portal-text)] mt-1 leading-none">{kpi.value}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="luxor-glass-card rounded-2xl p-5 border border-zinc-900 bg-zinc-950/20 space-y-4">
+              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-[10px] font-black uppercase tracking-wider text-white">Campaign Activity</h4>
-                  <span className="text-[8px] font-bold text-zinc-550 uppercase tracking-widest">{activityEvents.length} tracked</span>
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Campaign Activity</h4>
+                  <span className="text-[8px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest">{activityEvents.length} tracked</span>
                 </div>
                 <div className="space-y-3 text-[10px] font-bold">
                   {activityEvents.length ? activityEvents.slice(0, 5).map((event) => (
-                    <div key={event.id} className="flex justify-between items-center gap-3 py-1.5 border-b border-zinc-900 last:border-b-0">
+                    <div key={event.id} className="flex justify-between items-center gap-3 py-1.5 border-b border-[color:var(--portal-border)] last:border-b-0">
                       <div>
-                        <span className="text-white">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
-                        <p className="text-[9px] text-zinc-550 font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
+                        <span className="text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
+                        <p className="text-[9px] text-[color:var(--portal-muted)] font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
                       </div>
-                      <span className="font-mono text-[9px] text-zinc-650 shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>
+                      <span className="font-mono text-[9px] text-[color:var(--portal-muted)] shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>
                     </div>
                   )) : (
-                    <div className="rounded-xl border border-dashed border-zinc-850 p-5 text-center text-xs text-zinc-600">No opens, clicks, or unsubscribes have been tracked.</div>
+                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-5 text-center text-xs text-[color:var(--portal-muted)]">No opens, clicks, or unsubscribes have been tracked.</div>
                   )}
                 </div>
               </div>
 
-              <div className="luxor-glass-card rounded-2xl p-5 border border-zinc-900 bg-zinc-950/20 space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-white">Tracking Coverage</h4>
+              <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracking Coverage</h4>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <TrackingMetric label="Campaigns" value={campaigns.length} />
                   <TrackingMetric label="Sent" value={campaignTotals.sent} />
@@ -357,85 +357,89 @@ export function EmailBuilderTab({
 
         {/* Templates subtab */}
         {activeSubTab === 'templates' && (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {EMAIL_TEMPLATES.map((tpl) => (
-              <button
-                type="button"
-                key={tpl.id}
-                onClick={() => handleSelectTemplate(tpl)}
-                className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/20 text-left transition-all hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-800/20"
-              >
-                <div className="h-1.5 w-full" style={{ background: tpl.previewColor || '#caa24c' }} />
-                <div className="p-5">
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-bold text-white/90 transition-colors group-hover:text-white">{decodeHtmlEntities(tpl.name)}</h4>
-                    <span className="shrink-0 rounded-sm border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border-zinc-700 text-zinc-450 bg-zinc-800/10">
-                      {tpl.category}
+          <div className="h-full overflow-y-auto portal-scrollbar pr-1">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {EMAIL_TEMPLATES.map((tpl) => (
+                <button
+                  type="button"
+                  key={tpl.id}
+                  onClick={() => handleSelectTemplate(tpl)}
+                  className="group cursor-pointer overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/40 shadow-sm"
+                >
+                  <div className="h-1.5 w-full" style={{ background: tpl.previewColor || '#caa24c' }} />
+                  <div className="p-5">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-bold text-[color:var(--portal-text)] transition-colors group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{decodeHtmlEntities(tpl.name)}</h4>
+                      <span className="shrink-0 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
+                        {tpl.category}
+                      </span>
+                    </div>
+                    <p className="mb-4 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{tpl.description}</p>
+                    <span className="text-[10px] font-black uppercase text-[#a8792f] dark:text-[#caa24c] tracking-widest group-hover:underline">
+                      Use Template &rarr;
                     </span>
                   </div>
-                  <p className="mb-4 text-[11px] leading-relaxed text-zinc-500">{tpl.description}</p>
-                  <span className="text-[10px] font-black uppercase text-[#caa24c] tracking-widest group-hover:underline">
-                    Use Template &rarr;
-                  </span>
-                </div>
-              </button>
-            ))}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Elena AI tab */}
         {activeSubTab === 'elena-ai' && (
-          <div className="max-w-3xl luxor-glass-card rounded-2xl p-6 border border-zinc-900 bg-zinc-950/20 space-y-4">
-            <h3 className="text-xs font-black uppercase tracking-wider text-white">Generate with Elena AI</h3>
-            
-            {activeLead && (
-              <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3 flex items-start gap-2.5">
-                <BrainCircuit size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
-                <div className="text-xs leading-normal">
-                  <span className="font-bold text-[#f7efe3]">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
+          <div className="h-full overflow-y-auto portal-scrollbar pr-1">
+            <div className="max-w-3xl rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-wider text-[color:var(--portal-text)]">Generate with Elena AI</h3>
+              
+              {activeLead && (
+                <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 p-3.5 flex items-start gap-2.5">
+                  <BrainCircuit size={15} className="text-[#a8792f] dark:text-[#caa24c] shrink-0 mt-0.5" />
+                  <div className="text-xs leading-normal text-[color:var(--portal-text)]">
+                    <span className="font-bold">Context Active:</span> Personalizing follow-up for client <span className="font-bold text-[#a8792f] dark:text-[#caa24c]">{activeLead.full_name}</span> ({activeLead.event_type || 'Event'}, {activeLead.guest_count || 'open'} guests)
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <form onSubmit={handleGenerateElenaDraft} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-550 mb-1.5">
-                  Email Tone of Voice
-                </label>
-                <select
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
-                  className="w-full sm:w-64 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40 cursor-pointer"
+              <form onSubmit={handleGenerateElenaDraft} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
+                    Email Tone of Voice
+                  </label>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
+                    className="w-full sm:w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 cursor-pointer"
+                  >
+                    <option value="friendly">💅 Warm & Friendly</option>
+                    <option value="professional">💼 Corporate & Professional</option>
+                    <option value="urgent">🔥 Urgent (FOMO)</option>
+                    <option value="elegant">✨ Luxurious & Elegant</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
+                    Your Instructions
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={elenaPromptText}
+                    onChange={(e) => setElenaPromptText(e.target.value)}
+                    placeholder="Describe what you want Elena to draft..."
+                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={generatingElena}
+                  className="rounded-xl bg-[#caa24c] hover:bg-[#dfbd68] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#caa24c]/15 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
                 >
-                  <option value="friendly">💅 Warm & Friendly</option>
-                  <option value="professional">💼 Corporate & Professional</option>
-                  <option value="urgent">🔥 Urgent (FOMO)</option>
-                  <option value="elegant">✨ Luxurious & Elegant</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-550 mb-1.5">
-                  Your Instructions
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={elenaPromptText}
-                  onChange={(e) => setElenaPromptText(e.target.value)}
-                  placeholder="Describe what you want Elena to draft..."
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={generatingElena}
-                className="rounded-lg bg-[#caa24c] px-5 py-2 text-xs font-black uppercase tracking-wider text-white flex items-center gap-2"
-              >
-                {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
-              </button>
-            </form>
+                  {generatingElena ? <Loader2 size={13} className="animate-spin" /> : 'Generate Custom Template'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </div>
@@ -447,8 +451,10 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-3.5 py-1.5 text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-        active ? 'bg-[#caa24c]/10 text-[#caa24c]' : 'text-zinc-550 hover:text-zinc-300'
+      className={`rounded-xl px-4 py-2 text-[9.5px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+        active
+          ? 'border border-[#caa24c]/30 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#caa24c] shadow-xs'
+          : 'border border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'
       }`}
     >
       {label}
@@ -458,18 +464,18 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
 
 function TrackingMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-zinc-900 bg-zinc-950/40 p-3">
-      <p className="text-[7px] font-black uppercase tracking-wider text-zinc-600">{label}</p>
-      <p className="mt-1 font-mono text-sm font-bold text-white">{value.toLocaleString()}</p>
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+      <p className="text-[7.5px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-1 font-mono text-sm font-black text-[color:var(--portal-text)]">{value.toLocaleString()}</p>
     </div>
   )
 }
 
 function QuickLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="group flex w-full items-center justify-between border-b border-zinc-900/60 py-2 text-left transition-colors last:border-b-0 hover:text-white">
+    <button type="button" onClick={onClick} className="group flex w-full items-center justify-between border-b border-[color:var(--portal-border)] py-2.5 text-left transition-colors last:border-b-0 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer">
       <span>{label}</span>
-      <ChevronRight size={13} className="text-zinc-650 group-hover:translate-x-0.5 transition-transform" />
+      <ChevronRight size={13} className="text-[color:var(--portal-muted)] group-hover:translate-x-0.5 transition-transform" />
     </button>
   )
 }
