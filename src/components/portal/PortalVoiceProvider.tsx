@@ -51,9 +51,11 @@ type DialMatch = {
 
 type VoiceContextValue = {
   phoneState: PhoneState
+  callQuality: 'good' | 'medium' | 'bad'
   unreadCount: number
   isPanelOpen: boolean
   activeCall: ActiveCall | null
+  setCallQuality: (quality: 'good' | 'medium' | 'bad') => void
   openPanel: () => void
   closePanel: () => void
   enablePhone: () => Promise<void>
@@ -69,6 +71,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null)
+  const [callQuality, setCallQuality] = useState<'good' | 'medium' | 'bad'>('good')
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null)
   const [isMuted, setIsMuted] = useState(false)
   const [dialNumber, setDialNumber] = useState('')
@@ -149,6 +152,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setActiveCall(null)
     setIncomingCall(null)
     setIsMuted(false)
+    setCallQuality('good')
     if (incomingCallToastIdRef.current) {
       dismiss(incomingCallToastIdRef.current)
       incomingCallToastIdRef.current = null
@@ -172,6 +176,17 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         dismiss(incomingCallToastIdRef.current)
         incomingCallToastIdRef.current = null
       }
+    })
+    call.on('warning', (name) => {
+      const warningName = String(name || '').toLowerCase()
+      if (warningName.includes('high-rtt') || warningName.includes('packet-loss') || warningName.includes('audio-loss')) {
+        setCallQuality('bad')
+      } else {
+        setCallQuality('medium')
+      }
+    })
+    call.on('warning-cleared', () => {
+      setCallQuality('good')
     })
     call.on('disconnect', clearCall)
     call.on('cancel', clearCall)
@@ -453,14 +468,16 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
 
   const contextValue = useMemo<VoiceContextValue>(() => ({
     phoneState,
+    callQuality,
     unreadCount,
     isPanelOpen,
     activeCall,
+    setCallQuality,
     openPanel: () => setIsPanelOpen(true),
     closePanel: () => setIsPanelOpen(false),
     enablePhone,
     startCall,
-  }), [activeCall, enablePhone, isPanelOpen, phoneState, startCall, unreadCount])
+  }), [activeCall, callQuality, enablePhone, isPanelOpen, phoneState, startCall, unreadCount])
 
   return (
     <VoiceContext.Provider value={contextValue}>
@@ -496,26 +513,138 @@ export function usePortalVoice() {
   return context
 }
 
-export function PortalPhoneButton() {
-  const { activeCall, isPanelOpen, openPanel, closePanel, phoneState, unreadCount } = usePortalVoice()
+export type PhoneIndicatorState =
+  | 'disconnected'
+  | 'ready'
+  | 'connecting'
+  | 'active_good'
+  | 'active_medium'
+  | 'active_bad'
+
+export function PhoneStatusIndicator({
+  state,
+  className = '',
+}: {
+  state: PhoneIndicatorState
+  className?: string
+}) {
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <div className={`relative flex items-center justify-center ${className}`}>
+      {/* Outer Glow Pulse for Active & Connecting states */}
+      <AnimatePresence mode="wait">
+        {(state === 'active_good' || state === 'active_medium' || state === 'active_bad' || state === 'connecting') && (
+          <motion.span
+            key={`pulse-${state}`}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={
+              reduceMotion
+                ? { scale: 1.3, opacity: 0.4 }
+                : { scale: [1, 1.85, 1], opacity: [0.8, 0, 0.8] }
+            }
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{
+              duration: state === 'active_bad' ? 0.9 : state === 'connecting' ? 1.1 : 1.5,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+            className={`absolute inset-0 rounded-full pointer-events-none ${
+              state === 'active_good'
+                ? 'bg-emerald-400/60 shadow-[0_0_8px_rgba(52,211,153,0.85)]'
+                : state === 'active_medium'
+                ? 'bg-amber-400/60 shadow-[0_0_8px_rgba(251,191,36,0.85)]'
+                : state === 'active_bad'
+                ? 'bg-red-500/70 shadow-[0_0_10px_rgba(239,68,68,0.95)]'
+                : 'bg-amber-400/40 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
+            }`}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Core Indicator Circle */}
+      <motion.span
+        key={`core-${state}`}
+        initial={{ scale: 0.85, opacity: 0.8 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+        className={`relative z-10 block h-2.5 w-2.5 rounded-full transition-colors duration-300 ${
+          state === 'disconnected'
+            ? 'border-2 border-zinc-400 dark:border-zinc-500 bg-transparent'
+            : state === 'ready'
+            ? 'bg-emerald-500 border border-zinc-950/80 shadow-[0_0_4px_rgba(16,185,129,0.5)]'
+            : state === 'active_good'
+            ? 'bg-emerald-400 border border-zinc-950 shadow-[0_0_6px_rgba(52,211,153,0.9)]'
+            : state === 'active_medium'
+            ? 'bg-amber-400 border border-zinc-950 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+            : state === 'active_bad'
+            ? 'bg-red-500 border border-zinc-950 shadow-[0_0_6px_rgba(239,68,68,0.95)]'
+            : 'border-2 border-amber-400 bg-amber-400/30'
+        }`}
+      />
+    </div>
+  )
+}
+
+export function PortalPhoneButton({
+  overrideState,
+}: {
+  overrideState?: PhoneIndicatorState
+} = {}) {
+  const { activeCall, callQuality, isPanelOpen, openPanel, closePanel, phoneState } = usePortalVoice()
+
+  const computedState: PhoneIndicatorState = overrideState ?? (() => {
+    if (activeCall) {
+      if (activeCall.phase === 'dialing' || activeCall.phase === 'ringing') {
+        return 'connecting'
+      }
+      if (callQuality === 'bad') return 'active_bad'
+      if (callQuality === 'medium') return 'active_medium'
+      return 'active_good'
+    }
+    if (phoneState === 'starting') return 'connecting'
+    if (phoneState === 'ready') return 'ready'
+    return 'disconnected'
+  })()
 
   return (
     <button
       type="button"
       onClick={isPanelOpen ? closePanel : openPanel}
-      className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
+      className="relative flex items-center justify-center rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group"
       aria-label={activeCall ? 'Open active call' : 'Open Luxor phone'}
-      title={phoneState === 'ready' ? 'Luxor phone ready' : 'Open Luxor phone'}
+      title={
+        computedState === 'ready'
+          ? 'Luxor phone ready'
+          : computedState === 'active_good'
+          ? 'Active call - Good connection'
+          : computedState === 'active_medium'
+          ? 'Active call - Medium connection'
+          : computedState === 'active_bad'
+          ? 'Active call - Poor connection'
+          : computedState === 'connecting'
+          ? 'Phone connecting...'
+          : 'Phone disconnected'
+      }
     >
-      {activeCall ? <PhoneCall size={20} className="text-emerald-400" /> : <Phone size={20} className="text-zinc-400" />}
-      <span className={`absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full border border-zinc-950 ${
-        phoneState === 'ready' ? 'bg-emerald-400' : phoneState === 'error' ? 'bg-red-400' : 'bg-zinc-600'
-      }`} />
-      {unreadCount > 0 && (
-        <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-zinc-950 bg-[#caa24c] px-0.5 font-mono text-[9px] font-black text-white shadow-xs">
-          {Math.min(unreadCount, 99)}
-        </span>
-      )}
+      <Phone
+        size={20}
+        className={`transition-colors ${
+          activeCall
+            ? computedState === 'active_good'
+              ? 'text-emerald-400'
+              : computedState === 'active_medium'
+              ? 'text-amber-400'
+              : 'text-red-400'
+            : phoneState === 'ready'
+            ? 'text-zinc-200 group-hover:text-white'
+            : 'text-zinc-500 group-hover:text-zinc-300'
+        }`}
+      />
+      {/* Active Circle Indicator positioned top-right close to the phone handset, matching HubSpot */}
+      <div className="absolute top-[5px] right-[5px] pointer-events-none">
+        <PhoneStatusIndicator state={computedState} />
+      </div>
     </button>
   )
 }
