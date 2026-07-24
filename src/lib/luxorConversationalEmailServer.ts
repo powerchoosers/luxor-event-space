@@ -82,7 +82,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f1ea;padding:36px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e7dcc8;box-shadow:0 14px 40px rgba(79,57,24,0.08);">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e7dcc8;box-shadow:0 14px 40px rgba(79,57,24,0.08);">
           <!-- Gold Line Accent Header -->
           <tr>
             <td style="height:4px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
