@@ -407,11 +407,14 @@ export function usePortalNotifications() {
           seenEngagements.add(engagementKey)
           const eventId = `marketing_${String(event.id || '')}`
           const clicked = event.event_type === 'click'
+          const leadName = String(inquiry.full_name || event.recipient_name || 'Client')
+          const campaignSubject = String(event.campaign_subject || event.campaign_name || 'Email')
+
           aggregated.push({
             id: eventId,
             type: 'email_open',
-            title: `${String(inquiry.full_name || event.recipient_name || 'Client')} ${clicked ? 'clicked' : 'opened'} your email`,
-            subtitle: String(event.campaign_subject || event.campaign_name || 'Marketing email'),
+            title: clicked ? `Link Clicked: ${leadName}` : `Email Opened: ${leadName}`,
+            subtitle: clicked ? `Clicked link in ${campaignSubject}` : `Opened email "${campaignSubject}"`,
             timestamp: String(event.created_at || new Date().toISOString()),
             isRead: currentReadIds.has(eventId),
             targetUrl: leadUrl(inquiry.id, 'activity'),

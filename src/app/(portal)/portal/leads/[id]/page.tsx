@@ -50,6 +50,7 @@ import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, Lux
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -888,6 +889,78 @@ export default function LeadDetailPage({
   useEffect(() => {
     fetchAllData()
   }, [id])
+
+  // Sub-100ms Supabase Realtime WebSocket listener for instant Lead Dossier UI & field updates (opens, clicks, payments, SMS, calls)
+  useEffect(() => {
+    if (!id) return
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+
+    const channel = supabase
+      .channel(`luxor-lead-dossier-realtime-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_inquiries', filter: `id=eq.${id}` },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_payments' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_invoices' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_marketing_events' },
+        () => {
+          void fetchAllData(false)
+          if (lead?.email) void fetchMarketingEngagement(lead.email, { silent: true })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_messages' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_calls' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_notes' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_bookings' },
+        () => {
+          void fetchAllData(false)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [id, lead?.email])
 
   useEffect(() => {
     const refreshCalls = () => {
