@@ -96,7 +96,15 @@ export function EmailCampaignsTab({
         </div>
       </div>
 
-      <PortalTableCard title="Supabase Campaigns" subtitle="Tracked campaign activity, deliverability metrics, and report launcher.">
+      <PortalTableCard controls={(
+        <div className="flex items-center justify-between w-full">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Supabase Campaigns</h3>
+            <p className="text-[9px] text-[color:var(--portal-muted)] mt-0.5">Tracked campaign activity, deliverability metrics, and report launcher.</p>
+          </div>
+          <span className="font-mono text-[9px] text-[color:var(--portal-muted)]">{loading ? 'Loading…' : `${filteredCampaigns.length} campaign${filteredCampaigns.length === 1 ? '' : 's'}`}</span>
+        </div>
+      )}>
         <PortalStickyTable>
           <thead>
             <tr className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 text-left text-[8.5px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
