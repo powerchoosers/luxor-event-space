@@ -341,9 +341,9 @@ function renderFooter(block: FooterBlock): string {
             <img
               src="${palmMarkUrl}"
               alt="Luxor Event Space"
-              width="56"
-              height="42"
-              style="display:inline-block;width:56px;height:42px;object-fit:contain;"
+              width="64"
+              height="64"
+              style="display:inline-block;width:64px;height:64px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:#080605;box-sizing:border-box;"
             />
           </td>
         </tr>
@@ -423,9 +423,9 @@ function renderEmailHeader(): string {
                   <img
                     src="${palmMarkUrl}"
                     alt=""
-                    width="52"
-                    height="39"
-                    style="display:block;width:52px;height:39px;object-fit:contain;"
+                    width="60"
+                    height="60"
+                    style="display:block;width:60px;height:60px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:#080605;box-sizing:border-box;"
                   />
                 </td>
                 <!-- LUXOR text + subline -->

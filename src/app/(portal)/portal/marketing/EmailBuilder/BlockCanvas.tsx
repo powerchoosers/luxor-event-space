@@ -385,7 +385,7 @@ function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; on
       {/* Palm mark */}
       <div style={{ marginBottom: 14 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold.png`} alt="" width={48} height={48} style={{ display: 'inline-block', width: 48, height: 48, objectFit: 'contain' }} />
+        <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold.png`} alt="" width={48} height={48} style={{ display: 'inline-block', width: 48, height: 48, objectFit: 'contain', border: '2px solid #caa24c', borderRadius: '999px', padding: 2, backgroundColor: '#080605', boxSizing: 'border-box' }} />
       </div>
       {/* LUXOR wordmark */}
       <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 500, letterSpacing: '0.14em', color: GOLD, textTransform: 'uppercase', lineHeight: 1, marginBottom: 5 }}>LUXOR</div>
@@ -634,7 +634,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
             {/* Logo header band */}
             <div style={{ background: '#080605', padding: '18px 48px', borderLeft: '1px solid rgba(202,162,76,0.22)', borderRight: '1px solid rgba(202,162,76,0.22)', borderBottom: '1px solid rgba(202,162,76,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold.png`} alt="" width={52} height={52} style={{ width: 52, height: 52, objectFit: 'contain', display: 'block' }} />
+              <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold.png`} alt="" width={52} height={52} style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', border: '2px solid #caa24c', borderRadius: '999px', padding: 2, backgroundColor: '#080605', boxSizing: 'border-box' }} />
               <div>
                 <div style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 500, letterSpacing: '0.22em', color: GOLD, textTransform: 'uppercase', lineHeight: 1 }}>LUXOR</div>
                 <div style={{ fontFamily: SERIF, fontSize: 7.2, fontWeight: 500, letterSpacing: '0.4em', color: GOLD_DIM, textTransform: 'uppercase', marginTop: 4 }}>AT LAS PALMAS EVENTS</div>
