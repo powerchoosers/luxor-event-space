@@ -53,6 +53,7 @@ export function LuxorInquiryForm({
     const form = new FormData(event.currentTarget)
     const email = String(form.get('email') ?? '').trim()
     const phone = String(form.get('phone') ?? '').trim()
+    const smsOptIn = form.get('smsOptIn') === 'on'
 
     if (!eventType) {
       setError('Please select the type of event you are planning.')
@@ -64,12 +65,18 @@ export function LuxorInquiryForm({
       return
     }
 
+    if (phone && !smsOptIn) {
+      setError('Please check the text-message consent box, or remove the phone number and provide an email address instead.')
+      return
+    }
+
     setSubmitting(true)
 
     const payload: LuxorInquiryInput = {
       fullName: String(form.get('fullName') ?? ''),
       email,
       phone,
+      smsOptIn,
       eventType: eventType,
       targetDate: targetDate,
       guestCount: String(form.get('guestCount') ?? ''),
@@ -157,6 +164,21 @@ export function LuxorInquiryForm({
             <p id="contact-method-help" className="-mt-1 text-xs leading-5 text-[#d7c29a]/58 sm:col-span-2">
               Provide at least one contact method so the Luxor team can reply.
             </p>
+            <label className="flex items-start gap-3 rounded-md border border-[#caa24c]/18 bg-black/25 p-4 sm:col-span-2">
+              <input
+                name="smsOptIn"
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 accent-[#caa24c]"
+              />
+              <span className="text-xs leading-5 text-[#d7c29a]/72">
+                By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my
+                inquiry, tour, booking, payment, or event. Message frequency varies. Message and data rates may apply.
+                Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. View our{' '}
+                <a className="text-[#f1d27a] underline underline-offset-4" href="/privacy">Privacy Policy</a>
+                {' '}and{' '}
+                <a className="text-[#f1d27a] underline underline-offset-4" href="/terms">Terms of Service</a>.
+              </span>
+            </label>
 
             {showTourFields && (
               <div className="sm:col-span-2">

@@ -9,8 +9,10 @@ export const metadata: Metadata = {
 const sections = [
   ['Information we collect', 'When you request a tour, RSVP, ask a question, or begin planning an event, we may collect your name, email address, phone number, event type, preferred dates, guest-count estimate, package interest, and any notes you choose to provide.'],
   ['How we use it', 'We use submitted information to respond to your request, discuss availability, plan tours, prepare event proposals, manage bookings, send requested updates, and maintain customer-service records.'],
-  ['Service providers', 'We may use service providers for website hosting, customer relationship management, email delivery, scheduling, payment processing, and other business operations. They receive only the information needed to provide those services.'],
-  ['Marketing messages', 'We send promotional email only when permitted. Marketing messages include an unsubscribe option. Transactional messages about a request, tour, proposal, contract, payment, or booked event may still be sent when necessary.'],
+  ['Service providers', 'We may use service providers for website hosting, customer relationship management, email and text delivery, scheduling, payment processing, and other business operations. They receive only the information needed to provide those services.'],
+  ['Mobile information and sharing', 'We do not sell, rent, or share mobile phone numbers, text-message opt-in data, or SMS consent with third parties or affiliates for marketing or promotional purposes. Mobile information may be disclosed only to service providers that help Luxor Event Space deliver requested messages and operate the service, or when required by law.'],
+  ['Text messages', 'When you provide a mobile number and check the text-message consent box, Luxor Event Space may send customer-care messages about your inquiry, tour, booking, payment, or event. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent to text messages is not a condition of purchase.'],
+  ['Marketing messages', 'We send promotional email only when permitted. Marketing messages include an unsubscribe option. Customer-care messages about a request, tour, proposal, contract, payment, or booked event may still be sent when necessary and when permitted by the communication preference you provided.'],
   ['Retention and security', 'We retain information for as long as reasonably needed to respond to inquiries, manage events, meet business or legal obligations, and resolve disputes. No online system is completely secure, but we use reasonable safeguards appropriate to the information we handle.'],
   ['Your choices', 'You may ask to review, correct, or delete information you submitted, subject to records we must retain for legal, accounting, security, or contractual reasons.'],
 ]
@@ -21,7 +23,7 @@ export default function PrivacyPage() {
       <div className="mx-auto max-w-4xl">
         <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Website policy</p>
         <h1 className="mt-4 font-serif text-5xl leading-[0.92] sm:text-6xl">Privacy Policy</h1>
-        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective July 10, 2026</p>
+        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective July 23, 2026</p>
         <p className="mt-8 max-w-3xl text-base leading-7 text-[#d7c29a]/76">
           This policy explains how Luxor Event Space handles information collected through this website and related customer communications.
         </p>

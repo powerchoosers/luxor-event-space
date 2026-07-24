@@ -12,6 +12,7 @@ const sections = [
   ['Event agreements', 'Every confirmed event is governed by its signed event agreement and related written documents. If these website terms conflict with a signed event agreement, the signed event agreement controls for that booking.'],
   ['Payments and cancellations', 'Deposits, payment schedules, cancellations, refunds, damages, and other event-specific obligations are stated in the applicable proposal, invoice, and signed event agreement.'],
   ['Acceptable use', 'You may use this website to learn about the venue and submit legitimate inquiries. You may not attempt to disrupt the website, access protected systems, submit fraudulent requests, or misuse website content.'],
+  ['Luxor Event Space SMS program', 'If you provide a mobile number and check the text-message consent box, you agree to receive customer-care texts from Luxor Event Space about your inquiry, tour, booking, payment, or event. Message frequency varies. Message and data rates may apply. Reply STOP to opt out at any time or HELP for help. Consent is not a condition of purchase. Mobile carriers are not liable for delayed or undelivered messages. For assistance, email booking@luxoratlaspalmas.com.'],
   ['Third-party services', 'Links to maps, payment services, email services, or other third-party tools are provided for convenience. Those services operate under their own terms and privacy practices.'],
   ['Limitation', 'To the extent permitted by law, Luxor Event Space is not responsible for indirect losses arising solely from use of this informational website or from reliance on information that has not been confirmed in a signed agreement.'],
 ]
@@ -22,7 +23,7 @@ export default function TermsPage() {
       <div className="mx-auto max-w-4xl">
         <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Website policy</p>
         <h1 className="mt-4 font-serif text-5xl leading-[0.92] sm:text-6xl">Website Terms</h1>
-        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective July 10, 2026</p>
+        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective July 23, 2026</p>
         <p className="mt-8 max-w-3xl text-base leading-7 text-[#d7c29a]/76">
           These terms govern use of the Luxor Event Space website. They do not replace the signed agreement for a booked event.
         </p>

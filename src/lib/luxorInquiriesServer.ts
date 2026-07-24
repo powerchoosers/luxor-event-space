@@ -4,6 +4,7 @@ import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, Luxor
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { addRecipientToGrandOpeningCampaign, addRecipientToGrandOpeningReminderCampaigns } from './luxorMarketingServer'
 import { supabaseRest } from './supabaseRestServer'
+import { recordLuxorSmsConsent } from './luxorTextAutomationsServer'
 import {
   applyTourSlotToInquiry,
   assertTourSlotCanBeBooked,
@@ -34,6 +35,20 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     throw new Error('Please add either an email or phone number so Luxor can follow up.')
   }
 
+  const metadata: Record<string, unknown> = {
+    ...(input.metadata ?? {}),
+    ...(phone && input.smsOptIn
+      ? {
+          smsConsent: {
+            status: 'opted_in',
+            source: 'website_inquiry_form',
+            disclosureVersion: '2026-07-23',
+            capturedAt: new Date().toISOString(),
+          },
+        }
+      : {}),
+  }
+
   return {
     full_name: fullName,
     email: email || null,
@@ -54,7 +69,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     page_path: compactText(input.pagePath) || null,
     referrer: compactText(input.referrer) || null,
     user_agent: userAgent ? userAgent.slice(0, 500) : null,
-    metadata: input.metadata ?? {},
+    metadata,
   }
 }
 
@@ -86,6 +101,14 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
 
   if (created && selectedTourSlot) {
     await reserveLuxorTourSlot(selectedTourSlot)
+  }
+
+  if (created?.phone && row.metadata?.smsConsent) {
+    try {
+      await recordLuxorSmsConsent(created.phone, 'START', 'website_inquiry_form')
+    } catch (consentError) {
+      console.error('Inquiry created but SMS consent could not be recorded:', consentError)
+    }
   }
 
   if (created?.email && created.preferred_tour_date) {

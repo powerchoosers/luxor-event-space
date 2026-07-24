@@ -50,6 +50,7 @@ export type LuxorInquiryInput = {
   campaignKey?: string
   rsvpStatus?: 'attending' | 'not_attending' | 'maybe'
   marketingOptIn?: boolean
+  smsOptIn?: boolean
   attendeeCount?: string
   pagePath?: string
   referrer?: string
