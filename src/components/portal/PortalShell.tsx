@@ -285,7 +285,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                 className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_5px_16px_-9px_rgba(111,77,20,0.55)] ring-1 ring-[#caa24c]/10 transition-colors ${
                   portalTheme === 'light'
                     ? 'border-[#caa24c] bg-[#fffaf0]'
-                    : 'border-[#caa24c]/75 bg-[#080706]'
+                    : 'border-[#caa24c]/75 bg-[#caa24c]/10'
                 }`}
               >
                 <Image

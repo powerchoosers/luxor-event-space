@@ -34,7 +34,7 @@ export function LuxorWordmark({
           alt=""
           width={255}
           height={190}
-          className={(compact ? horizontal ? 'h-11 w-11 self-center shrink-0 rounded-full border-2 border-[#caa24c] bg-[#050505] p-0.5 object-contain' : 'h-9 w-auto object-contain' : 'h-14 w-auto object-contain sm:h-16') + ' ' + markClassName}
+          className={(compact ? horizontal ? 'h-11 w-11 self-center shrink-0 rounded-full border-2 border-[#caa24c] bg-[#caa24c]/10 p-0.5 object-contain' : 'h-9 w-auto object-contain' : 'h-14 w-auto object-contain sm:h-16') + ' ' + markClassName}
           priority={compact}
         />
       ) : null}
