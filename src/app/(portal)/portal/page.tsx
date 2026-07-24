@@ -9,7 +9,6 @@ import {
   FileText,
   CheckCircle2,
   User,
-  Star,
   Users,
   Clock,
   Zap,
@@ -30,6 +29,44 @@ import { LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, 
 import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
+
+function formatActivityTime(date: Date, now: Date): string {
+  if (isNaN(date.getTime())) return 'Recently';
+
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  if (isToday) {
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isYesterday) {
+    return 'Yesterday';
+  }
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 
 export default async function PortalOverview() {
   let leads: LuxorInquiry[] = [];
@@ -288,6 +325,116 @@ export default async function PortalOverview() {
       dueThisWeek.push(bill);
     }
   });
+
+  // --- Dynamic Real Activity Stream ---
+  type ActivityStreamItem = {
+    id: string;
+    title: string;
+    subtitle?: string;
+    rawDate: Date;
+    icon: React.ElementType;
+    href: string;
+  };
+
+  const rawActivities: ActivityStreamItem[] = [];
+
+  // 1. Inquiries
+  leads.forEach((l) => {
+    if (!l.created_at) return;
+    const createdAt = new Date(l.created_at);
+    let title = `New inquiry from ${l.full_name}`;
+    let icon = UserPlus;
+    const href = `/portal/leads/${l.id}`;
+
+    if (l.status === 'tour_requested' || l.preferred_tour_date) {
+      title = `${l.full_name} requested a tour`;
+      icon = User;
+    } else if (l.status === 'proposal_sent') {
+      title = `Proposal sent to ${l.full_name}`;
+      icon = FileText;
+    } else if (l.status === 'booked') {
+      title = `Booking confirmed: ${l.full_name}`;
+      icon = CheckCircle2;
+    }
+
+    rawActivities.push({
+      id: `lead-${l.id}`,
+      title,
+      subtitle: l.event_type || undefined,
+      rawDate: createdAt,
+      icon,
+      href,
+    });
+  });
+
+  // 2. Recent Notes
+  recentNotes.forEach((n) => {
+    if (!n.created_at) return;
+    const createdAt = new Date(n.created_at);
+    const matchedLead = n.inquiry_id ? leads.find((l) => l.id === n.inquiry_id) : null;
+    const title = matchedLead
+      ? `Note added for ${matchedLead.full_name}`
+      : `Note: ${n.content.slice(0, 35)}${n.content.length > 35 ? '...' : ''}`;
+    const href = n.inquiry_id ? `/portal/leads/${n.inquiry_id}` : '/portal/leads';
+
+    rawActivities.push({
+      id: `note-${n.id}`,
+      title,
+      rawDate: createdAt,
+      icon: FileText,
+      href,
+    });
+  });
+
+  // 3. Payments
+  payments.forEach((p) => {
+    const paidDate = p.paid_at || p.created_at;
+    if (!paidDate) return;
+    const rawDate = new Date(paidDate);
+    const matchedLead = p.inquiry_id ? leads.find((l) => l.id === p.inquiry_id) : null;
+    const matchedBooking = p.booking_id ? bookings.find((b) => b.id === p.booking_id) : null;
+    const clientName = matchedLead?.full_name || matchedBooking?.client_name;
+
+    const title = clientName
+      ? `Deposit received from ${clientName}`
+      : `Payment of $${Number(p.amount || 0).toLocaleString()} received`;
+    const href = p.inquiry_id ? `/portal/leads/${p.inquiry_id}` : '/portal/invoices';
+
+    rawActivities.push({
+      id: `pay-${p.id}`,
+      title,
+      rawDate,
+      icon: DollarSign,
+      href,
+    });
+  });
+
+  // 4. Bookings
+  bookings.forEach((b) => {
+    const bookingDate = b.created_at || b.event_date;
+    if (!bookingDate) return;
+    const rawDate = new Date(bookingDate);
+    const title = `Event confirmed: ${b.client_name}`;
+    const href = b.inquiry_id ? `/portal/leads/${b.inquiry_id}` : '/portal/calendar';
+
+    rawActivities.push({
+      id: `booking-${b.id}`,
+      title,
+      subtitle: b.event_type || undefined,
+      rawDate,
+      icon: CheckCircle2,
+      href,
+    });
+  });
+
+  // Sort descending by timestamp, take top 5
+  const recentActivities = rawActivities
+    .sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime())
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      formattedTime: formatActivityTime(item.rawDate, now),
+    }));
 
   return (
     <PortalPageFrame className="min-h-full pb-10 group/portal space-y-6">
@@ -581,83 +728,57 @@ export default async function PortalOverview() {
       </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         {/* Recent Activity */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
+        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
           <div>
-            <div className="flex items-center gap-2.5 mb-6">
+            <div className="flex items-center gap-2.5 mb-3.5">
               <Activity className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">RECENT ACTIVITY</h3>
             </div>
             
-            <div className="space-y-4">
-              {/* Row 1 */}
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0">
-                    <User size={14} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[color:var(--portal-text)]">Lewis requested a tour</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-medium text-[color:var(--portal-muted)] font-mono shrink-0">10:45 AM</span>
+            {recentActivities.length > 0 ? (
+              <div className="space-y-1">
+                {recentActivities.map((act, idx) => {
+                  const IconComp = act.icon;
+                  const isLast = idx === recentActivities.length - 1;
+                  return (
+                    <Link
+                      key={act.id}
+                      href={act.href}
+                      className={`flex items-center justify-between text-xs py-2 px-2.5 -mx-2.5 rounded-xl transition-all duration-150 hover:bg-[color:var(--portal-soft)] hover:shadow-xs active:scale-[0.99] cursor-pointer group/item ${
+                        !isLast ? "border-b border-[color:var(--portal-border)]/30 border-dashed" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 pr-2">
+                        <div className="w-7 h-7 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0 group-hover/item:bg-[#caa24c] group-hover/item:text-white transition-colors duration-150">
+                          <IconComp size={13} strokeWidth={1.75} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[color:var(--portal-text)] group-hover/item:text-[#caa24c] transition-colors duration-150 truncate text-xs">
+                            {act.title}
+                          </p>
+                          {act.subtitle && (
+                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate">
+                              {act.subtitle}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-medium text-[color:var(--portal-muted)] font-mono shrink-0 ml-2 group-hover/item:text-[color:var(--portal-text)] transition-colors">
+                        {act.formattedTime}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-
-              {/* Row 2 */}
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0">
-                    <FileText size={14} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[color:var(--portal-text)]">Proposal sent to Johnson Wedding</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-medium text-[color:var(--portal-muted)] shrink-0">Yesterday</span>
-              </div>
-
-              {/* Row 3 */}
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0">
-                    <DollarSign size={14} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[color:var(--portal-text)]">Deposit received from Garcia Quinceañera</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-medium text-[color:var(--portal-muted)] shrink-0">Yesterday</span>
-              </div>
-
-              {/* Row 4 */}
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0">
-                    <CheckCircle2 size={14} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[color:var(--portal-text)]">Wedding completed: The Davis Wedding</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-semibold text-[color:var(--portal-muted)] font-mono shrink-0">Jul 5</span>
-              </div>
-
-              {/* Row 5 */}
-              <div className="flex items-center justify-between text-xs pb-1">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0">
-                    <Star size={14} strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-[color:var(--portal-text)]">New review received from Samantha T.</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-semibold text-[color:var(--portal-muted)] font-mono shrink-0">Jul 5</span>
-              </div>
-            </div>
+            ) : (
+              <p className="text-xs text-[color:var(--portal-muted)] italic py-4 text-center">
+                No recent activity recorded yet.
+              </p>
+            )}
           </div>
-          <div className="mt-6 pt-4 border-t border-[color:var(--portal-border)]/50">
+          <div className="mt-3.5 pt-3 border-t border-[color:var(--portal-border)]/50">
             <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
               View all activity <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
@@ -665,15 +786,15 @@ export default async function PortalOverview() {
         </div>
 
         {/* This Month At A Glance */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
+        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
           <div>
-            <div className="flex items-center gap-2.5 mb-6">
+            <div className="flex items-center gap-2.5 mb-3.5">
               <Eye className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">THIS MONTH AT A GLANCE</h3>
             </div>
             
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
                 <div className="flex items-center gap-3">
                   <FileText size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Booked Revenue</span>
@@ -681,7 +802,7 @@ export default async function PortalOverview() {
                 <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">$48,500</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
+              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
                 <div className="flex items-center gap-3">
                   <Calendar size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Events</span>
@@ -689,7 +810,7 @@ export default async function PortalOverview() {
                 <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">8</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
+              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
                 <div className="flex items-center gap-3">
                   <Users size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Occupancy</span>
@@ -697,7 +818,7 @@ export default async function PortalOverview() {
                 <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">82%</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-3 border-dashed">
+              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
                 <div className="flex items-center gap-3">
                   <DollarSign size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Booking Value</span>
@@ -705,7 +826,7 @@ export default async function PortalOverview() {
                 <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">$6,062</span>
               </div>
 
-              <div className="flex items-center justify-between text-xs pb-1">
+              <div className="flex items-center justify-between text-xs pb-0.5">
                 <div className="flex items-center gap-3">
                   <Clock size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Days to Book</span>
@@ -714,7 +835,7 @@ export default async function PortalOverview() {
               </div>
             </div>
           </div>
-          <div className="mt-6 pt-4 border-t border-[color:var(--portal-border)]/50">
+          <div className="mt-3.5 pt-3 border-t border-[color:var(--portal-border)]/50">
             <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
               View full report <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
@@ -722,52 +843,52 @@ export default async function PortalOverview() {
         </div>
 
         {/* Quick Actions */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
+        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
           <div>
-            <div className="flex items-center gap-2.5 mb-6">
+            <div className="flex items-center gap-2.5 mb-3.5">
               <Zap className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">QUICK ACTIONS</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               <Link
                 href="/portal/leads"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Plus size={16} className="text-[#caa24c] shrink-0" />
                 <span>New Inquiry</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Calendar size={16} className="text-[#caa24c] shrink-0" />
                 <span>Schedule Tour</span>
               </Link>
               <Link
                 href="/portal/leads"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <FileText size={16} className="text-[#caa24c] shrink-0" />
                 <span>Create Proposal</span>
               </Link>
               <Link
                 href="/portal/invoices"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <DollarSign size={16} className="text-[#caa24c] shrink-0" />
                 <span>Create Invoice</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Calendar size={16} className="text-[#caa24c] shrink-0" />
                 <span>Add Event</span>
               </Link>
               <Link
                 href="/portal/calendar"
-                className="flex items-center gap-3 py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+                className="flex items-center gap-2.5 py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.02] active:scale-95 transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
               >
                 <Calendar size={16} className="text-[#caa24c] shrink-0" />
                 <span>Block Date</span>
@@ -776,7 +897,7 @@ export default async function PortalOverview() {
             
             <Link
               href="/portal/leads"
-              className="mt-3 flex items-center justify-center gap-3 w-full py-3 px-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-sm hover:scale-[1.01] active:scale-[0.99] transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
+              className="mt-2.5 flex items-center justify-center gap-2.5 w-full py-2.5 px-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:shadow-xs hover:scale-[1.01] active:scale-[0.99] transition-all text-xs font-semibold text-[color:var(--portal-text)] group"
             >
               <UserPlus size={16} className="text-[#caa24c] shrink-0" />
               <span>Add Vendor</span>
