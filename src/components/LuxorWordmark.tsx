@@ -29,11 +29,11 @@ export function LuxorWordmark({
     <div className={`luxor-live-lockup max-w-full ${horizontal ? `!flex-row items-center !gap-3.5 text-left ${align === 'center' ? 'justify-center' : ''}` : align === 'center' ? 'items-center text-center' : 'items-start text-left'} ${className}`}>
       {mark ? (
         <Image
-          src="/luxor-palm-mark.png"
+          src="/luxor-portal-mark-gold.png"
           alt=""
           width={255}
           height={190}
-          className={(compact ? horizontal ? 'h-11 w-11 self-center shrink-0 rounded-full border border-[#caa24c]/70 p-0.5 object-contain object-[center_42%]' : 'h-9 w-auto object-contain' : 'h-14 w-auto object-contain sm:h-16') + ' ' + markClassName}
+          className={(compact ? horizontal ? 'h-11 w-11 self-center shrink-0 rounded-full border-2 border-[#caa24c] bg-[#050505] p-0.5 object-contain' : 'h-9 w-auto object-contain' : 'h-14 w-auto object-contain sm:h-16') + ' ' + markClassName}
           priority={compact}
         />
       ) : null}
@@ -59,7 +59,7 @@ export function LuxorAxisLockup({
   return (
     <div className={`luxor-axis-lockup ${className}`}>
       <Image
-        src="/luxor-palm-mark.png"
+        src="/luxor-portal-mark-gold.png"
         alt=""
         width={255}
         height={190}

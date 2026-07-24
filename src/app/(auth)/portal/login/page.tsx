@@ -2,6 +2,7 @@ import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ZohoLoginButton } from './ZohoLoginButton'
+import { LuxorWordmark } from '@/components/LuxorWordmark'
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -26,7 +27,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
       <section className="relative hidden min-h-screen px-10 py-10 lg:flex lg:flex-col">
         <Link href="/" className="inline-flex w-fit items-center gap-4">
           <span className="flex h-14 w-14 items-center justify-center rounded-md border border-[#caa24c]/28 bg-[#caa24c]/8">
-            <Image src="/luxor-palm-mark.png" alt="" width={34} height={34} className="opacity-90" priority />
+            <Image src="/luxor-portal-mark-gold.png" alt="" width={34} height={34} className="opacity-90" priority />
           </span>
           <span>
             <span className="block font-serif text-4xl tracking-[0.22em] text-[#d7b45b]">LUXOR</span>
@@ -56,7 +57,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
       <section className="relative flex min-h-screen items-center justify-center px-5 py-10">
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center justify-center lg:hidden">
-            <Image src="/luxor-brand-lockup.png" alt="Luxor" width={220} height={82} priority />
+            <LuxorWordmark compact horizontal subline={false} className="[&_.luxor-wordmark]:!text-[2.2rem]" />
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/78 p-6 shadow-2xl shadow-black/45 backdrop-blur-xl sm:p-8">
