@@ -2527,7 +2527,7 @@ export default function LeadDetailPage({
       {activeLeadTab === 'overview' ? (
         <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:sticky lg:top-[3.25rem] lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div className="space-y-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
+          <div className="space-y-6 px-2.5 pt-2 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
             
             {/* Stage-specific Content Router */}
             {(() => {
@@ -2593,9 +2593,6 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
-                        <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-                          Edit inline
-                        </span>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-x-6 gap-y-1">
@@ -4073,7 +4070,7 @@ export default function LeadDetailPage({
           </div>
 
           {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
+          <div className="space-y-6 px-2.5 pt-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               

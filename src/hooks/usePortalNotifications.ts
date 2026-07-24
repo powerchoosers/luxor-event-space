@@ -17,6 +17,7 @@ export interface PortalNotificationItem {
 }
 
 const READ_STORAGE_KEY = 'luxor_read_notification_ids_v1'
+const NOTIFIED_TOAST_STORAGE_KEY = 'luxor_notified_toast_ids_v1'
 
 // Internal/self email addresses to filter out — never show emails to/from ourselves
 const INTERNAL_EMAIL_ADDRESSES = [
@@ -41,6 +42,27 @@ function saveStoredReadIds(ids: Set<string>) {
     localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(Array.from(ids)))
   } catch (err) {
     console.error('Failed to save read notifications to localStorage:', err)
+  }
+}
+
+function getStoredNotifiedIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(NOTIFIED_TOAST_STORAGE_KEY)
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw))
+  } catch {
+    return new Set()
+  }
+}
+
+function saveStoredNotifiedIds(ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  try {
+    const arr = Array.from(ids).slice(-500)
+    localStorage.setItem(NOTIFIED_TOAST_STORAGE_KEY, JSON.stringify(arr))
+  } catch (err) {
+    console.error('Failed to save notified toast ids to localStorage:', err)
   }
 }
 
@@ -94,8 +116,9 @@ export function usePortalNotifications() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Track IDs from last poll so we can detect genuinely new items
+  // Track IDs from last poll & persistent toast notifications fired
   const seenIdsRef = useRef<Set<string> | null>(null)
+  const notifiedToastIdsRef = useRef<Set<string> | null>(null)
   // Callback fired for each new item (used by PortalShell to fire toasts)
   const onNewItemRef = useRef<((item: NotificationToastPayload) => void) | null>(null)
 
@@ -136,7 +159,7 @@ export function usePortalNotifications() {
         invoiceRecords.forEach((invoice) => invoiceById.set(String(invoice.id || ''), invoice))
       }
 
-      // 1. Form Submissions & Inquiries
+      // 1. Form Submissions, RSVPs & Inquiries
       if (Array.isArray(inquiries)) {
           inquiries.forEach((inq: RawRecord) => {
             const inqId = String(inq.id || '')
@@ -144,17 +167,28 @@ export function usePortalNotifications() {
             const eventType = String(inq.event_type || 'Event')
             const guestCount = inq.guest_count ? String(inq.guest_count) : null
             const createdAt = String(inq.created_at || new Date().toISOString())
+            const source = String(inq.source || 'Website')
 
             const isRead = currentReadIds.has(`form_${inqId}`) || (inq.status !== 'new' && inq.status !== 'tour_requested')
+
+            let title = `New Inquiry: ${fullName}`
+            if (source.toLowerCase().includes('rsvp') || eventType.toLowerCase().includes('rsvp')) {
+              title = `New RSVP: ${fullName}`
+            } else if (source.toLowerCase().includes('tour') || inq.status === 'tour_requested') {
+              title = `Tour Request: ${fullName}`
+            } else if (source.toLowerCase().includes('booking') || eventType.toLowerCase().includes('booking')) {
+              title = `New Booking Request: ${fullName}`
+            }
+
             aggregated.push({
               id: `form_${inqId}`,
               type: 'form',
-              title: fullName,
-              subtitle: `${eventType} Inquiry ${guestCount ? `(${guestCount} guests)` : ''}`,
+              title,
+              subtitle: `${eventType} ${guestCount ? `(${guestCount} guests)` : ''}`,
               timestamp: createdAt,
               isRead,
               targetUrl: leadUrl(inqId),
-              metadata: { inquiryId: inqId, email: inq.email, phone: inq.phone },
+              metadata: { inquiryId: inqId, email: inq.email, phone: inq.phone, source },
             })
           })
       }
@@ -166,7 +200,7 @@ export function usePortalNotifications() {
         messages
           .filter((msg: RawRecord) => !isInternalEmail(msg))
           .forEach((msg: RawRecord, idx: number) => {
-            const emailId = String(msg.messageId || msg.id || `email_${idx}_${msg.dateSent || ''}`)
+            const emailId = String(msg.id || msg.messageId || `email_${idx}_${msg.dateSent || ''}`)
             const subject = decodeHtmlEntities(String(msg.subject || 'New Email Received'))
             const senderName = String(msg.senderName || msg.sender || msg.fromAddress || msg.from || 'Unknown sender')
             const timestamp = String(msg.dateSent || msg.receivedTime || new Date().toISOString())
@@ -243,21 +277,27 @@ export function usePortalNotifications() {
         }
       }
 
-      // 5. Confirmed or tentative bookings — always open the client dossier.
+      // 5. Confirmed or tentative bookings
       if (bookingsRes.status === 'fulfilled' && bookingsRes.value.ok) {
         const data = await bookingsRes.value.json()
         if (Array.isArray(data)) {
           data.filter((booking: RawRecord) => booking.status === 'confirmed' || booking.status === 'tentative').forEach((booking: RawRecord) => {
             const bookingId = String(booking.id || '')
+            const clientName = String(booking.client_name || 'Client')
+            const packageName = String(booking.package_name || 'Event Package')
+            const eventDate = booking.event_date ? String(booking.event_date) : null
+            const timestamp = String(booking.booked_at || booking.updated_at || booking.created_at || new Date().toISOString())
+            const status = String(booking.status || 'confirmed')
             const inquiryId = String(booking.inquiry_id || inquiryByEmail.get(normalizeEmail(booking.email))?.id || '')
-            const status = String(booking.status)
+
+            const isRead = currentReadIds.has(`booking_${bookingId}_${status}`) || currentReadIds.has(`booking_${bookingId}`)
             aggregated.push({
               id: `booking_${bookingId}_${status}`,
               type: 'booking',
-              title: status === 'confirmed' ? `Booking confirmed: ${String(booking.client_name || 'Client')}` : `Booking held: ${String(booking.client_name || 'Client')}`,
-              subtitle: [booking.event_type, booking.event_date].filter(Boolean).join(' · ') || 'Open the client record for booking details',
-              timestamp: String(booking.booked_at || booking.updated_at || booking.created_at || new Date().toISOString()),
-              isRead: currentReadIds.has(`booking_${bookingId}_${status}`),
+              title: status === 'confirmed' ? `Booking Confirmed: ${clientName}` : `Booking Held: ${clientName}`,
+              subtitle: [packageName, eventDate ? `for ${eventDate}` : ''].filter(Boolean).join(' · '),
+              timestamp,
+              isRead,
               targetUrl: leadUrl(inquiryId, 'overview'),
               metadata: { inquiryId, bookingId },
             })
@@ -406,17 +446,36 @@ export function usePortalNotifications() {
         }
       }
 
-      // Sort by timestamp descending
-      aggregated.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-
-      // Detect genuinely new items since last poll and fire toast callbacks
+      // Detect genuinely new items since last poll and fire toast callbacks (deduped via localStorage)
       const previousIds = seenIdsRef.current
       const currentIds = new Set(aggregated.map((i) => i.id))
-      seenIdsRef.current = currentIds
+      if (notifiedToastIdsRef.current === null) {
+        notifiedToastIdsRef.current = getStoredNotifiedIds()
+      }
+      const notifiedToastIds = notifiedToastIdsRef.current
 
-      if (previousIds !== null && onNewItemRef.current) {
+      const isFirstLoad = previousIds === null
+      const now = Date.now()
+
+      // On initial page mount, mark all historical existing items older than 3 minutes as already notified
+      // so initial portal load doesn't flood the UI with old toasts
+      if (isFirstLoad) {
+        aggregated.forEach((item) => {
+          const itemAgeMs = now - new Date(item.timestamp).getTime()
+          if (isNaN(itemAgeMs) || itemAgeMs > 180_000) {
+            notifiedToastIds.add(item.id)
+          }
+        })
+        saveStoredNotifiedIds(notifiedToastIds)
+      }
+
+      // Fire toasts for brand new items that have NEVER been notified before
+      if (onNewItemRef.current) {
         for (const item of aggregated) {
-          if (!previousIds.has(item.id) && !item.isRead) {
+          if (!item.isRead && !notifiedToastIds.has(item.id)) {
+            notifiedToastIds.add(item.id)
+            saveStoredNotifiedIds(notifiedToastIds)
+
             onNewItemRef.current({
               id: item.id,
               type: item.type,
@@ -428,6 +487,7 @@ export function usePortalNotifications() {
         }
       }
 
+      seenIdsRef.current = currentIds
       setItems(aggregated)
       setError(null)
     } catch (err) {
@@ -443,10 +503,9 @@ export function usePortalNotifications() {
     fetchNotifications(false)
   }, [fetchNotifications])
 
-  // Fast-poll for high-priority: invoices & form submissions every 15s
-  // General poll every 30s
+  // Fast-poll every 15s for instant updates on RSVPs, bookings, emails, etc.
   useEffect(() => {
-    const generalInterval = setInterval(() => fetchNotifications(true), 30_000)
+    const generalInterval = setInterval(() => fetchNotifications(true), 15_000)
     return () => clearInterval(generalInterval)
   }, [fetchNotifications])
 
