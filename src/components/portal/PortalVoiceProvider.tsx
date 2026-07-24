@@ -521,6 +521,57 @@ export type PhoneIndicatorState =
   | 'active_medium'
   | 'active_bad'
 
+const indicatorCoreVariants = {
+  disconnected: {
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: 'var(--portal-muted)',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 0px rgba(0, 0, 0, 0)',
+    scale: 1,
+    opacity: 0.85,
+  },
+  ready: {
+    backgroundColor: '#10b981',
+    borderColor: 'rgba(9, 9, 11, 0.9)',
+    borderWidth: '1px',
+    boxShadow: '0 0 5px rgba(16, 185, 129, 0.5)',
+    scale: 1,
+    opacity: 1,
+  },
+  connecting: {
+    backgroundColor: 'rgba(251, 191, 36, 0.25)',
+    borderColor: '#f59e0b',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 6px rgba(245, 158, 11, 0.5)',
+    scale: [0.95, 1.1, 0.95],
+    opacity: 1,
+  },
+  active_good: {
+    backgroundColor: '#34d399',
+    borderColor: 'rgba(9, 9, 11, 0.95)',
+    borderWidth: '1px',
+    boxShadow: '0 0 8px rgba(52, 211, 153, 0.9)',
+    scale: 1.05,
+    opacity: 1,
+  },
+  active_medium: {
+    backgroundColor: '#fbbf24',
+    borderColor: 'rgba(9, 9, 11, 0.95)',
+    borderWidth: '1px',
+    boxShadow: '0 0 8px rgba(251, 191, 36, 0.9)',
+    scale: 1.05,
+    opacity: 1,
+  },
+  active_bad: {
+    backgroundColor: '#ef4444',
+    borderColor: 'rgba(9, 9, 11, 0.95)',
+    borderWidth: '1px',
+    boxShadow: '0 0 10px rgba(239, 68, 68, 0.95)',
+    scale: 1.05,
+    opacity: 1,
+  },
+}
+
 export function PhoneStatusIndicator({
   state,
   className = '',
@@ -562,25 +613,19 @@ export function PhoneStatusIndicator({
         )}
       </AnimatePresence>
 
-      {/* Core Indicator Circle */}
+      {/* Core Indicator Circle with Framer Motion spring & color morph animations */}
       <motion.span
-        key={`core-${state}`}
-        initial={{ scale: 0.85, opacity: 0.8 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-        className={`relative z-10 block h-2.5 w-2.5 rounded-full transition-colors duration-300 ${
-          state === 'disconnected'
-            ? 'border-2 border-zinc-400 dark:border-zinc-500 bg-transparent'
-            : state === 'ready'
-            ? 'bg-emerald-500 border border-zinc-950/80 shadow-[0_0_4px_rgba(16,185,129,0.5)]'
-            : state === 'active_good'
-            ? 'bg-emerald-400 border border-zinc-950 shadow-[0_0_6px_rgba(52,211,153,0.9)]'
-            : state === 'active_medium'
-            ? 'bg-amber-400 border border-zinc-950 shadow-[0_0_6px_rgba(251,191,36,0.9)]'
-            : state === 'active_bad'
-            ? 'bg-red-500 border border-zinc-950 shadow-[0_0_6px_rgba(239,68,68,0.95)]'
-            : 'border-2 border-amber-400 bg-amber-400/30'
-        }`}
+        variants={indicatorCoreVariants}
+        initial={false}
+        animate={state}
+        transition={{
+          type: 'spring',
+          stiffness: 380,
+          damping: 24,
+          backgroundColor: { duration: 0.3, ease: 'easeInOut' },
+          borderColor: { duration: 0.3, ease: 'easeInOut' },
+        }}
+        className="relative z-10 block h-2.5 w-2.5 rounded-full border border-solid"
       />
     </div>
   )
@@ -629,7 +674,7 @@ export function PortalPhoneButton({
     >
       <Phone
         size={20}
-        className={`transition-colors ${
+        className={`transition-colors duration-200 ${
           activeCall
             ? computedState === 'active_good'
               ? 'text-emerald-400'
@@ -637,8 +682,8 @@ export function PortalPhoneButton({
               ? 'text-amber-400'
               : 'text-red-400'
             : phoneState === 'ready'
-            ? 'text-zinc-200 group-hover:text-white'
-            : 'text-zinc-500 group-hover:text-zinc-300'
+            ? 'text-emerald-400 dark:text-emerald-400'
+            : 'text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]'
         }`}
       />
       {/* Active Circle Indicator positioned top-right close to the phone handset, matching HubSpot */}
