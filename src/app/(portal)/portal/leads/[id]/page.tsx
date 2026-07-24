@@ -6111,15 +6111,19 @@ function LeadLifecycleRail({
                   ? 'border-2 border-[#caa24c] bg-[#caa24c] text-white ring-4 ring-[#caa24c]/25 shadow-lg shadow-[#caa24c]/20 font-bold'
                   : isDone
                   ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20 font-bold'
-                  : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650'
+                  : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650 hover:border-[#caa24c]/40'
               }`}>
-                <StageIcon
-                  size={15}
-                  color={isDone || isCurrent ? '#ffffff' : 'currentColor'}
-                  style={isDone || isCurrent ? { stroke: '#ffffff', color: '#ffffff' } : undefined}
-                  strokeWidth={isDone || isCurrent ? 2.5 : 2}
-                  aria-hidden="true"
-                />
+                {isDone || isCurrent ? (
+                  <StageIcon
+                    size={15}
+                    color="#ffffff"
+                    style={{ stroke: '#ffffff', color: '#ffffff' }}
+                    strokeWidth={2.5}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <span className="h-2 w-2 rounded-full bg-zinc-300 dark:bg-zinc-700 transition-colors group-hover/step:bg-[#caa24c]" />
+                )}
               </div>
 
               <span className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] ${
