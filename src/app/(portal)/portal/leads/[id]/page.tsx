@@ -38,6 +38,9 @@ import {
   Eye,
   MousePointerClick,
   RefreshCw,
+  Sliders,
+  CreditCard,
+  Flame,
   Baby,
   Cake,
   Heart,
@@ -2533,15 +2536,15 @@ export default function LeadDetailPage({
               if (currentStage === 'inquiry') {
                 return (
                   <>
-                    {/* Next Step */}
-                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10 luxor-soft-enter">
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#a8792f]">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
                             <ClipboardCheck size={18} />
                           </span>
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Next Step</p>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h2 className="mt-1 text-sm font-bold leading-snug text-[color:var(--portal-text)]">{nextBestMove.title}</h2>
                             <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--portal-muted)]">{nextBestMove.detail}</p>
                           </div>
@@ -2883,6 +2886,42 @@ export default function LeadDetailPage({
               if (currentStage === 'tour') {
                 return (
                   <>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <Calendar size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {lead.preferred_tour_date ? 'Conduct venue tour & build proposal' : 'Schedule or confirm venue tour'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {lead.preferred_tour_date ? 'Show space features, answer questions, and draft proposal package.' : 'Select a date & time or send a Zoho calendar invite.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={openTourScheduleModal}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer"
+                          >
+                            <Calendar size={13} /> {lead.preferred_tour_date ? 'Reschedule Tour' : 'Schedule Tour'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsInvoiceModalOpen(true)}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
+                          >
+                            <FileText size={13} /> Build Proposal
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
                     {/* Row 1: Tour Details & Tour Attendance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Tour Details */}
@@ -3166,16 +3205,28 @@ export default function LeadDetailPage({
               if (currentStage === 'planning') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Planning</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">All event details, preferences, and logistics in one place.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <Sliders size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Customize food & beverage package & decor layout' : 'Review event logistics & planning checklist'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Select menu preferences, bar packages, floor plans, and decor options.' : 'Confirm vendor arrivals, layout specs, and guest counts.'}
+                            </p>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => setActiveLeadTab('tasks')} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                          Planning Checklist
+                        </button>
                       </div>
-                      <button type="button" onClick={() => setActiveLeadTab('tasks')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Planning Checklist
-                      </button>
-                    </div>
+                    </section>
 
                     {/* Sub-tabs for Planning */}
                     <div className="flex gap-4 border-b border-[color:var(--portal-border)] text-xs overflow-x-auto pb-1 portal-scrollbar">
@@ -3400,21 +3451,30 @@ export default function LeadDetailPage({
               if (currentStage === 'proposal') {
                 return (
                   <>
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-[color:var(--portal-text)]">Proposal</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Track client delivery, view activity, and invoice balance.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]"><Send size={18} /></span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {!proposalInvoice ? 'Build the proposal' : !proposalSentAt ? 'Send the proposal and payment request' : proposalPaidTotal <= 0 ? 'Watch for the client view and payment' : !latestBooking ? 'Create the booking record' : 'Continue to the contract'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Sending automatically moves this lead into Proposal.' : proposalPaidTotal <= 0 ? 'Opened and payment status update here automatically.' : !latestBooking ? 'Payment is recorded. Create the booking to unlock Contract.' : 'The booking exists, so contract preparation is unlocked.'}
+                            </p>
+                          </div>
+                        </div>
+                        {!proposalInvoice ? (
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                        ) : !proposalSentAt || proposalPaidTotal <= 0 ? (
+                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
+                        ) : (
+                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
+                        )}
                       </div>
-                      {proposalInvoice ? (
-                        <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
-                          Edit Proposal
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
-                          Build Proposal
-                        </button>
-                      )}
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {/* Card 1: Sent & Delivery */}
@@ -3490,30 +3550,6 @@ export default function LeadDetailPage({
                       </div>
                     </div>
 
-                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]"><ChevronRight size={17} /></span>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next move</p>
-                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !proposalSentAt ? 'Send the proposal and payment request' : proposalPaidTotal <= 0 ? 'Watch for the client view and payment' : !latestBooking ? 'Create the booking record' : 'Continue to the contract'}
-                            </h4>
-                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Sending automatically moves this lead into Proposal.' : proposalPaidTotal <= 0 ? 'Opened and payment status update here automatically.' : !latestBooking ? 'Payment is recorded. Create the booking to unlock Contract.' : 'The booking exists, so contract preparation is unlocked.'}
-                            </p>
-                          </div>
-                        </div>
-                        {!proposalInvoice ? (
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
-                        ) : !proposalSentAt || proposalPaidTotal <= 0 ? (
-                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
-                        ) : (
-                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
-                        )}
-                      </div>
-                    </section>
-
                     <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -3553,16 +3589,45 @@ export default function LeadDetailPage({
               if (currentStage === 'contract') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Contract</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Generate, sign, and manage legal agreements.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <FileText size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {!latestBooking ? 'A booking record is required before agreement package generation.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to deposit / planning.' : 'Send agreement + venue guide to client for digital signoff.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {latestBooking ? (
+                            <button
+                              type="button"
+                              disabled={updatingStatus || latestBooking.contract_status === 'signed'}
+                              onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')}
+                              className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-45 cursor-pointer"
+                            >
+                              {latestBooking.contract_status === 'signed' ? 'Agreement Complete' : latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? 'Send Agreement + Guide' : 'Review Contract'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={openBookingModal}
+                              className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
+                            >
+                              Create Booking
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <button type="button" onClick={() => scrollToSection('lead-booking')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Booking Details
-                      </button>
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Contract Status */}
@@ -3642,16 +3707,35 @@ export default function LeadDetailPage({
               if (currentStage === 'deposit') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Deposit</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Track initial deposit invoices and payment schedules.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <DollarSign size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Security deposit collected' : 'Collect security deposit'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Deposit is secured. Track event rental balance.' : 'Draft invoice or send payment request link to collect deposit.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                            Draft Invoice
+                          </button>
+                          {latestBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
+                              Mark Deposit Paid
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                      <button type="button" className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Draft Invoice
-                      </button>
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Deposit Summary */}
@@ -3721,16 +3805,37 @@ export default function LeadDetailPage({
               if (currentStage === 'final_payment') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Final Payment</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Track event balances and final payment settlements.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <CreditCard size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {remainingBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              {remainingBalance <= 0 ? 'All invoice balances settled. Ready for event day operations.' : `${formatMoney(remainingBalance)} balance remaining. Send payment link or record manual payment.`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {latestInvoice && proposalBalance > 0 ? (
+                            <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                              Send Secure Payment Link
+                            </button>
+                          ) : null}
+                          {latestBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
+                              Mark Paid Manually
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                      <button type="button" onClick={() => setActiveLeadTab('documents')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        View Balance
-                      </button>
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Final Payment Status */}
@@ -3800,16 +3905,28 @@ export default function LeadDetailPage({
               if (currentStage === 'event') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Event Day</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Checklists, access details, and operations for event execution.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <Flame size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              Execute event day operations
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              Verify gate access codes, coordinate vendor arrival windows, and review run of show schedule.
+                            </p>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => setActiveLeadTab('timeline')} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                          Run of Show
+                        </button>
                       </div>
-                      <button type="button" onClick={() => setActiveLeadTab('timeline')} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        Run of Show
-                      </button>
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Coordinator & Contacts */}
@@ -3873,16 +3990,28 @@ export default function LeadDetailPage({
               if (currentStage === 'closing') {
                 return (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                      <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Closing</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">Post-event wrap-ups, reviews, and security deposits.</p>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]">
+                            <CheckCircle size={18} />
+                          </span>
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                              {latestBooking?.status === 'completed' ? 'Event completed & closed' : 'Complete post-event wrap-up & release deposit'}
+                            </h4>
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                              Log thank-you follow-ups, request client reviews, and clear final damage inspection.
+                            </p>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer">
+                          Complete Lead
+                        </button>
                       </div>
-                      <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">
-                        Complete Lead
-                      </button>
-                    </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Post-Event Checklist */}
