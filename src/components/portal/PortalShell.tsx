@@ -277,8 +277,10 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
       } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="flex flex-col min-h-full px-3.5 py-6">
-          <div className="mb-8 flex items-center justify-between px-1">
+        <div className="flex flex-col min-h-full px-3 py-6">
+          <div className={`mb-8 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+            sidebarCollapsed ? 'px-1.5' : 'px-1'
+          }`}>
             <Link href="/portal" className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
               <div className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full border border-[#caa24c]/40 bg-black/40 p-0.5 overflow-hidden">
                 <Image
@@ -319,7 +321,9 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                       }}
                       title={sidebarCollapsed ? item.label : undefined}
                       aria-label={item.label}
-                      className={`group relative flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm font-medium transition-all cursor-pointer ${
+                      className={`group relative flex w-full items-center justify-between rounded-lg border py-2.5 text-sm font-medium transition-all cursor-pointer ${
+                        sidebarCollapsed ? 'px-[18px]' : 'px-3'
+                      } ${
                         isCurrentGroup
                           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
                           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
@@ -397,7 +401,9 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
               <button
                 type="submit"
                 title={sidebarCollapsed ? 'Log Out' : undefined}
-                className="group relative flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:border-red-500/10 hover:text-red-400 cursor-pointer"
+                className={`group relative flex w-full items-center gap-3 rounded-lg border border-transparent py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:border-red-500/10 hover:text-red-400 cursor-pointer ${
+                  sidebarCollapsed ? 'px-[18px]' : 'px-3'
+                }`}
                 aria-label="Log out"
               >
                 <span className="w-5 h-5 flex items-center justify-center shrink-0">
@@ -659,7 +665,9 @@ function SidebarLink({
       prefetch
       title={collapsed ? label : undefined}
       aria-label={label}
-      className={`group relative flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+      className={`group relative flex items-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-all ${
+        collapsed ? 'px-[18px]' : 'px-3'
+      } ${
         active
           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
