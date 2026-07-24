@@ -531,15 +531,15 @@ const indicatorCoreVariants = {
     opacity: 0.85,
   },
   ready: {
-    backgroundColor: '#10b981',
-    borderColor: 'rgba(9, 9, 11, 0.9)',
-    borderWidth: '1px',
-    boxShadow: '0 0 5px rgba(16, 185, 129, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: '#10b981',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 4px rgba(16, 185, 129, 0.4)',
     scale: 1,
     opacity: 1,
   },
   connecting: {
-    backgroundColor: 'rgba(251, 191, 36, 0.25)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
     borderColor: '#f59e0b',
     borderWidth: '1.75px',
     boxShadow: '0 0 6px rgba(245, 158, 11, 0.5)',
@@ -547,26 +547,26 @@ const indicatorCoreVariants = {
     opacity: 1,
   },
   active_good: {
-    backgroundColor: '#34d399',
-    borderColor: 'rgba(9, 9, 11, 0.95)',
-    borderWidth: '1px',
-    boxShadow: '0 0 8px rgba(52, 211, 153, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: '#34d399',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 6px rgba(52, 211, 153, 0.8)',
     scale: 1.05,
     opacity: 1,
   },
   active_medium: {
-    backgroundColor: '#fbbf24',
-    borderColor: 'rgba(9, 9, 11, 0.95)',
-    borderWidth: '1px',
-    boxShadow: '0 0 8px rgba(251, 191, 36, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: '#fbbf24',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 6px rgba(251, 191, 36, 0.8)',
     scale: 1.05,
     opacity: 1,
   },
   active_bad: {
-    backgroundColor: '#ef4444',
-    borderColor: 'rgba(9, 9, 11, 0.95)',
-    borderWidth: '1px',
-    boxShadow: '0 0 10px rgba(239, 68, 68, 0.95)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: '#ef4444',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 8px rgba(239, 68, 68, 0.9)',
     scale: 1.05,
     opacity: 1,
   },
@@ -592,7 +592,7 @@ export function PhoneStatusIndicator({
             animate={
               reduceMotion
                 ? { scale: 1.3, opacity: 0.4 }
-                : { scale: [1, 1.85, 1], opacity: [0.8, 0, 0.8] }
+                : { scale: [1, 1.85, 1], opacity: [0.85, 0, 0.85] }
             }
             exit={{ scale: 0.8, opacity: 0 }}
             transition={{
@@ -600,20 +600,20 @@ export function PhoneStatusIndicator({
               repeat: Infinity,
               ease: 'easeInOut',
             }}
-            className={`absolute inset-0 rounded-full pointer-events-none ${
+            className={`absolute inset-0 rounded-full pointer-events-none border ${
               state === 'active_good'
-                ? 'bg-emerald-400/60 shadow-[0_0_8px_rgba(52,211,153,0.85)]'
+                ? 'border-emerald-400/70 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
                 : state === 'active_medium'
-                ? 'bg-amber-400/60 shadow-[0_0_8px_rgba(251,191,36,0.85)]'
+                ? 'border-amber-400/70 shadow-[0_0_8px_rgba(251,191,36,0.7)]'
                 : state === 'active_bad'
-                ? 'bg-red-500/70 shadow-[0_0_10px_rgba(239,68,68,0.95)]'
-                : 'bg-amber-400/40 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
+                ? 'border-red-500/80 shadow-[0_0_10px_rgba(239,68,68,0.85)]'
+                : 'border-amber-400/50 shadow-[0_0_6px_rgba(251,191,36,0.5)]'
             }`}
           />
         )}
       </AnimatePresence>
 
-      {/* Core Indicator Circle with Framer Motion spring & color morph animations */}
+      {/* Core Indicator Circle - Unfilled open outline ring with Framer Motion spring & color morph animations */}
       <motion.span
         variants={indicatorCoreVariants}
         initial={false}
@@ -622,7 +622,6 @@ export function PhoneStatusIndicator({
           type: 'spring',
           stiffness: 380,
           damping: 24,
-          backgroundColor: { duration: 0.3, ease: 'easeInOut' },
           borderColor: { duration: 0.3, ease: 'easeInOut' },
         }}
         className="relative z-10 block h-2.5 w-2.5 rounded-full border border-solid"
