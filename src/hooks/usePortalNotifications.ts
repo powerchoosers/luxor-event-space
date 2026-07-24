@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open'
 
@@ -507,6 +508,62 @@ export function usePortalNotifications() {
   useEffect(() => {
     const generalInterval = setInterval(() => fetchNotifications(true), 15_000)
     return () => clearInterval(generalInterval)
+  }, [fetchNotifications])
+
+  // Sub-100ms Supabase Realtime WebSocket subscription for instant updates on website RSVPs, bookings, and form submissions
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+
+    const channel = supabase
+      .channel('luxor-notifications-realtime-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_inquiries' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_bookings' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_messages' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_calls' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_invoices' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'luxor_payments' },
+        () => {
+          fetchNotifications(true)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [fetchNotifications])
 
   const registerToastCallback = useCallback((cb: (item: NotificationToastPayload) => void) => {
