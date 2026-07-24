@@ -749,6 +749,34 @@ thead.sticky th,
   -webkit-backdrop-filter: blur(24px) !important;
 }
 
+/* Keep every owner-portal data table visually aligned with the polished lead list. */
+.portal-data-table {
+  color: var(--portal-text);
+  font-size: 0.75rem;
+}
+
+.portal-data-table thead tr {
+  background-color: var(--portal-soft) !important;
+  color: var(--portal-muted) !important;
+  font-size: 0.625rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.15em !important;
+  text-transform: uppercase;
+}
+
+.portal-data-table tbody tr {
+  border-bottom: 1px solid var(--portal-border) !important;
+  transition: background-color 180ms ease;
+}
+
+.portal-data-table tbody tr:hover {
+  background-color: color-mix(in srgb, #caa24c 7%, transparent) !important;
+}
+
+.portal-data-table tbody tr:last-child {
+  border-bottom: 0 !important;
+}
+
 /* Ensure all interactive and clickable elements turn the cursor into a finger pointer for user feedback */
 a,
 button,

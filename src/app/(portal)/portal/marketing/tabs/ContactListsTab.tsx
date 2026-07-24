@@ -442,58 +442,58 @@ export function ContactListsTab({
           >
             <PortalStickyTable minWidth="1050px">
               <PortalStickyThead>
-                <tr className="bg-zinc-950/80 text-[9px] font-black uppercase tracking-wider text-zinc-400">
-                  <th className="px-6 py-4">Contact</th>
-                  <th className="px-4 py-4">Event Type</th>
-                  <th className="px-4 py-4">Lead Source</th>
-                  <th className="px-4 py-4">Form Submitted</th>
-                  <th className="px-4 py-4">Date Added</th>
-                  <th className="px-4 py-4 text-center">Email Status</th>
-                  <th className="px-4 py-4 text-center">SMS Status</th>
-                  <th className="px-4 py-4">Tags</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+                  <th className="px-6 py-3.5">Contact</th>
+                  <th className="px-4 py-3.5">Event Type</th>
+                  <th className="px-4 py-3.5">Lead Source</th>
+                  <th className="px-4 py-3.5">Form Submitted</th>
+                  <th className="px-4 py-3.5">Date Added</th>
+                  <th className="px-4 py-3.5 text-center">Email Status</th>
+                  <th className="px-4 py-3.5 text-center">SMS Status</th>
+                  <th className="px-4 py-3.5">Tags</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </PortalStickyThead>
-              <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
+              <tbody className="divide-y divide-[color:var(--portal-border)] text-xs">
                 {paginatedContacts.length > 0 ? (
                   paginatedContacts.map((contact) => {
                     return (
-                      <tr key={contact.id} className="hover:bg-zinc-900/10 transition-colors border-b border-zinc-900/40">
-                        <td className="px-6 py-4 flex items-center gap-3">
-                          <PortalContactAvatar name={contact.full_name} avatarUrl={contact.avatar_url} size="md" />
+                      <tr key={contact.id} className="group transition-colors hover:bg-[#caa24c]/7">
+                        <td className="flex items-center gap-4 px-6 py-3.5">
+                          <PortalContactAvatar name={contact.full_name} avatarUrl={contact.avatar_url} size="md" className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent" />
                           <div>
-                            <p className="font-bold text-white leading-tight">{contact.full_name}</p>
-                            <p className="text-[10px] text-zinc-550 truncate mt-0.5">{contact.email}</p>
-                            {contact.phone && <p className="text-[9px] text-zinc-650 font-mono mt-0.5">{formatPhoneDisplay(contact.phone)}</p>}
+                            <p className="text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{contact.full_name}</p>
+                            <p className="mt-0.5 truncate text-[10px] font-medium text-[color:var(--portal-muted)]">{contact.email}</p>
+                            {contact.phone && <p className="mt-0.5 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatPhoneDisplay(contact.phone)}</p>}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <span className="rounded bg-zinc-900/50 border border-zinc-800 px-2 py-0.5 text-[8.5px] font-bold text-zinc-400">
+                        <td className="px-4 py-3.5">
+                          <span className="rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[8.5px] font-bold text-[color:var(--portal-muted)]">
                             {contact.event_type}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-zinc-350">{contact.source}</td>
-                        <td className="px-4 py-4 text-zinc-450">{contact.submittedForm}</td>
-                        <td className="px-4 py-4 font-mono text-[10px] text-zinc-500">{contact.dateAdded}</td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-4 py-3.5 font-medium text-[color:var(--portal-text)]">{contact.source}</td>
+                        <td className="px-4 py-3.5 text-[color:var(--portal-muted)]">{contact.submittedForm}</td>
+                        <td className="px-4 py-3.5 font-mono text-[10px] text-[color:var(--portal-muted)]">{contact.dateAdded}</td>
+                        <td className="px-4 py-3.5 text-center">
                           <span className={`inline-block rounded px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${
                             contact.emailStatus === 'Subscribed'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                              ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                           }`}>
                             {contact.emailStatus}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-4 py-3.5 text-center">
                           <span className={`inline-block rounded px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${
                             contact.smsStatus === 'Subscribed'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                              ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                           }`}>
                             {contact.smsStatus}
                           </span>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3.5">
                           <div className="flex flex-wrap gap-1 max-w-[180px]">
                             {contact.tags.map((tag: string, tIdx: number) => (
                               <span key={tIdx} className={`rounded px-1.5 py-0.5 text-[8.5px] font-bold ${
@@ -503,27 +503,27 @@ export function ContactListsTab({
                                   ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
                                   : tag === 'Proposal Sent'
                                   ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400'
+                                  : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                               }`}>
                                 {tag}
                               </span>
                             ))}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-6 py-3.5 text-right">
+                          <div className="flex translate-x-4 items-center justify-end gap-2 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                             {contact.email && (
-                              <button
+                              <button type="button" aria-label={`Email ${contact.full_name}`}
                                 onClick={() => {
                                   window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: contact } }))
                                 }}
-                                className="rounded p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100"
+                                className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]"
                               >
-                                <Mail size={13} />
+                                <Mail size={14} />
                               </button>
                             )}
-                            <button className="rounded p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100">
-                              <MoreVertical size={13} />
+                            <button type="button" aria-label={`More actions for ${contact.full_name}`} className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]">
+                              <MoreVertical size={14} />
                             </button>
                           </div>
                         </td>
@@ -532,7 +532,7 @@ export function ContactListsTab({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-650 text-xs font-semibold">
+                    <td colSpan={9} className="px-6 py-12 text-center text-xs font-semibold text-[color:var(--portal-muted)]">
                       No contacts found matching the selected filters.
                     </td>
                   </tr>

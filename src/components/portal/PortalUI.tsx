@@ -260,7 +260,7 @@ export function PortalStickyTable({
   minWidth?: string
 }) {
   return (
-    <table className="w-full text-left" style={{ minWidth }}>
+    <table className="portal-data-table w-full text-left" style={{ minWidth }}>
       {children}
     </table>
   )
