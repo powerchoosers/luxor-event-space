@@ -3402,129 +3402,148 @@ export default function LeadDetailPage({
                   <>
                     <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                       <div>
-                        <h3 className="text-base font-black uppercase tracking-wider text-white">Proposal</h3>
-                        <p className="text-xs text-[color:var(--portal-muted)]">See exactly what was sent, whether it was opened, and what has been paid.</p>
+                        <h3 className="text-base font-black uppercase tracking-wider text-[color:var(--portal-text)]">Proposal</h3>
+                        <p className="text-xs text-[color:var(--portal-muted)]">Track client delivery, view activity, and invoice balance.</p>
                       </div>
-                      <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#caa24c] cursor-pointer">
-                        {proposalInvoice ? 'New Version' : 'Build Proposal'}
-                      </button>
+                      {proposalInvoice ? (
+                        <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
+                          Edit Proposal
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                          Build Proposal
+                        </button>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                      {[
-                        {
-                          label: 'Proposal sent',
-                          value: proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not sent',
-                          detail: proposalSentAt ? 'Client delivery completed' : 'Send it to advance this lead',
-                          icon: Send,
-                          tone: proposalSentAt ? 'emerald' : 'amber',
-                        },
-                        {
-                          label: 'Client opened',
-                          value: proposalViewedAt ? formatDisplayDate(proposalViewedAt) : 'Not opened yet',
-                          detail: proposalViewedAt ? 'Secure proposal page viewed' : proposalSentAt ? 'Waiting for client view' : 'Available after sending',
-                          icon: Eye,
-                          tone: proposalViewedAt ? 'emerald' : 'neutral',
-                        },
-                        {
-                          label: 'Payment',
-                          value: proposalPaidTotal > 0 ? formatMoney(proposalPaidTotal) : 'No payment recorded',
-                          detail: proposalInvoice ? `${formatMoney(proposalBalance)} balance remaining` : 'Create a proposal first',
-                          icon: DollarSign,
-                          tone: proposalBalance <= 0 && proposalAmount > 0 ? 'emerald' : proposalPaidTotal > 0 ? 'amber' : 'neutral',
-                        },
-                        {
-                          label: 'Proposal total',
-                          value: proposalAmount > 0 ? formatMoney(proposalAmount) : 'Not priced',
-                          detail: proposalInvoice ? `${proposalInvoice.line_items.length} line items` : 'No saved proposal',
-                          icon: FileText,
-                          tone: proposalAmount > 0 ? 'gold' : 'neutral',
-                        },
-                        {
-                          label: 'Follow-up',
-                          value: queuedProposalReminders.length ? `${queuedProposalReminders.length} scheduled` : proposalSentAt ? 'No reminder pending' : 'Not scheduled',
-                          detail: queuedProposalReminders[0] ? `Next ${formatRelativeTime(queuedProposalReminders[0].scheduled_for)}` : 'Reminders stop after open and payment',
-                          icon: Clock,
-                          tone: queuedProposalReminders.length ? 'gold' : 'neutral',
-                        },
-                      ].map((item) => {
-                        const StatusIcon = item.icon
-                        const toneClass = item.tone === 'emerald'
-                          ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400'
-                          : item.tone === 'amber'
-                            ? 'border-amber-500/20 bg-amber-500/[0.06] text-amber-400'
-                            : item.tone === 'gold'
-                              ? 'border-[#caa24c]/25 bg-[#caa24c]/[0.07] text-[#f1d27a]'
-                              : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-zinc-500'
-                        return (
-                          <section key={item.label} className={`rounded-2xl border p-4 shadow-xl shadow-black/10 ${toneClass}`}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-75">{item.label}</p>
-                                <p className="mt-3 text-sm font-black text-white">{item.value}</p>
-                                <p className="mt-1 text-[10px] leading-4 opacity-70">{item.detail}</p>
-                              </div>
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/15"><StatusIcon size={15} /></span>
-                            </div>
-                          </section>
-                        )
-                      })}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {/* Card 1: Sent & Delivery */}
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Delivery Status</span>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                            proposalSentAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                          }`}>
+                            <Send size={10} />
+                            {proposalSentAt ? 'Sent' : 'Draft'}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not Sent Yet'}</p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? 'Client delivery completed' : 'Send proposal to advance lead'}</p>
+                        </div>
+                      </div>
+
+                      {/* Card 2: Client Engagement / Opened */}
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Client Views</span>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                            proposalViewedAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'
+                          }`}>
+                            <Eye size={10} />
+                            {proposalViewedAt ? 'Opened' : 'Unread'}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalViewedAt ? formatDisplayDate(proposalViewedAt) : 'Not Opened Yet'}</p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalViewedAt ? 'Secure view recorded' : proposalSentAt ? 'Awaiting client view' : 'Available after send'}</p>
+                        </div>
+                      </div>
+
+                      {/* Card 3: Financial Summary / Total & Balance */}
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Proposal Total</span>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                            proposalBalance <= 0 && proposalAmount > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalPaidTotal > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20'
+                          }`}>
+                            <DollarSign size={10} />
+                            {proposalBalance <= 0 && proposalAmount > 0 ? 'Paid' : proposalPaidTotal > 0 ? 'Partial' : 'Unpaid'}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-sm font-mono font-bold text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
+                          <p className="mt-0.5 text-[10px] font-mono text-[color:var(--portal-muted)]">
+                            {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} balance remaining`) : 'No saved proposal'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Card 4: Automations / Reminders */}
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Reminders</span>
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]">
+                            <Clock size={10} />
+                            {queuedProposalReminders.length ? `${queuedProposalReminders.length} Active` : 'Idle'}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-sm font-bold text-[color:var(--portal-text)]">
+                            {queuedProposalReminders.length ? `${queuedProposalReminders.length} Pending` : 'No Reminder Pending'}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">
+                            {queuedProposalReminders[0] ? `Next ${formatRelativeTime(queuedProposalReminders[0].scheduled_for)}` : 'Reminders pause on payment'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[linear-gradient(135deg,rgba(202,162,76,0.1),rgba(202,162,76,0.025))] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    <section className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#f1d27a]"><ChevronRight size={17} /></span>
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]"><ChevronRight size={17} /></span>
                           <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Next move</p>
-                            <h4 className="mt-1 text-sm font-black text-white">
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next move</p>
+                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
                               {!proposalInvoice ? 'Build the proposal' : !proposalSentAt ? 'Send the proposal and payment request' : proposalPaidTotal <= 0 ? 'Watch for the client view and payment' : !latestBooking ? 'Create the booking record' : 'Continue to the contract'}
                             </h4>
-                            <p className="mt-1 text-[10px] leading-4 text-zinc-500">
+                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
                               {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Sending automatically moves this lead into Proposal.' : proposalPaidTotal <= 0 ? 'Opened and payment status update here automatically.' : !latestBooking ? 'Payment is recorded. Create the booking to unlock Contract.' : 'The booking exists, so contract preparation is unlocked.'}
                             </p>
                           </div>
                         </div>
                         {!proposalInvoice ? (
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white">Build Proposal</button>
+                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
                         ) : !proposalSentAt || proposalPaidTotal <= 0 ? (
-                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-40">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
+                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
                         ) : (
-                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
+                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
                         )}
                       </div>
                     </section>
 
-                    <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl shadow-black/10 luxor-soft-enter">
+                    <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Proposal line items</p>
-                          <p className="mt-1 text-xs text-zinc-600">The exact services and numbers stored on the latest sent proposal.</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Proposal line items</p>
+                          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">The exact services and numbers stored on the latest sent proposal.</p>
                         </div>
-                        {proposalInvoice ? <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-zinc-300">View PDF</button> : null}
+                        {proposalInvoice ? <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/30 transition-all cursor-pointer">View PDF</button> : null}
                       </div>
                       {proposalInvoice?.line_items?.length ? (
                         <>
                           <div className="divide-y divide-[color:var(--portal-border)]">
                             {proposalInvoice.line_items.map((item, index) => (
                               <div key={`${item.description}-${index}`} className="grid gap-2 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_70px_110px_110px] sm:items-center">
-                                <div className="min-w-0"><p className="font-bold text-zinc-200">{item.description}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-zinc-600">{item.category || 'Custom service'}</p></div>
-                                <div><span className="text-[9px] uppercase text-zinc-600 sm:hidden">Qty </span><span className="font-mono text-zinc-400">{item.quantity}</span></div>
-                                <div className="font-mono text-zinc-400 sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
-                                <div className="font-mono font-bold text-white sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
+                                <div className="min-w-0"><p className="font-bold text-[color:var(--portal-text)]">{item.description}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">{item.category || 'Custom service'}</p></div>
+                                <div><span className="text-[9px] uppercase text-[color:var(--portal-muted)] sm:hidden">Qty </span><span className="font-mono text-[color:var(--portal-muted)]">{item.quantity}</span></div>
+                                <div className="font-mono text-[color:var(--portal-muted)] sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
+                                <div className="font-mono font-bold text-[color:var(--portal-text)] sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
                               </div>
                             ))}
                           </div>
-                          <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-black/10 px-5 py-4 text-xs sm:ml-auto sm:w-80">
-                            <div className="flex justify-between text-zinc-500"><span>Subtotal</span><span className="font-mono">{formatMoney(proposalInvoice.subtotal)}</span></div>
-                            <div className="flex justify-between text-zinc-500"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="font-mono">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
-                            <div className="flex justify-between border-t border-white/10 pt-2 text-sm font-black text-white"><span>Total</span><span className="font-mono text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
-                            <div className="flex justify-between text-emerald-400"><span>Paid</span><span className="font-mono">{formatMoney(proposalPaidTotal)}</span></div>
-                            <div className="flex justify-between font-bold text-white"><span>Balance</span><span className="font-mono">{formatMoney(proposalBalance)}</span></div>
+                          <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 text-xs sm:ml-auto sm:w-80">
+                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
+                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
+                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-mono text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
+                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Paid</span><span className="font-mono">{formatMoney(proposalPaidTotal)}</span></div>
+                            <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="font-mono">{formatMoney(proposalBalance)}</span></div>
                           </div>
                         </>
                       ) : (
-                        <div className="p-8 text-center"><p className="text-xs font-bold text-zinc-300">No proposal line items yet.</p><button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white">Build Proposal</button></div>
+                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button></div>
                       )}
                     </section>
                   </>
