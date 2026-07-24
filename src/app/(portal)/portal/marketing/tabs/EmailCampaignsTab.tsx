@@ -64,10 +64,14 @@ export function EmailCampaignsTab({
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
         {stats.map((stat) => (
-          <div key={stat.label} className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 transition-all hover:border-zinc-800">
-            <p className="text-[8.5px] font-black uppercase tracking-wider text-zinc-500">{stat.label}</p>
-            <h3 className="mt-2.5 font-mono text-base font-bold text-white">{loading ? '…' : stat.value}</h3>
-            <p className="mt-2 text-[8.5px] font-bold leading-4 text-zinc-600">{stat.detail}</p>
+          <div key={stat.label} className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 transition-all hover:border-[#caa24c]/30">
+            <p className="text-[8.5px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{stat.label}</p>
+            {loading ? (
+              <div className="mt-2.5 h-6 w-16 rounded luxor-skeleton" />
+            ) : (
+              <h3 className="mt-2.5 font-mono text-base font-bold text-[color:var(--portal-text)]">{stat.value}</h3>
+            )}
+            <p className="mt-2 text-[8.5px] font-bold leading-4 text-[color:var(--portal-muted)]">{stat.detail}</p>
           </div>
         ))}
       </div>
@@ -83,7 +87,7 @@ export function EmailCampaignsTab({
       ) : null}
 
       <div className="flex items-center">
-        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950/20 p-1">
+        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
           <FilterTab active={filter === 'all'} onClick={() => setFilter('all')} label="All Campaigns" />
           <FilterTab active={filter === 'sent'} onClick={() => setFilter('sent')} label="Sent" />
           <FilterTab active={filter === 'scheduled'} onClick={() => setFilter('scheduled')} label="Scheduled" />
@@ -92,32 +96,51 @@ export function EmailCampaignsTab({
         </div>
       </div>
 
-      <PortalTableCard controls={(
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Campaign Performance</span>
-          <span className="font-mono text-[9px] text-zinc-500">{loading ? 'Loading…' : `${filteredCampaigns.length} campaign${filteredCampaigns.length === 1 ? '' : 's'}`}</span>
-        </div>
-      )}>
-        <PortalStickyTable minWidth="1040px">
-          <PortalStickyThead>
-            <tr className="bg-zinc-950/80 text-[9px] font-black uppercase tracking-wider text-zinc-400">
-              <th className="px-6 py-4">Campaign</th>
-              <th className="px-4 py-4">Status</th>
-              <th className="px-4 py-4 text-right">Recipients</th>
-              <th className="px-4 py-4 text-right">Sent</th>
-              <th className="px-4 py-4 text-right">Queued</th>
-              <th className="px-4 py-4 text-right">Failed</th>
-              <th className="px-4 py-4">Send Date</th>
-              <th className="px-4 py-4 text-right">Open Rate</th>
-              <th className="px-4 py-4 text-right">Click Rate</th>
-              <th className="px-4 py-4 text-right">Unsubs</th>
-              <th className="px-6 py-4 text-right">Actions</th>
+      <PortalTableCard title="Supabase Campaigns" subtitle="Tracked campaign activity, deliverability metrics, and report launcher.">
+        <PortalStickyTable>
+          <thead>
+            <tr className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 text-left text-[8.5px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
+              <th className="px-6 py-3.5">Campaign Name</th>
+              <th className="px-4 py-3.5">Status</th>
+              <th className="px-4 py-3.5 text-right">Recipients</th>
+              <th className="px-4 py-3.5 text-right">Sent</th>
+              <th className="px-4 py-3.5 text-right">Queued</th>
+              <th className="px-4 py-3.5 text-right">Failed</th>
+              <th className="px-4 py-3.5">Date</th>
+              <th className="px-4 py-3.5 text-right">Open Rate</th>
+              <th className="px-4 py-3.5 text-right">Click Rate</th>
+              <th className="px-4 py-3.5 text-right">Unsubs</th>
+              <th className="px-6 py-3.5 text-right">Actions</th>
             </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
-            {!loading && filteredCampaigns.length === 0 ? (
+          </thead>
+          <tbody>
+            {loading ? (
+              [1, 2, 3, 4].map((i) => (
+                <tr key={i} className="border-b border-[color:var(--portal-border)]">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-xl luxor-skeleton shrink-0" />
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="h-3.5 w-36 rounded luxor-skeleton" />
+                        <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4"><div className="h-5 w-16 rounded-full luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-8 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-8 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-8 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-8 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4"><div className="h-3.5 w-20 rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-10 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-10 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-3.5 w-8 ml-auto rounded luxor-skeleton" /></td>
+                  <td className="px-6 py-4 text-right"><div className="h-4 w-12 ml-auto rounded luxor-skeleton" /></td>
+                </tr>
+              ))
+            ) : !filteredCampaigns.length ? (
               <tr>
-                <td colSpan={11} className="px-6 py-12 text-center text-xs text-zinc-600">
+                <td colSpan={11} className="px-6 py-12 text-center text-xs text-[color:var(--portal-muted)]">
                   {campaigns.length ? 'No campaigns match this filter.' : 'No marketing campaigns have been saved in Supabase yet.'}
                 </td>
               </tr>
