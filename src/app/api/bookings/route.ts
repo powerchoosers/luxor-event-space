@@ -78,7 +78,11 @@ export async function POST(request: NextRequest) {
         }
         await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder'])
         try {
-          await queueBookingTextJobs(booking, inquiry)
+          await queueBookingTextJobs({
+            ...booking,
+            phone: booking.phone || inquiry.phone,
+            client_name: booking.client_name || inquiry.full_name,
+          })
         } catch (automationError) {
           console.error('Booking created, but its text reminders could not be queued:', automationError)
         }
@@ -129,7 +133,11 @@ export async function PATCH(request: NextRequest) {
           console.error('Booking advanced, but its reminder automation could not be updated:', automationError)
         }
         try {
-          await queueBookingTextJobs(booking, inquiry)
+          await queueBookingTextJobs({
+            ...booking,
+            phone: booking.phone || inquiry.phone,
+            client_name: booking.client_name || inquiry.full_name,
+          })
         } catch (automationError) {
           console.error('Booking advanced, but its text reminders could not be updated:', automationError)
         }

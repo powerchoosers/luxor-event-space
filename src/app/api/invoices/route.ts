@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       try {
         const inquiry = await getLuxorInquiry(invoice.inquiry_id)
         if (inquiry) {
-          await queueInvoiceReminderTexts(invoice, { phone: inquiry.phone, name: inquiry.name })
+          await queueInvoiceReminderTexts(invoice, { phone: inquiry.phone, name: inquiry.full_name })
         }
       } catch (automationError) {
         console.error('Invoice created, but its text reminders could not be queued:', automationError)
@@ -119,7 +119,7 @@ export async function PATCH(request: NextRequest) {
       try {
         const inquiry = await getLuxorInquiry(updatedInvoice.inquiry_id)
         if (inquiry) {
-          await queueInvoiceReminderTexts(updatedInvoice, { phone: inquiry.phone, name: inquiry.name })
+          await queueInvoiceReminderTexts(updatedInvoice, { phone: inquiry.phone, name: inquiry.full_name })
         }
       } catch (automationError) {
         console.error('Invoice updated, but its text reminders could not be queued:', automationError)

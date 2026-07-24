@@ -111,11 +111,11 @@ export async function listEligibleTextAudience(
     ),
   ])
 
-  const optedInPhones = new Set(
+  const optedInPhones = new Map(
     consents
       .filter((consent) => consent.status === 'opted_in')
-      .map((consent) => normalizePhoneNumber(consent.phone_number))
-      .filter((phone): phone is string => Boolean(phone)),
+      .map((consent) => [normalizePhoneNumber(consent.phone_number), consent.consent_scopes || []] as const)
+      .filter((entry): entry is readonly [string, string[]] => Boolean(entry[0])),
   )
   const inquiryIds = new Set((filter.inquiryIds || []).filter(Boolean))
   const statuses = new Set((filter.statuses || []).filter(Boolean))
@@ -125,6 +125,13 @@ export async function listEligibleTextAudience(
   return inquiries.flatMap((inquiry) => {
     const phone = normalizePhoneNumber(inquiry.phone || '')
     if (!phone || !optedInPhones.has(phone) || seen.has(phone)) return []
+    const scopes = optedInPhones.get(phone) || []
+    if (
+      filter.requiredScope &&
+      scopes.length &&
+      !scopes.includes(filter.requiredScope) &&
+      !scopes.includes('customer_care')
+    ) return []
     if (inquiryIds.size && !inquiryIds.has(inquiry.id)) return []
     if (statuses.size && !statuses.has(inquiry.status)) return []
     if (eventTypes.size && !eventTypes.has(inquiry.event_type || '')) return []
@@ -176,7 +183,11 @@ export async function createTextCampaign(data: {
   const sendTime = new Date(scheduledFor)
   if (Number.isNaN(sendTime.getTime())) throw new Error('Choose a valid send time.')
 
-  const audience = await listEligibleTextAudience(data.audienceFilter)
+  const complianceScope = campaignScope(data.campaignType || 'customer_care')
+  const audience = await listEligibleTextAudience({
+    ...(data.audienceFilter || {}),
+    requiredScope: complianceScope,
+  })
   if (!audience.length) {
     throw new Error('No opted-in text recipients match this audience.')
   }
@@ -202,7 +213,7 @@ export async function createTextCampaign(data: {
       estimated_segments: totalSegments,
       metadata: {
         ...(data.metadata || {}),
-        compliance_scope: 'customer_care',
+        compliance_scope: complianceScope,
         daily_segment_limit_at_creation: getDailySegmentLimit(),
       },
     }),
@@ -245,7 +256,7 @@ export async function createTextCampaign(data: {
       segment_count: recipient.segment_count,
       scheduled_for: sendTime.toISOString(),
       automation_key: `campaign:${campaign.id}:${recipient.phone_number}`,
-      metadata: { compliance_scope: 'customer_care' },
+      metadata: { compliance_scope: complianceScope },
     }))),
   })
 
@@ -331,6 +342,7 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
       automationKey: `tour_confirmation:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
       body: `Luxor Event Space: Hi ${firstName(inquiry.full_name)}, your private venue tour is confirmed for ${formatDate(inquiry.preferred_tour_date)}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. Reply with any questions. Reply STOP to opt out.`,
       requiredScope: 'tour',
+      metadata: { tour_date: inquiry.preferred_tour_date },
     }))
 
     const reminderDate = new Date(`${inquiry.preferred_tour_date}T15:00:00Z`)
@@ -345,6 +357,7 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
         automationKey: `tour_reminder:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
         body: `Luxor Event Space: Reminder for your private venue tour tomorrow${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. We look forward to meeting you. Reply STOP to opt out.`,
         requiredScope: 'tour',
+        metadata: { tour_date: inquiry.preferred_tour_date },
       }))
     }
   } else {
@@ -384,6 +397,7 @@ export async function queueBookingTextJobs(booking: LuxorBooking) {
       automationKey: `event_reminder:${booking.id}:${schedule.key}:${booking.event_date}`,
       body: `Luxor Event Space: Hi ${firstName(booking.client_name)}, your ${booking.event_type || 'event'} is ${schedule.label} away on ${formatDate(booking.event_date)}. Reply with any final questions or updates. Reply STOP to opt out.`,
       requiredScope: 'event',
+      metadata: { event_date: booking.event_date },
     }))
   }
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
@@ -432,6 +446,7 @@ export async function queueInvoiceReminderTexts(
       automationKey: `invoice_due:${invoice.id}:${invoice.due_date}`,
       body: `Luxor Event Space: Hi ${firstName(contact.name)}, a friendly reminder that your ${amount} invoice is due ${formatDate(invoice.due_date)}. Please use your secure invoice link or contact us with questions. Reply STOP to opt out.`,
       requiredScope: 'invoice',
+      metadata: { due_date: invoice.due_date },
     }))
   }
   jobs.push(await createUniqueTextJob({
@@ -444,6 +459,7 @@ export async function queueInvoiceReminderTexts(
     automationKey: `invoice_overdue:${invoice.id}:${invoice.due_date}`,
     body: `Luxor Event Space: Hi ${firstName(contact.name)}, our records show your ${amount} invoice due ${formatDate(invoice.due_date)} is still unpaid. Please use your secure invoice link or contact us for help. Reply STOP to opt out.`,
     requiredScope: 'invoice',
+    metadata: { due_date: invoice.due_date },
   }))
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
 }
@@ -558,24 +574,27 @@ async function processTextJob(job: LuxorTextJob) {
 
 async function getTextJobSkipReason(job: LuxorTextJob) {
   if (job.invoice_id && (job.job_type === 'invoice_due_reminder' || job.job_type === 'invoice_overdue_reminder')) {
-    const [invoice] = await supabaseRest<Array<{ status: string }>>(
-      `luxor_invoices?select=status&id=eq.${encodeURIComponent(job.invoice_id)}&limit=1`,
+    const [invoice] = await supabaseRest<Array<{ status: string; due_date: string | null }>>(
+      `luxor_invoices?select=status,due_date&id=eq.${encodeURIComponent(job.invoice_id)}&limit=1`,
     )
-    if (!invoice || invoice.status === 'paid' || invoice.status === 'void') return 'Invoice is already paid, void, or unavailable.'
+    if (!invoice || ['paid', 'void', 'cancelled'].includes(invoice.status)) return 'Invoice is already paid, cancelled, or unavailable.'
+    if (job.metadata?.due_date && invoice.due_date !== job.metadata.due_date) return 'Invoice due date changed; the old reminder was skipped.'
   }
   if (job.booking_id && job.job_type === 'event_reminder') {
-    const [booking] = await supabaseRest<Array<{ status: string }>>(
-      `luxor_bookings?select=status&id=eq.${encodeURIComponent(job.booking_id)}&limit=1`,
+    const [booking] = await supabaseRest<Array<{ status: string; event_date: string | null }>>(
+      `luxor_bookings?select=status,event_date&id=eq.${encodeURIComponent(job.booking_id)}&limit=1`,
     )
     if (!booking || booking.status === 'cancelled' || booking.status === 'completed') return 'Event is cancelled, completed, or unavailable.'
+    if (job.metadata?.event_date && booking.event_date !== job.metadata.event_date) return 'Event date changed; the old reminder was skipped.'
   }
   if (job.inquiry_id && job.job_type === 'tour_reminder') {
-    const [inquiry] = await supabaseRest<Array<{ status: string; tour_attendance_status?: string | null }>>(
-      `luxor_inquiries?select=status,tour_attendance_status&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
+    const [inquiry] = await supabaseRest<Array<{ status: string; tour_attendance_status?: string | null; preferred_tour_date: string | null }>>(
+      `luxor_inquiries?select=status,tour_attendance_status,preferred_tour_date&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
     )
     if (!inquiry || inquiry.status === 'closed_lost' || ['cancelled', 'attended', 'no_show'].includes(inquiry.tour_attendance_status || '')) {
       return 'Tour is cancelled, completed, or unavailable.'
     }
+    if (job.metadata?.tour_date && inquiry.preferred_tour_date !== job.metadata.tour_date) return 'Tour date changed; the old reminder was skipped.'
   }
   return null
 }
@@ -640,7 +659,7 @@ export async function recordTextCampaignReply(phone: string, optedOut = false) {
   const normalized = normalizePhoneNumber(phone)
   if (!normalized) return
   const recipients = await supabaseRest<LuxorTextCampaignRecipient[]>(
-    `luxor_text_campaign_recipients?select=*&phone_number=eq.${encodeURIComponent(normalized)}&status=in.(sent,delivered)&order=sent_at.desc&limit=10`,
+    `luxor_text_campaign_recipients?select=*&phone_number=eq.${encodeURIComponent(normalized)}&status=in.(sent,delivered)&order=sent_at.desc&limit=1`,
   )
   const campaignIds = new Set<string>()
   const now = new Date().toISOString()
@@ -702,6 +721,10 @@ function scopeForJob(kind: LuxorTextJobKind) {
   if (kind === 'payment_confirmation') return 'payment'
   if (kind.startsWith('invoice_')) return 'invoice'
   return 'customer_care'
+}
+
+function campaignScope(type: LuxorTextCampaignType) {
+  return type === 'elena' || type === 'transactional' ? 'customer_care' : type
 }
 
 function mapDeliveryStatus(status: string): LuxorTextJobStatus {

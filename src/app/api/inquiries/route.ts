@@ -5,6 +5,7 @@ import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
+import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -115,6 +116,21 @@ export async function PATCH(request: NextRequest) {
         )
       } catch (noteError) {
         console.error('Inquiry status updated, but status note creation failed:', noteError)
+      }
+    }
+
+    if (
+      updated.phone &&
+      (
+        updates.preferred_tour_date !== undefined ||
+        updates.preferred_tour_time !== undefined ||
+        (status === 'tour_confirmed' && existing.status !== 'tour_confirmed')
+      )
+    ) {
+      try {
+        await queueInquiryTextJobs(updated)
+      } catch (automationError) {
+        console.error('Inquiry updated, but its text reminders could not be queued:', automationError)
       }
     }
 

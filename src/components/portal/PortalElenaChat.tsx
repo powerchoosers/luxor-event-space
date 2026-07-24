@@ -315,6 +315,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         reply: string
         executedQueries: ExecutedQuery[]
         confirmation?: { query: string; summary: string }
+        textCampaignDraft?: {
+          name: string
+          bodyTemplate: string
+          campaignType: string
+        }
+      }
+
+      if (data.textCampaignDraft) {
+        window.localStorage.setItem('luxor_elena_text_campaign_draft', JSON.stringify(data.textCampaignDraft))
+        window.dispatchEvent(new CustomEvent('luxor:text-campaign-draft', { detail: data.textCampaignDraft }))
       }
       
       setMessages(prev => [

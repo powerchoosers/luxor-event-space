@@ -11,6 +11,7 @@ import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildFinalPaymentReminderEmail, buildProposalReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
+import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let invoiceId = 'unknown'
@@ -170,6 +171,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     } catch (automationError) {
       console.error('[invoice-payment-request] reminder queue failed after the proposal was delivered', automationError)
+    }
+    if (inquiry.phone && updated) {
+      try {
+        await queueInvoiceReminderTexts(updated, { phone: inquiry.phone, name: inquiry.full_name })
+        await createUniqueTextJob({
+          jobType: 'invoice_due_reminder',
+          phone: inquiry.phone,
+          name: inquiry.full_name,
+          inquiryId: inquiry.id,
+          bookingId: booking?.id,
+          invoiceId: invoice.id,
+          scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
+          automationKey: `invoice_payment_request:${invoice.id}:${checkout.id}`,
+          body: `Luxor Event Space: Hi ${inquiry.full_name.split(/\s+/)[0] || 'there'}, this is a reminder that your ${paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} payment request is still open. Review it securely here: ${reviewUrl} Reply STOP to opt out.`,
+          requiredScope: 'invoice',
+          metadata: { checkout_session_id: checkout.id, due_date: invoice.due_date },
+        })
+      } catch (automationError) {
+        console.error('[invoice-payment-request] text reminder queue failed after the proposal was delivered', automationError)
+      }
     }
     return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, checkoutUrl: checkout.url, paymentAmount, balanceDue })
   } catch (error) {

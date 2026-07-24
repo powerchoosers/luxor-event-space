@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
 
 type ToolCall = {
   id: string
@@ -198,6 +199,13 @@ Always use SQL queries to answer questions about the database. Do not make up da
     - contract_title, contract_body (text)
     - signed_name (text), signed_at (timestamptz)
 
+19. public.luxor_text_campaigns
+    - id, created_at, updated_at (uuid/timestamps)
+    - name, body_template, campaign_type, status (text)
+    - audience_label (text), audience_filter (jsonb)
+    - scheduled_for, sent_at (timestamptz)
+    - recipient_count, sent_count, delivered_count, failed_count, reply_count, opt_out_count (integer)
+
 
 ### GUIDELINES:
 - Execute read-only SQL queries (using SELECT statements) to lookup info immediately using the "execute_database_sql" tool.
@@ -206,6 +214,8 @@ Always use SQL queries to answer questions about the database. Do not make up da
 - If your query returns no results, check if you matched the casing or exact spelling.
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
+- When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
+- When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
@@ -244,6 +254,49 @@ const TOOLS_DEFINITION = [
           }
         },
         required: ['query', 'summary']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_text_campaign_draft',
+      description: 'Prepare a safe text campaign draft in the portal Text Campaigns builder. This does not send or queue messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'A short internal campaign name.'
+          },
+          bodyTemplate: {
+            type: 'string',
+            description: 'The SMS body, no more than 480 characters. It must identify Luxor Event Space and include Reply STOP to opt out.'
+          },
+          campaignType: {
+            type: 'string',
+            enum: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'elena']
+          }
+        },
+        required: ['name', 'bodyTemplate', 'campaignType']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_text_message_confirmation',
+      description: 'Ask the owner to confirm a one-to-one text message to a specific Luxor client. Never use for bulk messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string', description: 'The Luxor inquiry UUID returned by a database lookup.' },
+          phone: { type: 'string', description: 'The exact client phone returned by the database lookup.' },
+          contactName: { type: 'string', description: 'The client name returned by the database lookup.' },
+          body: { type: 'string', description: 'The complete text message to send, no more than 1,600 characters.' },
+          summary: { type: 'string', description: 'A clear confirmation summary naming the client and showing the message purpose.' }
+        },
+        required: ['inquiryId', 'phone', 'contactName', 'body', 'summary']
       }
     }
   }
@@ -347,12 +400,29 @@ export async function POST(request: Request) {
     if (confirmQuery && confirmSummary) {
       let queryResult: unknown
       try {
-        const rpcRes = await supabaseRest<unknown>('rpc/exec_sql', {
-          method: 'POST',
-          body: JSON.stringify({ query: confirmQuery })
-        })
-        queryResult = rpcRes
-        executedQueries.push({ query: confirmQuery, result: rpcRes })
+        if (confirmQuery.startsWith('SEND_TEXT:')) {
+          const payload = JSON.parse(confirmQuery.slice('SEND_TEXT:'.length)) as {
+            inquiryId?: string
+            phone?: string
+            contactName?: string
+            body?: string
+          }
+          queryResult = await sendLuxorDirectText({
+            to: payload.phone,
+            body: payload.body,
+            inquiryId: payload.inquiryId,
+            contactName: payload.contactName,
+            ownerEmail: session.email,
+          })
+          executedQueries.push({ query: 'Send confirmed one-to-one text', result: queryResult })
+        } else {
+          const rpcRes = await supabaseRest<unknown>('rpc/exec_sql', {
+            method: 'POST',
+            body: JSON.stringify({ query: confirmQuery })
+          })
+          queryResult = rpcRes
+          executedQueries.push({ query: confirmQuery, result: rpcRes })
+        }
       } catch (dbErr: unknown) {
         console.error('Confirmation query failed:', dbErr)
         queryResult = { error: dbErr instanceof Error ? dbErr.message : 'Database query failed' }
@@ -455,6 +525,7 @@ export async function POST(request: Request) {
     const maxLoops = 5
     let finalContent = 'I encountered an issue processing your request.'
     let confirmationPayload: { query: string; summary: string } | null = null
+    let textCampaignDraft: { name: string; bodyTemplate: string; campaignType: string } | null = null
 
     while (loopCount < maxLoops) {
       loopCount++
@@ -565,6 +636,70 @@ export async function POST(request: Request) {
               })
             }
           }
+          // C. Safe text-campaign draft (no send or database write)
+          else if (toolCall.function?.name === 'create_text_campaign_draft') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const draftBody = String(args.bodyTemplate || '').trim().slice(0, 480)
+              if (!/luxor event space/i.test(draftBody) || !/\bstop\b/i.test(draftBody)) {
+                throw new Error('Draft must identify Luxor Event Space and include STOP instructions.')
+              }
+              textCampaignDraft = {
+                name: String(args.name || 'Elena text campaign').trim().slice(0, 160),
+                bodyTemplate: draftBody,
+                campaignType: String(args.campaignType || 'elena'),
+              }
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'create_text_campaign_draft',
+                content: JSON.stringify({
+                  ok: true,
+                  message: 'Draft loaded into the Text Campaigns builder. The owner must review and explicitly queue it.',
+                })
+              })
+            } catch (draftError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'create_text_campaign_draft',
+                content: JSON.stringify({
+                  error: draftError instanceof Error ? draftError.message : 'Invalid text campaign draft.',
+                })
+              })
+            }
+          }
+          // D. One-to-one text confirmation
+          else if (toolCall.function?.name === 'request_text_message_confirmation') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const body = String(args.body || '').trim()
+              if (!body || body.length > 1600) throw new Error('The text must be between 1 and 1,600 characters.')
+              confirmationPayload = {
+                query: `SEND_TEXT:${JSON.stringify({
+                  inquiryId: String(args.inquiryId || ''),
+                  phone: String(args.phone || ''),
+                  contactName: String(args.contactName || ''),
+                  body,
+                })}`,
+                summary: String(args.summary || `Send a text to ${args.contactName || 'this client'}`),
+              }
+              confirmationInterrupted = true
+            } catch (textError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'request_text_message_confirmation',
+                content: JSON.stringify({
+                  error: textError instanceof Error ? textError.message : 'Invalid text message request.',
+                })
+              })
+            }
+          }
         }
 
         // If we need user confirmation, halt execution and report to client
@@ -598,7 +733,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       reply: finalContent,
       confirmation: confirmationPayload || undefined,
-      executedQueries
+      executedQueries,
+      textCampaignDraft: textCampaignDraft || undefined
     })
   } catch (err: unknown) {
     console.error('Internal Elena API error:', err)

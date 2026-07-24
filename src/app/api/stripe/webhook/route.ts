@@ -5,6 +5,8 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
+import type { LuxorPayment } from '@/lib/luxorInquiryTypes'
 
 function paymentKind(label: string | undefined) {
   const normalized = String(label || '').toLowerCase()
@@ -19,9 +21,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   const paidAt = new Date().toISOString()
   const kind = paymentKind(session.metadata?.payment_label)
 
-  await supabaseRest('luxor_payments?on_conflict=processor,processor_reference', {
+  const [payment] = await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
     method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
     body: JSON.stringify({
       booking_id: session.metadata?.booking_id || null,
       invoice_id: invoiceId,
@@ -54,9 +56,11 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   })
 
   const inquiryId = invoice.inquiry_id || session.metadata?.inquiry_id || null
+  let paymentContact: { phone?: string | null; name: string; inquiryId?: string | null } | null = null
   if (inquiryId) {
     const inquiry = await getLuxorInquiry(inquiryId)
     if (inquiry) {
+      paymentContact = { phone: inquiry.phone, name: inquiry.full_name, inquiryId: inquiry.id }
       await updateLuxorInquiry(inquiry.id, {
         status: ['booked', 'closed_lost'].includes(inquiry.status) ? inquiry.status : 'proposal_sent',
         pipeline_stage: ['booked', 'closed_lost'].includes(inquiry.status) ? inquiry.pipeline_stage : 'proposal',
@@ -78,6 +82,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   if (bookingId) {
     const booking = await getLuxorBooking(bookingId)
     if (booking) {
+      paymentContact ||= { phone: booking.phone, name: booking.client_name, inquiryId: booking.inquiry_id }
       const depositCovered = Number(booking.deposit_required || 0) > 0 && paidTotal + 0.005 >= Number(booking.deposit_required)
       const contractCovered = Number(booking.contract_total || 0) > 0 && paidTotal + 0.005 >= Number(booking.contract_total)
       const updatedBooking = await updateLuxorBooking(booking.id, {
@@ -107,6 +112,13 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           })
         }
       }
+    }
+  }
+  if (payment && paymentContact) {
+    try {
+      await queuePaymentConfirmationText(payment, paymentContact)
+    } catch (automationError) {
+      console.error('Stripe payment recorded, but its text confirmation could not be queued:', automationError)
     }
   }
 }

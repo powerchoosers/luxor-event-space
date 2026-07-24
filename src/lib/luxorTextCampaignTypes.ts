@@ -121,4 +121,5 @@ export type LuxorTextAudienceFilter = {
   inquiryIds?: string[]
   statuses?: string[]
   eventTypes?: string[]
+  requiredScope?: string
 }

@@ -515,7 +515,7 @@ function MarketingPageContent() {
       case 'text-campaigns':
         return {
           title: 'Text Campaigns',
-          desc: 'SMS campaign reporting appears here only after a campaign is stored and tracked in Supabase.',
+          desc: 'Build, review, schedule, and track consent-based client texts with Elena-assisted drafting.',
           icon: <MessageSquare size={18} />
         }
       case 'builder-automation':

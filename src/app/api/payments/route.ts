@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
         await queuePaymentConfirmationText(created, {
           phone: inquiry?.phone,
-          name: inquiry?.name || booking?.client_name || 'there',
+          name: inquiry?.full_name || booking?.client_name || 'there',
           inquiryId,
         })
       } catch (automationError) {

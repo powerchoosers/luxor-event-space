@@ -13,6 +13,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { LuxorEmailJobKind, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import { createLuxorZohoCalendarEvent } from '@/lib/zohoMailServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
+import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor Event Space, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -167,6 +168,14 @@ export async function POST(request: NextRequest) {
           zohoCalendarUrl: calendar.viewEventUrl,
         },
       })
+
+      if (updated) {
+        try {
+          await queueInquiryTextJobs(updated)
+        } catch (automationError) {
+          console.error('Tour scheduled, but its text confirmations could not be queued:', automationError)
+        }
+      }
 
       await createNote(
         inquiryId,
