@@ -81,7 +81,6 @@ const operationsSubItems = [
 
 const marketingSubItems = [
   { href: '/portal/marketing?tab=overview', label: 'Marketing Overview', icon: BarChart3 },
-  { href: '/portal/marketing?tab=emails', label: 'Emails', icon: Mail },
   { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
   { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
   { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
@@ -272,13 +271,13 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden portal-scrollbar ${
+      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
       } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="flex flex-col min-h-full px-3 py-6">
-          <div className={`mb-8 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+        <div className="flex flex-col min-h-full px-3 py-5">
+          <div className={`mb-5 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
             sidebarCollapsed ? 'px-1.5' : 'px-1'
           }`}>
             <Link href="/portal" className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
@@ -306,7 +305,9 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
           <nav className="flex-1 space-y-1">
             {navItems.map((item) => {
               if (item.isDropdown) {
-                const isCurrentGroup = pathname.startsWith(item.href)
+                const isCurrentGroup = item.href === '/portal/marketing'
+                  ? pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails'
+                  : pathname.startsWith(item.href)
                 const isExpanded = item.href === '/portal/operations' ? operationsExpanded : marketingExpanded
                 return (
                   <div key={item.href} className="space-y-1">
@@ -390,13 +391,13 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
                 )
               }
               return (
-                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href)} collapsed={sidebarCollapsed} />
+                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarCollapsed} />
               )
             })}
           </nav>
 
-          <div className="mt-auto space-y-2 border-t border-[#caa24c]/10 pt-6">
-            <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={pathname === '/portal/settings'} collapsed={sidebarCollapsed} />
+          <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
+            <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} />
             <form action="/api/auth/logout" method="post">
               <button
                 type="submit"
@@ -605,7 +606,7 @@ function PortalShellContent({ children, session }: { children: React.ReactNode; 
             : 'border-[#caa24c]/10 bg-[#050505]/86'
         }`} aria-label="Portal sections">
           {navItems.map((item) => {
-            const active = isActivePath(pathname, item.href)
+            const active = isActivePath(pathname, item.href, searchParams)
             return (
               <Link
                 key={item.href}
@@ -692,7 +693,15 @@ function SidebarLink({
   )
 }
 
-function isActivePath(pathname: string, href: string) {
+function isActivePath(pathname: string, href: string, searchParams?: ReturnType<typeof useSearchParams> | null) {
+  if (href.includes('?tab=')) {
+    const [basePath, query] = href.split('?')
+    const expectedTab = new URLSearchParams(query).get('tab')
+    return pathname === basePath && searchParams?.get('tab') === expectedTab
+  }
+  if (href === '/portal/marketing') {
+    return pathname === href && searchParams?.get('tab') !== 'emails'
+  }
   if (href === '/portal') return pathname === href
   return pathname === href || pathname.startsWith(`${href}/`)
 }
