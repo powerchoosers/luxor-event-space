@@ -3,6 +3,7 @@ import 'server-only'
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto'
 import { createLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { createUniqueLuxorEmailJob } from './luxorEmailJobsServer'
+import { addMarketingMember, isMarketingMember } from './luxorMarketingServer'
 import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
 import type { LuxorInquiry } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
@@ -15,6 +16,7 @@ export type GrandOpeningAttendee = {
   inquiry_id: string | null
   invited_by_inquiry_id: string | null
   full_name: string
+  email: string
   phone: string | null
   attendee_type: 'rsvp' | 'guest'
   checked_in_at: string
@@ -28,8 +30,14 @@ export type GrandOpeningAttendee = {
   metadata: Record<string, unknown>
 }
 
-export type GrandOpeningRsvpCandidate = Pick<LuxorInquiry, 'id' | 'full_name' | 'phone' | 'email' | 'attendee_count'> & {
+export type GrandOpeningRsvpCandidate = Pick<LuxorInquiry, 'id' | 'full_name' | 'phone' | 'email' | 'attendee_count' | 'marketing_opt_in'> & {
   checked_in: boolean
+}
+
+export type GrandOpeningContactMatch = {
+  id: string
+  email: string
+  marketing_opt_in: boolean
 }
 
 const CAMPAIGN_FILTER = `or=(campaign_key.eq.${LUXOR_GRAND_OPENING.campaignKey},flow.eq.grand_opening_rsvp,source.eq.grand_opening_rsvp)`
@@ -41,19 +49,16 @@ export async function searchGrandOpeningRsvps(query: string, limit = 12) {
   if (term.length < 2) return []
 
   const inquiries = await supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=id,full_name,email,phone,attendee_count&${CAMPAIGN_FILTER}&rsvp_status=eq.attending&full_name=ilike.${encodeURIComponent(`*${term}*`)}&order=full_name.asc&limit=${Math.min(Math.max(limit, 1), 20)}`,
+    `luxor_inquiries?select=id,full_name,email,phone,attendee_count,marketing_opt_in&${CAMPAIGN_FILTER}&rsvp_status=eq.attending&full_name=ilike.${encodeURIComponent(`*${term}*`)}&order=full_name.asc&limit=${Math.min(Math.max(limit, 1), 20)}`,
   )
   const checkedIn = await listGrandOpeningAttendees()
   const checkedIds = new Set(checkedIn.map((attendee) => attendee.inquiry_id).filter(Boolean))
 
-  return inquiries.map((inquiry) => ({
-    id: inquiry.id,
-    full_name: inquiry.full_name,
-    email: inquiry.email,
-    phone: inquiry.phone,
-    attendee_count: inquiry.attendee_count,
+  return Promise.all(inquiries.map(async (inquiry) => ({
+    ...inquiry,
+    marketing_opt_in: inquiry.marketing_opt_in || Boolean(inquiry.email && await isMarketingMember(inquiry.email)),
     checked_in: checkedIds.has(inquiry.id),
-  }))
+  })))
 }
 
 export async function resolveGrandOpeningInvite(value: string) {
@@ -61,22 +66,45 @@ export async function resolveGrandOpeningInvite(value: string) {
   if (!inquiryId || !signature || !isValidInviteSignature(inquiryId, signature)) return null
 
   const inquiries = await supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=id,full_name,email,phone,attendee_count&${CAMPAIGN_FILTER}&rsvp_status=eq.attending&id=eq.${encodeURIComponent(inquiryId)}&limit=1`,
+    `luxor_inquiries?select=id,full_name,email,phone,attendee_count,marketing_opt_in&${CAMPAIGN_FILTER}&rsvp_status=eq.attending&id=eq.${encodeURIComponent(inquiryId)}&limit=1`,
   )
   if (!inquiries[0]) return null
 
   const existing = await findAttendeeByInquiryId(inquiryId)
+  const inquiry = inquiries[0]
+  const marketingOptIn = Boolean(inquiry.marketing_opt_in || (inquiry.email && await isMarketingMember(inquiry.email)))
   return {
-    id: inquiries[0].id,
-    full_name: inquiries[0].full_name,
-    attendee_count: inquiries[0].attendee_count,
+    id: inquiry.id,
+    full_name: inquiry.full_name,
+    email: inquiry.email,
+    attendee_count: inquiry.attendee_count,
+    marketing_opt_in: marketingOptIn,
     checked_in: Boolean(existing),
+  }
+}
+
+export async function resolveGrandOpeningContact(fullNameValue: string, phoneValue: string): Promise<GrandOpeningContactMatch | null> {
+  const fullName = cleanName(fullNameValue)
+  const phone = normalizePhone(phoneValue)
+  if (fullName.split(' ').filter(Boolean).length < 2 || !phone) return null
+
+  const inquiries = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=id,full_name,email,phone,marketing_opt_in&full_name=ilike.${encodeURIComponent(fullName)}&email=not.is.null&limit=10`,
+  )
+  const inquiry = inquiries.find((candidate) => sameName(candidate.full_name, fullName) && normalizePhone(candidate.phone) === phone)
+  if (!inquiry?.email) return null
+
+  return {
+    id: inquiry.id,
+    email: requireEmail(inquiry.email),
+    marketing_opt_in: inquiry.marketing_opt_in || await isMarketingMember(inquiry.email),
   }
 }
 
 export async function checkInGrandOpeningRsvp(input: {
   inquiryId: string
   inviteToken?: string
+  email: string
   phone?: string
   marketingOptIn?: boolean
   checkedInBy: 'self' | 'staff'
@@ -92,17 +120,22 @@ export async function checkInGrandOpeningRsvp(input: {
   const inquiry = inquiries[0]
   if (!inquiry) throw new Error('We could not find that Grand Opening RSVP.')
 
+  const email = requireEmail(input.email)
   const phone = input.phone ? requirePhone(input.phone) : normalizePhone(inquiry.phone)
-  if (input.phone && input.phone !== inquiry.phone) {
+  const alreadyMarketing = Boolean(inquiry.email && await isMarketingMember(inquiry.email))
+  const marketingOptIn = Boolean(input.marketingOptIn || inquiry.marketing_opt_in || alreadyMarketing)
+  if (email !== inquiry.email?.toLowerCase() || phone !== normalizePhone(inquiry.phone) || marketingOptIn !== inquiry.marketing_opt_in) {
     await updateLuxorInquiry(inquiry.id, {
+      email,
       phone,
-      marketing_opt_in: Boolean(input.marketingOptIn || inquiry.marketing_opt_in),
+      marketing_opt_in: marketingOptIn,
       metadata: {
         ...(inquiry.metadata || {}),
-        raffleCheckIn: { updatedPhoneAt: new Date().toISOString(), contactPurpose: 'raffle_winner_contact' },
+        raffleCheckIn: { contactUpdatedAt: new Date().toISOString(), contactPurpose: 'raffle_winner_contact' },
       },
     })
   }
+  if (marketingOptIn) await addMarketingMember(email, inquiry.full_name, 'raffle_game')
 
   const existing = await findAttendeeByInquiryId(inquiry.id)
   if (existing) return existing
@@ -114,10 +147,11 @@ export async function checkInGrandOpeningRsvp(input: {
       campaign_key: LUXOR_GRAND_OPENING.campaignKey,
       inquiry_id: inquiry.id,
       full_name: inquiry.full_name,
+      email,
       phone,
       attendee_type: 'rsvp',
       checked_in_by: input.checkedInBy,
-      marketing_opt_in: Boolean(input.marketingOptIn),
+      marketing_opt_in: marketingOptIn,
       metadata: { original_attendee_count: inquiry.attendee_count || inquiry.guest_count || 1 },
     }),
   })
@@ -126,6 +160,7 @@ export async function checkInGrandOpeningRsvp(input: {
 
 export async function checkInGrandOpeningGuest(input: {
   fullName: string
+  email: string
   phone: string
   invitedByInquiryId: string
   marketingOptIn?: boolean
@@ -133,6 +168,7 @@ export async function checkInGrandOpeningGuest(input: {
 }) {
   const fullName = cleanName(input.fullName)
   if (fullName.split(' ').filter(Boolean).length < 2) throw new Error('Please enter the guest’s first and last name.')
+  const email = requireEmail(input.email)
   const phone = requirePhone(input.phone)
 
   const hosts = await supabaseRest<LuxorInquiry[]>(
@@ -141,25 +177,44 @@ export async function checkInGrandOpeningGuest(input: {
   const host = hosts[0]
   if (!host) throw new Error('Please choose the person whose RSVP invited you.')
 
-  const inquiry = await createLuxorInquiry({
-    fullName,
-    phone,
-    source: 'grand_opening_guest_checkin',
-    flow: 'grand_opening_guest_checkin',
-    campaignKey: LUXOR_GRAND_OPENING.campaignKey,
-    rsvpStatus: 'attending',
-    attendeeCount: '1',
-    marketingOptIn: Boolean(input.marketingOptIn),
-    smsOptIn: Boolean(input.marketingOptIn),
-    pagePath: '/grand-opening-check-in',
-    message: `Grand Opening guest invited by ${host.full_name}.`,
-    metadata: {
-      invitedByInquiryId: host.id,
-      invitedByName: host.full_name,
-      raffleContactPurpose: 'winner_contact',
-      guestMarketingConsentCaptured: Boolean(input.marketingOptIn),
-    },
-  })
+  const existingInquiry = await findExistingRaffleInquiry(fullName, email, phone)
+  const alreadyMarketing = await isMarketingMember(email)
+  const marketingOptIn = Boolean(input.marketingOptIn || alreadyMarketing || existingInquiry?.marketing_opt_in)
+  const associationMetadata = {
+    invitedByInquiryId: host.id,
+    invitedByName: host.full_name,
+    raffleContactPurpose: 'winner_contact',
+    grandOpeningRsvpAssociation: true,
+    raffleGameCheckedInAt: new Date().toISOString(),
+    guestMarketingConsentCaptured: Boolean(input.marketingOptIn),
+  }
+
+  const inquiry = existingInquiry
+    ? await updateLuxorInquiry(existingInquiry.id, {
+        email,
+        phone,
+        campaign_key: LUXOR_GRAND_OPENING.campaignKey,
+        rsvp_status: 'attending',
+        marketing_opt_in: marketingOptIn,
+        metadata: { ...(existingInquiry.metadata || {}), ...associationMetadata },
+      })
+    : await createLuxorInquiry({
+        fullName,
+        email,
+        phone,
+        source: 'raffle_game',
+        flow: 'grand_opening_raffle_checkin',
+        campaignKey: LUXOR_GRAND_OPENING.campaignKey,
+        rsvpStatus: 'attending',
+        attendeeCount: '1',
+        marketingOptIn,
+        pagePath: '/grand-opening-check-in',
+        message: `Grand Opening guest invited by ${host.full_name}.`,
+        metadata: associationMetadata,
+      })
+
+  if (!inquiry) throw new Error('We could not save this guest in the CRM.')
+  if (marketingOptIn) await addMarketingMember(email, inquiry.full_name, 'raffle_game')
 
   const [created] = await supabaseRest<GrandOpeningAttendee[]>('luxor_grand_opening_attendees?select=*', {
     method: 'POST',
@@ -169,10 +224,11 @@ export async function checkInGrandOpeningGuest(input: {
       inquiry_id: inquiry.id,
       invited_by_inquiry_id: host.id,
       full_name: inquiry.full_name,
+      email,
       phone,
       attendee_type: 'guest',
       checked_in_by: input.checkedInBy,
-      marketing_opt_in: Boolean(input.marketingOptIn),
+      marketing_opt_in: marketingOptIn,
       metadata: { invited_by_name: host.full_name },
     }),
   })
@@ -299,6 +355,36 @@ function requirePhone(value: string) {
   const phone = normalizePhone(value)
   if (!phone) throw new Error('Please enter a valid mobile phone number with area code.')
   return phone
+}
+
+async function findExistingRaffleInquiry(fullName: string, email: string, phone: string) {
+  const emailMatches = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&email=eq.${encodeURIComponent(email)}&order=created_at.asc&limit=2`,
+  )
+  if (emailMatches.length) {
+    const matchingEmail = emailMatches.find((candidate) =>
+      sameName(candidate.full_name, fullName) || normalizePhone(candidate.phone) === phone,
+    )
+    if (!matchingEmail) throw new Error('That email is already connected to a different CRM contact. Please ask the check-in host for help.')
+    return matchingEmail
+  }
+
+  const nameMatches = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&full_name=ilike.${encodeURIComponent(fullName)}&order=created_at.asc&limit=10`,
+  )
+  return nameMatches.find((candidate) => sameName(candidate.full_name, fullName) && normalizePhone(candidate.phone) === phone) || null
+}
+
+function requireEmail(value: string) {
+  const email = cleanText(value).toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 320) {
+    throw new Error('Please enter a valid email address.')
+  }
+  return email
+}
+
+function sameName(left: string, right: string) {
+  return cleanName(left).toLocaleLowerCase() === cleanName(right).toLocaleLowerCase()
 }
 
 function cleanName(value: unknown) {

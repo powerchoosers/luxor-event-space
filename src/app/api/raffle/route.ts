@@ -5,6 +5,7 @@ import {
   checkInGrandOpeningRsvp,
   drawGrandOpeningWinner,
   listGrandOpeningAttendees,
+  resolveGrandOpeningContact,
   searchGrandOpeningRsvps,
   skipGrandOpeningWinner,
 } from '@/lib/luxorGrandOpeningRaffleServer'
@@ -17,6 +18,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const query = new URL(request.url).searchParams.get('q') || ''
+    const contactName = new URL(request.url).searchParams.get('contactName') || ''
+    const contactPhone = new URL(request.url).searchParams.get('contactPhone') || ''
+    if (contactName && contactPhone) {
+      return NextResponse.json({ contact: await resolveGrandOpeningContact(contactName, contactPhone) })
+    }
     const [attendees, matches] = await Promise.all([
       listGrandOpeningAttendees(),
       query.trim().length >= 2 ? searchGrandOpeningRsvps(query, 20) : Promise.resolve([]),
@@ -38,6 +44,7 @@ export async function POST(request: NextRequest) {
       case 'check_in_rsvp':
         return NextResponse.json({ attendee: await checkInGrandOpeningRsvp({
           inquiryId: String(body.inquiryId || ''),
+          email: String(body.email || ''),
           phone: String(body.phone || ''),
           marketingOptIn: Boolean(body.marketingOptIn),
           checkedInBy: 'staff',
@@ -45,6 +52,7 @@ export async function POST(request: NextRequest) {
       case 'check_in_guest':
         return NextResponse.json({ attendee: await checkInGrandOpeningGuest({
           fullName: String(body.fullName || ''),
+          email: String(body.email || ''),
           phone: String(body.phone || ''),
           invitedByInquiryId: String(body.invitedByInquiryId || ''),
           marketingOptIn: Boolean(body.marketingOptIn),

@@ -13,7 +13,12 @@ export default function GrandOpeningRafflePage() {
   const [search, setSearch] = useState('')
   const [guestMode, setGuestMode] = useState(false)
   const [selectedHost, setSelectedHost] = useState<GrandOpeningRsvpCandidate | null>(null)
+  const [guestFirstName, setGuestFirstName] = useState('')
+  const [guestLastName, setGuestLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
+  const [matchedContactId, setMatchedContactId] = useState('')
   const [prizeLabel, setPrizeLabel] = useState('')
   const [winner, setWinner] = useState<GrandOpeningAttendee | null>(null)
   const [rollingName, setRollingName] = useState('Ready to draw')
@@ -44,6 +49,30 @@ export default function GrandOpeningRafflePage() {
     const timer = window.setTimeout(() => load(search), 220)
     return () => window.clearTimeout(timer)
   }, [load, search])
+  useEffect(() => {
+    if (!guestMode) return
+    const fullName = `${guestFirstName} ${guestLastName}`.trim()
+    if (!guestFirstName.trim() || !guestLastName.trim() || phone.replace(/\D/g, '').length !== 10) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ contactName: fullName, contactPhone: phone })
+        const response = await fetch(`/api/raffle?${params}`, { signal: controller.signal })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Unable to check the CRM contact.')
+        if (data.contact) {
+          setEmail(data.contact.email)
+          setMarketingOptIn(Boolean(data.contact.marketing_opt_in))
+          setMatchedContactId(data.contact.id)
+        } else if (matchedContactId) {
+          setEmail(''); setMarketingOptIn(false); setMatchedContactId('')
+        }
+      } catch (reason) {
+        if ((reason as Error).name !== 'AbortError') setError(reason instanceof Error ? reason.message : 'Unable to check the CRM contact.')
+      }
+    }, 300)
+    return () => { controller.abort(); window.clearTimeout(timer) }
+  }, [guestFirstName, guestLastName, guestMode, matchedContactId, phone])
 
   const eligible = useMemo(() => attendees.filter((person) => person.eligible && !person.winner_at && !person.disqualified_at), [attendees])
   const winners = useMemo(() => attendees.filter((person) => person.winner_at && !person.disqualified_at), [attendees])
@@ -62,7 +91,7 @@ export default function GrandOpeningRafflePage() {
   async function checkInRsvp(candidate: GrandOpeningRsvpCandidate) {
     setWorking(true); setError('')
     try {
-      await post({ action: 'check_in_rsvp', inquiryId: candidate.id, phone })
+      await post({ action: 'check_in_rsvp', inquiryId: candidate.id, email: candidate.email, phone, marketingOptIn: candidate.marketing_opt_in })
       setSearch(''); setMatches([]); setPhone('')
       await load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Check-in failed.') }
@@ -71,17 +100,17 @@ export default function GrandOpeningRafflePage() {
 
   async function checkInGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
     setWorking(true); setError('')
     try {
       await post({
         action: 'check_in_guest',
-        fullName: `${String(form.get('firstName') || '')} ${String(form.get('lastName') || '')}`.trim(),
+        fullName: `${guestFirstName} ${guestLastName}`.trim(),
+        email,
         phone,
         invitedByInquiryId: selectedHost?.id,
-        marketingOptIn: form.get('marketingOptIn') === 'on',
+        marketingOptIn,
       })
-      event.currentTarget.reset(); setPhone(''); setSelectedHost(null); setSearch(''); setMatches([])
+      event.currentTarget.reset(); setGuestFirstName(''); setGuestLastName(''); setEmail(''); setPhone(''); setMarketingOptIn(false); setMatchedContactId(''); setSelectedHost(null); setSearch(''); setMatches([])
       await load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Guest check-in failed.') }
     finally { setWorking(false) }
@@ -143,7 +172,7 @@ export default function GrandOpeningRafflePage() {
                 <div className="max-h-[390px] space-y-2 overflow-y-auto portal-scrollbar">
                   {loading ? <CenteredLoader /> : search.trim().length < 2 ? <Hint icon={<Search size={18} />} text="Type at least two letters to find an RSVP." /> : matches.length ? matches.map((candidate) => (
                     <button key={candidate.id} disabled={working || candidate.checked_in} onClick={() => checkInRsvp(candidate)} className="flex w-full items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-left transition hover:border-[#caa24c]/35 disabled:opacity-55">
-                      <span><span className="block text-sm font-bold text-[color:var(--portal-text)]">{candidate.full_name}</span><span className="mt-1 block text-[10px] text-[color:var(--portal-muted)]">{candidate.attendee_count || 1} on RSVP</span></span>
+                      <span className="min-w-0"><span className="block text-sm font-bold text-[color:var(--portal-text)]">{candidate.full_name}</span><span className="mt-1 block truncate text-[10px] text-[color:var(--portal-muted)]">{candidate.email || 'Email missing'} · {candidate.attendee_count || 1} on RSVP{candidate.marketing_opt_in ? ' · Marketing on' : ''}</span></span>
                       <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${candidate.checked_in ? 'bg-emerald-500/12 text-emerald-500' : 'bg-[#caa24c]/12 text-[#caa24c]'}`}>{candidate.checked_in ? 'Checked in' : 'Check in'}</span>
                     </button>
                   )) : <Hint icon={<Users size={18} />} text="No matching Grand Opening RSVP was found." />}
@@ -151,13 +180,14 @@ export default function GrandOpeningRafflePage() {
               </div>
             ) : (
               <form onSubmit={checkInGuest} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3"><SimpleInput name="firstName" label="First name" required /><SimpleInput name="lastName" label="Last name" required /></div>
+                <div className="grid grid-cols-2 gap-3"><SimpleInput name="firstName" label="First name" value={guestFirstName} onChange={setGuestFirstName} required /><SimpleInput name="lastName" label="Last name" value={guestLastName} onChange={setGuestLastName} required /></div>
                 <PhoneInput value={phone} onChange={setPhone} />
+                <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Email *</span><input required type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (matchedContactId) setMatchedContactId('') }} placeholder="guest@example.com" className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /><span className="mt-1.5 block text-[10px] text-[color:var(--portal-muted)]">{matchedContactId ? 'Autofilled from the existing CRM contact.' : 'Required for every raffle ticket.'}</span></label>
                 <div className="relative">
                   <SearchBox value={selectedHost ? selectedHost.full_name : search} onChange={(value) => { setSelectedHost(null); setSearch(value) }} placeholder="Search who invited them…" label="Main RSVP" />
                   {!selectedHost && matches.length ? <div className="absolute z-20 mt-2 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-2xl">{matches.slice(0, 8).map((candidate) => <button key={candidate.id} type="button" onClick={() => { setSelectedHost(candidate); setSearch(candidate.full_name); setMatches([]) }} className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{candidate.full_name}</button>)}</div> : null}
                 </div>
-                <label className="flex items-start gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3"><input name="marketingOptIn" type="checkbox" className="mt-0.5 h-4 w-4 accent-[#caa24c]" /><span className="text-[11px] leading-5 text-[color:var(--portal-muted)]">Guest agreed to receive occasional Luxor marketing texts. Leave unchecked unless they explicitly say yes.</span></label>
+                <label className="flex items-start gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3"><input name="marketingOptIn" type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#caa24c]" /><span className="text-[11px] leading-5 text-[color:var(--portal-muted)]">Add this email to Luxor’s marketing list. Existing members are prechecked automatically.</span></label>
                 <PortalButton type="submit" variant="primary" disabled={working || !selectedHost} className="w-full"><UserPlus size={14} /> {working ? 'Checking in' : 'Add guest & check in'}</PortalButton>
               </form>
             )}
@@ -244,7 +274,7 @@ function SmallMode({ active, onClick, children }: { active: boolean; onClick: ()
 }
 function SearchBox({ value, onChange, placeholder, label = 'RSVP name' }: { value: string; onChange: (value: string) => void; placeholder: string; label?: string }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">{label}</span><div className="relative mt-2"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" /><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 pl-9 pr-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></div></label> }
 function PhoneInput({ value, onChange, optional = false }: { value: string; onChange: (value: string) => void; optional?: boolean }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Phone {optional ? '(optional)' : '*'}</span><input required={!optional} value={value} onChange={(event) => onChange(formatPhone(event.target.value))} placeholder="(210) 000-0000" className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label> }
-function SimpleInput({ name, label, required }: { name: string; label: string; required?: boolean }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">{label}</span><input name={name} required={required} className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label> }
+function SimpleInput({ name, label, value, onChange, required }: { name: string; label: string; value: string; onChange: (value: string) => void; required?: boolean }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">{label}</span><input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label> }
 function Metric({ label, value }: { label: string; value: number }) { return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-center"><p className="font-mono text-xl font-bold text-[color:var(--portal-text)]">{value}</p><p className="mt-1 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{label}</p></div> }
 function Hint({ icon, text }: { icon: React.ReactNode; text: string }) { return <div className="py-10 text-center text-[color:var(--portal-muted)]"><div className="mx-auto mb-3 w-fit text-[#caa24c]">{icon}</div><p className="text-xs">{text}</p></div> }
 function CenteredLoader() { return <div className="py-12 text-center text-[#caa24c]"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div> }

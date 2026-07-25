@@ -6,7 +6,7 @@ import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 type Match = { id: string; full_name: string; checked_in: boolean }
-type InviteRsvp = { id: string; full_name: string; attendee_count: number | null; checked_in: boolean }
+type InviteRsvp = { id: string; full_name: string; email: string; attendee_count: number | null; marketing_opt_in: boolean; checked_in: boolean }
 
 export default function GrandOpeningCheckInPage() {
   return <Suspense fallback={<CheckInLoading />}><GrandOpeningCheckIn /></Suspense>
@@ -22,7 +22,11 @@ function GrandOpeningCheckIn() {
   const [hostQuery, setHostQuery] = useState('')
   const [matches, setMatches] = useState<Match[]>([])
   const [selectedHost, setSelectedHost] = useState<Match | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [matchedContactId, setMatchedContactId] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -35,7 +39,11 @@ function GrandOpeningCheckIn() {
       .then(async (response) => {
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'This check-in link is not valid.')
-        if (!cancelled) setInviteRsvp(data.rsvp)
+        if (!cancelled) {
+          setInviteRsvp(data.rsvp)
+          setEmail(data.rsvp.email || '')
+          setMarketingOptIn(Boolean(data.rsvp.marketing_opt_in))
+        }
       })
       .catch((reason) => {
         if (!cancelled) {
@@ -46,6 +54,33 @@ function GrandOpeningCheckIn() {
       .finally(() => !cancelled && setInviteLoading(false))
     return () => { cancelled = true }
   }, [inviteToken])
+
+  useEffect(() => {
+    if (mode !== 'guest') return
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (firstName.trim().length < 1 || lastName.trim().length < 1 || phone.replace(/\D/g, '').length !== 10) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ contactName: fullName, contactPhone: phone })
+        const response = await fetch(`/api/public/grand-opening-check-in?${params}`, { signal: controller.signal })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Unable to check the CRM contact.')
+        if (data.contact) {
+          setEmail(data.contact.email)
+          setMarketingOptIn(Boolean(data.contact.marketing_opt_in))
+          setMatchedContactId(data.contact.id)
+        } else if (matchedContactId) {
+          setEmail('')
+          setMarketingOptIn(false)
+          setMatchedContactId('')
+        }
+      } catch (reason) {
+        if ((reason as Error).name !== 'AbortError') setError(reason instanceof Error ? reason.message : 'Unable to check the CRM contact.')
+      }
+    }, 350)
+    return () => { controller.abort(); window.clearTimeout(timer) }
+  }, [firstName, lastName, matchedContactId, mode, phone])
 
   useEffect(() => {
     if (mode !== 'guest' || inviteRsvp || hostQuery.trim().length < 2) {
@@ -75,12 +110,12 @@ function GrandOpeningCheckIn() {
     event.preventDefault()
     setError('')
     setSubmitting(true)
-    const form = new FormData(event.currentTarget)
     try {
       const payload = mode === 'guest'
         ? {
             mode: 'guest',
-            fullName: `${String(form.get('firstName') || '')} ${String(form.get('lastName') || '')}`.trim(),
+            fullName: `${firstName} ${lastName}`.trim(),
+            email,
             phone,
             invitedByInquiryId: host?.id || '',
             marketingOptIn,
@@ -89,6 +124,7 @@ function GrandOpeningCheckIn() {
             mode: 'rsvp',
             inquiryId: inviteRsvp?.id || '',
             inviteToken,
+            email,
             phone,
             marketingOptIn,
           }
@@ -136,7 +172,7 @@ function GrandOpeningCheckIn() {
               <p className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-[#caa24c]">You’re in the raffle</p>
               <h2 className="mt-3 font-serif text-5xl text-[#f7efe3]">Welcome, {checkedInName.split(' ')[0]}.</h2>
               <p className="mt-4 text-sm leading-6 text-[#d7c29a]/70">Stay nearby when winners are announced. If your name is called and you are not present, another winner will be drawn.</p>
-              <button type="button" onClick={() => { setCheckedInName(''); setMode('guest'); setPhone(''); setMarketingOptIn(false) }} className="mt-8 text-xs font-bold uppercase tracking-[0.15em] text-[#f1d27a] underline underline-offset-4">Check in another guest</button>
+              <button type="button" onClick={() => { setCheckedInName(''); setMode('guest'); setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setMatchedContactId(''); setMarketingOptIn(false) }} className="mt-8 text-xs font-bold uppercase tracking-[0.15em] text-[#f1d27a] underline underline-offset-4">Check in another guest</button>
             </motion.div>
           ) : inviteLoading ? <CheckInLoading compact /> : (
             <motion.form key="form" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onSubmit={submit} className="space-y-5">
@@ -156,8 +192,8 @@ function GrandOpeningCheckIn() {
               ) : (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field name="firstName" label="First name" required />
-                    <Field name="lastName" label="Last name" required />
+                    <Field name="firstName" label="First name" value={firstName} onChange={setFirstName} required />
+                    <Field name="lastName" label="Last name" value={lastName} onChange={setLastName} required />
                   </div>
                   <div className="relative">
                     <label className="block">
@@ -178,6 +214,12 @@ function GrandOpeningCheckIn() {
               )}
 
               <label className="block">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email address *</span>
+                <input required type="email" inputMode="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); if (matchedContactId) setMatchedContactId('') }} placeholder="you@example.com" className="mt-2 w-full rounded-lg border border-[#caa24c]/22 bg-black/35 px-4 py-3.5 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#8c795d] focus:border-[#f1d27a]/70" />
+                <span className="mt-2 block text-[11px] leading-5 text-[#a99678]">{matchedContactId ? 'Matched to your existing Luxor contact.' : 'Required so we can send event updates and contact you about your raffle entry.'}</span>
+              </label>
+
+              <label className="block">
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Mobile phone {mode === 'guest' ? '*' : '(optional)'}</span>
                 <input required={mode === 'guest'} type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(formatPhone(event.target.value))} placeholder="(210) 000-0000" className="mt-2 w-full rounded-lg border border-[#caa24c]/22 bg-black/35 px-4 py-3.5 font-mono text-sm text-[#f7efe3] outline-none transition placeholder:text-[#8c795d] focus:border-[#f1d27a]/70" />
                 <span className="mt-2 block text-[11px] leading-5 text-[#a99678]">Used to call you if you win and are away from the raffle screen.</span>
@@ -185,7 +227,7 @@ function GrandOpeningCheckIn() {
 
               <label className="flex items-start gap-3 rounded-xl border border-[#caa24c]/14 bg-black/20 p-4">
                 <input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#caa24c]" />
-                <span className="text-xs leading-5 text-[#c8b99f]">Yes, send me occasional Luxor news and future event invitations by text. Consent is optional and not required to enter. Reply STOP to opt out.</span>
+                <span className="text-xs leading-5 text-[#c8b99f]">Yes, add me to Luxor’s email list for occasional news and future event invitations. This is optional and does not affect raffle entry.</span>
               </label>
 
               {error ? <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm leading-5 text-red-200">{error}</p> : null}
@@ -206,8 +248,8 @@ function ModeButton({ active, onClick, icon, label }: { active: boolean; onClick
   return <button type="button" onClick={onClick} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-[0.14em] transition ${active ? 'bg-[#caa24c] text-[#090706]' : 'text-[#bba98e] hover:text-[#f7efe3]'}`}>{icon}{label}</button>
 }
 
-function Field({ name, label, required }: { name: string; label: string; required?: boolean }) {
-  return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{label} {required ? '*' : ''}</span><input name={name} required={required} className="mt-2 w-full rounded-lg border border-[#caa24c]/22 bg-black/35 px-4 py-3.5 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70" /></label>
+function Field({ name, label, value, onChange, required }: { name: string; label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
+  return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{label} {required ? '*' : ''}</span><input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} autoComplete={name === 'firstName' ? 'given-name' : 'family-name'} className="mt-2 w-full rounded-lg border border-[#caa24c]/22 bg-black/35 px-4 py-3.5 text-sm text-[#f7efe3] outline-none transition focus:border-[#f1d27a]/70" /></label>
 }
 
 function CheckInLoading({ compact = false }: { compact?: boolean }) {

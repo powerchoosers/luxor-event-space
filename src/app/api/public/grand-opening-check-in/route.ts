@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   checkInGrandOpeningGuest,
   checkInGrandOpeningRsvp,
+  resolveGrandOpeningContact,
   resolveGrandOpeningInvite,
   searchGrandOpeningRsvps,
 } from '@/lib/luxorGrandOpeningRaffleServer'
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
   try {
     assertPublicRateLimit(request)
     const { searchParams } = new URL(request.url)
+    const contactName = searchParams.get('contactName')?.trim()
+    const contactPhone = searchParams.get('contactPhone')?.trim()
+    if (contactName && contactPhone) {
+      return NextResponse.json({ contact: await resolveGrandOpeningContact(contactName, contactPhone) })
+    }
     const invite = searchParams.get('invite')?.trim()
     if (invite) {
       const rsvp = await resolveGrandOpeningInvite(invite)
@@ -48,6 +54,7 @@ export async function POST(request: NextRequest) {
     const attendee = mode === 'guest'
       ? await checkInGrandOpeningGuest({
           fullName: String(body.fullName || ''),
+          email: String(body.email || ''),
           phone: String(body.phone || ''),
           invitedByInquiryId: String(body.invitedByInquiryId || ''),
           marketingOptIn: Boolean(body.marketingOptIn),
@@ -56,6 +63,7 @@ export async function POST(request: NextRequest) {
       : await checkInGrandOpeningRsvp({
           inquiryId: String(body.inquiryId || ''),
           inviteToken: String(body.inviteToken || ''),
+          email: String(body.email || ''),
           phone: String(body.phone || ''),
           marketingOptIn: Boolean(body.marketingOptIn),
           checkedInBy: 'self',
