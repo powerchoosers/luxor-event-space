@@ -45,6 +45,7 @@ import {
   Cake,
   Heart,
   PartyPopper,
+  Loader2,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
@@ -1394,6 +1395,7 @@ export default function LeadDetailPage({
 
   const handleSendContractPackage = async (booking: LuxorBooking) => {
     try {
+      setSendingContractBookingId(booking.id)
       setUpdatingStatus(true)
       const res = await fetch('/api/signatures', {
         method: 'POST',
@@ -1409,6 +1411,7 @@ export default function LeadDetailPage({
       console.error(err)
       notify({ title: 'Contract not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
+      setSendingContractBookingId(null)
       setUpdatingStatus(false)
     }
   }
@@ -3679,24 +3682,87 @@ export default function LeadDetailPage({
                           </span>
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
-                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
-                            </h4>
-                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!latestBooking ? 'A booking record is required before agreement package generation.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to deposit / planning.' : 'Send agreement + venue guide to client for digital signoff.'}
-                            </p>
+                            <AnimatePresence mode="wait">
+                              <motion.div
+                                key={latestBooking?.contract_status || 'no_booking'}
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.25 }}
+                              >
+                                <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
+                                  {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
+                                </h4>
+                                <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                                  {!latestBooking ? 'A booking record is required before agreement package generation.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to deposit / planning.' : 'Send agreement + venue guide to client for digital signoff.'}
+                                </p>
+                              </motion.div>
+                            </AnimatePresence>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {latestBooking ? (
-                            <button
+                            <motion.button
+                              layout
                               type="button"
                               disabled={updatingStatus || latestBooking.contract_status === 'signed'}
                               onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')}
-                              className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-45 cursor-pointer"
+                              whileTap={{ scale: 0.96 }}
+                              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                              className={`relative overflow-hidden min-h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors cursor-pointer disabled:opacity-50 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#dfbd68]'}`}
                             >
-                              {latestBooking.contract_status === 'signed' ? 'Agreement Complete' : latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? 'Send Agreement + Guide' : 'Review Contract'}
-                            </button>
+                              <AnimatePresence mode="wait">
+                                {isSendingCurrentBooking ? (
+                                  <motion.span
+                                    key="sending"
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="inline-flex items-center gap-2"
+                                  >
+                                    <Loader2 size={13} className="animate-spin text-white" />
+                                    Sending Package...
+                                  </motion.span>
+                                ) : latestBooking.contract_status === 'signed' ? (
+                                  <motion.span
+                                    key="signed"
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="inline-flex items-center gap-2"
+                                  >
+                                    <CheckCircle2 size={13} className="text-emerald-300" />
+                                    Agreement Complete
+                                  </motion.span>
+                                ) : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                                  <motion.span
+                                    key="sent"
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="inline-flex items-center gap-2"
+                                  >
+                                    <CheckCircle2 size={13} className="text-emerald-400" />
+                                    Review Contract
+                                  </motion.span>
+                                ) : (
+                                  <motion.span
+                                    key="not_sent"
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="inline-flex items-center gap-2"
+                                  >
+                                    <Send size={12} className="text-amber-100" />
+                                    Send Agreement + Guide
+                                  </motion.span>
+                                )}
+                              </AnimatePresence>
+                            </motion.button>
                           ) : (
                             <button
                               type="button"
@@ -3708,11 +3774,15 @@ export default function LeadDetailPage({
                           )}
                         </div>
                       </div>
-                    </section>
+                    </motion.section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Contract Status */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                      {/* Contract Status Card */}
+                      <motion.section 
+                        layout
+                        transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                        className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter"
+                      >
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Agreement Status</p>
@@ -3720,66 +3790,176 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Document Type</span>
-                              <span className="font-bold text-white">{latestBooking ? 'Venue rental agreement' : 'Booking record needed'}</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{latestBooking ? 'Venue rental agreement' : 'Booking record needed'}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestBooking?.contract_status?.replaceAll('_', ' ') || 'not started'}</span>
+                              <AnimatePresence mode="wait">
+                                <motion.span
+                                  key={latestBooking?.contract_status || 'none'}
+                                  initial={{ opacity: 0, scale: 0.85 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.85 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase"
+                                >
+                                  {latestBooking?.contract_status?.replaceAll('_', ' ') || 'not started'}
+                                </motion.span>
+                              </AnimatePresence>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
-                              <span className="font-bold text-white">{latestBooking?.contract_sent_at ? formatDisplayDate(latestBooking.contract_sent_at) : 'Not marked sent'}</span>
+                              <AnimatePresence mode="wait">
+                                <motion.span
+                                  key={latestBooking?.contract_sent_at || 'unsent'}
+                                  initial={{ opacity: 0, x: 6 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -6 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="font-bold text-[color:var(--portal-text)]"
+                                >
+                                  {latestBooking?.contract_sent_at ? formatDisplayDate(latestBooking.contract_sent_at) : 'Not marked sent'}
+                                </motion.span>
+                              </AnimatePresence>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Signed Date</span>
-                              <span className="font-bold text-zinc-500">{latestBooking?.contract_signed_at ? formatDisplayDate(latestBooking.contract_signed_at) : 'Pending'}</span>
+                              <AnimatePresence mode="wait">
+                                <motion.span
+                                  key={latestBooking?.contract_signed_at || 'unsigned'}
+                                  initial={{ opacity: 0, x: 6 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -6 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="font-bold text-zinc-500"
+                                >
+                                  {latestBooking?.contract_signed_at ? formatDisplayDate(latestBooking.contract_signed_at) : 'Pending'}
+                                </motion.span>
+                              </AnimatePresence>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Signers</span>
-                              <span className="font-bold text-white">{lead.full_name}{lead.email ? `, ${lead.email}` : ''}</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{lead.full_name}{lead.email ? `, ${lead.email}` : ''}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
                           {latestBooking ? (
                             <>
-                              <button type="button" disabled={updatingStatus || latestBooking.contract_status === 'signed'} onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} className="flex-1 min-w-[120px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer disabled:opacity-45">{latestBooking.contract_status === 'signed' ? 'Agreement Complete' : latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? 'Send Agreement + Guide' : 'Review Contract'}</button>
+                              <motion.button 
+                                layout
+                                type="button" 
+                                disabled={updatingStatus || latestBooking.contract_status === 'signed'} 
+                                onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} 
+                                whileTap={{ scale: 0.97 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                className={`flex-1 min-w-[120px] py-2 rounded text-[9px] font-black uppercase text-white shadow-sm transition-colors cursor-pointer disabled:opacity-45 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#a8792f]'}`}
+                              >
+                                <AnimatePresence mode="wait">
+                                  {isSendingCurrentBooking ? (
+                                    <motion.span key="sending" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="inline-flex items-center justify-center gap-1.5">
+                                      <Loader2 size={11} className="animate-spin" />
+                                      Sending...
+                                    </motion.span>
+                                  ) : latestBooking.contract_status === 'signed' ? (
+                                    <motion.span key="signed" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                                      Agreement Complete
+                                    </motion.span>
+                                  ) : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                                    <motion.span key="sent" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                                      Review Contract
+                                    </motion.span>
+                                  ) : (
+                                    <motion.span key="not_sent" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
+                                      Send Agreement + Guide
+                                    </motion.span>
+                                  )}
+                                </AnimatePresence>
+                              </motion.button>
                             </>
                           ) : (
                             <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
                           )}
                         </div>
-                      </section>
+                      </motion.section>
 
-                      {/* Signature History */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
+                      {/* Signature History Card */}
+                      <motion.section 
+                        layout
+                        transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                        className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter"
+                      >
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Signature Timeline</p>
                           <div className="space-y-3 text-xs">
                             <div className="flex items-center gap-3">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
                               <div>
-                                <p className="font-bold text-white">Booking record created</p>
+                                <p className="font-bold text-[color:var(--portal-text)]">Booking record created</p>
                                 <p className="text-[9px] text-zinc-500">{latestBooking ? formatTimelineDate(latestBooking.created_at) : 'Not created yet'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
+                              <AnimatePresence mode="wait">
+                                <motion.span
+                                  key={latestBooking?.contract_sent_at ? 'sent' : 'unsent'}
+                                  initial={{ scale: 0.6, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  exit={{ scale: 0.6, opacity: 0 }}
+                                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                  className={`flex h-5 w-5 items-center justify-center rounded-full ${latestBooking?.contract_sent_at ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-600'}`}
+                                >
+                                  <Check size={10} />
+                                </motion.span>
+                              </AnimatePresence>
                               <div>
-                                <p className="font-bold text-white">Contract marked sent</p>
-                                <p className="text-[9px] text-zinc-500">{latestBooking?.contract_sent_at ? formatTimelineDate(latestBooking.contract_sent_at) : 'Waiting for manual tracking'}</p>
+                                <p className={`font-bold transition-colors ${latestBooking?.contract_sent_at ? 'text-[color:var(--portal-text)]' : 'text-zinc-400'}`}>Contract marked sent</p>
+                                <AnimatePresence mode="wait">
+                                  <motion.p
+                                    key={latestBooking?.contract_sent_at || 'no_sent'}
+                                    initial={{ opacity: 0, y: 3 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -3 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="text-[9px] text-zinc-500"
+                                  >
+                                    {latestBooking?.contract_sent_at ? formatTimelineDate(latestBooking.contract_sent_at) : 'Waiting for manual tracking'}
+                                  </motion.p>
+                                </AnimatePresence>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 animate-pulse"><Circle size={4} className="fill-current" /></span>
+                              <AnimatePresence mode="wait">
+                                <motion.span
+                                  key={latestBooking?.contract_status || 'pending_sig'}
+                                  initial={{ scale: 0.6, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  exit={{ scale: 0.6, opacity: 0 }}
+                                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                  className={`flex h-5 w-5 items-center justify-center rounded-full ${latestBooking?.contract_status === 'signed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400 animate-pulse'}`}
+                                >
+                                  {latestBooking?.contract_status === 'signed' ? <Check size={10} /> : <Circle size={4} className="fill-current" />}
+                                </motion.span>
+                              </AnimatePresence>
                               <div>
-                                <p className="font-bold text-white">{latestBooking?.contract_status === 'signed' ? 'Contract signed' : 'Awaiting client signature'}</p>
+                                <AnimatePresence mode="wait">
+                                  <motion.p
+                                    key={latestBooking?.contract_status === 'signed' ? 'signed_title' : 'awaiting_title'}
+                                    initial={{ opacity: 0, y: 3 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -3 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="font-bold text-[color:var(--portal-text)]"
+                                  >
+                                    {latestBooking?.contract_status === 'signed' ? 'Contract signed' : 'Awaiting client signature'}
+                                  </motion.p>
+                                </AnimatePresence>
                                 <p className="text-[9px] text-zinc-500">{latestBooking?.contract_signed_at ? formatTimelineDate(latestBooking.contract_signed_at) : 'No email or portal generated here'}</p>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </section>
+                      </motion.section>
                     </div>
                   </>
                 )
