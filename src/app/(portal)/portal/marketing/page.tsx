@@ -9,7 +9,7 @@ import {
   BarChart3,
   TrendingUp,
   MessageSquare,
-  Sparkles,
+  LayoutTemplate,
   Users,
   Phone,
   Calendar
@@ -500,7 +500,7 @@ function MarketingPageContent() {
       case 'emails':
         return {
           title: 'Emails',
-          desc: 'Unified inbox and sent stream for client emails, Zoho correspondence, and marketing campaign blasts.',
+          desc: 'One inbox for client conversations, sent messages, and marketing campaigns.',
           icon: <Mail size={18} />
         }
       case 'sources':
@@ -524,8 +524,8 @@ function MarketingPageContent() {
       case 'builder-automation':
         return {
           title: 'Email Builder',
-          desc: 'Build email campaigns and review real campaign tracking from Supabase.',
-          icon: <Sparkles size={18} />
+          desc: 'Build email campaigns and review delivery and engagement activity.',
+          icon: <LayoutTemplate size={18} />
         }
       case 'contact-lists':
         return {

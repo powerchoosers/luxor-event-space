@@ -286,30 +286,23 @@ export function PortalPagination({
   if (totalPages <= 1) return null
 
   const buttonClass = 'flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35'
+  const pageOptions = Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1
+    return { value: String(page), label: `Page ${page} of ${totalPages}` }
+  })
 
   return (
-    <nav className="flex items-center gap-2" aria-label="Pagination">
+    <nav className="flex shrink-0 items-center gap-2" aria-label="Pagination">
       <button type="button" aria-label="Previous page" title="Previous page" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className={buttonClass}>
         <ChevronLeft size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
-      <div className="flex items-center gap-1 font-mono">
-        {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-          <button
-            key={page}
-            type="button"
-            aria-label={`Go to page ${page}`}
-            aria-current={currentPage === page ? 'page' : undefined}
-            onClick={() => onPageChange(page)}
-            className={`flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-[10px] transition-colors ${
-              currentPage === page
-                ? 'border-[#caa24c]/40 bg-[#caa24c]/15 font-bold text-[#a8792f]'
-                : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/30 hover:bg-[#caa24c]/8 hover:text-[color:var(--portal-text)]'
-            }`}
-          >
-            {page}
-          </button>
-        ))}
-      </div>
+      <PortalSelect
+        value={String(currentPage)}
+        onChange={(value) => onPageChange(Number(value))}
+        options={pageOptions}
+        className="min-w-[124px]"
+        buttonClassName="h-8 rounded-md bg-[color:var(--portal-card)] px-2 font-mono text-[10px] font-semibold"
+      />
       <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>

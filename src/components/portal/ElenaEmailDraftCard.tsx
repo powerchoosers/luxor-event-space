@@ -276,7 +276,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
         {isSent && (
           <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-400 font-medium">
             <Check size={16} className="shrink-0" />
-            <span>Email successfully sent via Zoho Mail to {recipientEmail}!</span>
+            <span>Email successfully sent to {recipientEmail}.</span>
           </div>
         )}
 

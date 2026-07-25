@@ -123,7 +123,7 @@ export default function CommunicationsPage() {
     } catch (err) {
       setEmailMessages([])
       const message = err instanceof Error ? err.message : 'Unable to load client email history.'
-      setEmailThreadError(message)
+      setEmailThreadError(message.includes('reconnected with email search permission') ? 'The mailbox needs to be reconnected in Settings.' : 'Email history could not be refreshed. Please try again.')
       setZohoReconnectRequired((current) => current || message.includes('reconnected with email search permission'))
     } finally {
       setLoadingEmailMessages(false)
@@ -223,7 +223,7 @@ export default function CommunicationsPage() {
 
       setEmailContent('')
       setEmailSubject('')
-      setEmailSendStatus(result.messageId ? `Email sent. Zoho message ID: ${result.messageId}` : 'Email sent through Zoho.')
+      setEmailSendStatus(result.messageId ? 'Email sent and added to the conversation.' : 'Email sent.')
       await fetchClientEmailThread(selectedInquiry.email)
     } catch (err) {
       setEmailSendStatus(err instanceof Error ? err.message : 'Unable to send email.')
@@ -285,7 +285,7 @@ export default function CommunicationsPage() {
       <PortalPageHeader
         icon={<Inbox size={18} />}
         title="Communications"
-        description="Review client email history, send Zoho replies, and record follow-up notes from one contained workspace."
+        description="Review client email history, send replies, and record follow-up notes from one workspace."
         actions={
           <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {inquiries.length} client email channels
@@ -409,7 +409,7 @@ export default function CommunicationsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Mail size={15} className="text-[#caa24c]" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Send Zoho Email</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Send Email</span>
                     </div>
                     <PortalSelect
                       value={sendFrom}
@@ -443,7 +443,7 @@ export default function CommunicationsPage() {
                     value={emailContent}
                     onChange={(event) => setEmailContent(event.target.value)}
                     className="min-h-28 w-full resize-none rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
-                    placeholder="Write the message to send through Zoho..."
+                    placeholder="Write your message..."
                   />
 
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -473,7 +473,7 @@ export default function CommunicationsPage() {
                   </div>
 
                   {!selectedInquiry.email ? (
-                    <p className="text-xs text-zinc-600 italic">Add a client email address to see their sent and received Zoho messages.</p>
+                    <p className="text-xs text-zinc-600 italic">Add a client email address to see their sent and received messages.</p>
                   ) : loadingEmailMessages && emailMessages.length === 0 ? (
                     <div className="space-y-2 py-1">
                       {[1, 2, 3].map((i) => (
@@ -494,12 +494,12 @@ export default function CommunicationsPage() {
                           href="/api/auth/zoho/login?setup=1"
                           className="mt-3 inline-flex rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition-colors hover:bg-rose-500/15"
                         >
-                          Reconnect Zoho Search
+                          Reconnect mailbox
                         </a>
                       ) : null}
                     </div>
                   ) : emailMessages.length === 0 ? (
-                    <p className="text-xs text-zinc-600 italic">No Zoho messages found yet for this email address.</p>
+                    <p className="text-xs text-zinc-600 italic">No messages found yet for this email address.</p>
                   ) : (
                     <div className="space-y-2">
                       {emailMessages.map((message) => (

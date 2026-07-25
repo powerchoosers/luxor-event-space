@@ -64,7 +64,7 @@ export function LeadSourcesTab({ inquiries, onFilterSource }: LeadSourcesTabProp
   const maxLeads = Math.max(...sourceRows.map((row) => row.leads), 0)
 
   const stats = [
-    { label: 'Total Inquiries', value: totals.leads.toLocaleString(), detail: 'All Supabase inquiry records' },
+    { label: 'Total Inquiries', value: totals.leads.toLocaleString(), detail: 'All inquiry records' },
     { label: 'Tour Pipeline', value: totals.tours.toLocaleString(), detail: 'Tour requested through booked' },
     { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Inquiries marked booked' },
     { label: 'Booking Conversion', value: `${totals.conversionRate}%`, detail: 'Booked ÷ total inquiries' },

@@ -45,7 +45,7 @@ export function EmailCampaignsTab({
     const unsubscribes = campaigns.reduce((sum, campaign) => sum + Number(campaign.unsubscribe_count || 0), 0)
 
     return [
-      { label: 'Campaigns', value: campaigns.length.toLocaleString(), detail: 'Saved in Supabase' },
+      { label: 'Campaigns', value: campaigns.length.toLocaleString(), detail: 'Saved campaigns' },
       { label: 'Recipients', value: recipients.toLocaleString(), detail: 'Campaign recipient rows' },
       { label: 'Emails Sent', value: sent.toLocaleString(), detail: 'Recipients marked sent' },
       { label: 'Queued', value: queued.toLocaleString(), detail: 'Waiting for delivery' },
@@ -99,7 +99,7 @@ export function EmailCampaignsTab({
       <PortalTableCard controls={(
         <div className="flex items-center justify-between w-full">
           <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Supabase Campaigns</h3>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Campaigns</h3>
             <p className="text-[9px] text-[color:var(--portal-muted)] mt-0.5">Tracked campaign activity, deliverability metrics, and report launcher.</p>
           </div>
           <span className="font-mono text-[9px] text-[color:var(--portal-muted)]">{loading ? 'Loading…' : `${filteredCampaigns.length} campaign${filteredCampaigns.length === 1 ? '' : 's'}`}</span>
@@ -149,7 +149,7 @@ export function EmailCampaignsTab({
             ) : !filteredCampaigns.length ? (
               <tr>
                 <td colSpan={11} className="px-6 py-12 text-center text-xs text-[color:var(--portal-muted)]">
-                  {campaigns.length ? 'No campaigns match this filter.' : 'No marketing campaigns have been saved in Supabase yet.'}
+                  {campaigns.length ? 'No campaigns match this filter.' : 'No marketing campaigns have been saved yet.'}
                 </td>
               </tr>
             ) : null}

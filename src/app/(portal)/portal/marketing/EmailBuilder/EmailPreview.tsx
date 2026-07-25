@@ -434,7 +434,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
               <div className="max-w-xl mx-auto px-6 py-8 space-y-6">
                 <div>
                   <h4 className="text-sm font-bold text-white/90">Send Campaign</h4>
-                  <p className="text-xs text-zinc-500 mt-1">Send now through Zoho, or pick a date and time to schedule it. Separate multiple addresses with commas.</p>
+                  <p className="text-xs text-zinc-500 mt-1">Send now, or pick a date and time to schedule it. Separate multiple addresses with commas.</p>
                 </div>
 
                 <div className="space-y-4">
@@ -743,7 +743,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                 </button>
 
                 <p className="text-[10px] text-zinc-700 text-center">
-                  Sent by Zoho Mail from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are processed by the Supabase email scheduler.
+                  Sent from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are delivered automatically at the selected time.
                 </p>
               </div>
             </div>

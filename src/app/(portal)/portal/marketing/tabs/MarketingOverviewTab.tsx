@@ -116,7 +116,7 @@ export function MarketingOverviewTab({
           <div className="flex items-start justify-between gap-4 border-b border-zinc-900 pb-4">
             <div>
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Audience by List</h3>
-              <p className="mt-1 text-[10px] text-zinc-500">Current Supabase marketing-list membership, grouped by saved source.</p>
+              <p className="mt-1 text-[10px] text-zinc-500">Current marketing-list membership, grouped by saved source.</p>
             </div>
             <span className="font-mono text-xs font-bold text-[#caa24c]">{loading ? '…' : totalSubscribers.toLocaleString()} total</span>
           </div>
@@ -139,7 +139,7 @@ export function MarketingOverviewTab({
               })}
             </div>
           ) : (
-            <DataEmptyState loading={loading} message="No subscribers are saved in Supabase yet." />
+            <DataEmptyState loading={loading} message="No subscribers are saved yet." />
           )}
         </section>
 
@@ -171,7 +171,7 @@ export function MarketingOverviewTab({
           <div className="flex items-start justify-between gap-3 border-b border-zinc-900 pb-4">
             <div>
               <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Grand Opening RSVP Activity</h3>
-              <p className="mt-1 text-[9px] text-zinc-500">Real RSVP submissions from Supabase.</p>
+              <p className="mt-1 text-[9px] text-zinc-500">RSVP submissions received from the website.</p>
             </div>
             <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View RSVPs</button>
           </div>
@@ -263,7 +263,7 @@ export function MarketingOverviewTab({
         <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Scheduled Sends</h3>
-            <p className="mt-1 text-[9px] text-zinc-500">Campaigns with queued recipients or a scheduled/sending status in Supabase.</p>
+            <p className="mt-1 text-[9px] text-zinc-500">Campaigns with queued recipients or a scheduled or sending status.</p>
           </div>
           <button type="button" onClick={() => onTabChange('calendar')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open calendar</button>
         </div>

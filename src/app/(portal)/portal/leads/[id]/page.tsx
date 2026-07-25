@@ -1023,13 +1023,13 @@ export default function LeadDetailPage({
       }
       if (!response.ok) {
         setZohoReconnectRequired(Boolean(payload.reconnectRequired))
-        throw new Error(payload.error || 'Unable to load Zoho email history.')
+        throw new Error(payload.error || 'Unable to load email history.')
       }
       setEmailMessages(payload.messages || [])
     } catch (threadError) {
       setEmailMessages([])
-      const message = threadError instanceof Error ? threadError.message : 'Unable to load Zoho email history.'
-      setEmailThreadError(message)
+      const message = threadError instanceof Error ? threadError.message : 'Unable to load email history.'
+      setEmailThreadError(message.includes('reconnected with email search permission') ? 'The mailbox needs to be reconnected in Settings.' : 'Email history could not be refreshed. Please try again.')
       setZohoReconnectRequired((current) => current || message.includes('reconnected with email search permission'))
     } finally {
       setLoadingEmailMessages(false)
@@ -2077,7 +2077,7 @@ export default function LeadDetailPage({
     pushRecommendedAction({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
-      detail: 'Create the Zoho invite, AI email, and reminders',
+      detail: 'Create the calendar invite, confirmation, and reminders',
       onClick: openTourScheduleModal,
       disabled: !lead.email,
     })
@@ -2127,7 +2127,7 @@ export default function LeadDetailPage({
     pushRecommendedAction({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
-      detail: lead.email ? 'Create the Zoho invite, AI email, and reminders' : 'Add an email address first',
+      detail: lead.email ? 'Create the calendar invite, confirmation, and reminders' : 'Add an email address first',
       onClick: openTourScheduleModal,
       disabled: !lead.email,
     })
@@ -2204,7 +2204,7 @@ export default function LeadDetailPage({
     activeFeedTab === 'notes'
       ? 'Use the note box above to capture the first written follow-up or summary.'
       : activeFeedTab === 'comms'
-        ? 'Add a call log, email note, or sync Zoho history to populate this view.'
+        ? 'Add a call log, email note, or sync email history to populate this view.'
         : activeFeedTab === 'system'
           ? 'Status changes will appear here automatically when the lead moves.'
           : 'Use the note box above to add the first update or wait for email history to sync.'
@@ -2724,7 +2724,7 @@ export default function LeadDetailPage({
                             type="button"
                             onClick={openTourScheduleModal}
                             disabled={!lead.email}
-                            title={lead.email ? 'Schedule the tour and send the Zoho invite' : 'Add an email address before sending an invite'}
+                            title={lead.email ? 'Schedule the tour and send the calendar invite' : 'Add an email address before sending an invite'}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Calendar size={13} /> Schedule Invite
@@ -3050,7 +3050,7 @@ export default function LeadDetailPage({
                               {lead.preferred_tour_date ? 'Conduct venue tour & build proposal' : 'Schedule or confirm venue tour'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {lead.preferred_tour_date ? 'Show space features, answer questions, and draft proposal package.' : 'Select a date & time or send a Zoho calendar invite.'}
+                              {lead.preferred_tour_date ? 'Show space features, answer questions, and draft proposal package.' : 'Select a date & time or send a calendar invite.'}
                             </p>
                           </div>
                         </div>
@@ -3311,12 +3311,12 @@ export default function LeadDetailPage({
                       {/* Zoho Emails */}
                       <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
                         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Zoho Email History</h4>
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Email History</h4>
                           <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-300">Inbound / Outbound</span>
                         </div>
                         <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar text-left">
                           {emailMessages.length === 0 ? (
-                            <p className="text-xs text-zinc-500 italic py-8 text-center">No Zoho emails logged for this address.</p>
+                            <p className="text-xs text-zinc-500 italic py-8 text-center">No emails logged for this address.</p>
                           ) : (
                             emailMessages.map((email) => {
                               const isOutgoing = email.direction === 'outgoing'
@@ -4764,7 +4764,7 @@ export default function LeadDetailPage({
                         <NotebookPen size={16} className="text-zinc-500" />
                         Manual Note
                       </h3>
-                      <p className="mt-1 text-xs text-zinc-600">Save a private lead note to Supabase for this client.</p>
+                      <p className="mt-1 text-xs text-zinc-600">Save a private note to this client record.</p>
                     </div>
                     <PortalSelect
                       value={noteType}
@@ -4894,7 +4894,7 @@ export default function LeadDetailPage({
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                              {isOutgoing ? 'Luxor Zoho Mail' : email.from || 'Zoho Mail'}
+                              {isOutgoing ? 'Luxor Event Space' : email.from || 'Unknown sender'}
                             </span>
                             <div className="flex items-center gap-3">
                               <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
@@ -5448,7 +5448,7 @@ export default function LeadDetailPage({
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
             <div>
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Schedule Tour & Send Invite</h3>
-              <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">Zoho sends the calendar invitation. Elena AI writes the branded email, and Supabase sends the reminders.</p>
+              <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">This sends the calendar invitation, a branded confirmation, and the scheduled reminders.</p>
             </div>
             <PortalCloseButton onClick={() => setIsTourScheduleModalOpen(false)} aria-label="Close tour scheduler" className="shrink-0" />
           </div>
@@ -5496,7 +5496,7 @@ export default function LeadDetailPage({
               <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
             </div>
             <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 px-4 py-3 text-[10px] font-semibold leading-5 text-blue-950 dark:text-blue-200/90 shadow-xs">
-              This sends one native Zoho calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
+              This sends one calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
             </div>
           </div>
 

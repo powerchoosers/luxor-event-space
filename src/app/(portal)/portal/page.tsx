@@ -461,7 +461,7 @@ export default async function PortalOverview() {
           </div>
           <div className="flex items-center gap-1.5 text-[color:var(--portal-muted)]">
             <ShieldCheck size={13} className="text-emerald-400" />
-            <span className="font-mono text-[10px]">Zoho Mail Sync Verified</span>
+            <span className="font-mono text-[10px]">Mailbox Connected</span>
           </div>
         </div>
         <div className="flex items-center gap-2 font-mono text-[10px] text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-3 py-1 rounded-full">

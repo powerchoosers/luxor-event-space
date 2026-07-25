@@ -317,7 +317,7 @@ export function EmailBuilderTab({
                       </div>
                     )) : (
                       <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-6 text-center text-xs text-[color:var(--portal-muted)]">
-                        No Supabase campaign is marked as an automation.
+                        No campaign is marked as an automation.
                       </div>
                     )}
                   </div>

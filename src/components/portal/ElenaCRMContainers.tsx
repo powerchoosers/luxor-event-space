@@ -325,7 +325,7 @@ export function ElenaContractCard({
               <span>{copied ? 'Link Copied!' : 'Copy Signing Link'}</span>
             </button>
           ) : (
-            <span className="text-[10px] text-zinc-500 font-mono">Zoho Delivery Active</span>
+            <span className="text-[10px] text-zinc-500 font-mono">Email Delivery Active</span>
           )}
 
           {!sent ? (

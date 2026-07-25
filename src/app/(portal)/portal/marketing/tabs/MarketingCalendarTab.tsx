@@ -59,7 +59,7 @@ export function MarketingCalendarTab({ campaigns, loading }: MarketingCalendarTa
     <div className="space-y-6">
       <div className="flex flex-col gap-4 rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Supabase Campaign Schedule</h3>
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Campaign Schedule</h3>
           <p className="mt-1 text-[10px] leading-5 text-zinc-500">Every calendar item below comes from a campaign&apos;s saved send date. Past sends remain visible as history.</p>
         </div>
         <div className="flex items-center">
@@ -87,7 +87,7 @@ export function MarketingCalendarTab({ campaigns, loading }: MarketingCalendarTa
         <div className="rounded-2xl border border-dashed border-zinc-850 bg-zinc-950/20 p-10 text-center">
           <CalendarClock size={22} className="mx-auto text-zinc-700" />
           <h3 className="mt-4 text-sm font-bold text-white">No campaign dates yet</h3>
-          <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-zinc-600">Create and schedule a campaign. It will appear here after its send date is saved in Supabase.</p>
+          <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-[color:var(--portal-muted)]">Create and schedule a campaign. It will appear here after its send date is saved.</p>
         </div>
       ) : (
         <PortalCalendar
