@@ -107,6 +107,14 @@ export async function getLuxorSignatureRequestByToken(token: string) {
   return signature ?? null
 }
 
+export async function getActiveLuxorSignatureRequestByBooking(bookingId: string) {
+  const [signature] = await supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&status=in.(sent,viewed)&order=created_at.desc&limit=1`,
+  )
+
+  return signature ?? null
+}
+
 export async function listLuxorSignatureRequests(limit = 100) {
   const safeLimit = Math.min(Math.max(limit, 1), 250)
   return supabaseRest<LuxorSignatureRequest[]>(
@@ -162,6 +170,9 @@ export async function signLuxorSignatureRequest(input: {
   const signature = await getLuxorSignatureRequestByToken(input.token)
   if (!signature) throw new Error('Signature request not found.')
   if (signature.status === 'signed' && signature.executed_document_path) return signature
+  if (!['sent', 'viewed'].includes(signature.status)) {
+    throw new Error('This signing link is no longer active. Please contact Luxor Event Space for a new agreement.')
+  }
   if (signature.status !== 'signed' && signature.expires_at && new Date(signature.expires_at).getTime() < Date.now()) {
     throw new Error('This signature link has expired.')
   }

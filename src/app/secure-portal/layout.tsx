@@ -35,6 +35,7 @@ export default function SecurePortalLayout({ children }: { children: ReactNode }
                   src="/luxor-portal-mark-gold-tight.png"
                   alt="Luxor Event Space"
                   fill
+                  sizes="32px"
                   className="object-contain p-0.5"
                 />
               </div>

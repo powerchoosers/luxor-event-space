@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, UserCheck, UserX } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
@@ -96,6 +96,25 @@ export default function CalendarPage() {
     }
   }
 
+  const updateContractRequest = async (booking: LuxorBooking, action: 'cancel' | 'resend') => {
+    if (action === 'cancel' && !window.confirm('Cancel this contract? The client’s current signing link will stop working immediately.')) return
+    try {
+      setBusyId(`${action}-contract-${booking.id}`)
+      const response = await fetch('/api/signatures', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, action }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to update contract.')
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update contract.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const tourItems = useMemo<PortalCalendarItem[]>(() => {
     const tourCards = data.tours
       .filter((tour) => tour.preferred_tour_date)
@@ -159,6 +178,7 @@ export default function CalendarPage() {
             booking={booking}
             busyId={busyId}
             onSendContract={sendContract}
+            onContractAction={updateContractRequest}
           />
         ),
       } satisfies PortalCalendarItem))
@@ -259,10 +279,12 @@ function EventControls({
   booking,
   busyId,
   onSendContract,
+  onContractAction,
 }: {
   booking: LuxorBooking & { paid_total?: number; balance_due?: number }
   busyId: string | null
   onSendContract: (booking: LuxorBooking) => void
+  onContractAction: (booking: LuxorBooking, action: 'cancel' | 'resend') => void
 }) {
   return (
     <div className="space-y-3">
@@ -275,7 +297,15 @@ function EventControls({
       <div className="flex flex-wrap items-center gap-2">
         <PortalStatusBadge status={booking.status} />
         <PortalStatusBadge status={booking.contract_status || 'not_sent'} />
-        <ActionButton disabled={busyId === `contract-${booking.id}` || booking.contract_status === 'signed'} onClick={() => onSendContract(booking)} icon={<Check size={11} />} label="Send contract" />
+        {!booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? (
+          <ActionButton disabled={busyId === `contract-${booking.id}`} onClick={() => onSendContract(booking)} icon={<Check size={11} />} label="Send contract" />
+        ) : null}
+        {booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? (
+          <>
+            <ActionButton disabled={busyId !== null} onClick={() => onContractAction(booking, 'resend')} icon={<RefreshCw size={11} className={busyId === `resend-contract-${booking.id}` ? 'animate-spin' : ''} />} label="Resend" />
+            <ActionButton disabled={busyId !== null} onClick={() => onContractAction(booking, 'cancel')} icon={<Trash2 size={11} />} label="Cancel" />
+          </>
+        ) : null}
       </div>
       {booking.inquiry_id ? (
         <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">

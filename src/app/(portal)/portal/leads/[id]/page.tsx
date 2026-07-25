@@ -243,6 +243,7 @@ export default function LeadDetailPage({
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [sendingContractBookingId, setSendingContractBookingId] = useState<string | null>(null)
+  const [contractActionKey, setContractActionKey] = useState<string | null>(null)
   const [pendingLifecycleStatus, setPendingLifecycleStatus] = useState<LuxorInquiry['status'] | null>(null)
 
   // Timeline tab filtering
@@ -1413,6 +1414,39 @@ export default function LeadDetailPage({
       notify({ title: 'Contract not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingContractBookingId(null)
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleContractRequestAction = async (booking: LuxorBooking, action: 'cancel' | 'resend') => {
+    if (action === 'cancel' && !window.confirm('Cancel this contract? The client’s current signing link will stop working immediately.')) return
+    try {
+      setContractActionKey(`${action}-${booking.id}`)
+      setUpdatingStatus(true)
+      const res = await fetch('/api/signatures', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, action }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `The contract could not be ${action === 'cancel' ? 'cancelled' : 'resent'}.`)
+      await createFlowNote(
+        action === 'cancel'
+          ? 'Active contract signing request cancelled. The previous client link is no longer valid.'
+          : 'Contract signing email and Guest Guide resent to the client. The signing link was renewed.',
+        'status_change',
+      )
+      await fetchAllData(false)
+      notify({
+        title: action === 'cancel' ? 'Contract cancelled' : 'Contract resent',
+        description: action === 'cancel' ? 'The old signing link has been disabled.' : 'The client received the agreement and Guest Guide again.',
+        variant: 'success',
+      })
+    } catch (err) {
+      console.error(err)
+      notify({ title: 'Contract not updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setContractActionKey(null)
       setUpdatingStatus(false)
     }
   }
@@ -3712,7 +3746,7 @@ export default function LeadDetailPage({
                               layout
                               type="button"
                               disabled={updatingStatus || latestBooking.contract_status === 'signed'}
-                              onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')}
+                              onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')}
                               whileTap={{ scale: 0.96 }}
                               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                               className={`relative overflow-hidden min-h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors cursor-pointer disabled:opacity-50 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#dfbd68]'}`}
@@ -3856,7 +3890,7 @@ export default function LeadDetailPage({
                                 layout
                                 type="button" 
                                 disabled={updatingStatus || latestBooking.contract_status === 'signed'} 
-                                onClick={() => latestBooking.contract_status === 'not_sent' || !latestBooking.contract_status ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} 
+                                onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} 
                                 whileTap={{ scale: 0.97 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                 className={`flex-1 min-w-[120px] py-2 rounded text-[9px] font-black uppercase text-white shadow-sm transition-colors cursor-pointer disabled:opacity-45 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#a8792f]'}`}
@@ -3882,6 +3916,26 @@ export default function LeadDetailPage({
                                   )}
                                 </AnimatePresence>
                               </motion.button>
+                              {latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={updatingStatus}
+                                    onClick={() => handleContractRequestAction(latestBooking, 'resend')}
+                                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
+                                  >
+                                    <RefreshCw size={11} className={contractActionKey === `resend-${latestBooking.id}` ? 'animate-spin' : ''} /> Resend
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={updatingStatus}
+                                    onClick={() => handleContractRequestAction(latestBooking, 'cancel')}
+                                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 text-[9px] font-black uppercase tracking-wider text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
+                                  >
+                                    <Trash2 size={11} /> Cancel
+                                  </button>
+                                </>
+                              ) : null}
                             </>
                           ) : (
                             <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
@@ -5229,12 +5283,32 @@ export default function LeadDetailPage({
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => booking.contract_status === 'not_sent' || !booking.contract_status ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
+                        onClick={() => !booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
                         disabled={booking.contract_status === 'signed' || updatingStatus}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-45 cursor-pointer"
                       >
                         {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Mark Signed Manually' : 'Send Agreement + Guide'}
                       </button>
+                      {booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleContractRequestAction(booking, 'resend')}
+                            disabled={updatingStatus}
+                            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
+                          >
+                            <RefreshCw size={12} className={contractActionKey === `resend-${booking.id}` ? 'animate-spin' : ''} /> Resend
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleContractRequestAction(booking, 'cancel')}
+                            disabled={updatingStatus}
+                            className="inline-flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
+                          >
+                            <Trash2 size={12} /> Cancel
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         type="button"
                         onClick={openBookingModal}
