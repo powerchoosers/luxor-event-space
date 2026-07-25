@@ -241,8 +241,12 @@ export async function queueGrandOpeningCheckInLaunchEmails(now = new Date()) {
   )
   let queued = 0
   const jobIds: string[] = []
+  const seenEmails = new Set<string>()
 
   for (const inquiry of inquiries) {
+    const emailKey = inquiry.email!.trim().toLowerCase()
+    if (seenEmails.has(emailKey)) continue
+    seenEmails.add(emailKey)
     const inviteToken = createGrandOpeningInviteToken(inquiry.id)
     const checkInUrl = `https://www.luxoratlaspalmas.com/grand-opening-check-in?invite=${encodeURIComponent(inviteToken)}`
     const job = await createUniqueLuxorEmailJob({
