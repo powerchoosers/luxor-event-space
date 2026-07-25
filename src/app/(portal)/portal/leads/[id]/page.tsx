@@ -54,7 +54,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
+import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
@@ -6696,7 +6696,7 @@ function DetailItem({
             disabled={isSaving}
             placeholder={placeholder}
             onClick={(event) => event.stopPropagation()}
-            onChange={(event) => setDraft(field === 'phone' ? formatUsDialInput(event.target.value) : event.target.value)}
+            onChange={(event) => setDraft(inputType === 'tel' || label === 'Phone' ? formatUsDialInput(event.target.value) : event.target.value)}
             onBlur={() => {
               void commitDraft()
             }}
