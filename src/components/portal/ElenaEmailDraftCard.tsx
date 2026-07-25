@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Mail, Send, Eye, X, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
+import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
+import { PortalCloseButton } from '@/components/portal/PortalUI'
 
 export interface EmailDraftPayload {
   recipientEmail: string
@@ -102,6 +104,25 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
     senderPhone,
     senderImageUrl: senderProfile.avatarUrl,
   })
+  const previewHtml = stripTrackingPixels(renderedHtml).replace(
+    '</head>',
+    `<style>
+      html, body { scrollbar-color: rgba(202,162,76,.82) rgba(50,42,31,.12); scrollbar-width: thin; }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: rgba(50,42,31,.08); border-radius: 999px; }
+      ::-webkit-scrollbar-thumb { min-height: 44px; border: 2px solid rgba(255,255,255,.92); border-radius: 999px; background: linear-gradient(180deg,#e4bd63,#a8792f); }
+      ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg,#f1d27a,#9f742b); }
+    </style></head>`
+  )
+
+  useEffect(() => {
+    if (!isPreviewOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsPreviewOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [isPreviewOpen])
 
   const handleSend = async () => {
     if (!recipientEmail.trim() || !subject.trim() || !body.trim() || isSending || isSent) return
@@ -153,14 +174,9 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
     <div className="portal-render-surface mt-3 w-full overflow-hidden rounded-[1.35rem] border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans shadow-[0_22px_60px_-42px_rgba(55,38,16,0.55)]">
       {/* Card Top Header Bar */}
       <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
-            <Mail size={14} />
-          </div>
-          <div>
-            <h4 className="text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--portal-text)]">Elena Email Draft</h4>
-            <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Personal email • {senderProfile.displayName} signature</p>
-          </div>
+        <div>
+          <h4 className="text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--portal-text)]">Elena Email Draft</h4>
+          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Personal email • {senderProfile.displayName} signature</p>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -178,8 +194,9 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
             <button
               type="button"
               onClick={() => setShowRefineInput((prev) => !prev)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:text-[#a8792f] cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg p-1 text-[color:var(--portal-muted)] opacity-60 transition-all hover:bg-black/5 hover:text-[color:var(--portal-text)] hover:opacity-100 dark:hover:bg-white/5 cursor-pointer"
               title="Ask Elena to refine this draft"
+              aria-label="Ask Elena to refine this draft"
             >
               <RefreshCw size={11} />
             </button>
@@ -323,46 +340,43 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
       </div>
 
       {/* HTML Render Preview Modal */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="relative flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
+      {isPreviewOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-3 backdrop-blur-sm dark:bg-black/70 sm:p-6">
+          <div role="dialog" aria-modal="true" aria-label="Outgoing email preview" className="relative flex h-[min(92dvh,56rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[0_28px_90px_-34px_rgba(37,26,10,0.65)] sm:h-[min(90dvh,54rem)]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3.5">
+            <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5 sm:px-5">
               <div className="flex items-center gap-2">
                 <Eye size={16} className="text-[#caa24c]" />
                 <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Outgoing Email Preview</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsPreviewOpen(false)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
+              <PortalCloseButton onClick={() => setIsPreviewOpen(false)} aria-label="Close preview" size={16} />
             </div>
 
             {/* Rendered HTML Iframe Preview */}
-            <div className="flex-1 overflow-hidden bg-[color:var(--portal-soft)] p-4">
-              <iframe
-                title="Email Preview"
-                srcDoc={stripTrackingPixels(renderedHtml)}
-                className="h-full w-full rounded-xl border border-zinc-800 bg-white shadow-inner"
-              />
+            <div className="min-h-0 flex-1 bg-[color:var(--portal-soft)] p-2 sm:p-4">
+              <div className="portal-scrollbar h-full overflow-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-1.5 shadow-inner sm:p-2">
+                <iframe
+                  title="Email Preview"
+                  srcDoc={previewHtml}
+                  className="h-full min-h-[34rem] w-full min-w-[19rem] rounded-lg border-0 bg-white shadow-sm"
+                />
+              </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-              <span className="text-xs text-[color:var(--portal-muted)]">Recipient: <strong className="text-[color:var(--portal-text)]">{recipientEmail}</strong></span>
+            <div className="flex shrink-0 flex-col gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <span className="min-w-0 truncate text-xs text-[color:var(--portal-muted)]">Recipient: <strong className="text-[color:var(--portal-text)]">{recipientEmail}</strong></span>
               <button
                 type="button"
                 onClick={() => setIsPreviewOpen(false)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                className="self-end rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-xs font-medium text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:bg-[#caa24c]/8 sm:self-auto cursor-pointer"
               >
                 Close Preview
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
