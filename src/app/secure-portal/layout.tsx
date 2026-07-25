@@ -26,11 +26,11 @@ export const metadata: Metadata = {
 export default function SecurePortalLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${manrope.variable} ${cormorant.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#171410] text-[#f7f1e8] font-sans selection:bg-[#b88a44]/35 selection:text-white">
-        <header className="sticky top-0 z-50 border-b border-white/8 bg-[#171410]/96 px-4 py-3 backdrop-blur-xl sm:px-6">
-          <div className="mx-auto flex max-w-[1440px] items-center justify-between">
+      <body className="min-h-full bg-[#171410] font-sans text-[#f7f1e8] selection:bg-[#b88a44]/35 selection:text-white lg:h-dvh lg:overflow-hidden">
+        <header className="sticky top-0 z-50 h-14 border-b border-white/8 bg-[#171410]/96 px-4 backdrop-blur-xl sm:px-6">
+          <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-[#b88a44]/70 bg-[#0e0c0a] p-0.5">
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-[#b88a44]/70 bg-[#0e0c0a] p-0.5">
                 <Image
                   src="/luxor-portal-mark-gold-tight.png"
                   alt="Luxor Event Space"
@@ -54,7 +54,11 @@ export default function SecurePortalLayout({ children }: { children: ReactNode }
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main className="lg:h-[calc(100dvh-84px)] lg:min-h-0 lg:overflow-hidden">{children}</main>
+        <footer className="flex h-7 items-center justify-between border-t border-white/8 bg-[#12100d] px-4 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7f756a] sm:px-6">
+          <span>Luxor Event Space</span>
+          <span className="normal-case tracking-normal text-[#6e665d]">Private · Secure · Encrypted</span>
+        </footer>
       </body>
     </html>
   )

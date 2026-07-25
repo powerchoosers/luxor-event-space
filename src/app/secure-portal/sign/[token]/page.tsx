@@ -214,7 +214,11 @@ export default function SignaturePage() {
 
   const goToSignature = useCallback(() => {
     setPageNumber(signaturePlacement.pageIndex + 1)
-    viewerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      viewerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      viewerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }, [signaturePlacement.pageIndex])
 
   const submit = async (event: React.FormEvent) => {
@@ -269,60 +273,40 @@ export default function SignaturePage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1440px] px-3 py-4 sm:px-6 sm:py-6">
-      <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c9a76e]">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 py-3 sm:px-5 lg:h-full lg:min-h-0 lg:overflow-hidden lg:py-3">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-1 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#c9a76e]">
             <FileText size={13} /> {complete ? 'Completed agreement' : 'Ready for your review'}
           </div>
-          <h1 className="font-serif text-2xl font-medium text-[#f7f1e8] sm:text-3xl">
+          <h1 className="truncate font-serif text-[22px] font-medium leading-none text-[#f7f1e8] sm:text-2xl">
             {signature.contract_title || 'Event Space Agreement'}
           </h1>
-          <p className="mt-1 text-xs text-[#9f9589]">Prepared for {signature.client_name}</p>
+          <p className="mt-1 text-[11px] text-[#9f9589]">Prepared for {signature.client_name}</p>
         </div>
         <a
           href={pdfUrl}
           download
-          className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/10 px-3.5 py-2 text-xs font-semibold text-[#d9cec0] transition hover:border-[#c49a59]/45 hover:text-white"
+          className="inline-flex h-9 w-fit shrink-0 items-center gap-2 rounded-lg border border-white/12 bg-white/[0.025] px-3 text-[11px] font-semibold text-[#d9cec0] transition hover:border-[#c49a59]/45 hover:bg-white/[0.05] hover:text-white"
         >
           <Download size={14} /> Download {complete ? 'executed copy' : 'PDF'}
         </a>
       </div>
 
-      <div className="grid min-h-[720px] overflow-hidden rounded-2xl border border-white/10 bg-[#211d18] shadow-[0_28px_80px_rgba(0,0,0,0.35)] lg:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="flex min-w-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
-          <div className="flex h-14 items-center justify-between border-b border-white/10 bg-[#1b1814] px-3 sm:px-5">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                aria-label="Previous page"
-                onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
-                disabled={pageNumber <= 1}
-                className="rounded-lg p-2 text-[#d9cec0] transition hover:bg-white/7 disabled:cursor-not-allowed disabled:opacity-25"
-              >
-                <ChevronLeft size={17} />
-              </button>
-              <span className="min-w-20 text-center text-xs font-semibold text-[#b8aea2]">
-                {pageNumber} / {numPages || '—'}
-              </span>
-              <button
-                type="button"
-                aria-label="Next page"
-                onClick={() => setPageNumber((page) => Math.min(numPages || page, page + 1))}
-                disabled={!numPages || pageNumber >= numPages}
-                className="rounded-lg p-2 text-[#d9cec0] transition hover:bg-white/7 disabled:cursor-not-allowed disabled:opacity-25"
-              >
-                <ChevronRight size={17} />
-              </button>
+      <div className="grid overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+        <section className="flex min-w-0 flex-col border-b border-white/10 lg:min-h-0 lg:border-b-0 lg:border-r">
+          <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-[#1b1814] px-3 sm:px-4">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9f9589]">
+              <FileText size={13} className="text-[#c9a76e]" /> Agreement preview
             </div>
             {!complete && (
-              <button type="button" onClick={goToSignature} className="text-xs font-semibold text-[#d5b477] transition hover:text-[#f0d5a4]">
+              <button type="button" onClick={goToSignature} className="text-[11px] font-semibold text-[#d5b477] transition hover:text-[#f0d5a4]">
                 Go to signature
               </button>
             )}
           </div>
 
-          <div ref={viewerRef} className="min-h-[620px] flex-1 overflow-auto bg-[#302b25] p-4 sm:p-7">
+          <div ref={viewerRef} className="h-[68svh] min-h-[500px] overflow-auto bg-[#302b25] p-3 sm:p-5 lg:h-auto lg:min-h-0 lg:flex-1">
             <Document
               key={pdfUrl}
               file={pdfUrl}
@@ -363,12 +347,42 @@ export default function SignaturePage() {
               )}
             </Document>
           </div>
+
+          <div className="flex h-11 shrink-0 items-center justify-between border-t border-white/10 bg-[#1b1814] px-3 sm:px-4">
+            <span className="hidden text-[9px] font-semibold uppercase tracking-[0.14em] text-[#766d64] sm:block">Use arrows to review</span>
+            <div className="mx-auto flex items-center rounded-lg border border-white/10 bg-[#12100d] p-0.5 sm:mx-0">
+              <button
+                type="button"
+                aria-label="Previous page"
+                title="Previous page"
+                onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
+                disabled={pageNumber <= 1}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[#d9cec0] transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-25"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="min-w-[66px] px-2 text-center text-[10px] font-bold tabular-nums text-[#c5baad]">
+                {pageNumber} <span className="font-medium text-[#71685f]">of</span> {numPages || '—'}
+              </span>
+              <button
+                type="button"
+                aria-label="Next page"
+                title="Next page"
+                onClick={() => setPageNumber((page) => Math.min(numPages || page, page + 1))}
+                disabled={!numPages || pageNumber >= numPages}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[#d9cec0] transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-25"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+            <span className="hidden text-[9px] font-semibold text-[#766d64] sm:block">{numPages || '—'} pages</span>
+          </div>
         </section>
 
-        <aside className="bg-[#f4efe7] text-[#2d251e]">
+        <aside className="flex min-h-0 flex-col bg-[#f4efe7] text-[#2d251e]">
           {complete ? (
-            <div className="flex h-full min-h-[520px] flex-col justify-between p-6 sm:p-8">
-              <div>
+            <div className="flex min-h-[520px] flex-1 flex-col lg:min-h-0">
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e4f1e7] text-[#2f7547]">
                   <CheckCircle2 size={25} />
                 </div>
@@ -387,13 +401,15 @@ export default function SignaturePage() {
                   </div>
                 </div>
               </div>
-              <a href={pdfUrl} download className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f]">
-                <Download size={16} /> Download executed agreement
-              </a>
+              <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
+                <a href={pdfUrl} download className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f]">
+                  <Download size={16} /> Download executed agreement
+                </a>
+              </div>
             </div>
           ) : (
-            <form onSubmit={submit} className="flex h-full min-h-[650px] flex-col">
-              <div className="flex-1 p-5 sm:p-7">
+            <form onSubmit={submit} className="flex min-h-[650px] flex-1 flex-col lg:min-h-0">
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 lg:min-h-0">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]">
                   <LockKeyhole size={13} /> Signature · 1 of 1
                 </div>
@@ -465,7 +481,7 @@ export default function SignaturePage() {
                 )}
               </div>
 
-              <div className="border-t border-[#ded5c8] bg-[#eee8df] p-5 sm:p-6">
+              <div className="sticky bottom-0 z-10 shrink-0 border-t border-[#ded5c8] bg-[#eee8df]/98 p-4 backdrop-blur sm:p-5 lg:static">
                 <button
                   type="submit"
                   disabled={submitting || !accepted || !signedName.trim() || !signatureDataUrl}
@@ -473,7 +489,7 @@ export default function SignaturePage() {
                 >
                   {submitting ? <><LoaderCircle className="animate-spin" size={16} /> Finalizing agreement…</> : <><PenLine size={16} /> Sign & complete agreement</>}
                 </button>
-                <p className="mt-3 text-center text-[11px] leading-4 text-[#8a8074]">A completed PDF will be emailed to you and Luxor Event Space.</p>
+                <p className="mt-2 text-center text-[10px] leading-4 text-[#8a8074]">A completed PDF will be emailed to you and Luxor Event Space.</p>
               </div>
             </form>
           )}
