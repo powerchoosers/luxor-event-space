@@ -104,7 +104,10 @@ function detailCacheKey(messageId: string, folderId?: string) {
 }
 
 function mailboxParts(value: string) {
-  return value
+  const decodedValue = decodeHtmlEntities(value).replace(/\u00a0/g, ' ').trim()
+  if (!decodedValue || /^(?:not provided|n\/?a|none|null|undefined)$/i.test(decodedValue)) return []
+
+  return decodedValue
     .split(/[,;](?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/)
     .map((part) => {
       const email = part.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() || ''
@@ -117,9 +120,10 @@ function mailboxParts(value: string) {
     .filter((part) => part.email || part.raw)
 }
 
-function mailboxLabel(value: string, inquiryByEmail: Map<string, LuxorInquiry>) {
-  if (!value.trim()) return 'Unknown contact'
-  return mailboxParts(value)
+function mailboxLabel(value: string, inquiryByEmail: Map<string, LuxorInquiry>, fallback = 'Unknown contact') {
+  const parts = mailboxParts(value)
+  if (!parts.length) return fallback
+  return parts
     .map(({ email, embeddedName, raw }) => {
       if (!email) return raw
       return inquiryByEmail.get(email)?.full_name
@@ -569,6 +573,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     void requestMessageDetail(message.id, message.folderId).catch(() => undefined)
   }
 
+  const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
+
   return (
     <div className="portal-surface flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
@@ -948,7 +954,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                       )}
                     </div>
                     <p className="text-[10px] font-mono text-[color:var(--portal-muted)] mt-0.5">
-                      To: {mailboxLabel(messageDetail.to, inquiryByEmail)} {messageDetail.cc ? `| CC: ${mailboxLabel(messageDetail.cc, inquiryByEmail)}` : ''}
+                      To: {mailboxLabel(messageDetail.to, inquiryByEmail, 'Client')} {selectedCcLabel ? `| CC: ${selectedCcLabel}` : ''}
                     </p>
                   </div>
                 </div>
@@ -1143,6 +1149,7 @@ function ThreadMessage({
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
   const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
+  const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
     const document = frame.contentDocument
@@ -1164,7 +1171,7 @@ function ThreadMessage({
             <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{message.direction === 'outgoing' ? `Luxor to ${mailboxLabel(message.to, inquiryByEmail)}` : mailboxLabel(message.from, inquiryByEmail)}</p>
             <p className="shrink-0 text-[9px] font-mono text-[color:var(--portal-muted)]">{formatEmailDateDetailed(message.receivedAt)}</p>
           </div>
-          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${mailboxLabel(message.to, inquiryByEmail)}${message.cc ? ` · CC ${mailboxLabel(message.cc, inquiryByEmail)}` : ''}` : decodeHtmlEntities(message.summary || message.subject)}</p>
+          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${mailboxLabel(message.to, inquiryByEmail, 'Client')}${ccLabel ? ` · CC ${ccLabel}` : ''}` : decodeHtmlEntities(message.summary || message.subject)}</p>
         </div>
       </button>
       {expanded && (
