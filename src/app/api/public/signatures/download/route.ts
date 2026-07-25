@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent } from '@/lib/luxorSignaturesServer'
-import { buildLuxorContractPdf } from '@/lib/luxorContractPdfServer'
-import type { LuxorBooking } from '@/lib/luxorInquiryTypes'
 
 export async function GET(request: NextRequest) {
   try {
     const token = request.nextUrl.searchParams.get('token') || ''
     const kind = request.nextUrl.searchParams.get('kind') || 'contract'
-    if (process.env.NODE_ENV === 'development' && token === 'ux-layout-review') {
-      const booking = {
-        client_name: 'Lewis Patterson', email: 'lewis@example.com', phone: '(210) 555-0148', event_type: 'Baby shower',
-        event_date: '2026-11-14', start_time: '17:00', end_time: '23:00', guest_count: 120,
-        package_name: 'Signature Celebration', contract_total: 8250, deposit_required: 2500,
-        final_payment_due_date: '2026-10-15',
-      } as LuxorBooking
-      const pdf = await buildLuxorContractPdf(booking, 'layout-review')
-      return new NextResponse(Buffer.from(pdf), { headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } })
-    }
     const signature = await getLuxorSignatureRequestByToken(token)
     if (!signature) return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     if (signature.status === 'void') {

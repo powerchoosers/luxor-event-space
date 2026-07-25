@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildSignatureEmail, buildSignatureEmailHtml, cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildContractReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
-import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
 
 export async function GET(request: NextRequest) {
   try {
