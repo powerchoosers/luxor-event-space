@@ -39,16 +39,24 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
-import { EmailComposeDrawer } from '@/components/portal/EmailComposeDrawer'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
-import { PortalNotificationModal } from '@/components/portal/PortalNotificationModal'
 
 type PortalUserProfile = {
   displayName: string
   email: string
   avatarUrl: string | null
 }
+
+const EmailComposeDrawer = dynamic(
+  () => import('@/components/portal/EmailComposeDrawer').then((mod) => mod.EmailComposeDrawer),
+  { ssr: false }
+)
+
+const PortalNotificationModal = dynamic(
+  () => import('@/components/portal/PortalNotificationModal').then((mod) => mod.PortalNotificationModal),
+  { ssr: false }
+)
 
 const PortalElenaChat = dynamic(
   () => import('@/components/portal/PortalElenaChat').then((mod) => mod.PortalElenaChat),

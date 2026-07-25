@@ -650,10 +650,19 @@ export function usePortalNotifications() {
   // Secure polling is the fallback for private RLS-protected rows that cannot be
   // delivered to the browser's anonymous Realtime connection.
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchNotifications(true)
+      }
+    }
+    window.addEventListener('visibilitychange', handleVisibilityChange)
     const generalInterval = setInterval(() => {
       if (document.visibilityState === 'visible') void fetchNotifications(true)
     }, GENERAL_POLL_INTERVAL_MS)
-    return () => clearInterval(generalInterval)
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(generalInterval)
+    }
   }, [fetchNotifications])
 
   // Sub-100ms Supabase Realtime WebSocket subscription for instant updates on website RSVPs, bookings, and form submissions

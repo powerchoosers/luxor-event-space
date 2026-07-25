@@ -466,8 +466,8 @@ function formatZohoUtcDateTime(value: string) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
 }
 
-export async function listLuxorZohoInbox(limit = 25) {
-  const safeLimit = Math.min(Math.max(limit, 1), 50)
+export async function listLuxorZohoInbox(limit = 1000) {
+  const safeLimit = Math.min(Math.max(limit, 1), 1000)
   if (cachedInboxListing && cachedInboxListing.expiresAt > Date.now()) {
     return cachedInboxListing.items.slice(0, safeLimit)
   }
@@ -476,31 +476,45 @@ export async function listLuxorZohoInbox(limit = 25) {
     inboxListingRequest = (async () => {
       const { accountId, baseUrl } = getZohoConfig()
       const accessToken = await getZohoAccessToken()
-      const params = new URLSearchParams({ limit: '50' })
-      const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
-        headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
-        cache: 'no-store',
+      const batchSize = 200
+      const totalPages = Math.min(Math.ceil(safeLimit / batchSize), 5)
+
+      const pagePromises = Array.from({ length: totalPages }, (_, pageIndex) => {
+        const start = pageIndex * batchSize + 1
+        const pageLimit = Math.min(batchSize, safeLimit - pageIndex * batchSize)
+        const params = new URLSearchParams({
+          limit: String(pageLimit),
+          start: String(start),
+        })
+        return fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view?${params.toString()}`, {
+          headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+          cache: 'no-store',
+        }).then(async (response) => {
+          const resultText = await response.text()
+          if (!response.ok) {
+            if (response.status === 401) cachedAccessToken = null
+            throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
+          }
+          const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+          return (result.data || []).map((message): LuxorZohoMessage => ({
+            id: message.messageId || message.message_id || '',
+            threadId: message.threadId || message.messageId || message.message_id || '',
+            folderId: message.folderId || '',
+            subject: decodeHtmlEntities(message.subject) || '(No subject)',
+            from: message.fromAddress || message.sender || 'Unknown sender',
+            to: message.toAddress || '',
+            cc: message.ccAddress || '',
+            receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
+            summary: decodeHtmlEntities(message.summary),
+            hasAttachment: zohoBoolean(message.hasAttachment),
+            isRead: String(message.status || '') === '1',
+            direction: 'incoming',
+          }))
+        })
       })
-      const resultText = await response.text()
-      if (!response.ok) {
-        if (response.status === 401) cachedAccessToken = null
-        throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
-      }
-      const result = resultText ? JSON.parse(resultText) as { data?: ZohoMessageSummary[] } : {}
-      return (result.data || []).map((message): LuxorZohoMessage => ({
-        id: message.messageId || message.message_id || '',
-        threadId: message.threadId || message.messageId || message.message_id || '',
-        folderId: message.folderId || '',
-        subject: decodeHtmlEntities(message.subject) || '(No subject)',
-        from: message.fromAddress || message.sender || 'Unknown sender',
-        to: message.toAddress || '',
-        cc: message.ccAddress || '',
-        receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-        summary: decodeHtmlEntities(message.summary),
-        hasAttachment: zohoBoolean(message.hasAttachment),
-        isRead: String(message.status || '') === '1',
-        direction: 'incoming',
-      }))
+
+      const pages = await Promise.all(pagePromises)
+      return pages.flat()
     })()
   }
 
@@ -528,8 +542,8 @@ export async function listLuxorZohoInbox(limit = 25) {
   }
 }
 
-export async function listLuxorZohoSentMessages(limit = 50) {
-  const safeLimit = Math.min(Math.max(limit, 1), 100)
+export async function listLuxorZohoSentMessages(limit = 1000) {
+  const safeLimit = Math.min(Math.max(limit, 1), 1000)
   if (cachedSentListing && cachedSentListing.expiresAt > Date.now()) {
     return cachedSentListing.items.slice(0, safeLimit)
   }
@@ -539,36 +553,47 @@ export async function listLuxorZohoSentMessages(limit = 50) {
       const { accountId, baseUrl, allowedSenders } = getZohoConfig()
       const accessToken = await getZohoAccessToken()
       const primarySender = allowedSenders[0] || 'booking@luxoratlaspalmas.com'
-      const params = new URLSearchParams({
-        searchKey: `sender:${primarySender}`,
-        limit: '100',
-        start: '1',
-        includeto: 'true',
+      const batchSize = 200
+      const totalPages = Math.min(Math.ceil(safeLimit / batchSize), 5)
+
+      const pagePromises = Array.from({ length: totalPages }, (_, pageIndex) => {
+        const start = pageIndex * batchSize + 1
+        const pageLimit = Math.min(batchSize, safeLimit - pageIndex * batchSize)
+        const params = new URLSearchParams({
+          searchKey: `sender:${primarySender}`,
+          limit: String(pageLimit),
+          start: String(start),
+          includeto: 'true',
+        })
+        return fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
+          headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+          cache: 'no-store',
+        }).then(async (response) => {
+          const resultText = await response.text()
+          if (!response.ok) {
+            if (response.status === 401) cachedAccessToken = null
+            throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
+          }
+          const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+          return (result.data || []).map((message): LuxorZohoMessage => ({
+            id: message.messageId || message.message_id || '',
+            threadId: message.threadId || message.messageId || message.message_id || '',
+            folderId: message.folderId || '',
+            subject: decodeHtmlEntities(message.subject) || '(No subject)',
+            from: message.fromAddress || message.sender || primarySender,
+            to: message.toAddress || '',
+            cc: message.ccAddress || '',
+            receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
+            summary: decodeHtmlEntities(message.summary),
+            hasAttachment: zohoBoolean(message.hasAttachment),
+            direction: 'outgoing',
+            isRead: true,
+          }))
+        })
       })
-      const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/search?${params.toString()}`, {
-        headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
-        cache: 'no-store',
-      })
-      const resultText = await response.text()
-      if (!response.ok) {
-        if (response.status === 401) cachedAccessToken = null
-        throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
-      }
-      const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
-      return (result.data || []).map((message): LuxorZohoMessage => ({
-        id: message.messageId || message.message_id || '',
-        threadId: message.threadId || message.messageId || message.message_id || '',
-        folderId: message.folderId || '',
-        subject: decodeHtmlEntities(message.subject) || '(No subject)',
-        from: message.fromAddress || message.sender || primarySender,
-        to: message.toAddress || '',
-        cc: message.ccAddress || '',
-        receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
-        summary: decodeHtmlEntities(message.summary),
-        hasAttachment: zohoBoolean(message.hasAttachment),
-        direction: 'outgoing',
-        isRead: true,
-      }))
+
+      const pages = await Promise.all(pagePromises)
+      return pages.flat()
     })()
   }
 
@@ -744,7 +769,7 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
   }
 }
 
-export async function listLuxorZohoMessagesForAddress(email: string, limit = 50) {
+export async function listLuxorZohoMessagesForAddress(email: string, limit = 1000) {
   const clientEmail = normalizeEmailAddress(email)
   if (!clientEmail) return []
 
@@ -752,7 +777,7 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 50)
   const accessToken = await getZohoAccessToken()
   const params = new URLSearchParams({
     searchKey: `sender:${clientEmail}::or:to:${clientEmail}`,
-    limit: String(Math.min(Math.max(limit, 1), 100)),
+    limit: String(Math.min(Math.max(limit, 1), 1000)),
     start: '1',
     includeto: 'true',
   })

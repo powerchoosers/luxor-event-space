@@ -105,7 +105,7 @@ async function requestMailbox(force = false) {
   if (mailboxCache && !force) return mailboxCache
   if (mailboxRequest && !force) return mailboxRequest
 
-  const request = fetch('/api/email/inbox?limit=100&folder=all', { cache: 'no-store' })
+  const request = fetch('/api/email/inbox?limit=1000&folder=all', { cache: 'no-store' })
     .then(async (response) => {
       const data = (await response.json().catch(() => ({}))) as {
         messages?: EmailMessageItem[]

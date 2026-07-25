@@ -466,6 +466,9 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setIsMuted(nextMuted)
   }, [isMuted])
 
+  const openPanel = useCallback(() => setIsPanelOpen(true), [])
+  const closePanel = useCallback(() => setIsPanelOpen(false), [])
+
   const contextValue = useMemo<VoiceContextValue>(() => ({
     phoneState,
     callQuality,
@@ -473,11 +476,11 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     isPanelOpen,
     activeCall,
     setCallQuality,
-    openPanel: () => setIsPanelOpen(true),
-    closePanel: () => setIsPanelOpen(false),
+    openPanel,
+    closePanel,
     enablePhone,
     startCall,
-  }), [activeCall, callQuality, enablePhone, isPanelOpen, phoneState, startCall, unreadCount])
+  }), [activeCall, callQuality, closePanel, enablePhone, isPanelOpen, openPanel, phoneState, startCall, unreadCount])
 
   return (
     <VoiceContext.Provider value={contextValue}>

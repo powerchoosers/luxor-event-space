@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const limit = Number.parseInt(searchParams.get('limit') || '50', 10)
+    const limit = Number.parseInt(searchParams.get('limit') || '1000', 10)
     const email = searchParams.get('email') || ''
     const folder = (searchParams.get('folder') || 'all').toLowerCase()
     const source = searchParams.get('source') || 'email-client'
-    const safeLimit = Number.isFinite(limit) ? limit : 50
+    const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 1000, 1), 1000)
 
     console.log(JSON.stringify({
       level: 'info',

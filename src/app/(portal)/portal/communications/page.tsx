@@ -108,7 +108,7 @@ export default function CommunicationsPage() {
       setLoadingEmailMessages(true)
       setEmailThreadError(null)
       setZohoReconnectRequired(false)
-      const res = await fetch(`/api/email/inbox?limit=50&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const res = await fetch(`/api/email/inbox?limit=1000&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
       const data = await res.json().catch(() => ({})) as {
         mailbox?: string
         messages?: ZohoInboxMessage[]

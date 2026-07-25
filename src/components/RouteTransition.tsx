@@ -42,13 +42,13 @@ export function RouteTransition({
   }
 
   const initialState = isPortal
-    ? { opacity: 0, y: 8 }
+    ? { opacity: 0, y: 4 }
     : { opacity: 0, y: 16, filter: 'blur(6px)' }
   const animateState = isPortal
     ? { opacity: 1, y: 0 }
     : { opacity: 1, y: 0, filter: 'blur(0px)' }
   const exitState = isPortal
-    ? { opacity: 0, y: -4 }
+    ? { opacity: 0, y: -2 }
     : { opacity: 0, y: -10, filter: 'blur(4px)' }
 
   return (
@@ -60,7 +60,7 @@ export function RouteTransition({
         initial={initialState}
         animate={animateState}
         exit={exitState}
-        transition={{ duration: isPortal ? 0.16 : 0.32, ease: [0.23, 1, 0.32, 1] }}
+        transition={{ duration: isPortal ? 0.1 : 0.28, ease: [0.23, 1, 0.32, 1] }}
         onAnimationComplete={() => {
           const safeId = `route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`
           const el = document.getElementById(safeId)

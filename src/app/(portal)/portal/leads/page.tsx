@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Users,
@@ -90,6 +90,7 @@ export default function LeadsPage() {
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearchTerm = useDeferredValue(searchTerm)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false)

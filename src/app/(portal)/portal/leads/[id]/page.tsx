@@ -1015,7 +1015,7 @@ export default function LeadDetailPage({
       setLoadingEmailMessages(true)
       setEmailThreadError(null)
       setZohoReconnectRequired(false)
-      const response = await fetch(`/api/email/inbox?limit=50&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const response = await fetch(`/api/email/inbox?limit=1000&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => ({})) as {
         messages?: ZohoEmailMessage[]
         error?: string
