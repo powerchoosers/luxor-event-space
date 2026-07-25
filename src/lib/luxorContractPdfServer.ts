@@ -197,11 +197,11 @@ export async function buildExecutedLuxorContract(input: {
     })
 
     const ownerBox = LUXOR_CONTRACT_SIGNATURE_PLACEMENT.owner
-    const ownerSignatureSize = Math.min(23, ownerBox.width / script.widthOfTextAtSize(input.ownerName, 1))
+    const originalPageOwnerSignatureSize = Math.min(23, ownerBox.width / script.widthOfTextAtSize(input.ownerName, 1))
     signaturePage.drawText(input.ownerName, {
       x: ownerBox.x,
       y: ownerBox.y + 10,
-      size: ownerSignatureSize,
+      size: originalPageOwnerSignatureSize,
       font: script,
       color: ink,
       maxWidth: ownerBox.width,
