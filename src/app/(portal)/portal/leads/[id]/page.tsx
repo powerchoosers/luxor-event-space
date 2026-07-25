@@ -242,6 +242,7 @@ export default function LeadDetailPage({
 
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [sendingContractBookingId, setSendingContractBookingId] = useState<string | null>(null)
   const [pendingLifecycleStatus, setPendingLifecycleStatus] = useState<LuxorInquiry['status'] | null>(null)
 
   // Timeline tab filtering
@@ -3671,10 +3672,15 @@ export default function LeadDetailPage({
               }
 
               if (currentStage === 'contract') {
+                const isSendingCurrentBooking = Boolean(latestBooking && sendingContractBookingId === latestBooking.id)
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <motion.section 
+                      layout
+                      transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                      className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                    >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -5071,21 +5077,21 @@ export default function LeadDetailPage({
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {linkedVendors.map(({ ref, vendor }) => (
-                  <div key={ref.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                  <div key={ref.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-white">{vendor?.name || 'Vendor record unavailable'}</p>
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">{vendor?.vendor_type || 'Linked vendor'}</p>
+                        <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{vendor?.name || 'Vendor record unavailable'}</p>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{vendor?.vendor_type || 'Linked vendor'}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleVendorSelection(ref.id)}
-                        className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-300"
+                        className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 cursor-pointer"
                       >
                         Remove
                       </button>
                     </div>
-                    <div className="mt-3 grid gap-2 text-[10px] text-zinc-500 sm:grid-cols-2">
+                    <div className="mt-3 grid gap-2 text-[10px] text-[color:var(--portal-muted)] sm:grid-cols-2">
                       <span>{vendor?.phone || 'No phone'}</span>
                       <span>{vendor?.email || 'No email'}</span>
                     </div>
@@ -5093,7 +5099,7 @@ export default function LeadDetailPage({
                       value={ref.notes || ''}
                       onChange={(event) => updateVendorNotes(ref.id, event.target.value)}
                       placeholder="Vendor notes for this event..."
-                      className="mt-3 h-20 w-full rounded-lg border border-zinc-900 bg-zinc-950/70 p-3 text-xs leading-5 text-zinc-300 outline-none transition-colors focus:border-[#caa24c]/40"
+                      className="mt-3 h-20 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none transition-colors focus:border-[#caa24c]/40 placeholder-[color:var(--portal-muted)]"
                     />
                   </div>
                 ))}
@@ -5106,16 +5112,16 @@ export default function LeadDetailPage({
           <div id="lead-timeline" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
               <div>
-                <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                  <Clock size={16} className="text-zinc-500" />
+                <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]">
+                  <Clock size={16} className="text-[#a8792f] dark:text-[#caa24c]" />
                   Event Timeline
                 </h3>
-                <p className="mt-1 text-xs text-zinc-600">Build the run of show without needing to advance the lead stage.</p>
+                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Build the run of show without needing to advance the lead stage.</p>
               </div>
               <button
                 type="button"
                 onClick={() => openTimelineModal(null)}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 cursor-pointer"
               >
                 <Plus size={12} /> Add Step
               </button>
@@ -5125,37 +5131,37 @@ export default function LeadDetailPage({
               <button
                 type="button"
                 onClick={() => openTimelineModal(null)}
-                className="w-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/25 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+                className="w-full rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5 cursor-pointer"
               >
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#caa24c]">
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                   <Plus size={18} />
                 </span>
-                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-zinc-300">Add timeline step</span>
-                <span className="mt-2 block text-xs leading-5 text-zinc-600">No timeline steps are planned yet. Add setup, vendor arrivals, ceremony, dinner, breakdown, or custom event milestones.</span>
+                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Add timeline step</span>
+                <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">No timeline steps are planned yet. Add setup, vendor arrivals, ceremony, dinner, breakdown, or custom event milestones.</span>
               </button>
             ) : (
-              <div className="relative ml-3 space-y-4 border-l border-zinc-850 pl-6">
+              <div className="relative ml-3 space-y-4 border-l border-[color:var(--portal-border)] pl-6">
                 {timelineItems.map(({ item, originalIndex }) => (
-                  <div key={`${item.time}-${item.title}-${originalIndex}`} className="relative rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
-                    <span className="absolute -left-[31px] top-5 flex h-3 w-3 rounded-full border border-[#caa24c] bg-[#080706]" />
+                  <div key={`${item.time}-${item.title}-${originalIndex}`} className="relative rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                    <span className="absolute -left-[31px] top-5 flex h-3 w-3 rounded-full border border-[#caa24c] bg-[color:var(--portal-card)]" />
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="font-mono text-xs font-black text-[#caa24c]">{item.time}</p>
-                        <p className="mt-1 text-sm font-bold text-white">{item.title}</p>
-                        {item.description ? <p className="mt-2 text-xs leading-5 text-zinc-500">{item.description}</p> : null}
+                        <p className="font-mono text-xs font-black text-[#a8792f] dark:text-[#caa24c]">{item.time}</p>
+                        <p className="mt-1 text-sm font-bold text-[color:var(--portal-text)]">{item.title}</p>
+                        {item.description ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{item.description}</p> : null}
                       </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => openTimelineModal(originalIndex)}
-                          className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-[#caa24c]/20 hover:text-[#f1d27a]"
+                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => deleteTimelineItem(originalIndex)}
-                          className="rounded-md border border-zinc-800 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-300"
+                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 cursor-pointer"
                         >
                           Delete
                         </button>
@@ -5170,22 +5176,22 @@ export default function LeadDetailPage({
 
           {activeLeadTab === 'documents' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
+            <h3 className="mb-6 flex items-center justify-between font-semibold text-[color:var(--portal-text)]">
               <span className="flex items-center gap-2.5">
-                <FileSignature size={16} className="text-zinc-500" />
+                <FileSignature size={16} className="text-[#a8792f] dark:text-[#caa24c]" />
                 Booking & Contract
               </span>
-              <span className="font-mono text-xs text-zinc-500">{sortedBookings.length} records</span>
+              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{sortedBookings.length} records</span>
             </h3>
 
             {sortedBookings.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
-                <p className="font-semibold text-zinc-300">No booking record is linked yet.</p>
-                <p className="mt-1 text-zinc-600">Create the booking record first. The agreement uses its event date, package, guest count, and payment details.</p>
+              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">No booking record is linked yet.</p>
+                <p className="mt-1 text-[color:var(--portal-muted)]">Create the booking record first. The agreement uses its event date, package, guest count, and payment details.</p>
                 <button
                   type="button"
                   onClick={openBookingModal}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 cursor-pointer"
                 >
                   Create booking record
                 </button>
@@ -5193,31 +5199,31 @@ export default function LeadDetailPage({
             ) : (
               <div className="space-y-3">
                 {sortedBookings.map((booking, index) => (
-                  <div key={booking.id} className="rounded-xl border border-zinc-900 bg-zinc-950/35 p-4">
+                  <div key={booking.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
                           {index === 0 ? 'Latest booking' : 'Booking record'}
                         </p>
-                        <p className="mt-1 text-sm font-bold text-white">{booking.event_date || 'Event date TBD'}</p>
-                        <p className="mt-1 text-[10px] text-zinc-500">
+                        <p className="mt-1 text-sm font-bold text-[color:var(--portal-text)]">{booking.event_date || 'Event date TBD'}</p>
+                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] font-medium">
                           {(booking.package_name || 'No package').replaceAll('_', ' ')} • {(booking.contract_status || 'not_sent').replaceAll('_', ' ')}
                         </p>
                       </div>
                       <PortalStatusBadge status={booking.status} />
                     </div>
-                    <div className="mt-3 grid gap-2 text-[10px] text-zinc-500 sm:grid-cols-3">
+                    <div className="mt-3 grid gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px] sm:grid-cols-3">
                       <div>
-                        <span className="block text-zinc-600">Contract total</span>
-                        <span className="font-mono text-zinc-300">${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="block text-[color:var(--portal-muted)]">Contract total</span>
+                        <span className="font-mono font-bold text-[color:var(--portal-text)]">${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div>
-                        <span className="block text-zinc-600">Deposit required</span>
-                        <span className="font-mono text-zinc-300">${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="block text-[color:var(--portal-muted)]">Deposit required</span>
+                        <span className="font-mono font-bold text-[color:var(--portal-text)]">${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div>
-                        <span className="block text-zinc-600">Contract status</span>
-                        <span className="font-mono text-zinc-300">{(booking.contract_status || 'not_sent').replaceAll('_', ' ')}</span>
+                        <span className="block text-[color:var(--portal-muted)]">Contract status</span>
+                        <span className="font-mono font-bold text-[color:var(--portal-text)]">{(booking.contract_status || 'not_sent').replaceAll('_', ' ')}</span>
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -5225,14 +5231,14 @@ export default function LeadDetailPage({
                         type="button"
                         onClick={() => booking.contract_status === 'not_sent' || !booking.contract_status ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
                         disabled={booking.contract_status === 'signed' || updatingStatus}
-                        className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12 disabled:opacity-45"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-45 cursor-pointer"
                       >
                         {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Mark Signed Manually' : 'Send Agreement + Guide'}
                       </button>
                       <button
                         type="button"
                         onClick={openBookingModal}
-                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-colors hover:text-white"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer"
                       >
                         Update Booking
                       </button>
