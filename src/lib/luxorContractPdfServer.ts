@@ -1,6 +1,7 @@
 import 'server-only'
 
 import crypto from 'crypto'
+import fontkit from '@pdf-lib/fontkit'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFFont, type PDFPage } from 'pdf-lib'
@@ -533,9 +534,18 @@ export async function buildExecutedLuxorContract(input: {
   const originalHash = crypto.createHash('sha256').update(input.original).digest('hex')
   const addCertificate = async (detailed: boolean) => {
     const pdf = await PDFDocument.load(input.original)
+    pdf.registerFontkit(fontkit)
     const regular = await pdf.embedFont(StandardFonts.Helvetica)
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-    const script = await pdf.embedFont(StandardFonts.TimesRomanItalic)
+    const signatureFontBytes = await fs.readFile(path.join(
+      process.cwd(),
+      'node_modules',
+      '@fontsource',
+      'alex-brush',
+      'files',
+      'alex-brush-latin-400-normal.woff',
+    ))
+    const script = await pdf.embedFont(signatureFontBytes, { subset: true })
 
     const signatureBytes = Buffer.from(input.clientSignatureDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')
     const clientSignature = await pdf.embedPng(signatureBytes)

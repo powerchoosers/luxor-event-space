@@ -11,6 +11,16 @@ import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 
+const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
+
+function resolveOwnerSignerName(value?: string | null) {
+  const configuredName = value?.trim()
+  if (!configuredName || configuredName.toLocaleLowerCase() === 'arianna') {
+    return DEFAULT_OWNER_SIGNER_NAME
+  }
+  return configuredName
+}
+
 function defaultContractBody(booking: LuxorBooking) {
   const proposalItems = Array.isArray(booking.metadata?.proposalLineItems)
     ? booking.metadata.proposalLineItems as Array<{ description?: string; quantity?: number }>
@@ -44,7 +54,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
   const token = createPublicToken()
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString()
 
-  const ownerName = process.env.LUXOR_OWNER_SIGNER_NAME || 'Arianna'
+  const ownerName = resolveOwnerSignerName(process.env.LUXOR_OWNER_SIGNER_NAME)
   const ownerEmail = process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
   const parsedName = parseClientName(booking.client_name)
   const [created] = await supabaseRest<LuxorSignatureRequest[]>('luxor_signature_requests?select=*', {
@@ -225,7 +235,7 @@ export async function signLuxorSignatureRequest(input: {
     })
   }
 
-  const ownerName = signature.owner_name || process.env.LUXOR_OWNER_SIGNER_NAME || 'Arianna'
+  const ownerName = resolveOwnerSignerName(signature.owner_name || process.env.LUXOR_OWNER_SIGNER_NAME)
   const ownerEmail = signature.owner_email || process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
   const ownerSignedAt = signature.owner_signed_at || new Date().toISOString()
   const existingEvents = await listLuxorSignatureEvents(signature.id)
