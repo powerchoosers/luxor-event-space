@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import type { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
+import { LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
 
 const gold = rgb(0.73, 0.54, 0.24)
 const ink = rgb(0.12, 0.105, 0.09)
@@ -166,6 +167,7 @@ export async function buildExecutedLuxorContract(input: {
   clientName: string
   clientEmail: string
   clientSignedAt: string
+  clientSignatureDataUrl: string
   ownerName: string
   ownerEmail: string
   ownerSignedAt: string
@@ -177,6 +179,48 @@ export async function buildExecutedLuxorContract(input: {
     const regular = await pdf.embedFont(StandardFonts.Helvetica)
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
     const script = await pdf.embedFont(StandardFonts.TimesRomanItalic)
+
+    const signatureBytes = Buffer.from(input.clientSignatureDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')
+    const clientSignature = await pdf.embedPng(signatureBytes)
+    const signaturePage = pdf.getPages()[LUXOR_CONTRACT_SIGNATURE_PLACEMENT.pageIndex]
+    if (!signaturePage) throw new Error('The contract signature page is missing.')
+
+    const clientBox = LUXOR_CONTRACT_SIGNATURE_PLACEMENT.client
+    const clientScale = Math.min(clientBox.width / clientSignature.width, clientBox.height / clientSignature.height)
+    const clientWidth = clientSignature.width * clientScale
+    const clientHeight = clientSignature.height * clientScale
+    signaturePage.drawImage(clientSignature, {
+      x: clientBox.x + (clientBox.width - clientWidth) / 2,
+      y: clientBox.y + (clientBox.height - clientHeight) / 2,
+      width: clientWidth,
+      height: clientHeight,
+    })
+
+    const ownerBox = LUXOR_CONTRACT_SIGNATURE_PLACEMENT.owner
+    const ownerSignatureSize = Math.min(23, ownerBox.width / script.widthOfTextAtSize(input.ownerName, 1))
+    signaturePage.drawText(input.ownerName, {
+      x: ownerBox.x,
+      y: ownerBox.y + 10,
+      size: ownerSignatureSize,
+      font: script,
+      color: ink,
+      maxWidth: ownerBox.width,
+    })
+    signaturePage.drawText(`Signed ${new Date(input.clientSignedAt).toLocaleDateString('en-US')}`, {
+      x: clientBox.x,
+      y: clientBox.y - 20,
+      size: 7.25,
+      font: regular,
+      color: muted,
+    })
+    signaturePage.drawText(`Countersigned ${new Date(input.ownerSignedAt).toLocaleDateString('en-US')}`, {
+      x: ownerBox.x,
+      y: ownerBox.y - 20,
+      size: 7.25,
+      font: regular,
+      color: muted,
+    })
+
     const page = pdf.addPage([612, 792])
     page.drawRectangle({ x: 0, y: 0, width: 612, height: 792, color: cream })
     page.drawRectangle({ x: 0, y: 736, width: 612, height: 56, color: ink })

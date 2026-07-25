@@ -31,6 +31,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     }
 
+    if (signature.expires_at && new Date(signature.expires_at).getTime() < Date.now() && signature.status !== 'signed') {
+      return NextResponse.json({ error: 'This signing link has expired. Please contact Luxor Event Space for a new agreement.' }, { status: 410 })
+    }
+
     const isInternalOwner = Boolean(request.cookies.get('luxor_portal_session'))
 
     if (signature.status === 'sent' && !isInternalOwner) {
@@ -67,9 +71,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please accept the signing acknowledgement.' }, { status: 400 })
     }
 
+    const signatureDataUrl = String(body.signatureDataUrl || '')
+    if (!/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(signatureDataUrl)) {
+      return NextResponse.json({ error: 'Please add your signature before completing the agreement.' }, { status: 400 })
+    }
+    if (signatureDataUrl.length > 2_500_000) {
+      return NextResponse.json({ error: 'The signature image is too large. Please clear it and try again.' }, { status: 413 })
+    }
+
     const signature = await signLuxorSignatureRequest({
       token: String(body.token || ''),
       signedName,
+      signatureDataUrl,
       ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
       userAgent: request.headers.get('user-agent'),
     })

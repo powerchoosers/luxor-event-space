@@ -152,6 +152,7 @@ export async function listLuxorSignatureEvents(signatureRequestId: string) {
 export async function signLuxorSignatureRequest(input: {
   token: string
   signedName: string
+  signatureDataUrl: string
   ip?: string | null
   userAgent?: string | null
 }) {
@@ -221,6 +222,7 @@ export async function signLuxorSignatureRequest(input: {
     clientName: signature.signed_name || input.signedName,
     clientEmail: signature.client_email,
     clientSignedAt: signedAt,
+    clientSignatureDataUrl: input.signatureDataUrl,
     ownerName,
     ownerEmail,
     ownerSignedAt,
