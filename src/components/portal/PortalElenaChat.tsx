@@ -773,7 +773,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         {/* Interactive CRM Action Cards */}
                         {msg.emailDraft && (
                           <div className="mt-2 ml-8 w-full max-w-md">
-                            <ElenaEmailDraftCard payload={msg.emailDraft} />
+                            <ElenaEmailDraftCard draft={msg.emailDraft} />
                           </div>
                         )}
                         {msg.crmUpdateCard && (
