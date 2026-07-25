@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
-import { LUXOR_CONTRACT_PAGE_SIZE, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from '@/lib/luxorSignaturePlacement'
+import { LUXOR_CONTRACT_PAGE_SIZE, LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT, type LuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -26,6 +26,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString()
 
 type SignatureMode = 'type' | 'draw'
+type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
+  signature_placement?: LuxorContractSignaturePlacement
+}
 
 function createTypedSignature(name: string) {
   const canvas = document.createElement('canvas')
@@ -146,7 +149,7 @@ function LoadingState() {
 
 export default function SignaturePage() {
   const params = useParams<{ token: string }>()
-  const [signature, setSignature] = useState<LuxorSignatureRequest | null>(null)
+  const [signature, setSignature] = useState<PublicLuxorSignatureRequest | null>(null)
   const [signedName, setSignedName] = useState('')
   const [mode, setMode] = useState<SignatureMode>('type')
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
@@ -207,10 +210,12 @@ export default function SignaturePage() {
     setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
   }
 
+  const signaturePlacement = signature?.signature_placement || LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT
+
   const goToSignature = useCallback(() => {
-    setPageNumber(LUXOR_CONTRACT_SIGNATURE_PLACEMENT.pageIndex + 1)
+    setPageNumber(signaturePlacement.pageIndex + 1)
     viewerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  }, [signaturePlacement.pageIndex])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -255,7 +260,7 @@ export default function SignaturePage() {
   }
 
   const scale = pageWidth / LUXOR_CONTRACT_PAGE_SIZE.width
-  const placement = LUXOR_CONTRACT_SIGNATURE_PLACEMENT.client
+  const placement = signaturePlacement.client
   const overlayStyle = {
     left: placement.x * scale,
     top: (LUXOR_CONTRACT_PAGE_SIZE.height - placement.y - placement.height) * scale,
@@ -342,7 +347,7 @@ export default function SignaturePage() {
                     renderAnnotationLayer={false}
                     loading={<div style={{ width: pageWidth, height: pageWidth * 1.294 }} className="bg-[#f7f0e4]" />}
                   />
-                  {!complete && pageNumber === LUXOR_CONTRACT_SIGNATURE_PLACEMENT.pageIndex + 1 && (
+                  {!complete && pageNumber === signaturePlacement.pageIndex + 1 && (
                     <div
                       className={`absolute z-10 flex items-center justify-center overflow-hidden rounded-sm transition ${signatureDataUrl ? 'bg-transparent' : 'border border-dashed border-[#b88a44] bg-[#fff9ed]/75'}`}
                       style={overlayStyle}

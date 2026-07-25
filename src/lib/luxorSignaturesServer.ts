@@ -5,6 +5,7 @@ import { supabaseRest } from './supabaseRestServer'
 import { cancelQueuedLuxorEmailJobs, createPublicToken } from './luxorEmailJobsServer'
 import { getLuxorBooking, updateLuxorBooking } from './luxorBookingsServer'
 import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuidePdf, parseClientName } from './luxorContractPdfServer'
+import { getLuxorContractSignaturePlacement, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
@@ -64,6 +65,8 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
       owner_email: ownerEmail,
       expires_at: expiresAt,
       metadata: {
+        documentVersion: 2,
+        signaturePlacement: LUXOR_CONTRACT_SIGNATURE_PLACEMENT,
         eventDate: booking.event_date,
         guestCount: booking.guest_count,
         contractTotal: booking.contract_total,
@@ -223,6 +226,7 @@ export async function signLuxorSignatureRequest(input: {
     clientEmail: signature.client_email,
     clientSignedAt: signedAt,
     clientSignatureDataUrl: input.signatureDataUrl,
+    signaturePlacement: getLuxorContractSignaturePlacement(signature.metadata),
     ownerName,
     ownerEmail,
     ownerSignedAt,
