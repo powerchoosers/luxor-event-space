@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { to, subject, content, from, track, campaignName, format, recipientName } = body
+    const { to, subject, content, from, track, campaignName, format, recipientName, contentMode } = body
     const senderProfile = await getLuxorUserProfile(session.email)
     const signatureEmail = typeof from === 'string' && from.trim()
       ? from.trim().toLowerCase()
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
         recipientName: typeof recipientName === 'string' ? recipientName : undefined,
         subject: String(subject || ''),
         body: finalContent,
+        bodyHtml: contentMode === 'rich' ? finalContent : undefined,
         senderName: senderProfile.displayName,
         senderRole: senderProfile.roleTitle,
         senderEmail: signatureEmail,
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           name: campaignName || `Direct Email: ${subject}`,
           subject: subject,
-          html_body: content,
+          html_body: finalContent,
           status: 'sent',
           audience_label: 'Direct Message',
           scheduled_for: new Date().toISOString(),

@@ -33,26 +33,13 @@ import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import { EMAIL_TEMPLATES, EmailBlock, EmailTemplate } from '@/app/(portal)/portal/marketing/emailTemplates'
 import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer'
 import { BrandAssetPicker } from './BrandAssetPicker'
+import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 
 // Allowed Zoho email senders
 const ALLOWED_SENDERS = [
   { value: 'booking@luxoratlaspalmas.com', label: 'Booking Email' },
   { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email' }
 ]
-
-const DEFAULT_FOOTER_BLOCK: EmailBlock = {
-  id: 'footer-default',
-  type: 'footer',
-  companyName: 'Luxor Event Space',
-  address: '803 Castroville Rd #402, San Antonio, TX 78237',
-  phone: 'Private venue tours by appointment.',
-  website: 'luxoratlaspalmas.com',
-  unsubscribeUrl: '#unsubscribe',
-  showSocial: true,
-  instagramUrl: 'https://www.instagram.com/luxoratlaspalmas?utm_source=qr',
-  facebookUrl: 'https://www.facebook.com/share/1DD3mKM8XJ/?mibextid=wwXIfr',
-  tiktokUrl: 'https://www.tiktok.com/@luxoratlaspalmas?_r=1&_t=ZT-97vnzmYjFUM',
-}
 
 interface EmailComposeDrawerProps {
   isOpen: boolean
@@ -91,6 +78,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   // Form Fields
   const [fromAddress, setFromAddress] = useState('booking@luxoratlaspalmas.com')
   const [fromName, setFromName] = useState('Luxor Event Space')
+  const [senderRole, setSenderRole] = useState('Venue Team')
+  const [senderAvatarUrl, setSenderAvatarUrl] = useState<string | null>(null)
   const [toAddress, setToAddress] = useState('')
   const [subject, setSubject] = useState('')
   const [track, setTrack] = useState(true)
@@ -203,6 +192,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   useEffect(() => {
     if (isOpen) {
       void fetchInquiries()
+      void fetch('/api/portal/user-preferences', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then((response) => response.ok ? response.json() : null)
+        .then((profile) => {
+          if (!profile) return
+          if (typeof profile.display_name === 'string' && profile.display_name.trim()) setFromName(profile.display_name.trim())
+          if (typeof profile.role_title === 'string' && profile.role_title.trim()) setSenderRole(profile.role_title.trim())
+          setSenderAvatarUrl(typeof profile.avatar_url === 'string' && profile.avatar_url.trim() ? profile.avatar_url.trim() : null)
+        })
+        .catch((error) => console.warn('Failed to load email sender profile:', error))
     }
   }, [isOpen])
 
@@ -303,24 +301,21 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   // Compile current email blocks or text to responsive Luxor HTML
   const compiledHtml = useMemo(() => {
     if (selectedTemplateId === 'regular') {
-      // Wrap regular text in simple brand layout
-      const blocks: EmailBlock[] = [
-        {
-          id: 'text-regular',
-          type: 'text',
-          content: bodyText || 'Type your message...',
-          fontSize: 15,
-          textAlign: 'left',
-          color: 'rgba(215,194,154,0.78)',
-        },
-        DEFAULT_FOOTER_BLOCK
-      ]
-      return renderEmailToHtml(subject || 'Direct Message', blocks)
+      return buildConversationalEmailHtml({
+        to: toAddress || 'client@example.com',
+        subject: subject || 'Message from Luxor Event Space',
+        body: '',
+        bodyHtml: bodyText || '<p>Type your message...</p>',
+        senderName: fromName,
+        senderRole,
+        senderEmail: fromAddress,
+        senderImageUrl: senderAvatarUrl,
+      })
     } else {
       // Use configured template blocks
       return renderEmailToHtml(subject || 'Marketing Email', templateBlocks)
     }
-  }, [selectedTemplateId, bodyText, templateBlocks, subject])
+  }, [selectedTemplateId, bodyText, templateBlocks, subject, toAddress, fromName, senderRole, fromAddress, senderAvatarUrl])
 
   const updateIframeHeight = () => {
     if (iframeRef.current?.contentWindow?.document?.body) {
@@ -358,12 +353,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
       setIsSending(true)
       setErrorMsg(null)
 
+      const isConversational = selectedTemplateId === 'regular'
       const payload = {
         to: toAddress.trim(),
         from: fromAddress,
         fromName: fromName.trim(),
         subject: subject.trim(),
-        content: compiledHtml,
+        content: isConversational ? bodyText : compiledHtml,
+        format: isConversational ? 'conversational' : 'html',
+        contentMode: isConversational ? 'rich' : undefined,
         track,
         campaignName: selectedTemplateId !== 'regular' ? `Direct Campaign: ${subject.trim()}` : undefined
       }
@@ -458,8 +456,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 <input
                   type="text"
                   value={fromName}
-                  onChange={(e) => setFromName(e.target.value)}
-                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
+                  readOnly
+                  title="Sender identity is managed in Settings"
+                  className="w-full cursor-default rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none"
                 />
               </div>
               <div className="space-y-1">
