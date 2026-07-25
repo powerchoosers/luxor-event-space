@@ -575,7 +575,6 @@ export function usePortalNotifications() {
       const notifiedToastIds = notifiedToastIdsRef.current
 
       const isFirstLoad = previousIds === null
-      const now = Date.now()
 
       // On initial page mount, mark ALL existing historical items as already notified
       // so opening/reloading the portal never floods the UI with popups for existing items
