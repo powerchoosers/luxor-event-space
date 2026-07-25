@@ -462,27 +462,79 @@ export function usePortalNotifications() {
       // 9. Campaign opens/clicks matched to a lead email.
       if (marketingEventsRes.status === 'fulfilled' && marketingEventsRes.value.ok) {
         const data = await marketingEventsRes.value.json() as { events?: RawRecord[] }
-        const seenEngagements = new Set<string>()
-        ;(data.events || []).filter((event) => event.event_type === 'open' || event.event_type === 'click').forEach((event) => {
+        const rawEvents = (data.events || []).filter((event) => event.event_type === 'open' || event.event_type === 'click')
+
+        type OpenGroup = {
+          inquiry: RawRecord
+          events: RawRecord[]
+          latestTimestamp: string
+        }
+        const openGroups = new Map<string, OpenGroup>()
+
+        rawEvents.forEach((event) => {
           const inquiry = inquiryByEmail.get(normalizeEmail(event.recipient_email))
           if (!inquiry?.id) return
-          const engagementKey = `${String(event.campaign_id || '')}:${String(event.recipient_id || '')}:${String(event.event_type || '')}`
-          if (seenEngagements.has(engagementKey)) return
-          seenEngagements.add(engagementKey)
-          const eventId = `marketing_${String(event.id || '')}`
           const clicked = event.event_type === 'click'
-          const leadName = String(inquiry.full_name || event.recipient_name || 'Client')
-          const campaignSubject = String(event.campaign_subject || event.campaign_name || 'Email')
+
+          if (clicked) {
+            const eventId = `marketing_${String(event.id || '')}`
+            const leadName = String(inquiry.full_name || event.recipient_name || 'Client')
+            const campaignSubject = String(event.campaign_subject || event.campaign_name || 'Email')
+            aggregated.push({
+              id: eventId,
+              type: 'email_open',
+              title: `Link Clicked: ${leadName}`,
+              subtitle: `Clicked link in ${campaignSubject}`,
+              timestamp: String(event.created_at || new Date().toISOString()),
+              isRead: currentReadIds.has(eventId),
+              targetUrl: leadUrl(inquiry.id, 'activity'),
+              metadata: { inquiryId: inquiry.id, campaignId: event.campaign_id, eventId: event.id },
+            })
+          } else {
+            // Group opens for the same recipient in 2-minute time windows so multi-email thread opens generate 1 notification
+            const eventTime = new Date(String(event.created_at || '')).getTime() || Date.now()
+            const timeBucket = Math.floor(eventTime / (2 * 60 * 1000))
+            const groupKey = `${String(inquiry.id)}_${timeBucket}`
+
+            const existing = openGroups.get(groupKey)
+            if (existing) {
+              existing.events.push(event)
+              if (eventTime > new Date(existing.latestTimestamp).getTime()) {
+                existing.latestTimestamp = String(event.created_at)
+              }
+            } else {
+              openGroups.set(groupKey, {
+                inquiry,
+                events: [event],
+                latestTimestamp: String(event.created_at || new Date().toISOString()),
+              })
+            }
+          }
+        })
+
+        openGroups.forEach((group, groupKey) => {
+          const leadName = String(group.inquiry.full_name || 'Client')
+          const firstEvent = group.events[0]
+          const firstSubject = String(firstEvent.campaign_subject || firstEvent.campaign_name || 'Email')
+          const count = group.events.length
+
+          const eventId = count > 1 ? `marketing_group_${groupKey}` : `marketing_${String(firstEvent.id || '')}`
+          const isRead = group.events.every((ev) => currentReadIds.has(`marketing_${String(ev.id || '')}`)) || currentReadIds.has(eventId)
+
+          const title = `Email Opened: ${leadName}`
+          const subtitle = count > 1
+            ? `Opened email thread (${count} messages including "${firstSubject}")`
+            : `Opened email "${firstSubject}"`
 
           aggregated.push({
             id: eventId,
             type: 'email_open',
-            title: clicked ? `Link Clicked: ${leadName}` : `Email Opened: ${leadName}`,
-            subtitle: clicked ? `Clicked link in ${campaignSubject}` : `Opened email "${campaignSubject}"`,
-            timestamp: String(event.created_at || new Date().toISOString()),
-            isRead: currentReadIds.has(eventId),
-            targetUrl: leadUrl(inquiry.id, 'activity'),
-            metadata: { inquiryId: inquiry.id, campaignId: event.campaign_id, eventId: event.id },
+            title,
+            subtitle,
+            timestamp: group.latestTimestamp,
+            isRead,
+            targetUrl: leadUrl(group.inquiry.id, 'activity'),
+            metadata: { inquiryId: group.inquiry.id, count, eventIds: group.events.map((e) => e.id) },
           })
         })
       }

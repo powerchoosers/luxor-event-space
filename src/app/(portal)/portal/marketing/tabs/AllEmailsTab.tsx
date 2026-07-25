@@ -31,7 +31,7 @@ import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
-import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
 
 export interface EmailMessageItem {
   id: string
@@ -1114,7 +1114,7 @@ function ThreadMessage({
 }
 
 function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean) {
-  let content = message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`
+  let content = stripTrackingPixels(message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }

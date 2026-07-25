@@ -1,4 +1,5 @@
 import { Check, CreditCard, FileText, ShieldCheck } from 'lucide-react'
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
@@ -24,7 +25,10 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   const requestedAmount = Math.min(Number(invoice.payment_requested_amount || balanceDue), balanceDue)
 
-  if (!invoice.proposal_viewed_at) {
+  const cookieStore = await cookies()
+  const isInternalOwner = Boolean(cookieStore.get('luxor_portal_session'))
+
+  if (!invoice.proposal_viewed_at && !isInternalOwner) {
     await updateInvoice(invoice.id, { proposal_viewed_at: new Date().toISOString() })
     if (invoice.inquiry_id) {
       await cancelQueuedLuxorEmailJobs(invoice.inquiry_id, ['proposal_view_reminder'])

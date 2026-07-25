@@ -34,6 +34,7 @@ import { EMAIL_TEMPLATES, EmailBlock, EmailTemplate } from '@/app/(portal)/porta
 import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer'
 import { BrandAssetPicker } from './BrandAssetPicker'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
+import { stripTrackingPixels } from '@/lib/luxorTextUtils'
 
 // Allowed Zoho email senders
 const ALLOWED_SENDERS = [
@@ -1075,7 +1076,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                   <iframe
                     ref={iframeRef}
                     title="luxor-email-preview"
-                    srcDoc={compiledHtml.replace('</head>', '<style>body::-webkit-scrollbar { width: 6px; height: 6px; } body::-webkit-scrollbar-track { background: #000000; } body::-webkit-scrollbar-thumb { background: rgba(202, 162, 76, 0.4); border-radius: 3px; } body::-webkit-scrollbar-thumb:hover { background: rgba(202, 162, 76, 0.6); }</style></head>')}
+                    srcDoc={stripTrackingPixels(compiledHtml).replace('</head>', '<style>body::-webkit-scrollbar { width: 6px; height: 6px; } body::-webkit-scrollbar-track { background: #000000; } body::-webkit-scrollbar-thumb { background: rgba(202, 162, 76, 0.4); border-radius: 3px; } body::-webkit-scrollbar-thumb:hover { background: rgba(202, 162, 76, 0.6); }</style></head>')}
                     sandbox="allow-same-origin"
                     onLoad={handleIframeLoad}
                     className="border-none absolute left-0 top-0 origin-top-left"

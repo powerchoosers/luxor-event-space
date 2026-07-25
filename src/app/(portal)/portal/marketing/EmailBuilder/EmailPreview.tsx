@@ -6,7 +6,7 @@ import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
-import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
 
 const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30
@@ -58,7 +58,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const [sendMessage, setSendMessage] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const html = renderEmailToHtml(subject, blocks)
+  const html = stripTrackingPixels(renderEmailToHtml(subject, blocks))
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
   const isScheduled = Boolean(scheduledFor)
 

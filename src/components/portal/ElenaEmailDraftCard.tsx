@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { Mail, Send, Eye, X, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
+import { stripTrackingPixels } from '@/lib/luxorTextUtils'
 
 export interface EmailDraftPayload {
   recipientEmail: string
@@ -329,7 +330,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
             <div className="flex-1 overflow-hidden bg-[color:var(--portal-soft)] p-4">
               <iframe
                 title="Email Preview"
-                srcDoc={renderedHtml}
+                srcDoc={stripTrackingPixels(renderedHtml)}
                 className="h-full w-full rounded-xl border border-zinc-800 bg-white shadow-inner"
               />
             </div>

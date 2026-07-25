@@ -38,3 +38,15 @@ export function decodeHtmlEntities(value: string | null | undefined): string {
 
   return text
 }
+
+/**
+ * Strips or neutralizes tracking pixel images (/api/marketing/track/...) in email HTML
+ * to prevent internal views in the CRM from triggering accidental open counts.
+ */
+export function stripTrackingPixels(html: string | null | undefined): string {
+  if (!html) return ''
+  return String(html)
+    .replace(/<img[^>]*src=["'][^"']*\/api\/marketing\/track\/[^"']*["'][^>]*>/gi, '')
+    .replace(/src=["'][^"']*\/api\/marketing\/track\/[^"']*["']/gi, 'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"')
+}
+

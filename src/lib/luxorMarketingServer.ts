@@ -24,6 +24,10 @@ const PUBLIC_BASE_URL =
   'http://localhost:3000'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const INTERNAL_EMAIL_ADDRESSES = [
+  'booking@luxoratlaspalmas.com',
+  'hello@luxoratlaspalmas.com',
+]
 
 export type MarketingRecipientInput = {
   email: string
@@ -530,8 +534,27 @@ export async function createMarketingCampaign(data: {
 }
 
 export async function recordMarketingOpen(trackingToken: string, request: Request) {
+  const cookie = request.headers.get('cookie') || ''
+  const referer = request.headers.get('referer') || ''
+  const secFetchSite = request.headers.get('sec-fetch-site') || ''
+
+  // Never record open events from internal CRM owner views or same-origin requests
+  if (
+    cookie.includes('luxor_portal_session') ||
+    referer.includes('/portal') ||
+    secFetchSite === 'same-origin'
+  ) {
+    return null
+  }
+
   const recipient = await getRecipientByTrackingToken(trackingToken)
   if (!recipient) return null
+
+  // Never record open events for internal staff mailboxes
+  const recipientEmail = recipient.email.toLowerCase()
+  if (INTERNAL_EMAIL_ADDRESSES.some((addr) => recipientEmail.includes(addr))) {
+    return null
+  }
 
   const now = new Date().toISOString()
   const userAgent = request.headers.get('user-agent') || ''
@@ -567,8 +590,25 @@ export async function recordMarketingOpen(trackingToken: string, request: Reques
 }
 
 export async function recordMarketingClick(trackingToken: string, url: string, request: Request) {
+  const cookie = request.headers.get('cookie') || ''
+  const referer = request.headers.get('referer') || ''
+  const secFetchSite = request.headers.get('sec-fetch-site') || ''
+
+  if (
+    cookie.includes('luxor_portal_session') ||
+    referer.includes('/portal') ||
+    secFetchSite === 'same-origin'
+  ) {
+    return null
+  }
+
   const recipient = await getRecipientByTrackingToken(trackingToken)
   if (!recipient) return null
+
+  const recipientEmail = recipient.email.toLowerCase()
+  if (INTERNAL_EMAIL_ADDRESSES.some((addr) => recipientEmail.includes(addr))) {
+    return null
+  }
 
   const now = new Date().toISOString()
   const userAgent = request.headers.get('user-agent') || ''
