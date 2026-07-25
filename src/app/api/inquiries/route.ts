@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { countRecentInquiryAttempts, getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -48,9 +49,42 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = (await request.json()) as LuxorInquiryInput
+    const ipHash = hashPublicRequestIp(getPublicRequestIp(request.headers))
+
+    if (payload.website) {
+      return NextResponse.json({ inquiry: null }, { status: 201 })
+    }
+
+    if (payload.formStartedAt && Date.now() - payload.formStartedAt < 800) {
+      return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 })
+    }
+
+    try {
+      const recentAttempts = await countRecentInquiryAttempts(ipHash)
+      if (recentAttempts >= 6) {
+        return NextResponse.json({ error: 'Too many requests were submitted. Please wait ten minutes or call Luxor.' }, { status: 429 })
+      }
+
+      await recordLuxorPublicEvent({
+        eventName: 'inquiry_attempt',
+        sessionId: payload.sessionId,
+        pagePath: payload.pagePath,
+        source: payload.source,
+        ipHash,
+        metadata: { flow: payload.flow, eventType: payload.eventType },
+      })
+    } catch (protectionError) {
+      console.warn('Public inquiry protection event could not be recorded:', protectionError)
+    }
+
+    const duplicate = await findRecentDuplicateLuxorInquiry(payload)
+    if (duplicate) {
+      return NextResponse.json({ inquiry: duplicate, duplicate: true }, { status: 200 })
+    }
+
     const inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined)
 
-    if (inquiry && inquiry.email) {
+    if (inquiry?.email && inquiry.marketing_opt_in) {
       try {
         await addMarketingMember(inquiry.email, inquiry.full_name, inquiry.source)
       } catch (mktError) {
@@ -61,6 +95,24 @@ export async function POST(request: NextRequest) {
     if (inquiry) {
       sendInquiryNotificationEmail(inquiry).catch((emailErr) => {
         console.error('Inquiry created but failed to send internal notification email:', emailErr)
+      })
+
+      recordLuxorPublicEvent({
+        eventName: 'inquiry_submitted',
+        sessionId: payload.sessionId,
+        pagePath: payload.pagePath,
+        source: payload.source,
+        inquiryId: inquiry.id,
+        ipHash,
+        metadata: {
+          flow: inquiry.flow,
+          eventType: inquiry.event_type,
+          packageInterest: inquiry.package_interest,
+          tourReserved: Boolean(inquiry.preferred_tour_date),
+          marketingOptIn: inquiry.marketing_opt_in,
+        },
+      }).catch((eventError) => {
+        console.error('Inquiry created but conversion event failed:', eventError)
       })
     }
 

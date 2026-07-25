@@ -7,7 +7,6 @@ import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, ChevronLeft, ChevronRight, Grid3X3, Maximize2, X } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 type GalleryCategory = 'All' | 'Room' | 'Lounge' | 'Weddings' | 'Celebrations' | 'Corporate'
 
@@ -204,18 +203,22 @@ export default function GalleryPage() {
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate overflow-hidden px-5 pb-16 pt-36 sm:px-6 lg:px-8 lg:pb-20 lg:pt-44">
+      <section className="relative isolate overflow-hidden px-5 pb-14 pt-32 sm:px-6 lg:px-8 lg:pb-20 lg:pt-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(202,162,76,0.14),transparent_22rem),radial-gradient(circle_at_88%_12%,rgba(189,101,117,0.16),transparent_20rem),linear-gradient(180deg,#120d0c,#050505)]" />
         <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
-        <div className="relative z-10 mx-auto max-w-7xl">
-          <div className="mx-auto max-w-4xl text-center">
-            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
-            <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
-              See the room before you visit.
-            </h1>
-            <p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
-              Browse the atmosphere, then schedule a private walkthrough to confirm the scale, lighting, and layout for your event.
-            </p>
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 lg:grid-cols-[.78fr_1.22fr] lg:items-center">
+          <div className="max-w-2xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
+            <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">See the room before you visit.</h1>
+            <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Browse real event moments and room setups, then walk through the scale, lighting, and guest flow in person.</p>
+            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link>
+          </div>
+          <div className="grid grid-cols-5 gap-3 sm:gap-4">
+            <div className="relative col-span-3 aspect-[3/4] overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Wedding reception setup in the Luxor main hall" fill priority sizes="(min-width:1024px) 35vw,60vw" className="object-cover" /></div>
+            <div className="col-span-2 grid gap-3 pt-8 sm:gap-4 sm:pt-12">
+              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/dining-hall/main-hall-side-dance-candid.png" alt="Guests dancing at Luxor" fill priority sizes="(min-width:1024px) 22vw,40vw" className="object-cover" /></div>
+              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/luxor-lounge/luxor-lounge-quinceanera.png" alt="Quinceañera portrait moment in the Luxor lounge" fill sizes="(min-width:1024px) 22vw,40vw" className="object-cover" /></div>
+            </div>
           </div>
         </div>
       </section>
@@ -257,6 +260,8 @@ export default function GalleryPage() {
                 key={`${item.src}-${item.title}`}
                 type="button"
                 onClick={() => setSelectedIndex(index)}
+                data-conversion="gallery_open"
+                data-conversion-label={item.title}
                 className={`group relative block overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] text-left shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] outline-none transition hover:-translate-y-1 hover:border-[#f1d27a]/45 focus-visible:border-[#f1d27a] focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${item.span} ${item.aspect}`}
               >
                 <Image
@@ -288,8 +293,8 @@ export default function GalleryPage() {
               <p className="max-w-xl text-sm leading-6 text-[#d7c29a]/70 sm:text-base">
                 The next step is seeing how your guest count, tables, photos, and dance floor would fit inside the room.
               </p>
-              <Link href="/visit" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
-                Request a tour <ArrowRight className="h-4 w-4" />
+              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+                Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </Reveal>

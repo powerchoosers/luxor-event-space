@@ -644,6 +644,7 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
                 src="/luxor-concierge.png" 
                 alt="Elena AI Assistant" 
                 fill 
+                sizes="36px"
                 className="object-cover"
               />
             </button>

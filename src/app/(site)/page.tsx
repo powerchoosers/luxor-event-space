@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowRight, CalendarDays, Check, MapPin } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
@@ -12,6 +13,7 @@ type EventCard = {
   copy: string
   imageSrc: string
   details: string[]
+  href: string
 }
 
 const eventCards: EventCard[] = [
@@ -20,24 +22,28 @@ const eventCards: EventCard[] = [
     copy: 'A polished room for ceremony moments, dinner, portraits, and dancing.',
     imageSrc: '/images/dining-hall/main-hall-wedding-dance-candid.png',
     details: ['Ceremony flow', 'Reception layout', 'Photo moments'],
+    href: '/events/weddings',
   },
   {
     title: 'Quinceañeras',
     copy: 'A dramatic setting for the grand entrance, court seating, cake, and family photos.',
     imageSrc: '/images/dining-hall/main-hall-quinceanera-angle.png',
     details: ['Grand entrance', 'Court seating', 'Family photos'],
+    href: '/events/quinceaneras',
   },
   {
     title: 'Private celebrations',
     copy: 'Warm enough for showers and birthdays, refined enough for milestone dinners.',
     imageSrc: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
     details: ['Baby showers', 'Birthdays', 'Anniversaries'],
+    href: '/events/baby-showers',
   },
   {
     title: 'Corporate events',
     copy: 'A formal backdrop for awards, dinners, networking, and company gatherings.',
     imageSrc: '/images/luxor-lounge/luxor-lounge-corporate.png',
     details: ['Awards', 'Networking', 'Dinner service'],
+    href: '/events/corporate-events',
   },
 ]
 
@@ -102,6 +108,7 @@ function PrimaryButton({ href, children }: { href: string; children: React.React
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       href={href}
+      data-conversion={href.includes('visit') || href === '#visit' ? 'tour_cta_click' : undefined}
       className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-center text-xs font-bold uppercase tracking-[0.16em] text-[#050505] shadow-[0_22px_44px_-26px_rgba(202,162,76,0.8)] sm:text-sm"
     >
       {children}
@@ -112,7 +119,7 @@ function PrimaryButton({ href, children }: { href: string; children: React.React
 
 function CenteredLuxorLockup() {
   return (
-    <LuxorAxisLockup size="hero" className="mx-auto w-full max-w-[420px] sm:max-w-[560px]" />
+    <LuxorAxisLockup className="mx-auto w-full max-w-[290px] sm:max-w-[360px]" />
   )
 }
 
@@ -134,6 +141,9 @@ function EventCardView({ event }: { event: EventCard }) {
             </li>
           ))}
         </ul>
+        <Link href={event.href} className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f1d27a] transition hover:text-white">
+          See the full story <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
     </article>
   )
@@ -157,14 +167,14 @@ export default function Home() {
         <div className="relative z-10 mx-auto flex min-h-[calc(92svh-7rem)] max-w-7xl items-center justify-center px-5 pb-14 pt-8 text-center sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:px-8">
           <div className="w-full min-w-0 max-w-5xl">
             <CenteredLuxorLockup />
-            <h1 className="mx-auto mt-8 max-w-[22rem] text-wrap font-serif text-4xl leading-[0.92] text-[#f7efe3] sm:max-w-4xl sm:text-6xl lg:text-7xl">
+            <h1 className="mx-auto mt-5 max-w-[22rem] text-wrap font-serif text-4xl leading-[0.92] text-[#f7efe3] sm:max-w-4xl sm:text-5xl lg:text-6xl">
               San Antonio celebrations with a room that already feels special.
             </h1>
-            <p className="mx-auto mt-6 max-w-[22rem] text-base leading-7 text-[#d7c29a]/82 sm:max-w-2xl sm:text-lg">
+            <p className="mx-auto mt-4 max-w-[22rem] text-base leading-7 text-[#d7c29a]/82 sm:max-w-2xl sm:text-lg">
               Weddings, quinceañeras, showers, and private events in an elegant dark-and-gold venue made for photos, dinner, and dancing.
             </p>
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-              <PrimaryButton href="#visit">Request a tour</PrimaryButton>
+            <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+              <PrimaryButton href="/visit">Check tour times</PrimaryButton>
               <a
                 href="#events"
                 className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/35 bg-black/35 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f7efe3] backdrop-blur-sm transition hover:border-[#f1d27a]/60 sm:text-sm"
@@ -172,13 +182,13 @@ export default function Home() {
                 See event types
               </a>
             </div>
-            <div className="mx-auto mt-7 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#d7c29a]/72">
+            <div className="mx-auto mt-5 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#d7c29a]/72">
               <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />
               <span>Private venue tours at 803 Castroville Rd #402, San Antonio, TX 78237.</span>
             </div>
             <a
               href="#events"
-              className="mx-auto mt-8 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-[#d7c29a]/68 transition-colors hover:text-[#f1d27a]"
+              className="mx-auto mt-5 hidden items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#d7c29a]/68 transition-colors hover:text-[#f1d27a] xl:inline-flex"
             >
               Scroll to explore <ArrowDown className="h-3.5 w-3.5 animate-bounce text-[#caa24c]" />
             </a>
@@ -312,6 +322,25 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="relative isolate overflow-hidden border-y border-[#caa24c]/16 bg-[#120d0c] py-16 sm:py-24">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_15%,rgba(202,162,76,.12),transparent_24rem)]" />
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:px-8">
+          <Reveal>
+            <div className="relative mx-auto max-w-xl pb-10 pr-8 sm:pr-16">
+              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/25"><Image src="/images/arianna-patterson-headshot.png" alt="Arianna Patterson, owner of Luxor Event Space" fill sizes="(min-width:1024px) 46vw,90vw" className="object-cover" /></div>
+              <div className="absolute bottom-0 right-0 h-36 w-44 overflow-hidden rounded-md border-4 border-[#120d0c] bg-[#080706] shadow-2xl sm:h-44 sm:w-56"><Image src="/images/dining-hall/main-hall-table-toast-candid.png" alt="Guests sharing a toast inside Luxor" fill sizes="224px" className="object-cover" /></div>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#caa24c]">Arianna’s approach</p>
+            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">The room matters. How people feel inside it matters more.</h2>
+            <p className="mt-6 text-base leading-7 text-[#d7c29a]/76">Luxor owner Arianna Patterson built the venue around the real rhythm of a celebration: families arriving, formal moments landing, dinner feeling connected, and the dance floor coming alive.</p>
+            <p className="mt-4 text-base leading-7 text-[#d7c29a]/70">That is why the first conversation is practical. Bring the guest count, the date, and the moments you care about. The team will help you see what works in the actual room.</p>
+            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Owner story" className="mt-7 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#f1d27a]">Meet us for a walkthrough <ArrowRight className="h-4 w-4" /></Link>
+          </Reveal>
+        </div>
+      </section>
+
       <section className="border-y border-[#caa24c]/14 bg-[#080706] py-16 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
           <Reveal>
@@ -370,7 +399,7 @@ export default function Home() {
           </Reveal>
 
           <Reveal delay={140}>
-            <LuxorInquiryForm source="homepage" />
+            <LuxorInquiryForm source="homepage" title="Check your date and request a private tour" submitLabel="Send tour request" />
           </Reveal>
         </div>
       </section>

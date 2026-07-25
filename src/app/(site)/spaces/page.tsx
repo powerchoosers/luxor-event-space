@@ -4,7 +4,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Camera, DoorOpen, Music, Utensils } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 const zones = [
   ['Arrival', 'A clear first impression for guests as they enter the room.', DoorOpen],
@@ -26,17 +25,17 @@ export default function SpacesPage() {
       <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_78%_10%,rgba(189,101,117,0.18),transparent_24rem),linear-gradient(180deg,#120d0c,#050505)] px-5 pb-16 pt-36 sm:px-6 lg:px-8 lg:pb-24 lg:pt-44">
         <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
         <div className="relative z-10 mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
-          <div className="mx-auto max-w-2xl text-center">
-            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
+          <div className="max-w-2xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">The venue</p>
             <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
               A room made to be understood in person.
             </h1>
-            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
+            <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
               Photos help, but the important part is the flow: where guests enter, where dinner happens, where photos land, and where the party opens up.
             </p>
-            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/visit" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
-                Walk the space <ArrowRight className="h-4 w-4" />
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Spaces hero" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+                Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/gallery" className="inline-flex items-center justify-center rounded-md border border-[#caa24c]/32 bg-black/35 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#f7efe3]">
                 See gallery
@@ -128,7 +127,7 @@ export default function SpacesPage() {
                 </div>
               ))}
             </div>
-            <Link href="/visit" className="mt-8 inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Spaces details" className="mt-8 inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
               Schedule a walkthrough <ArrowRight className="h-4 w-4" />
             </Link>
           </Reveal>

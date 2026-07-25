@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://luxoratlaspalmas.com'
-  const routes = ['', '/events', '/spaces', '/gallery', '/pricing', '/visit', '/grand-opening-rsvp', '/privacy', '/terms']
+  const routes = ['', '/events', '/events/weddings', '/events/quinceaneras', '/events/baby-showers', '/events/corporate-events', '/spaces', '/gallery', '/pricing', '/visit', '/grand-opening-rsvp', '/privacy', '/terms']
 
   return routes.map((route) => ({
     url: `${baseUrl}${route}`,

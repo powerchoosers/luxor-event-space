@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Check, Clock, MapPin } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 
 const tourReasons = [
@@ -21,7 +20,7 @@ const questions = [
   ['Should I tour before I know my exact guest count?', 'Yes. A rough range is enough to start seeing which layouts make sense.'],
   ['Can I compare packages during the visit?', 'Yes. The tour should help connect the package tiers to the event you are actually planning.'],
   ['What should I bring?', 'Bring inspiration photos, target dates, guest count, and any must-have moments like entrance, cake, DJ, or photo booth.'],
-  ['How many guests can the venue hold?', 'Capacity depends on the room, table layout, dance floor, entertainment, and service plan. Share your estimated guest count in the tour request so the team can confirm a realistic layout with you.'],
+  ['How many guests can the venue hold?', 'Luxor can accommodate events up to 200 guests. The practical count may be lower when a layout needs more room for a ceremony, dance floor, entertainment, or service plan.'],
   ['What should I know about parking and arrival?', 'Parking and guest arrival details can vary with the event plan. The team will review the current parking arrangement, entrances, and vendor arrival path during your walkthrough.'],
   ['Can Luxor accommodate accessibility needs?', 'Tell us about any mobility, seating, restroom, or arrival accommodations your guests may need. The team will walk those needs with you in person before you reserve the date.'],
   ['Can I bring my own caterer or bar service?', 'Catering, beverage, and vendor requirements are confirmed for each event. Bring your preferred vendors or service ideas to the tour so the team can explain the current options and requirements.'],
@@ -35,15 +34,15 @@ export default function VisitPage() {
       <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_20%_18%,rgba(202,162,76,0.14),transparent_22rem),radial-gradient(circle_at_88%_12%,rgba(189,101,117,0.16),transparent_20rem),linear-gradient(180deg,#120d0c,#050505)] px-5 pb-16 pt-36 sm:px-6 lg:px-8 lg:pb-24 lg:pt-44">
         <div className="absolute inset-0 luxor-noise opacity-[0.16]" />
         <div className="relative z-10 mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="mx-auto max-w-2xl text-center">
-            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
+          <div className="max-w-2xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Private venue tours</p>
             <h1 className="mx-auto max-w-2xl font-serif text-4xl leading-[0.94] sm:text-5xl lg:text-6xl">
               Come see if the room feels right.
             </h1>
-            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
+            <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
               A private tour is the best way to understand the size, lighting, guest flow, and package options for your celebration.
             </p>
-            <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left">
+            <div className="mt-8 grid max-w-xl gap-3 text-left">
               {tourReasons.map((reason) => (
                 <div key={reason} className="flex items-center gap-3 border-t border-[#caa24c]/16 pt-4 text-[#d7c29a]/78">
                   <Check className="h-4 w-4 shrink-0 text-[#caa24c]" />
@@ -51,7 +50,7 @@ export default function VisitPage() {
                 </div>
               ))}
             </div>
-            <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left text-sm leading-6 text-[#d7c29a]/70">
+            <div className="mt-8 grid max-w-xl gap-3 text-left text-sm leading-6 text-[#d7c29a]/70">
               <a
                 href="https://www.google.com/maps/dir/?api=1&destination=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237"
                 target="_blank"
@@ -66,7 +65,7 @@ export default function VisitPage() {
           </div>
 
           <div>
-            <LuxorInquiryForm source="visit_page" showTourFields />
+            <LuxorInquiryForm source="visit_page" showTourFields title="Check availability and choose a tour time" submitLabel="Reserve or request tour" />
           </div>
         </div>
       </section>

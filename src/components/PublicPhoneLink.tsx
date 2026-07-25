@@ -15,9 +15,14 @@ export function PublicPhoneLink({ compact = false, className = '' }: { compact?:
     return () => { active = false }
   }, [])
 
-  if (!phoneNumber) return null
+  if (!phoneNumber) {
+    return <span className={className} aria-label="Loading Luxor phone number">
+      <Phone className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} />
+      <span>{compact ? 'Call Luxor' : 'Loading phone…'}</span>
+    </span>
+  }
 
-  return <a href={`tel:${phoneNumber}`} className={className} aria-label={`Call Luxor Event Space at ${formatPhone(phoneNumber)}`}>
+  return <a href={`tel:${phoneNumber}`} data-conversion="call_cta_click" data-conversion-label="Call Luxor" className={className} aria-label={`Call Luxor Event Space at ${formatPhone(phoneNumber)}`}>
     <Phone className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4 shrink-0 text-[#caa24c]'} />
     <span>{compact ? 'Call Luxor' : formatPhone(phoneNumber)}</span>
   </a>

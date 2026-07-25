@@ -2,9 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Calendar as CalendarIcon, CalendarPlus, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
-import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 
@@ -15,6 +15,14 @@ type CalendarPayload = {
   tasks: LuxorTask[]
 }
 
+const TOUR_TIME_OPTIONS = Array.from({ length: 20 }, (_, index) => {
+  const totalMinutes = 9 * 60 + index * 30
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  return { value, label: formatTime(value) }
+})
+
 export default function CalendarPage() {
   const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
   const [view, setView] = useState<PortalCalendarView>('month')
@@ -22,6 +30,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [publishingSlot, setPublishingSlot] = useState(false)
+  const [slotDraft, setSlotDraft] = useState({ slotDate: '', startTime: '10:00', endTime: '10:30', capacity: '1' })
 
   const loadData = async () => {
     try {
@@ -41,6 +51,46 @@ export default function CalendarPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const publishTourSlot = async () => {
+    try {
+      setPublishingSlot(true)
+      const response = await fetch('/api/tour-slots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...slotDraft, capacity: Number(slotDraft.capacity), title: 'Private venue tour' }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to publish this tour time.')
+      setSlotDraft((current) => ({ ...current, slotDate: '' }))
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to publish this tour time.')
+    } finally {
+      setPublishingSlot(false)
+    }
+  }
+
+  const updatePublishedSlot = async (slot: LuxorTourSlot, action: 'toggle' | 'delete') => {
+    const deleting = action === 'delete'
+    if (deleting && !window.confirm('Remove this published tour time?')) return
+
+    try {
+      setBusyId(`slot-${slot.id}`)
+      const response = await fetch(deleting ? `/api/tour-slots?id=${encodeURIComponent(slot.id)}` : '/api/tour-slots', {
+        method: deleting ? 'DELETE' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: deleting ? undefined : JSON.stringify({ id: slot.id, status: slot.status === 'available' ? 'unavailable' : 'available' }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Unable to update this tour time.')
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to update this tour time.')
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   const updateAttendance = async (tour: LuxorInquiry, attendance: string) => {
     try {
@@ -142,6 +192,7 @@ export default function CalendarPage() {
       title: slot.title || 'Published tour slot',
       subtitle: `${formatTime(slot.start_time)}${slot.end_time ? ` - ${formatTime(slot.end_time)}` : ''} • ${Math.max(0, slot.capacity - slot.booked_count)} open`,
       tone: 'blue',
+      content: <SlotControls slot={slot} busy={busyId === `slot-${slot.id}`} onUpdate={updatePublishedSlot} />,
     } satisfies PortalCalendarItem))
 
     return [...tourCards, ...slotCards]
@@ -219,6 +270,37 @@ export default function CalendarPage() {
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
       ) : null}
 
+      {activeCalendar === 'tours' ? (
+        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-[color:var(--portal-text)]">
+                <CalendarPlus size={16} className="text-[#caa24c]" />
+                <h2 className="text-sm font-bold">Publish tour availability</h2>
+              </div>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">These are the exact times clients can reserve on the public website.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:items-end">
+              <FieldLabel label="Date">
+                <PortalDatePicker value={slotDraft.slotDate} onChange={(slotDate) => setSlotDraft((current) => ({ ...current, slotDate }))} className="w-full xl:w-44" placeholder="Choose date" />
+              </FieldLabel>
+              <FieldLabel label="Starts">
+                <PortalSelect value={slotDraft.startTime} onChange={(startTime) => setSlotDraft((current) => ({ ...current, startTime }))} options={TOUR_TIME_OPTIONS} className="w-full xl:w-36" buttonClassName="min-h-10" />
+              </FieldLabel>
+              <FieldLabel label="Ends">
+                <PortalSelect value={slotDraft.endTime} onChange={(endTime) => setSlotDraft((current) => ({ ...current, endTime }))} options={TOUR_TIME_OPTIONS} className="w-full xl:w-36" buttonClassName="min-h-10" />
+              </FieldLabel>
+              <FieldLabel label="Appointments">
+                <PortalSelect value={slotDraft.capacity} onChange={(capacity) => setSlotDraft((current) => ({ ...current, capacity }))} options={[1, 2, 3, 4].map((value) => ({ value: String(value), label: String(value) }))} className="w-full xl:w-28" buttonClassName="min-h-10" />
+              </FieldLabel>
+              <PortalButton variant="primary" disabled={!slotDraft.slotDate || publishingSlot} onClick={publishTourSlot} className="min-h-10">
+                <CalendarPlus size={14} /> {publishingSlot ? 'Publishing…' : 'Publish time'}
+              </PortalButton>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {loading ? (
         <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 shadow-xl space-y-6">
           <div className="flex items-center justify-between">
@@ -242,6 +324,30 @@ export default function CalendarPage() {
         <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />
       )}
     </PortalPageFrame>
+  )
+}
+
+function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function SlotControls({ slot, busy, onUpdate }: { slot: LuxorTourSlot; busy: boolean; onUpdate: (slot: LuxorTourSlot, action: 'toggle' | 'delete') => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <PortalStatusBadge status={slot.status} />
+        <span className="text-[10px] text-[color:var(--portal-muted)]">{slot.booked_count} of {slot.capacity} reserved</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <ActionButton disabled={busy || slot.status === 'booked'} onClick={() => onUpdate(slot, 'toggle')} icon={<Check size={11} />} label={slot.status === 'available' ? 'Hide time' : 'Publish again'} />
+        <ActionButton disabled={busy || slot.booked_count > 0} onClick={() => onUpdate(slot, 'delete')} icon={<Trash2 size={11} />} label="Delete" />
+      </div>
+    </div>
   )
 }
 

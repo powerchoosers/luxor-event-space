@@ -61,7 +61,6 @@ export default function GrandOpeningPage() {
       targetDate: LUXOR_GRAND_OPENING.date,
       guestCount: attendeeCount,
       attendeeCount,
-      packageInterest: eventInterest,
       message: `Grand Opening RSVP${eventInterest ? ` - interested in ${eventInterest}` : ''}.`,
       source: 'grand_opening_rsvp',
       flow: 'grand_opening_rsvp',

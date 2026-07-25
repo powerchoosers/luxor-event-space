@@ -51,10 +51,26 @@ export type LuxorInquiryInput = {
   rsvpStatus?: 'attending' | 'not_attending' | 'maybe'
   marketingOptIn?: boolean
   smsOptIn?: boolean
+  website?: string
+  formStartedAt?: number
+  sessionId?: string
+  attribution?: LuxorPublicAttribution
   attendeeCount?: string
   pagePath?: string
   referrer?: string
   metadata?: Record<string, unknown>
+}
+
+export type LuxorPublicAttribution = {
+  landingPage?: string
+  initialReferrer?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+  utmContent?: string
+  utmTerm?: string
+  gclid?: string
+  fbclid?: string
 }
 
 export type LuxorInquiry = {

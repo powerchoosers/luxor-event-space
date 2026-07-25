@@ -44,23 +44,77 @@ export function assertTourSlotCanBeBooked(slot: LuxorTourSlot | null) {
 export async function reserveLuxorTourSlot(slot: LuxorTourSlot) {
   assertTourSlotCanBeBooked(slot)
 
-  const nextBookedCount = slot.booked_count + 1
-  const nextStatus = nextBookedCount >= slot.capacity ? 'booked' : 'available'
-
   const [updated] = await supabaseRest<LuxorTourSlot[]>(
-    `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&id=eq.${encodeURIComponent(slot.id)}`,
+    'rpc/reserve_luxor_tour_slot',
+    {
+      method: 'POST',
+      body: JSON.stringify({ p_slot_id: slot.id }),
+    },
+  )
+
+  if (!updated) {
+    throw new Error('That tour time was just taken. Please choose another available time.')
+  }
+
+  return updated
+}
+
+export async function releaseLuxorTourSlot(slotId: string) {
+  const [updated] = await supabaseRest<LuxorTourSlot[]>('rpc/release_luxor_tour_slot', {
+    method: 'POST',
+    body: JSON.stringify({ p_slot_id: slotId }),
+  })
+  return updated ?? null
+}
+
+export async function createLuxorTourSlot(input: {
+  slotDate: string
+  startTime: string
+  endTime?: string | null
+  capacity?: number
+  title?: string | null
+  notes?: string | null
+}) {
+  const [created] = await supabaseRest<LuxorTourSlot[]>('luxor_tour_slots?select=' + TOUR_SLOT_SELECT, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      slot_date: input.slotDate,
+      start_time: input.startTime,
+      end_time: input.endTime || null,
+      status: 'available',
+      capacity: input.capacity ?? 1,
+      booked_count: 0,
+      title: input.title?.trim() || 'Private venue tour',
+      notes: input.notes?.trim() || null,
+    }),
+  })
+
+  return created
+}
+
+export async function updateLuxorTourSlotStatus(id: string, status: LuxorTourSlot['status']) {
+  const [updated] = await supabaseRest<LuxorTourSlot[]>(
+    `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&id=eq.${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({
-        booked_count: nextBookedCount,
-        status: nextStatus,
-        updated_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify({ status, updated_at: new Date().toISOString() }),
     },
   )
 
   return updated ?? null
+}
+
+export async function deleteLuxorTourSlot(id: string) {
+  const slot = await getLuxorTourSlot(id)
+  if (!slot) return false
+  if (slot.booked_count > 0) {
+    throw new Error('This time already has a reservation. Mark it unavailable instead of deleting it.')
+  }
+
+  await supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+  return true
 }
 
 export function applyTourSlotToInquiry(

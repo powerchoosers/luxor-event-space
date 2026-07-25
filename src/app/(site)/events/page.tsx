@@ -4,7 +4,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Baby, Briefcase, Cake, Check, Heart } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 
 const eventTypes = [
   {
@@ -12,6 +11,7 @@ const eventTypes = [
     copy: 'A polished room for ceremony moments, dinner, portraits, speeches, and dancing.',
     image: '/images/dining-hall/main-hall-wedding-dance-candid.png',
     icon: Heart,
+    slug: 'weddings',
     points: ['Ceremony and reception flow', 'Photo-ready room details', 'Dinner and dance floor planning'],
   },
   {
@@ -19,6 +19,7 @@ const eventTypes = [
     copy: 'A dramatic setting for a grand entrance, court seating, cake, family photos, and dancing.',
     image: '/images/dining-hall/main-hall-quinceanera-angle.png',
     icon: Cake,
+    slug: 'quinceaneras',
     points: ['Grand entrance planning', 'Court and family seating', 'Feature moments for photos'],
   },
   {
@@ -26,6 +27,7 @@ const eventTypes = [
     copy: 'A warm, elegant backdrop for lunch, gifts, photos, and a room that feels finished.',
     image: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
     icon: Baby,
+    slug: 'baby-showers',
     points: ['Gift and dessert tables', 'Comfortable guest layout', 'Soft decor compatibility'],
   },
   {
@@ -33,6 +35,7 @@ const eventTypes = [
     copy: 'A formal space for awards, company dinners, networking nights, and milestone events.',
     image: '/images/luxor-lounge/luxor-lounge-corporate.png',
     icon: Briefcase,
+    slug: 'corporate-events',
     points: ['Dinner and presentation flow', 'Networking layouts', 'Awards and company moments'],
   },
 ]
@@ -56,7 +59,7 @@ export default function EventsPage() {
 
         <div className="relative z-10 mx-auto max-w-7xl">
           <div className="mx-auto max-w-4xl text-center">
-            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Celebrations at Luxor</p>
             <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
               Event types that fit the room.
             </h1>
@@ -64,8 +67,8 @@ export default function EventsPage() {
               Luxor is built for celebrations that need a strong backdrop, simple guest flow, and enough polish before the decor even arrives.
             </p>
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/visit" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
-                Request a tour <ArrowRight className="h-4 w-4" />
+              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Events hero" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+                Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/pricing" className="inline-flex items-center justify-center rounded-md border border-[#caa24c]/32 bg-black/35 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#f7efe3]">
                 View packages
@@ -105,6 +108,9 @@ export default function EventsPage() {
                           </li>
                         ))}
                       </ul>
+                      <Link href={`/events/${event.slug}`} className="mt-7 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f1d27a] transition hover:text-white">
+                        Explore {event.title} <ArrowRight className="h-4 w-4" />
+                      </Link>
                     </div>
                   </article>
                 </Reveal>
@@ -153,8 +159,8 @@ export default function EventsPage() {
                   A tour is where you check the practical details: guest count, table shape, entrance, photos, DJ placement, package fit, and the exact feeling you want guests to have.
                 </p>
               </div>
-              <Link href="/visit" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
-                Plan a tour <ArrowRight className="h-4 w-4" />
+              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Events footer" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+                Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </Reveal>

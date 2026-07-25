@@ -9,6 +9,7 @@ import {
   applyTourSlotToInquiry,
   assertTourSlotCanBeBooked,
   getLuxorTourSlot,
+  releaseLuxorTourSlot,
   reserveLuxorTourSlot,
 } from './luxorTourSlotsServer'
 
@@ -31,12 +32,30 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     throw new Error('Please add your full name.')
   }
 
+  if (fullName.length > 120) {
+    throw new Error('Please shorten the name to 120 characters or fewer.')
+  }
+
   if (!email && !phone) {
     throw new Error('Please add either an email or phone number so Luxor can follow up.')
   }
 
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Please check the email address and try again.')
+  }
+
+  if (phone && phone.replace(/\D/g, '').length < 10) {
+    throw new Error('Please enter a complete phone number.')
+  }
+
+  if (message.length > 3000) {
+    throw new Error('Please shorten the event notes to 3,000 characters or fewer.')
+  }
+
   const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
+    ...(input.sessionId ? { publicSessionId: compactText(input.sessionId).slice(0, 120) } : {}),
+    ...(input.attribution ? { attribution: input.attribution } : {}),
     ...(phone && input.smsOptIn
       ? {
           smsConsent: {
@@ -73,6 +92,24 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   }
 }
 
+export async function findRecentDuplicateLuxorInquiry(input: LuxorInquiryInput, minutes = 10) {
+  const email = compactText(input.email).toLowerCase()
+  const phone = compactText(input.phone)
+  if (!email && !phone) return null
+
+  const since = new Date(Date.now() - minutes * 60_000).toISOString()
+  const filters = [
+    email ? `email.eq.${encodeURIComponent(email)}` : '',
+    phone ? `phone.eq.${encodeURIComponent(phone)}` : '',
+  ].filter(Boolean)
+
+  const [existing] = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&created_at=gte.${encodeURIComponent(since)}&or=(${filters.join(',')})&order=created_at.desc&limit=1`,
+  )
+
+  return existing ?? null
+}
+
 function normalizeRsvpStatus(value: unknown) {
   return value === 'attending' || value === 'not_attending' || value === 'maybe' ? value : null
 }
@@ -84,9 +121,12 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
 
   const selectedTourSlot = selectedTourSlotId ? await getLuxorTourSlot(selectedTourSlotId) : null
 
+  let reservedTourSlot: Awaited<ReturnType<typeof reserveLuxorTourSlot>> | null = null
+
   if (selectedTourSlotId) {
     assertTourSlotCanBeBooked(selectedTourSlot)
-    applyTourSlotToInquiry(row, selectedTourSlot!)
+    reservedTourSlot = await reserveLuxorTourSlot(selectedTourSlot!)
+    applyTourSlotToInquiry(row, reservedTourSlot)
   }
 
   const status = row.preferred_tour_date || row.preferred_tour_time ? 'tour_requested' : 'new'
@@ -97,10 +137,16 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     pipeline_stage: pipelineStage,
     tour_attendance_status: status === 'tour_requested' ? 'pending' : null,
   }
-  const [created] = await insertLuxorInquiryRow(insertPayload)
-
-  if (created && selectedTourSlot) {
-    await reserveLuxorTourSlot(selectedTourSlot)
+  let created: LuxorInquiry | undefined
+  try {
+    ;[created] = await insertLuxorInquiryRow(insertPayload)
+  } catch (error) {
+    if (reservedTourSlot) {
+      await releaseLuxorTourSlot(reservedTourSlot.id).catch((releaseError) => {
+        console.error('Inquiry insert failed and its tour slot could not be released:', releaseError)
+      })
+    }
+    throw error
   }
 
   if (created?.phone && row.metadata?.smsConsent) {

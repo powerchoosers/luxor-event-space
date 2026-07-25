@@ -59,7 +59,7 @@ import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
 import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
-import { catalogItemToLineItem, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
+import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_PACKAGE_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
 type ZohoEmailMessage = {
   id: string
@@ -1977,11 +1977,7 @@ export default function LeadDetailPage({
       icon: <Briefcase size={14} />,
       inputType: 'select',
       placeholder: 'Package or room interest',
-      options: [
-        { value: 'Foundation', label: 'Foundation' },
-        { value: 'Signature', label: 'Signature' },
-        { value: 'Showpiece', label: 'Showpiece' },
-      ],
+      options: LUXOR_PACKAGE_INTEREST_OPTIONS,
     },
     {
       label: 'Preferred Tour Date',
@@ -5995,12 +5991,12 @@ export default function LeadDetailPage({
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Package Name</label>
-                <input
-                  type="text"
+                <PortalSelect
                   value={bookingPackageName}
-                  onChange={(e) => setBookingPackageName(e.target.value)}
-                  placeholder="Gold package, venue rental, etc."
-                  className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                  onChange={setBookingPackageName}
+                  placeholder="Select the agreed package"
+                  options={LUXOR_PACKAGE_OPTIONS}
+                  className="w-full"
                 />
               </div>
 

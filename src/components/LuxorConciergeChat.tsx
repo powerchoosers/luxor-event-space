@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -8,6 +8,7 @@ import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
+import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import {
   ArrowRight,
   CalendarDays,
@@ -130,6 +131,8 @@ export function LuxorConciergeChat() {
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
+  const [preferredTourWindow, setPreferredTourWindow] = useState('')
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [eventPickerOpen, setEventPickerOpen] = useState(true)
   const [submitted, setSubmitted] = useState(false)
   const [submittingInquiry, setSubmittingInquiry] = useState(false)
@@ -141,6 +144,9 @@ export function LuxorConciergeChat() {
     notes: '',
   })
   const messageEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const formStartedAt = useRef(Date.now())
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -159,9 +165,24 @@ export function LuxorConciergeChat() {
   const hasBookingCard = messages.some((message) => message.ui === 'booking')
   const contactComplete =
     contactDetails.name.trim().length > 1 &&
-    contactDetails.email.includes('@') &&
-    contactDetails.phone.replace(/\D/g, '').length >= 10
-  const bookingReady = contactComplete && Boolean(tourSelection)
+    (contactDetails.email.includes('@') || contactDetails.phone.replace(/\D/g, '').length >= 10)
+  const bookingReady = contactComplete && Boolean(tourSelection || preferredTourWindow)
+
+  useEffect(() => {
+    if (!open) return
+    trackLuxorPublicEvent('concierge_opened')
+    window.requestAnimationFrame(() => inputRef.current?.focus())
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        window.requestAnimationFrame(() => triggerRef.current?.focus())
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open])
 
   function updateContactDetail(field: keyof ContactDetails, value: string) {
     setContactDetails((current) => ({ ...current, [field]: value }))
@@ -273,12 +294,16 @@ export function LuxorConciergeChat() {
       eventType: selectedEvent?.label ?? inferEventType(messages, contactDetails.notes),
       guestCount: inferGuestCount(messages, contactDetails.notes),
       preferredTourDate: tourSelection?.date ?? '',
-      preferredTourTime: tourSelection?.time ?? '',
+      preferredTourTime: tourSelection?.time ?? preferredTourWindow,
       message: contactDetails.notes,
       source: 'chat_widget',
       flow: 'concierge_chat',
       pagePath: window.location.pathname,
       referrer: document.referrer,
+      marketingOptIn,
+      formStartedAt: formStartedAt.current,
+      sessionId: getLuxorPublicSessionId(),
+      attribution: getLuxorPublicAttribution(),
       metadata: {
         selectedEvent: selectedEvent?.label ?? null,
         selectedTourSlotId: tourSelection?.id ?? null,
@@ -306,7 +331,9 @@ export function LuxorConciergeChat() {
           id: createId(),
           role: 'assistant',
           content:
-            `Perfect, ${contactDetails.name.trim()}. Your tour request for ${tourSelection?.label} is started. A Luxor coordinator will confirm final availability by phone or email. Is there anything else I can help you with while you plan?`,
+            tourSelection
+              ? `Perfect, ${contactDetails.name.trim()}. Your appointment for ${tourSelection.label} is reserved. A Luxor coordinator will follow up within one business day.`
+              : `Thank you, ${contactDetails.name.trim()}. Your ${preferredTourWindow.toLowerCase()} tour request is with the Luxor team. A coordinator will follow up within one business day.`,
         },
       ])
     } catch (error) {
@@ -359,9 +386,10 @@ export function LuxorConciergeChat() {
               {tourSlotsError}
             </p>
           ) : tourSlots.length === 0 ? (
-            <p className="rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
-              No open tour slots are published right now. Use the full form and Luxor can follow up with options.
-            </p>
+            <div className="rounded-md border border-[#caa24c]/18 bg-black/25 p-3">
+              <p className="text-xs leading-5 text-[#d7c29a]/70">No exact times are published right now. Pick a preferred window and the team will offer options.</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div>
+            </div>
           ) : (
             tourSlots.map((slot) => {
               const active = tourSelection?.id === slot.id
@@ -425,6 +453,7 @@ export function LuxorConciergeChat() {
             placeholder="Event notes, guest count, target month..."
             className="min-h-20 resize-none rounded-md border border-[#caa24c]/18 bg-black/30 px-3 py-2.5 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
           />
+          {contactDetails.email ? <label className="flex items-start gap-2 rounded-md border border-[#caa24c]/16 bg-black/20 p-2.5 text-[11px] leading-4 text-[#d7c29a]/70"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 accent-[#caa24c]" /><span>Email me occasional Luxor event ideas and offers. Optional.</span></label> : null}
         </div>
 
         {submissionError ? (
@@ -439,7 +468,7 @@ export function LuxorConciergeChat() {
           disabled={!bookingReady || submitted || submittingInquiry}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {submitted ? 'Tour requested' : submittingInquiry ? 'Booking tour' : bookingReady ? 'Book tour' : 'Pick available time + add contact'}
+          {submitted ? 'Tour requested' : submittingInquiry ? 'Sending request' : bookingReady ? (tourSelection ? 'Reserve tour' : 'Send tour request') : 'Pick a time + add contact'}
           <Check className="h-4 w-4" />
         </button>
       </motion.div>
@@ -447,7 +476,7 @@ export function LuxorConciergeChat() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[130] sm:bottom-6 sm:right-6">
+    <div className="site-floating-action fixed bottom-20 right-4 z-[130] sm:bottom-6 sm:right-6">
       <AnimatePresence initial={false}>
         {open ? (
           <motion.section
@@ -456,8 +485,9 @@ export function LuxorConciergeChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute bottom-0 right-0 flex h-[min(720px,calc(100svh-2rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)]"
+            className="absolute bottom-0 right-0 flex h-[min(560px,calc(100svh-6rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)] sm:h-[min(560px,calc(100svh-3rem))]"
             role="dialog"
+            aria-modal="true"
             aria-label="Luxor concierge chat"
           >
             <header className="border-b border-[#caa24c]/18 bg-[#0d0908] p-4">
@@ -637,9 +667,7 @@ export function LuxorConciergeChat() {
                           {tourSlotsError}
                         </p>
                       ) : tourSlots.length === 0 ? (
-                        <p className="rounded-md border border-[#caa24c]/18 bg-[#080706] px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
-                          No open tour slots are published right now.
-                        </p>
+                        <div className="rounded-md border border-[#caa24c]/18 bg-[#080706] p-3"><p className="text-xs leading-5 text-[#d7c29a]/70">Choose a preferred window.</p><div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div></div>
                       ) : (
                         tourSlots.map((slot) => {
                         const active = tourSelection?.id === slot.id
@@ -665,7 +693,7 @@ export function LuxorConciergeChat() {
                       })
                       )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        {tourSelection ? (
+                        {tourSelection || preferredTourWindow ? (
                           <button
                             type="button"
                             onClick={submitTourRequest}
@@ -699,6 +727,7 @@ export function LuxorConciergeChat() {
             >
               <div className="flex items-end gap-2">
                 <textarea
+                  ref={inputRef}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -724,6 +753,7 @@ export function LuxorConciergeChat() {
           </motion.section>
         ) : (
           <motion.button
+            ref={triggerRef}
             key="chat-trigger"
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}

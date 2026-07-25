@@ -945,3 +945,8 @@ body[data-portal-theme='light'] .portal-search-dropdown {
   border-color: rgba(124, 91, 36, 0.18) !important;
   box-shadow: 0 20px 45px -15px rgba(48, 33, 14, 0.25) !important;
 }
+@media (max-width: 639px) {
+  body[data-mobile-menu-open='true'] .site-floating-action {
+    display: none;
+  }
+}

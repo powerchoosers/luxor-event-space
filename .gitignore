@@ -44,9 +44,11 @@ next-env.d.ts
 # local development tooling and QA artifacts
 /.agents/
 /.codex/
+/.codex-remote-attachments/
 /.playwright-cli/
 /output/
 /tmp/
+/supabase/.temp/
 *.code-workspace
 
 # Local Twilio setup notes

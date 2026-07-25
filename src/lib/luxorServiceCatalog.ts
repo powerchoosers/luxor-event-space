@@ -80,15 +80,15 @@ const FULL_DECOR_INCLUSIONS = [
 export const LUXOR_PACKAGE_PRESETS: LuxorPackagePreset[] = [
   {
     id: 'rent-only',
-    name: 'Rent Only',
-    eyebrow: 'Venue essentials',
+    name: 'Venue Rental',
+    eyebrow: 'A flexible foundation',
     description: 'Friday evening venue rental with the required setup, security, and cleaning.',
     catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'guest-tables', 'basic-linens'],
     includedItems: [],
   },
   {
     id: 'small',
-    name: 'Small',
+    name: 'Foundation',
     eyebrow: 'Decor + buffet',
     description: 'Venue, required services, full decor, and buffet catering for up to 100 guests.',
     catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-buffet'],
@@ -96,21 +96,39 @@ export const LUXOR_PACKAGE_PRESETS: LuxorPackagePreset[] = [
   },
   {
     id: 'mid',
-    name: 'Mid',
+    name: 'Signature',
     eyebrow: 'Most popular',
-    description: 'The Small package plus the DJ package.',
+    description: 'The Foundation package plus a DJ to carry the evening from entrance to last dance.',
     catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-buffet', 'dj'],
     includedItems: FULL_DECOR_INCLUSIONS,
   },
   {
     id: 'best',
-    name: 'Best',
-    eyebrow: 'Full experience',
+    name: 'Showpiece',
+    eyebrow: 'The complete experience',
     description: 'Full decor, plated dinner, DJ, Signature photo booth, and bartender service.',
     catalogIds: ['rental-friday-evening', 'security-1', 'cleaning-76-150', 'decor-full', 'catering-plated', 'dj', 'booth-signature', 'bar-service-1-75'],
     includedItems: FULL_DECOR_INCLUSIONS,
   },
 ]
+
+export const LUXOR_PACKAGE_OPTIONS = LUXOR_PACKAGE_PRESETS.map((preset) => ({ value: preset.name, label: preset.name }))
+
+export const LUXOR_PACKAGE_INTEREST_OPTIONS = [
+  ...LUXOR_PACKAGE_OPTIONS,
+  { value: 'Not Sure', label: 'Help me choose' },
+]
+
+export const LUXOR_LEGACY_PACKAGE_NAMES: Record<string, string> = {
+  'Rent Only': 'Venue Rental',
+  'Venue Essentials': 'Venue Rental',
+  Small: 'Foundation',
+  'Classic Celebration': 'Foundation',
+  Mid: 'Signature',
+  'Signature Celebration': 'Signature',
+  Best: 'Showpiece',
+  'Grand Celebration': 'Showpiece',
+}
 
 export function catalogItemToLineItem(item: LuxorCatalogItem): LuxorInvoiceLineItem {
   const unitPrice = item.unitPrice ?? 0

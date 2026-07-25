@@ -13,7 +13,7 @@ const navLinks = [
   { label: 'Events', href: '/events' },
   { label: 'Spaces', href: '/spaces' },
   { label: 'Gallery', href: '/gallery' },
-  { label: 'Pricing', href: '/pricing' },
+  { label: 'Rates', href: '/pricing' },
   { label: 'Visit', href: '/visit' },
 ]
 
@@ -34,10 +34,13 @@ export const Header = () => {
   useEffect(() => {
     document.documentElement.style.overflow = mobileMenuOpen ? 'hidden' : ''
     document.body.style.overflow = mobileMenuOpen ? 'hidden' : ''
+    if (mobileMenuOpen) document.body.dataset.mobileMenuOpen = 'true'
+    else delete document.body.dataset.mobileMenuOpen
 
     return () => {
       document.documentElement.style.overflow = ''
       document.body.style.overflow = ''
+      delete document.body.dataset.mobileMenuOpen
     }
   }, [mobileMenuOpen])
 
@@ -80,7 +83,7 @@ export const Header = () => {
             <Link
               key={item.label}
               href={item.href}
-              className="group relative text-[10px] font-mono uppercase tracking-[0.34em] text-[#d7c29a]/75 transition-colors hover:text-[#f1d27a]"
+              className="group relative font-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
               {item.label}
               <motion.span 
@@ -103,6 +106,8 @@ export const Header = () => {
           >
             <Link
               href="/visit"
+              data-conversion="tour_cta_click"
+              data-conversion-label="Header"
               className="hidden rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#050505] shadow-[0_18px_36px_-24px_rgba(202,162,76,0.8)] transition-all duration-300 hover:bg-[#dfbd68] sm:inline-flex sm:items-center sm:gap-2"
             >
               <CalendarDays className="h-3.5 w-3.5 text-[#050505]" />
@@ -172,6 +177,8 @@ export const Header = () => {
               >
                 <Link
                   href="/visit"
+                  data-conversion="tour_cta_click"
+                  data-conversion-label="Mobile menu"
                   onClick={() => setMobileMenuOpen(false)}
                   className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/60 bg-[#caa24c] px-8 py-4 text-sm font-bold uppercase tracking-[0.18em] text-black shadow-xl"
                 >

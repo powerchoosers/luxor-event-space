@@ -1,351 +1,127 @@
 'use client'
 
-import React from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, Check } from 'lucide-react'
-import { motion } from 'framer-motion'
+import Link from 'next/link'
+import { useState } from 'react'
+import { ArrowRight, Check, Clock3, Sparkles } from 'lucide-react'
+import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
+import { LUXOR_PACKAGE_PRESETS, getPackagePresetTotal, getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 
-type PlanVariant = 'light' | 'dark' | 'rose'
-
-type PricingPlan = {
-  name: string
-  badge: string
-  summary: string
-  bestFor: string
-  includes: string[]
-  variant: PlanVariant
-  featured?: boolean
-  actionLabel: string
-}
-
-
-
-const pricingPlans: PricingPlan[] = [
-  {
-    name: 'Foundation',
-    badge: 'Entry package',
-    summary: 'A clean base package for hosts who want the room essentials handled without extras.',
-    bestFor: 'Best for straightforward events that need the room set, dressed, and ready.',
-    includes: [
-      'Tables',
-      'Chairs',
-      'Basic tablecloths',
-      'Access to the lounge room',
-      'VIP access',
-    ],
-    variant: 'light',
-    actionLabel: 'Request Foundation quote',
-  },
-  {
-    name: 'Signature',
-    badge: 'Most chosen',
-    summary: 'Everything in Foundation plus a light decor package that makes the room feel finished.',
-    bestFor: 'Best for guests who want the next level of polish without going all in.',
-    includes: ['Everything in Foundation', 'Light decor package'],
-    variant: 'dark',
-    featured: true,
-    actionLabel: 'Request Signature quote',
-  },
-  {
-    name: 'Showpiece',
-    badge: 'All inclusive',
-    summary: 'The full production tier with decor, sound, and a photo moment built in.',
-    bestFor: 'Best for a one-stop celebration that needs the room to feel complete on arrival.',
-    includes: [
-      'Everything in Foundation',
-      'Everything in Signature',
-      'Full decor package',
-      'DJ',
-      'Photo booth',
-    ],
-    variant: 'rose',
-    actionLabel: 'Request Showpiece quote',
-  },
+const rentalRows = [
+  { day: 'Monday–Thursday', ids: ['rental-weekday-morning', 'rental-weekday-evening', 'rental-weekday-full'] },
+  { day: 'Friday', ids: ['rental-friday-morning', 'rental-friday-evening', 'rental-friday-full'] },
+  { day: 'Saturday', ids: ['rental-saturday-morning', 'rental-saturday-evening', 'rental-saturday-full'] },
+  { day: 'Sunday', ids: ['rental-sunday-morning', 'rental-sunday-evening', 'rental-sunday-full'] },
 ]
 
-function SectionTitle({
-  eyebrow,
-  title,
-  copy,
-  align = 'left',
-  dark = false,
-}: {
-  eyebrow: string
-  title: string
-  copy: string
-  align?: 'left' | 'center'
-  dark?: boolean
-}) {
-  return (
-    <div className={`max-w-3xl ${align === 'center' ? 'mx-auto text-center' : ''}`}>
-      <p className={`font-mono text-[10px] uppercase tracking-[0.42em] ${dark ? 'text-[#f1d27a]' : 'text-[#caa24c]'}`}>{eyebrow}</p>
-      <h2 className={`mt-4 font-serif text-4xl leading-[0.95] ${dark ? 'text-[#f8f3ed]' : 'text-[#f7efe3]'} sm:text-5xl lg:text-6xl`}>
-        {title}
-      </h2>
-      <p className={`mt-5 max-w-2xl text-base leading-7 ${dark ? 'text-white/75' : 'text-[#d7c29a]/72'} sm:text-lg`}>{copy}</p>
-    </div>
-  )
+const packageHighlights: Record<string, string[]> = {
+  'rent-only': ['Friday evening venue rental', 'Guest tables and basic linens', 'Cleaning and one security officer'],
+  small: ['Everything needed for the venue', 'Full decor package', 'Buffet catering for up to 100 guests'],
+  mid: ['Foundation package', 'Full decor and buffet catering', 'DJ package'],
+  best: ['Full decor and plated dinner', 'DJ and Signature photo booth', 'Bartender service for up to 75 guests'],
 }
 
-function PricingHeroVisual() {
-  return (
-    <div className="relative">
-      <motion.div
-        animate={{ 
-          x: [-12, 12, -12],
-          y: [-12, 12, -12],
-        }}
-        transition={{ 
-          duration: 9, 
-          repeat: Infinity,
-          ease: "linear" 
-        }}
-        className="absolute -left-6 top-12 h-40 w-40 bg-[#caa24c]/18 blur-3xl luxor-ambient" 
-      />
-      <motion.div
-        animate={{ 
-          x: [12, -12, 12],
-          y: [12, -12, 12],
-        }}
-        transition={{ 
-          duration: 11, 
-          repeat: Infinity,
-          ease: "linear" 
-        }}
-        className="absolute -right-6 bottom-12 h-44 w-44 bg-[#bd6575]/18 blur-3xl luxor-ambient" 
-      />
-
-      <motion.figure 
-        layoutId="hero-image"
-        className="luxor-deco-frame relative isolate min-h-[620px] overflow-hidden border border-[#caa24c]/25 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.85)]"
-      >
-        <Image
-          src="/images/dining-hall/main-hall-wedding-wide.png"
-          alt="Luxor venue styling sample"
-          fill
-          priority
-          sizes="(min-width: 1024px) 52vw, 100vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.58))]" />
-        <div className="absolute inset-0 opacity-60 luxor-noise" />
-
-
-      </motion.figure>
-    </div>
-  )
+const packageFit: Record<string, string> = {
+  'rent-only': 'Best when you already have your own vendor team and want a polished space to make your own.',
+  small: 'Best when you want the room, decor, and meal handled without building the event one vendor at a time.',
+  mid: 'Best when you want a complete party atmosphere with the essential planning pieces already together.',
+  best: 'Best when you want the most hosted, guest-ready experience with fewer details left to coordinate.',
 }
 
-function TierCard({ plan, index }: { plan: PricingPlan; index: number }) {
-  const styles: Record<
-    PlanVariant,
-    {
-      card: string
-      eyebrow: string
-      copy: string
-      check: string
-      button: string
-      buttonText: string
-      badge: string
-    }
-  > = {
-    light: {
-      card: 'bg-[#0a0807] border-[#caa24c]/24 text-[#f8f3ed] shadow-[0_24px_60px_-48px_rgba(0,0,0,0.85)]',
-      eyebrow: 'text-[#caa24c]',
-      copy: 'text-[#d7c29a]/70',
-      check: 'text-[#caa24c]',
-      button: 'bg-[#caa24c] text-[#050505] hover:bg-[#f1d27a]',
-      buttonText: 'Request quote',
-      badge: 'border-[#caa24c]/24 bg-[#caa24c]/8 text-[#f1d27a]',
-    },
-    dark: {
-      card: 'bg-[#050505] border-[#f1d27a]/38 text-[#f8f3ed] shadow-[0_28px_80px_-48px_rgba(202,162,76,0.4)]',
-      eyebrow: 'text-[#f1d27a]',
-      copy: 'text-white/72',
-      check: 'text-[#f1d27a]',
-      button: 'bg-[#caa24c] text-[#050505] hover:bg-[#f1d27a]',
-      buttonText: 'Request quote',
-      badge: 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]',
-    },
-    rose: {
-      card:
-        'bg-[radial-gradient(circle_at_top_right,rgba(189,101,117,0.3),transparent_22%),linear-gradient(145deg,#2a1219_0%,#0a0707_58%,#3a2027_100%)] border-[#caa24c]/24 text-white shadow-[0_24px_60px_-48px_rgba(0,0,0,0.85)]',
-      eyebrow: 'text-[#f2d8d6]',
-      copy: 'text-white/76',
-      check: 'text-[#f2d8d6]',
-      button: 'bg-white text-[#100b0d] hover:bg-[#f4ebe2]',
-      buttonText: 'Request quote',
-      badge: 'border-[#caa24c]/24 bg-white/10 text-white/70',
-    },
-  }
-
-  const variant = styles[plan.variant]
-  const featuredLift = plan.featured ? 'lg:-mt-6 lg:scale-[1.02]' : ''
-
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.1, duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-      whileHover={{ y: -12, transition: { duration: 0.3 } }}
-      className={`relative flex h-full flex-col overflow-hidden border p-6 sm:p-7 ${variant.card} ${featuredLift}`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className={`font-mono text-[10px] uppercase tracking-[0.34em] ${variant.eyebrow}`}>
-          Tier 0{index + 1}
-        </p>
-        <span
-          className={`border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.32em] ${variant.badge}`}
-        >
-          {plan.badge}
-        </span>
-      </div>
-
-      <h3 className="mt-6 font-serif text-3xl leading-[0.95] sm:text-4xl">{plan.name}</h3>
-      <p className={`mt-4 text-base leading-7 ${variant.copy}`}>{plan.summary}</p>
-
-      <div className="mt-6 border border-[#caa24c]/16 bg-white/[0.03] p-4">
-        <p className={`font-mono text-[10px] uppercase tracking-[0.34em] ${variant.eyebrow}`}>
-          Best for
-        </p>
-        <p className={`mt-2 text-sm leading-6 ${variant.copy}`}>{plan.bestFor}</p>
-      </div>
-
-      <div className="mt-6 flex-1">
-        <p className={`font-mono text-[10px] uppercase tracking-[0.34em] ${variant.eyebrow}`}>
-          Includes
-        </p>
-        <ul className="mt-4 space-y-3">
-          {plan.includes.map((item) => (
-            <li key={item} className="flex gap-3 text-sm leading-6 sm:text-[15px]">
-              <Check className={`mt-0.5 h-4 w-4 shrink-0 ${variant.check}`} />
-              <span className={variant.copy}>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <motion.a
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        href="/visit"
-        className={`mt-8 inline-flex items-center justify-center gap-2 border border-[#f1d27a]/30 px-5 py-3 text-sm font-semibold uppercase tracking-[0.12em] transition-transform duration-200 ${variant.button}`}
-      >
-        {plan.actionLabel}
-        <ArrowRight className="h-4 w-4" />
-      </motion.a>
-    </motion.article>
-  )
-}
+const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
 export default function PricingPageContent() {
+  const [selectedPackage, setSelectedPackage] = useState('')
+
+  function choosePackage(packageName: string) {
+    setSelectedPackage(packageName)
+    window.requestAnimationFrame(() => document.getElementById('quote')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
   return (
-    <main id="top" className="overflow-x-hidden bg-[#050505]">
-      <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(202,162,76,0.18),transparent_28rem),radial-gradient(circle_at_18%_18%,rgba(189,101,117,0.12),transparent_22rem),linear-gradient(135deg,#050505_0%,#120d0c_48%,#050505_100%)] text-[#f8f3ed]">
-        <div className="absolute inset-0 luxor-noise opacity-35" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,5,6,0.2),rgba(7,5,6,0.74))]" />
-
-
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-14 px-6 pb-16 pt-32 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:px-8 lg:pb-20 lg:pt-40">
-          <div className="mx-auto max-w-2xl text-center">
-            <LuxorAxisLockup className="mx-auto mb-8 w-full max-w-[360px] sm:max-w-[460px]" />
-            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
-              Three packages with the same black-and-gold polish.
-            </h1>
-            <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
-              Foundation keeps it clean. Signature adds light decor. Showpiece brings the full room together
-              with decor, a DJ, and a photo booth.
-            </p>
-
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link
-                href="#tiers"
-                className="inline-flex items-center gap-2 border border-[#f1d27a]/40 bg-[#caa24c] px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#050505] shadow-[0_20px_40px_-24px_rgba(202,162,76,0.65)] transition-transform duration-200 hover:-translate-y-0.5"
-              >
-                Compare packages
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/visit"
-                className="inline-flex items-center gap-2 border border-[#caa24c]/28 bg-white/[0.04] px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm transition-colors duration-200 hover:border-[#f1d27a]/50 hover:bg-[#caa24c]/10"
-              >
-                Ask for a quote
-              </Link>
+    <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
+      <section className="relative isolate overflow-hidden pt-28">
+        <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall prepared for dinner and dancing" fill priority sizes="100vw" className="object-cover" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,.96),rgba(5,5,5,.7)_55%,rgba(5,5,5,.3)),linear-gradient(180deg,rgba(5,5,5,.45),#050505_96%)]" />
+        <div className="absolute inset-0 luxor-noise opacity-20" />
+        <div className="relative z-10 mx-auto flex min-h-[72svh] max-w-7xl items-center px-5 py-16 sm:px-6 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="font-mono text-xs font-bold uppercase tracking-[.28em] text-[#f1d27a]">Packages & rates</p>
+            <h1 className="mt-5 font-serif text-5xl leading-[.9] sm:text-7xl lg:text-8xl">Real numbers before you fall in love with the room.</h1>
+            <p className="mt-7 max-w-2xl text-base leading-7 text-[#eadcc8]/82 sm:text-lg">See the venue rate, compare complete celebration packages, and request an exact quote for your date. No tour is required just to learn whether Luxor fits your budget.</p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link href="#packages" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Compare packages <ArrowRight className="h-4 w-4" /></Link>
+              <Link href="#quote" data-conversion="inquiry_cta_click" data-conversion-label="Pricing hero" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em]">Get my exact quote</Link>
             </div>
-
-            <p className="mx-auto mt-6 max-w-lg text-sm leading-6 text-white/60">
-              Quotes are based on date, guest count, and the mix of add-ons you want.
-            </p>
-          </div>
-
-          <div className="lg:pl-6">
-            <PricingHeroVisual />
           </div>
         </div>
       </section>
 
-      <section id="tiers" className="bg-[#080706] py-20 sm:py-28 lg:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <Reveal>
-            <SectionTitle
-              eyebrow="Investment"
-              title="Clear package paths for your vision."
-              copy="Compare what each package includes, then request a date-specific quote based on guest count, timing, and the options your event needs."
-            />
-          </Reveal>
-
-          <Reveal delay={120}>
-            <div className="mt-14 grid gap-6 lg:grid-cols-3">
-              {pricingPlans.map((plan, index) => (
-                <TierCard key={plan.name} plan={plan} index={index} />
-              ))}
+      <section className="bg-[#080706] py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Venue rental · from $1,000</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Start with the room. Add only what your celebration needs.</h2><p className="mt-5 text-base leading-7 text-[#d7c29a]/72">Morning is 9am–4pm, evening is 6pm–1am, and full day is 9am–11pm. These are the actual base rental rates; availability and required services are confirmed in your final quote.</p></Reveal>
+          <Reveal delay={100}>
+            <div className="mt-10 overflow-hidden rounded-md border border-[#caa24c]/22">
+              <div className="hidden grid-cols-4 bg-[#120d0c] px-6 py-4 font-mono text-xs uppercase tracking-[.2em] text-[#caa24c] sm:grid"><span>Day</span><span>Morning</span><span>Evening</span><span>Full day</span></div>
+              {rentalRows.map((row) => <div key={row.day} className="grid gap-4 border-t border-[#caa24c]/16 bg-[#0a0807] px-6 py-5 first:border-t-0 sm:grid-cols-4 sm:items-center"><strong className="font-serif text-2xl font-normal">{row.day}</strong>{row.ids.map((id, index) => { const rate = getLuxorCatalogItem(id)?.unitPrice || 0; return <div key={id}><span className="mr-2 font-mono text-[10px] uppercase tracking-[.18em] text-[#caa24c] sm:hidden">{['Morning','Evening','Full day'][index]}</span><span className="text-lg text-[#eadcc8]">{money.format(rate)}</span></div> })}</div>)}
             </div>
           </Reveal>
         </div>
       </section>
 
-      <section className="bg-[#050505] py-20 sm:py-28 lg:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <Reveal>
-            <div className="luxor-panel p-6 sm:p-8 lg:p-10">
-              <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-                <div className="max-w-2xl">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.42em] text-[#d7b37a]">
-                    Need a custom mix?
-                  </p>
-                  <h2 className="mt-4 font-serif text-4xl leading-[0.95] text-white sm:text-5xl lg:text-6xl">
-                    We can tune the quote instead of forcing you into a box.
-                  </h2>
-                  <p className="mt-5 max-w-xl text-base leading-7 text-white/75 sm:text-lg">
-                    If you want light decor but not the DJ, or you want to add a photo booth to Signature, we
-                    can build the package around the event.
-                  </p>
-                </div>
+      <section id="packages" className="bg-[#120d0c] py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Friday evening planning examples</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Choose how much you want Luxor to handle.</h2><p className="mt-5 text-base leading-7 text-[#d7c29a]/72">Every example begins with a Friday evening rental and clearly listed services. Pick the closest fit now; we will tailor the final quote to your date, guest count, and event.</p></Reveal>
+          <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {LUXOR_PACKAGE_PRESETS.map((plan, index) => (
+              <Reveal key={plan.id} delay={index * 70}>
+                <article className={`flex h-full flex-col rounded-md border p-6 ${plan.id === 'mid' ? 'border-[#f1d27a]/55 bg-[#17100d] shadow-[0_28px_80px_-52px_rgba(202,162,76,.7)]' : 'border-[#caa24c]/22 bg-[#0a0807]'}`}>
+                  <p className="font-mono text-xs uppercase tracking-[.24em] text-[#caa24c]">{plan.eyebrow}</p>
+                  <h3 className="mt-5 font-serif text-4xl">{plan.name}</h3>
+                  <p className="mt-3 font-serif text-3xl text-[#f1d27a]">{money.format(getPackagePresetTotal(plan))}</p>
+                  <p className="mt-1 text-xs text-[#d7c29a]/56">Friday evening sample total</p>
+                  <p className="mt-5 text-sm leading-6 text-[#d7c29a]/72">{plan.description}</p>
+                  <p className="mt-4 border-l border-[#caa24c]/35 pl-4 text-xs leading-5 text-[#eadcc8]/68">{packageFit[plan.id]}</p>
+                  <ul className="mt-6 flex-1 space-y-3">{packageHighlights[plan.id].map((item) => <li key={item} className="flex gap-3 text-sm leading-6 text-[#eadcc8]/82"><Check className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />{item}</li>)}</ul>
+                  <button type="button" onClick={() => choosePackage(plan.name)} data-conversion="package_cta_click" data-conversion-label={plan.name} className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[.14em] text-[#050505] transition hover:bg-[#dfbd68] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f1d27a]">Choose {plan.name} <ArrowRight className="h-4 w-4" /></button>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
 
-                <div className="flex flex-wrap gap-3 lg:justify-end">
-                  <Link
-                    href="/visit"
-                    className="inline-flex items-center gap-2 border border-[#f1d27a]/40 bg-[#caa24c] px-5 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-[#050505] transition-transform duration-200 hover:-translate-y-0.5"
-                  >
-                    Ask for a custom quote
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    href="/"
-                    className="inline-flex items-center gap-2 border border-[#caa24c]/28 bg-white/[0.04] px-5 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-white/90 backdrop-blur-sm transition-colors duration-200 hover:border-[#f1d27a]/50 hover:bg-[#caa24c]/10"
-                  >
-                    Back to home
-                  </Link>
-                </div>
-              </div>
+      <section id="quote" className="scroll-mt-24 bg-[#120d0c] py-16 sm:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:items-start lg:px-8">
+          <Reveal>
+            <Sparkles className="h-6 w-6 text-[#caa24c]" />
+            <p className="mt-6 font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Personalized pricing</p>
+            <h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Get the number that matters: yours.</h2>
+            <p className="mt-5 max-w-xl text-base leading-7 text-[#d7c29a]/72">Share the basics and a Luxor coordinator will confirm availability, package fit, and an exact proposal. Selecting a package is helpful, not a commitment.</p>
+            <div className="mt-8 space-y-3 text-sm text-[#eadcc8]/78">
+              {['Your package choice is saved with the lead.', 'Your date and guest count shape the final number.', 'You can request a tour after reviewing the fit.'].map((item) => <p key={item} className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#caa24c]" />{item}</p>)}
             </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <LuxorInquiryForm source="pricing_page" flow="pricing_quote" title="Request your exact quote." submitLabel="Request my quote" initialPackageInterest={selectedPackage} />
           </Reveal>
         </div>
       </section>
+
+      <section className="bg-[#080706] py-16 sm:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
+          <Reveal><Clock3 className="h-6 w-6 text-[#caa24c]" /><h2 className="mt-5 font-serif text-4xl leading-none sm:text-6xl">What changes the final quote?</h2></Reveal>
+          <Reveal delay={100}><div className="grid gap-4 sm:grid-cols-2">{[
+            ['Date and rental window', 'Weekday, Friday, Saturday, and Sunday rates differ, as do morning, evening, and full-day windows.'],
+            ['Guest count', 'Cleaning, security, catering, and bar needs can change as the guest count grows.'],
+            ['Food, decor, and entertainment', 'Choose venue essentials or add decor, catering, DJ, photo booth, and bar service.'],
+            ['Your exact event', 'The team confirms availability and the final service mix before anything is booked.'],
+          ].map(([title, copy]) => <article key={title} className="border-t border-[#caa24c]/26 py-5"><h3 className="font-serif text-2xl">{title}</h3><p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p></article>)}</div></Reveal>
+        </div>
+      </section>
+
+      <section className="bg-[#050505] px-5 py-16 sm:px-6 sm:py-24 lg:px-8"><Reveal><div className="luxor-panel mx-auto flex max-w-7xl flex-col gap-7 p-7 sm:p-10 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">The room changes the decision</p><h2 className="mt-3 max-w-3xl font-serif text-4xl leading-none sm:text-5xl">Know the price. Then experience Luxor in person.</h2></div><Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Pricing footer" className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link></div></Reveal></section>
     </main>
   )
 }

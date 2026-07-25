@@ -7,6 +7,8 @@ import { Footer } from '@/components/Footer'
 import { LuxorConciergeChat } from '@/components/LuxorConciergeChat'
 import { SiteScrollGuard } from '@/components/SiteScrollGuard'
 import { RouteTransition } from '@/components/RouteTransition'
+import { PublicConversionTracker } from '@/components/PublicConversionTracker'
+import { PublicMobileActions } from '@/components/PublicMobileActions'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -82,17 +84,19 @@ export default function RootLayout({
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <body className="min-h-full bg-[#050505] text-[#f6efe8]">
+      <body className="min-h-full bg-[#050505] pb-16 text-[#f6efe8] sm:pb-0">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}
         />
         <SiteScrollGuard />
+        <PublicConversionTracker />
         <Header />
         <main className="flex-grow">
           <RouteTransition surface="site">{children}</RouteTransition>
         </main>
         <LuxorConciergeChat />
+        <PublicMobileActions />
         <Footer />
       </body>
     </html>
