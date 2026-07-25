@@ -61,7 +61,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
           smsConsent: {
             status: 'opted_in',
             source: 'website_inquiry_form',
-            disclosureVersion: '2026-07-23',
+            disclosureVersion: '2026-07-25',
             capturedAt: new Date().toISOString(),
           },
         }
@@ -156,7 +156,7 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
         proof: {
           inquiry_id: created.id,
           page_path: created.page_path,
-          disclosure_version: '2026-07-23',
+          disclosure_version: '2026-07-25',
         },
       })
       const { queueInquiryTextJobs } = await import('./luxorTextCampaignsServer')

@@ -16,6 +16,15 @@ export async function POST(request: NextRequest) {
   await recordTextCampaignReply(params.From, controlType === 'STOP')
   if (controlType === 'STOP' || controlType === 'START') {
     await recordLuxorSmsConsent(params.From, controlType, params.OptOutType ? 'twilio_advanced_opt_out' : 'inbound_keyword')
+  } else if (controlType === 'HELP') {
+    // When Advanced Opt-Out reports HELP, Twilio has already sent its configured
+    // response. Avoid a duplicate message; otherwise provide the documented help path.
+    if (!params.OptOutType) {
+      return new Response(
+        '<Response><Message>Luxor Event Space: For help, email booking@luxoratlaspalmas.com. Msg &amp; data rates may apply. Reply STOP to opt out.</Message></Response>',
+        { headers: { 'Content-Type': 'text/xml; charset=utf-8' } },
+      )
+    }
   } else if (!controlType) {
     const settings = await getLuxorPhoneRoutingSettings()
     if (settings.inbound_text_reply_enabled) {

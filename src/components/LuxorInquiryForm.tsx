@@ -294,9 +294,7 @@ export function LuxorInquiryForm({
               </div>
 
               {phone.trim() ? (
-                <ConsentRow checked={smsOptIn} onChange={setSmsOptIn}>
-                  Text me about this inquiry, tour, booking, payment, or event. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. This is optional.
-                </ConsentRow>
+                <SmsConsentRow checked={smsOptIn} onChange={setSmsOptIn} />
               ) : null}
 
               <ConsentRow checked={marketingOptIn} onChange={setMarketingOptIn}>
@@ -363,6 +361,27 @@ function ConsentRow({ checked, onChange, children }: { checked: boolean; onChang
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
       <span className="text-xs leading-5 text-[#d7c29a]/72">{children}</span>
     </label>
+  )
+}
+
+function SmsConsentRow({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="mt-4 rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]"
+        />
+        <span className="text-xs leading-5 text-[#d7c29a]/72">
+          By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+        </span>
+      </label>
+      <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">
+        Read the <a href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</a> and <a href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</a>.
+      </p>
+    </div>
   )
 }
 
