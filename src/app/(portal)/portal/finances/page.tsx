@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo, useDeferredValue } from 'react'
 import Link from 'next/link'
 import {
   FileText,
@@ -150,19 +150,19 @@ type LuxorBookingExpense = {
     }
   }
 
-  // Financial Calculations
-  const paidInvoices = invoices.filter((inv) => inv.status === 'paid')
-  const netRevenue = paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+  // Financial Calculations (Memoized for high performance)
+  const paidInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'paid'), [invoices])
+  const netRevenue = useMemo(() => paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [paidInvoices])
 
-  const outstandingInvoices = invoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue')
-  const outstandingAR = outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+  const outstandingInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue'), [invoices])
+  const outstandingAR = useMemo(() => outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [outstandingInvoices])
 
-  const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue')
-  const overdueAR = overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
-  const unpaidRetainers = bookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0)
+  const overdueInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'overdue'), [invoices])
+  const overdueAR = useMemo(() => overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [overdueInvoices])
+  const unpaidRetainers = useMemo(() => bookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0), [bookings])
 
-  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
-  const monthlyProfit = Math.max(netRevenue - totalExpenses, 0)
+  const totalExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [expenses])
+  const monthlyProfit = useMemo(() => Math.max(netRevenue - totalExpenses, 0), [netRevenue, totalExpenses])
 
   // Payments extraction
   interface RenderPayment {
@@ -174,14 +174,14 @@ type LuxorBookingExpense = {
     notes: string | null
   }
 
-  const bookingPayments: RenderPayment[] = bookings.flatMap((b) => b.payments || []).map(p => ({
+  const bookingPayments: RenderPayment[] = useMemo(() => bookings.flatMap((b) => b.payments || []).map(p => ({
     id: p.id,
     amount: Number(p.amount),
     status: p.status,
     payment_method: p.payment_method,
     paid_at: p.paid_at,
     notes: p.notes
-  }))
+  })), [bookings])
 
   const invoicePayments: RenderPayment[] = invoices.filter(i => i.status === 'paid').map(i => ({
     id: `inv-${i.id}`,

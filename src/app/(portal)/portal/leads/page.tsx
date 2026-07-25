@@ -263,39 +263,45 @@ export default function LeadsPage() {
     }
   }
 
-  // Filter & Sort Inquiries
-  const filteredLeads = leads.filter((lead) => {
-    const matchesSearch =
-      lead.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (lead.phone && lead.phone.includes(searchTerm))
+  // Filter & Sort Inquiries (Memoized for high performance)
+  const filteredLeads = useMemo(() => {
+    const term = deferredSearchTerm.toLowerCase().trim()
+    return leads.filter((lead) => {
+      const matchesSearch =
+        !term ||
+        lead.full_name.toLowerCase().includes(term) ||
+        (lead.email && lead.email.toLowerCase().includes(term)) ||
+        (lead.phone && lead.phone.includes(term))
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'grand_opening' ? isGrandOpeningRsvp(lead) : getPipelineStage(lead) === statusFilter)
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'grand_opening' ? isGrandOpeningRsvp(lead) : getPipelineStage(lead) === statusFilter)
 
-    return matchesSearch && matchesStatus
-  })
+      return matchesSearch && matchesStatus
+    })
+  }, [leads, deferredSearchTerm, statusFilter])
 
-  const sortedLeads = [...filteredLeads].sort((a, b) => {
-    if (sortBy === 'name') {
-      return a.full_name.localeCompare(b.full_name)
-    }
-    if (sortBy === 'guests') {
-      return (b.guest_count || 0) - (a.guest_count || 0)
-    }
-    // Default: recently active (created_at desc)
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  const sortedLeads = useMemo(() => {
+    return [...filteredLeads].sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.full_name.localeCompare(b.full_name)
+      }
+      if (sortBy === 'guests') {
+        return (b.guest_count || 0) - (a.guest_count || 0)
+      }
+      // Default: recently active (created_at desc)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [filteredLeads, sortBy])
 
   // Computed Metrics
   const totalCount = sortedLeads.length
-  const newLeadsCount = leads.filter((l) => l.status === 'new').length
+  const newLeadsCount = useMemo(() => leads.filter((l) => l.status === 'new').length, [leads])
 
   // Pagination Calculations
   const totalPages = Math.ceil(totalCount / 25)
   const startIndex = (currentPage - 1) * 25
-  const paginatedLeads = sortedLeads.slice(startIndex, startIndex + 25)
+  const paginatedLeads = useMemo(() => sortedLeads.slice(startIndex, startIndex + 25), [sortedLeads, startIndex])
 
   // Ensure current page bounds stay valid when filters change
   useEffect(() => {
@@ -304,12 +310,13 @@ export default function LeadsPage() {
     }
   }, [totalPages, currentPage])
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page)
     localStorage.setItem('luxor_leads_current_page', String(page))
-  }
-  const grandOpeningCount = leads.filter(isGrandOpeningRsvp).length
-  const missingContact = leads.filter((l) => !l.email && !l.phone).length
+  }, [])
+
+  const grandOpeningCount = useMemo(() => leads.filter(isGrandOpeningRsvp).length, [leads])
+  const missingContact = useMemo(() => leads.filter((l) => !l.email && !l.phone).length, [leads])
   return (
     <PortalPageFrame className="flex-1 min-h-0 overflow-hidden">
       <PortalPageHeader

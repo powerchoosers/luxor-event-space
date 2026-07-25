@@ -26,16 +26,18 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// Tab Component Imports
-import { MarketingOverviewTab } from './tabs/MarketingOverviewTab'
-import { AllEmailsTab } from './tabs/AllEmailsTab'
-import { LeadSourcesTab } from './tabs/LeadSourcesTab'
-import { EmailCampaignsTab } from './tabs/EmailCampaignsTab'
-import { TextCampaignsTab } from './tabs/TextCampaignsTab'
-import { EmailBuilderTab } from './tabs/EmailBuilderTab'
-import { ContactListsTab } from './tabs/ContactListsTab'
-import { CallCenterTab } from './tabs/CallCenterTab'
-import { MarketingCalendarTab } from './tabs/MarketingCalendarTab'
+import dynamic from 'next/dynamic'
+
+// Tab Component Imports (Lazy Loaded)
+const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false })
+const AllEmailsTab = dynamic(() => import('./tabs/AllEmailsTab').then(m => m.AllEmailsTab), { ssr: false })
+const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false })
+const EmailCampaignsTab = dynamic(() => import('./tabs/EmailCampaignsTab').then(m => m.EmailCampaignsTab), { ssr: false })
+const TextCampaignsTab = dynamic(() => import('./tabs/TextCampaignsTab').then(m => m.TextCampaignsTab), { ssr: false })
+const EmailBuilderTab = dynamic(() => import('./tabs/EmailBuilderTab').then(m => m.EmailBuilderTab), { ssr: false })
+const ContactListsTab = dynamic(() => import('./tabs/ContactListsTab').then(m => m.ContactListsTab), { ssr: false })
+const CallCenterTab = dynamic(() => import('./tabs/CallCenterTab').then(m => m.CallCenterTab), { ssr: false })
+const MarketingCalendarTab = dynamic(() => import('./tabs/MarketingCalendarTab').then(m => m.MarketingCalendarTab), { ssr: false })
 
 import type { EmailTemplate } from './emailTemplates'
 import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
