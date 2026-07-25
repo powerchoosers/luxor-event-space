@@ -399,7 +399,7 @@ export default function LeadsPage() {
       </div>
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
-        {activeTab === 'dashboard' && <LeadsDashboard leads={leads} />}
+        {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
@@ -998,7 +998,7 @@ function formatDate(value: string) {
 
 // --- SUB-TAB COMPONENTS FOR LEADS & CLIENTS ---
 
-function LeadsDashboard({ leads }: { leads: LuxorInquiry[] }) {
+function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: boolean }) {
   const newInquiries = leads.filter(l => l.status === 'new').length
   const toursScheduled = leads.filter(l => l.status === 'tour_requested').length
   const toursCompleted = leads.filter(l => l.status === 'tour_confirmed' || l.tour_attendance_status === 'attended').length
@@ -1121,41 +1121,49 @@ function LeadsDashboard({ leads }: { leads: LuxorInquiry[] }) {
       </div>
 
       {/* Recent Activity / Inquiries List */}
-      <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-between justify-between">
-          <span>Recent Lead Submissions</span>
-          <span className="text-[9px] font-semibold text-zinc-500 lowercase tracking-normal">last 5 entries</span>
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-[color:var(--portal-border)] text-zinc-550 font-bold uppercase tracking-wider text-[10px]">
-                <th className="pb-3">Client Name</th>
-                <th className="pb-3">Event Type</th>
-                <th className="pb-3">Intake Date</th>
-                <th className="pb-3">Source Channel</th>
-                <th className="pb-3 text-right">Pipeline Status</th>
+      <PortalTableCard
+        controls={
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
+            <span className="text-[9px] font-semibold text-[color:var(--portal-muted)]">Last 5 entries</span>
+          </div>
+        }
+      >
+        <PortalStickyTable minWidth="960px">
+          <PortalStickyThead>
+            <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+              <th className="px-8 py-3.5">Full Name &amp; Contact</th>
+              <th className="px-6 py-3.5">Event Type</th>
+              <th className="px-6 py-3.5">Intake Date</th>
+              <th className="px-6 py-3.5">Source Node</th>
+              <th className="px-8 py-3.5 text-right">Pipeline Status</th>
+            </tr>
+          </PortalStickyThead>
+          <tbody className="divide-y divide-[color:var(--portal-border)]">
+            {loading ? (
+              <PortalTableSkeleton cols={5} rows={5} />
+            ) : recentLeads.length === 0 ? (
+              <tr><td colSpan={5} className="px-8 py-12 text-center text-sm text-[color:var(--portal-muted)]">No recent lead submissions.</td></tr>
+            ) : recentLeads.map((lead) => (
+              <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
+                <td className="px-8 py-3">
+                  <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60">
+                    <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent" />
+                    <div>
+                      <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{lead.full_name}</p>
+                      <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">{lead.email || 'No email registered'}</p>
+                    </div>
+                  </Link>
+                </td>
+                <td className="px-6 py-3 text-sm font-medium text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</td>
+                <td className="px-6 py-3 text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
+                <td className="px-6 py-3 font-mono text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/80">{formatSourceLabel(lead)}</td>
+                <td className="px-8 py-3 text-right"><span className="rounded-md border border-[#caa24c]/25 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#f1d27a]">{lead.status}</span></td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-900/30">
-              {recentLeads.map((l) => (
-                <tr key={l.id} className="hover:bg-zinc-950/20 transition-colors">
-                  <td className="py-4 font-bold text-white">
-                    <Link href={`/portal/leads/${l.id}`} className="hover:text-[#caa24c] transition-colors">{l.full_name}</Link>
-                    <span className="block text-[10px] text-zinc-500 font-normal font-mono mt-0.5">{l.email || 'No email registered'}</span>
-                  </td>
-                  <td className="py-4 text-zinc-300 font-medium">{l.event_type || 'Quinceañera'}</td>
-                  <td className="py-4 text-zinc-400 font-medium">{formatDate(l.created_at)}</td>
-                  <td className="py-4 font-mono font-bold text-[#caa24c]/80 uppercase tracking-widest text-[9px]">{isGrandOpeningRsvp(l) ? 'RSVP' : l.source.replaceAll('_', ' ')}</td>
-                  <td className="py-4 text-right">
-                    <span className="text-[9px] font-bold uppercase tracking-wider border rounded-md px-2 py-0.5 border-[#caa24c]/25 bg-[#caa24c]/10 text-[#f1d27a]">{l.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            ))}
+          </tbody>
+        </PortalStickyTable>
+      </PortalTableCard>
     </div>
   )
 }

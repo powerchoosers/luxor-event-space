@@ -518,6 +518,7 @@ export function usePortalVoice() {
 
 export type PhoneIndicatorState =
   | 'disconnected'
+  | 'hover'
   | 'ready'
   | 'connecting'
   | 'active_good'
@@ -532,6 +533,14 @@ const indicatorCoreVariants = {
     boxShadow: '0 0 0px rgba(0, 0, 0, 0)',
     scale: 1,
     opacity: 0.85,
+  },
+  hover: {
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderColor: '#caa24c',
+    borderWidth: '1.75px',
+    boxShadow: '0 0 4px rgba(202, 162, 76, 0.35)',
+    scale: 1,
+    opacity: 1,
   },
   ready: {
     backgroundColor: 'rgba(0, 0, 0, 0)',
@@ -639,6 +648,7 @@ export function PortalPhoneButton({
   overrideState?: PhoneIndicatorState
 } = {}) {
   const { activeCall, callQuality, isPanelOpen, openPanel, closePanel, phoneState } = usePortalVoice()
+  const [isHovered, setIsHovered] = useState(false)
 
   const computedState: PhoneIndicatorState = overrideState ?? (() => {
     if (activeCall) {
@@ -658,6 +668,8 @@ export function PortalPhoneButton({
     <button
       type="button"
       onClick={isPanelOpen ? closePanel : openPanel}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
       className="relative flex items-center justify-center rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group"
       aria-label={activeCall ? 'Open active call' : 'Open Luxor phone'}
       title={
@@ -685,12 +697,12 @@ export function PortalPhoneButton({
               : 'text-red-400'
             : phoneState === 'ready'
             ? 'text-emerald-400 dark:text-emerald-400'
-            : 'text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]'
+            : 'text-[color:var(--portal-muted)] group-hover:text-[#caa24c]'
         }`}
       />
       {/* Active Circle Indicator positioned top-right close to the phone handset, matching HubSpot */}
-      <div className="absolute top-[5px] right-[5px] pointer-events-none">
-        <PhoneStatusIndicator state={computedState} />
+      <div className="absolute right-[7px] top-[7px] pointer-events-none">
+        <PhoneStatusIndicator state={computedState === 'disconnected' && isHovered ? 'hover' : computedState} />
       </div>
     </button>
   )
