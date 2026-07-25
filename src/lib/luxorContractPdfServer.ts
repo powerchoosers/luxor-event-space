@@ -465,14 +465,16 @@ export async function buildLuxorGuestGuidePdf(booking: LuxorBooking) {
 
   w.addPage()
   for (const [sectionIndex, section] of guestGuideSections.entries()) {
-    if (sectionIndex > 0 && w.y < 275) w.addPage()
+    if ([2, 4, 6].includes(sectionIndex)) w.addPage()
     w.heading(`Section ${section.number} - ${section.title}`)
     w.paragraph(section.intro)
     for (const [itemTitle, body] of section.items) {
       w.subheading(itemTitle)
       w.paragraph(body)
     }
-    w.note('Planning note: Share this section with the people responsible for these details and confirm timing, requirements, and approvals with Luxor in writing before the Event.')
+    if (sectionIndex === guestGuideSections.length - 1) {
+      w.note('Planning note: Share these requirements with the people responsible for the Event and confirm any exception or approval with Luxor in writing before the Event.')
+    }
   }
 
   w.addPage()
@@ -495,13 +497,10 @@ export async function buildLuxorGuestGuidePdf(booking: LuxorBooking) {
   ]
   for (const [label, value] of fees) w.feeRow(label, value)
   w.note('The Client remains responsible for charges that exceed the security deposit. This schedule does not limit Luxor\'s right to recover the actual cost of repair, replacement, cleaning, or other event-related losses.')
-
-  w.addPage()
-  w.title('Thank you', 'We look forward to celebrating with you')
-  w.paragraph(`Thank you for choosing Luxor Event Space, ${names.firstName}. We are honored to host your celebration and appreciate the trust you place in our team.`)
-  w.paragraph('Our goal is to provide a beautiful, safe, and memorable experience for you and your guests. Following this Guide helps the Event run smoothly and helps us care for the Venue for every family that celebrates here.')
-  w.paragraph('For questions or written approvals, reply to your Luxor email thread or contact booking@luxoratlaspalmas.com.')
-  w.note(`Luxor Event Space  |  Patterson Elite Enterprises LLC d/b/a Luxor at Las Palmas Events  |  ${LUXOR_VENUE_ADDRESS}  |  booking@luxoratlaspalmas.com  |  www.luxoratlaspalmas.com`)
+  w.y -= 16
+  w.heading(`Thank you, ${names.firstName}`)
+  w.paragraph('We are honored to host your celebration. Following this Guide helps the Event run smoothly and helps us care for the Venue for every family that celebrates here.', { gap: 4 })
+  w.paragraph('For questions or written approvals, reply to your Luxor email thread or contact booking@luxoratlaspalmas.com.', { gap: 0 })
 
   return w.finish()
 }

@@ -3,7 +3,6 @@ import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent, signLuxorSi
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
-import { LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from '@/lib/luxorSignaturePlacement'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -28,19 +27,6 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
 export async function GET(request: NextRequest) {
   try {
     const token = request.nextUrl.searchParams.get('token') || ''
-    if (process.env.NODE_ENV === 'development' && token === 'ux-review') {
-      return NextResponse.json({
-        id: 'ux-review',
-        client_name: 'Sophia Martinez',
-        client_email: 'sophia@example.com',
-        status: 'viewed',
-        contract_title: 'Quinceañera Booking Agreement',
-        signed_name: null,
-        signed_at: null,
-        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-        signature_placement: LUXOR_CONTRACT_SIGNATURE_PLACEMENT,
-      })
-    }
     const signature = await getLuxorSignatureRequestByToken(token)
 
     if (!signature) {
