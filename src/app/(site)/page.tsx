@@ -159,7 +159,7 @@ export default function Home() {
           fill
           priority
           sizes="100vw"
-          className="scale-[1.04] object-cover object-[49%_center]"
+          className="scale-[1.04] object-cover object-[49%_center] sm:-translate-x-[1.8%]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94),rgba(5,5,5,0.66)_48%,rgba(5,5,5,0.28)),linear-gradient(180deg,rgba(5,5,5,0.5),rgba(5,5,5,0.9)_88%)]" />
         <div className="absolute inset-0 luxor-noise opacity-[0.18]" />
