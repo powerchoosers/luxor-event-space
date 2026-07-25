@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { processDueLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { listQueuedLuxorEmailJobsByIds, processDueLuxorEmailJobs, processLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { queueGrandOpeningCheckInLaunchEmails } from '@/lib/luxorGrandOpeningRaffleServer'
 
 export const dynamic = 'force-dynamic'
@@ -35,8 +35,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const raffleLaunch = await queueGrandOpeningCheckInLaunchEmails()
+    const raffleJobs = raffleLaunch.jobIds.length
+      ? (await listQueuedLuxorEmailJobsByIds(raffleLaunch.jobIds)).slice(0, 10)
+      : []
+    const raffleResults = raffleJobs.length ? await processLuxorEmailJobs(raffleJobs) : []
     const results = await processDueLuxorEmailJobs(1)
-    return NextResponse.json({ success: true, raffleLaunch, processed: results.length, results })
+    return NextResponse.json({ success: true, raffleLaunch, raffleProcessed: raffleResults.length, raffleResults, processed: results.length, results })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Email processing failed.'
     console.error('Luxor scheduled email worker failed:', message)

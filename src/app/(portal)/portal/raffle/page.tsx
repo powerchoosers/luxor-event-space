@@ -1,11 +1,13 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Expand, Gift, Loader2, Phone, RefreshCw, Search, Sparkles, TicketCheck, UserPlus, Users, X } from 'lucide-react'
+import { CircleDotDashed, Expand, Loader2, Phone, RefreshCw, Search, TicketCheck, UserPlus, Users, X } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 import type { GrandOpeningAttendee, GrandOpeningRsvpCandidate } from '@/lib/luxorGrandOpeningRaffleServer'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 export default function GrandOpeningRafflePage() {
+  const reduceMotion = useReducedMotion()
   const [attendees, setAttendees] = useState<GrandOpeningAttendee[]>([])
   const [matches, setMatches] = useState<GrandOpeningRsvpCandidate[]>([])
   const [search, setSearch] = useState('')
@@ -89,19 +91,19 @@ export default function GrandOpeningRafflePage() {
     if (!eligible.length || drawing) return
     setDrawing(true); setWinner(null); setError('')
     const started = Date.now()
-    const roller = window.setInterval(() => {
+    const roller = reduceMotion ? null : window.setInterval(() => {
       const name = eligible[Math.floor(Math.random() * eligible.length)]?.full_name
       if (name) setRollingName(name)
     }, 85)
     try {
       const dataPromise = post({ action: 'draw', prizeLabel })
       const data = await dataPromise
-      const remaining = Math.max(0, 2300 - (Date.now() - started))
+      const remaining = Math.max(0, (reduceMotion ? 180 : 2300) - (Date.now() - started))
       await new Promise((resolve) => window.setTimeout(resolve, remaining))
       setWinner(data.winner); setRollingName(data.winner.full_name)
       await load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to draw a winner.') }
-    finally { window.clearInterval(roller); setDrawing(false) }
+    finally { if (roller) window.clearInterval(roller); setDrawing(false) }
   }
 
   async function skipWinner() {
@@ -122,7 +124,7 @@ export default function GrandOpeningRafflePage() {
       {error ? <div className="rounded-xl border border-red-500/25 bg-red-500/8 px-4 py-3 text-sm text-red-400">{error}</div> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(360px,.82fr)_minmax(520px,1.18fr)]">
-        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl">
+        <motion.section initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.42, ease: [0.23, 1, 0.32, 1] }} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl">
           <div className="border-b border-[color:var(--portal-border)] p-5">
             <div className="flex items-center justify-between gap-3">
               <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">iPad station</p><h2 className="mt-1 text-lg font-bold text-[color:var(--portal-text)]">Manual check-in</h2></div>
@@ -167,35 +169,79 @@ export default function GrandOpeningRafflePage() {
               {attendees.slice(0, 20).map((person) => <div key={person.id} className="flex items-center justify-between rounded-lg px-2 py-2 text-xs"><span className="truncate font-semibold text-[color:var(--portal-text)]">{person.full_name}</span><span className="ml-3 shrink-0 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">{person.attendee_type}</span></div>)}
             </div>
           </div>
-        </section>
+        </motion.section>
 
-        <section ref={stageRef} className="relative isolate flex min-h-[650px] flex-col overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[#050505] text-[#f7efe3] shadow-2xl">
+        <motion.section ref={stageRef} initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.52, delay: reduceMotion ? 0 : 0.06, ease: [0.23, 1, 0.32, 1] }} className="relative isolate flex min-h-[650px] flex-col overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[#050505] text-[#f7efe3] shadow-2xl">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(202,162,76,.23),transparent_28rem),linear-gradient(180deg,#110d09,#050505_72%)]" />
           <div className="absolute inset-0 luxor-noise opacity-20" />
           <div className="relative flex items-center justify-between border-b border-[#caa24c]/15 px-6 py-5">
             <div><p className="font-serif text-2xl uppercase tracking-[0.2em] text-[#caa24c]">Luxor</p><p className="mt-1 text-[8px] uppercase tracking-[0.33em] text-[#9f8250]">Grand Opening Raffle</p></div>
             <button onClick={() => stageRef.current?.requestFullscreen()} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#caa24c]/20 text-[#caa24c] hover:bg-[#caa24c]/10" aria-label="Show raffle full screen"><Expand size={17} /></button>
           </div>
-          <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-            <div className={`flex h-20 w-20 items-center justify-center rounded-full border ${winner ? 'border-[#f1d27a] bg-[#caa24c] text-[#090706]' : 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#caa24c]'} shadow-[0_0_60px_-18px_rgba(202,162,76,.8)]`}>{drawing ? <Loader2 className="h-9 w-9 animate-spin" /> : winner ? <Gift className="h-9 w-9" /> : <Sparkles className="h-9 w-9" />}</div>
-            <p className="mt-8 text-[10px] font-black uppercase tracking-[0.34em] text-[#caa24c]">{winner ? 'Winner' : drawing ? 'Selecting at random' : `${eligible.length} guests in the draw`}</p>
-            <h2 className={`mt-5 max-w-4xl font-serif leading-[.9] ${winner ? 'text-7xl sm:text-8xl 2xl:text-9xl' : 'text-6xl sm:text-7xl'} text-[#f7efe3]`}>{winner?.full_name || rollingName}</h2>
-            {winner?.phone ? <a href={`tel:${winner.phone}`} className="mt-7 inline-flex items-center gap-2 rounded-full border border-[#caa24c]/25 bg-black/30 px-4 py-2 font-mono text-sm text-[#f1d27a]"><Phone size={14} /> {formatDisplayPhone(winner.phone)}</a> : winner ? <p className="mt-7 text-sm text-[#a99678]">No phone number provided — call their name in the room.</p> : null}
-            {winner?.prize_label ? <p className="mt-5 text-sm font-bold uppercase tracking-[0.18em] text-[#d7c29a]">{winner.prize_label}</p> : null}
+          <div className="relative flex flex-1 flex-col items-center justify-center px-5 py-10 text-center sm:px-8">
+            <DrawMechanism drawing={drawing} winner={Boolean(winner)} drawNumber={winners.length + (winner ? 0 : 1)} reduceMotion={Boolean(reduceMotion)} />
+            <div className="mt-8 w-full max-w-4xl">
+              <div className="flex items-center justify-between border-b border-[#caa24c]/18 pb-3 font-mono text-[8px] uppercase tracking-[0.24em] text-[#9f8250]">
+                <span>Presence verified</span><span>Secure random selection</span>
+              </div>
+              <div className="relative flex min-h-48 items-center justify-center overflow-hidden border-b border-[#caa24c]/18 px-3 py-8 sm:min-h-56">
+                <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-[#caa24c]/30 to-transparent" />
+                {drawing && !reduceMotion ? <motion.div initial={{ x: '-110%' }} animate={{ x: '110%' }} transition={{ duration: 0.85, repeat: Infinity, ease: 'linear' }} className="pointer-events-none absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-[#caa24c]/8 to-transparent" /> : null}
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.h2
+                    key={winner?.id || rollingName}
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: drawing ? 22 : 10, filter: 'blur(7px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -18, filter: 'blur(6px)' }}
+                    transition={{ duration: reduceMotion ? 0.12 : drawing ? 0.09 : 0.42, ease: [0.23, 1, 0.32, 1] }}
+                    className={`max-w-4xl font-serif leading-[.88] ${winner ? 'text-7xl sm:text-8xl 2xl:text-9xl' : 'text-5xl sm:text-7xl'} text-[#f7efe3]`}
+                  >
+                    {winner?.full_name || rollingName}
+                  </motion.h2>
+                </AnimatePresence>
+              </div>
+              <p className="mt-5 text-[10px] font-black uppercase tracking-[0.3em] text-[#caa24c]">{winner ? 'Selected winner' : drawing ? 'Names are being mixed' : `${eligible.length} verified guests available`}</p>
+            </div>
+            <AnimatePresence>
+              {winner ? <motion.div initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
+                {winner.phone ? <a href={`tel:${winner.phone}`} className="inline-flex items-center gap-2 rounded-full border border-[#caa24c]/25 bg-black/30 px-4 py-2 font-mono text-sm text-[#f1d27a]"><Phone size={14} /> {formatDisplayPhone(winner.phone)}</a> : <p className="text-sm text-[#a99678]">No phone number provided — call their name in the room.</p>}
+                {winner.prize_label ? <p className="mt-5 text-sm font-bold uppercase tracking-[0.18em] text-[#d7c29a]">{winner.prize_label}</p> : null}
+              </motion.div> : null}
+            </AnimatePresence>
           </div>
           <div className="relative border-t border-[#caa24c]/15 bg-black/25 p-5 sm:p-6">
             <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Prize name (optional)</span><input value={prizeLabel} onChange={(event) => setPrizeLabel(event.target.value)} placeholder="Example: Venue credit" className="mt-2 w-full rounded-lg border border-[#caa24c]/20 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#7e6e58] focus:border-[#f1d27a]/60" /></label>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              {winner ? <><button onClick={() => { setWinner(null); setRollingName('Ready for the next prize'); setPrizeLabel('') }} className="min-h-12 flex-1 rounded-lg border border-[#caa24c]/30 px-4 text-[10px] font-black uppercase tracking-[0.16em] text-[#f1d27a]">Keep winner</button><button disabled={working} onClick={skipWinner} className="min-h-12 flex-1 rounded-lg border border-red-500/25 bg-red-500/10 px-4 text-[10px] font-black uppercase tracking-[0.16em] text-red-300"><X size={14} className="mr-2 inline" />Not present — skip</button></> : <button disabled={drawing || !eligible.length} onClick={draw} className="min-h-14 w-full rounded-lg border border-[#f1d27a]/50 bg-[#caa24c] px-6 text-xs font-black uppercase tracking-[0.2em] text-[#090706] shadow-[0_20px_55px_-28px_rgba(202,162,76,.9)] disabled:opacity-40">{drawing ? 'Drawing…' : 'Draw a winner'}</button>}
+              {winner ? <><button onClick={() => { setWinner(null); setRollingName('Ready for the next prize'); setPrizeLabel('') }} className="min-h-12 flex-1 rounded-lg border border-[#caa24c]/30 px-4 text-[10px] font-black uppercase tracking-[0.16em] text-[#f1d27a] transition hover:bg-[#caa24c]/8">Confirm winner</button><button disabled={working} onClick={skipWinner} className="min-h-12 flex-1 rounded-lg border border-red-500/25 bg-red-500/10 px-4 text-[10px] font-black uppercase tracking-[0.16em] text-red-300 transition hover:bg-red-500/15"><X size={14} className="mr-2 inline" />Not present — redraw</button></> : <motion.button whileHover={reduceMotion ? undefined : { y: -2 }} whileTap={reduceMotion ? undefined : { scale: 0.985 }} disabled={drawing || !eligible.length} onClick={draw} className="min-h-14 w-full rounded-lg border border-[#f1d27a]/50 bg-[#caa24c] px-6 text-xs font-black uppercase tracking-[0.2em] text-[#090706] shadow-[0_20px_55px_-28px_rgba(202,162,76,.9)] disabled:opacity-40"><CircleDotDashed size={15} className="mr-2 inline" />{drawing ? 'Mixing entries…' : 'Begin random draw'}</motion.button>}
             </div>
           </div>
-        </section>
+        </motion.section>
       </div>
     </PortalPageFrame>
   )
 }
 
-function SmallMode({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button type="button" onClick={onClick} className={`rounded-md px-3 py-2 text-[9px] font-black uppercase tracking-wider ${active ? 'bg-[#caa24c] text-white' : 'text-[color:var(--portal-muted)]'}`}>{children}</button> }
+function DrawMechanism({ drawing, winner, drawNumber, reduceMotion }: { drawing: boolean; winner: boolean; drawNumber: number; reduceMotion: boolean }) {
+  return (
+    <div className="relative flex h-24 w-24 items-center justify-center" aria-hidden="true">
+      <motion.div
+        animate={drawing && !reduceMotion ? { rotate: 360 } : { rotate: 0 }}
+        transition={drawing && !reduceMotion ? { duration: 1.1, repeat: Infinity, ease: 'linear' } : { duration: 0.35 }}
+        className={`absolute inset-1 rounded-full border ${winner ? 'border-[#f1d27a]' : 'border-[#caa24c]/45'}`}
+      >
+        {[0, 90, 180, 270].map((rotation) => <span key={rotation} style={{ transform: `translateX(-50%) rotate(${rotation}deg)`, transformOrigin: '50% 43px' }} className="absolute left-1/2 top-0 h-2.5 w-px bg-[#caa24c]" />)}
+      </motion.div>
+      <motion.div animate={winner && !reduceMotion ? { scale: [0.86, 1.06, 1] } : { scale: 1 }} transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }} className={`relative flex h-16 w-16 flex-col items-center justify-center rounded-full border ${winner ? 'border-[#f1d27a] bg-[#caa24c] text-[#090706]' : 'border-[#caa24c]/25 bg-[#caa24c]/8 text-[#f1d27a]'} shadow-[0_0_55px_-20px_rgba(202,162,76,.8)]`}>
+        <span className="font-mono text-[7px] font-bold uppercase tracking-[0.22em]">Draw</span>
+        <span className="mt-0.5 font-mono text-lg font-black leading-none">{String(Math.max(drawNumber, 1)).padStart(2, '0')}</span>
+      </motion.div>
+    </div>
+  )
+}
+
+function SmallMode({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <button type="button" onClick={onClick} className={`relative isolate overflow-hidden rounded-md px-3 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${active ? 'text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{active ? <motion.span layoutId="raffle-check-in-mode" transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }} className="absolute inset-0 -z-10 rounded-md bg-[#caa24c]" /> : null}<span className="relative">{children}</span></button>
+}
 function SearchBox({ value, onChange, placeholder, label = 'RSVP name' }: { value: string; onChange: (value: string) => void; placeholder: string; label?: string }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">{label}</span><div className="relative mt-2"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" /><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 pl-9 pr-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></div></label> }
 function PhoneInput({ value, onChange, optional = false }: { value: string; onChange: (value: string) => void; optional?: boolean }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Phone {optional ? '(optional)' : '*'}</span><input required={!optional} value={value} onChange={(event) => onChange(formatPhone(event.target.value))} placeholder="(210) 000-0000" className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label> }
 function SimpleInput({ name, label, required }: { name: string; label: string; required?: boolean }) { return <label className="block"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">{label}</span><input name={name} required={required} className="mt-2 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label> }

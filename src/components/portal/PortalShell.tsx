@@ -13,7 +13,7 @@ import {
   Search,
   Settings,
   Users,
-  Sparkles,
+  CalendarRange,
   DollarSign,
   ChevronDown,
   Gauge,
@@ -27,6 +27,7 @@ import {
   Phone,
   TrendingUp,
   TicketCheck,
+  Workflow,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -76,7 +77,7 @@ const navItems = [
   { href: '/portal/marketing?tab=emails', icon: <Mail size={18} />, label: 'Emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
-  { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
+  { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events' },
   { href: '/portal/raffle', icon: <TicketCheck size={18} />, label: 'Grand Opening Raffle' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
   { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
@@ -100,7 +101,7 @@ const marketingSubItems = [
   { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
   { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
   { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
-  { href: '/portal/marketing?tab=builder-automation', label: 'Email Builder & Automation', icon: Sparkles },
+  { href: '/portal/marketing?tab=builder-automation', label: 'Email Builder & Automation', icon: Workflow },
   { href: '/portal/marketing?tab=contact-lists', label: 'Contact Lists', icon: Users },
   { href: '/portal/marketing?tab=call-center', label: 'Call Center', icon: Phone },
   { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 export default function RaffleLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${manrope.variable} ${cormorant.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#050505] text-[#f7efe3]">{children}</body>
+      <body className="min-h-full bg-[#050505] text-[#f7efe3]" style={{ backgroundColor: '#050505' }}>{children}</body>
     </html>
   )
 }

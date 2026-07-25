@@ -1,8 +1,9 @@
 'use client'
 
-import { Check, ChevronDown, Loader2, Search, Sparkles, TicketCheck, Users } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Search, TicketCheck, Users } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 type Match = { id: string; full_name: string; checked_in: boolean }
 type InviteRsvp = { id: string; full_name: string; attendee_count: number | null; checked_in: boolean }
@@ -12,6 +13,7 @@ export default function GrandOpeningCheckInPage() {
 }
 
 function GrandOpeningCheckIn() {
+  const reduceMotion = useReducedMotion()
   const searchParams = useSearchParams()
   const inviteToken = searchParams?.get('invite') || ''
   const [inviteRsvp, setInviteRsvp] = useState<InviteRsvp | null>(null)
@@ -35,7 +37,12 @@ function GrandOpeningCheckIn() {
         if (!response.ok) throw new Error(data.error || 'This check-in link is not valid.')
         if (!cancelled) setInviteRsvp(data.rsvp)
       })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : 'This check-in link is not valid.'))
+      .catch((reason) => {
+        if (!cancelled) {
+          setMode('guest')
+          setError(reason instanceof Error ? reason.message : 'This check-in link is not valid.')
+        }
+      })
       .finally(() => !cancelled && setInviteLoading(false))
     return () => { cancelled = true }
   }, [inviteToken])
@@ -104,7 +111,12 @@ function GrandOpeningCheckIn() {
     <main className="relative isolate min-h-screen overflow-hidden bg-[#050505] px-4 py-8 sm:px-6 sm:py-12">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.22),transparent_30rem),linear-gradient(180deg,#0c0907_0%,#050505_65%)]" />
       <div className="absolute inset-0 luxor-noise opacity-20" />
-      <section className="relative mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#caa24c]/28 bg-[#090706]/95 shadow-[0_40px_120px_-48px_rgba(0,0,0,1)]">
+      <motion.section
+        initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.48, ease: [0.23, 1, 0.32, 1] }}
+        className="relative mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#caa24c]/28 bg-[#090706]/95 shadow-[0_40px_120px_-48px_rgba(0,0,0,1)]"
+      >
         <div className="h-1 bg-gradient-to-r from-[#6d4b1d] via-[#f1d27a] to-[#6d4b1d]" />
         <header className="border-b border-[#caa24c]/15 px-6 py-7 text-center sm:px-9">
           <p className="font-serif text-3xl font-semibold uppercase tracking-[0.2em] text-[#caa24c]">Luxor</p>
@@ -117,16 +129,17 @@ function GrandOpeningCheckIn() {
         </header>
 
         <div className="p-5 sm:p-8">
+          <AnimatePresence mode="wait" initial={false}>
           {checkedInName ? (
-            <div className="py-10 text-center">
+            <motion.div key="success" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="py-10 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#caa24c] text-[#090706]"><Check className="h-8 w-8" /></div>
               <p className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-[#caa24c]">You’re in the raffle</p>
               <h2 className="mt-3 font-serif text-5xl text-[#f7efe3]">Welcome, {checkedInName.split(' ')[0]}.</h2>
               <p className="mt-4 text-sm leading-6 text-[#d7c29a]/70">Stay nearby when winners are announced. If your name is called and you are not present, another winner will be drawn.</p>
               <button type="button" onClick={() => { setCheckedInName(''); setMode('guest'); setPhone(''); setMarketingOptIn(false) }} className="mt-8 text-xs font-bold uppercase tracking-[0.15em] text-[#f1d27a] underline underline-offset-4">Check in another guest</button>
-            </div>
+            </motion.div>
           ) : inviteLoading ? <CheckInLoading compact /> : (
-            <form onSubmit={submit} className="space-y-5">
+            <motion.form key="form" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onSubmit={submit} className="space-y-5">
               {inviteRsvp ? (
                 <div className="grid grid-cols-2 rounded-xl border border-[#caa24c]/20 bg-black/30 p-1">
                   <ModeButton active={mode === 'rsvp'} onClick={() => setMode('rsvp')} icon={<Check className="h-4 w-4" />} label="My check-in" />
@@ -177,13 +190,14 @@ function GrandOpeningCheckIn() {
 
               {error ? <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm leading-5 text-red-200">{error}</p> : null}
 
-              <button disabled={submitting || (mode === 'rsvp' && !inviteRsvp) || (mode === 'guest' && !host)} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border border-[#f1d27a]/50 bg-[#caa24c] px-5 text-xs font-black uppercase tracking-[0.18em] text-[#090706] shadow-[0_18px_50px_-24px_rgba(202,162,76,.8)] transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{submitting ? 'Checking you in' : 'Enter the raffle'}
-              </button>
-            </form>
+              <motion.button whileHover={reduceMotion ? undefined : { y: -2 }} whileTap={reduceMotion ? undefined : { scale: 0.985 }} disabled={submitting || (mode === 'rsvp' && !inviteRsvp) || (mode === 'guest' && !host)} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border border-[#f1d27a]/50 bg-[#caa24c] px-5 text-xs font-black uppercase tracking-[0.18em] text-[#090706] shadow-[0_18px_50px_-24px_rgba(202,162,76,.8)] transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <TicketCheck className="h-4 w-4" />}{submitting ? 'Checking you in' : 'Enter the raffle'}
+              </motion.button>
+            </motion.form>
           )}
+          </AnimatePresence>
         </div>
-      </section>
+      </motion.section>
     </main>
   )
 }

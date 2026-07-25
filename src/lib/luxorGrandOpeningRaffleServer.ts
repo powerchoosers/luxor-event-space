@@ -234,12 +234,13 @@ export function createGrandOpeningInviteToken(inquiryId: string) {
 }
 
 export async function queueGrandOpeningCheckInLaunchEmails(now = new Date()) {
-  if (now < EVENT_START || now > EVENT_END) return { queued: 0, skipped: 'outside_event_window' as const }
+  if (now < EVENT_START || now > EVENT_END) return { queued: 0, jobIds: [] as string[], skipped: 'outside_event_window' as const }
 
   const inquiries = await supabaseRest<LuxorInquiry[]>(
     `luxor_inquiries?select=*&${CAMPAIGN_FILTER}&rsvp_status=eq.attending&email=not.is.null&order=created_at.asc`,
   )
   let queued = 0
+  const jobIds: string[] = []
 
   for (const inquiry of inquiries) {
     const inviteToken = createGrandOpeningInviteToken(inquiry.id)
@@ -253,10 +254,13 @@ export async function queueGrandOpeningCheckInLaunchEmails(now = new Date()) {
       automationKey: `grand-opening-check-in:${inquiry.id}`,
       metadata: { campaign_key: LUXOR_GRAND_OPENING.campaignKey, check_in_url: checkInUrl },
     })
-    if (job) queued += 1
+    if (job) {
+      jobIds.push(job.id)
+      if (job.status === 'queued') queued += 1
+    }
   }
 
-  return { queued }
+  return { queued, jobIds }
 }
 
 function buildGrandOpeningCheckInEmailHtml(inquiry: LuxorInquiry, checkInUrl: string) {

@@ -23,7 +23,16 @@ export async function GET(request: NextRequest) {
 
     const query = searchParams.get('q')?.trim() || ''
     const matches = await searchGrandOpeningRsvps(query, 8)
-    return NextResponse.json({ matches: matches.map(({ id, full_name, checked_in }) => ({ id, full_name, checked_in })) })
+    const seenNames = new Set<string>()
+    const privateNameOnlyMatches = matches
+      .filter((match) => {
+        const key = match.full_name.trim().toLocaleLowerCase()
+        if (seenNames.has(key)) return false
+        seenNames.add(key)
+        return true
+      })
+      .map(({ id, full_name, checked_in }) => ({ id, full_name, checked_in }))
+    return NextResponse.json({ matches: privateNameOnlyMatches })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to search the guest list.'
     return NextResponse.json({ error: message }, { status: message.includes('Too many') ? 429 : 400 })
