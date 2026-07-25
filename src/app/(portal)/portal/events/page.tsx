@@ -46,6 +46,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearchTerm = useDeferredValue(searchTerm)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [activeDetailTab, setActiveDetailTab] = useState<'timeline' | 'layout' | 'vendors' | 'payments' | 'checklist' | 'walkthrough'>('timeline')
 
@@ -72,20 +73,23 @@ export default function EventsPage() {
     fetchBookings()
   }, [])
 
-  // Filter bookings
-  const filteredBookings = bookings.filter((b) => {
-    const term = searchTerm.toLowerCase()
-    return (
-      b.client_name.toLowerCase().includes(term) ||
-      (b.event_type && b.event_type.toLowerCase().includes(term)) ||
-      b.id.toLowerCase().includes(term)
-    )
-  })
+  // Filter bookings (Memoized for high performance)
+  const filteredBookings = useMemo(() => {
+    const term = deferredSearchTerm.toLowerCase().trim()
+    if (!term) return bookings
+    return bookings.filter((b) => {
+      return (
+        b.client_name.toLowerCase().includes(term) ||
+        (b.event_type && b.event_type.toLowerCase().includes(term)) ||
+        b.id.toLowerCase().includes(term)
+      )
+    })
+  }, [bookings, deferredSearchTerm])
 
-  const selectedEvent = bookings.find((b) => b.id === selectedEventId)
+  const selectedEvent = useMemo(() => bookings.find((b) => b.id === selectedEventId), [bookings, selectedEventId])
 
   // Sub-metrics
-  const confirmedCount = bookings.filter((b) => b.status === 'confirmed').length
+  const confirmedCount = useMemo(() => bookings.filter((b) => b.status === 'confirmed').length, [bookings])
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">

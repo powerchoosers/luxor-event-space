@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, UserPlus, UserRound, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -34,6 +34,7 @@ export function LuxorMessenger() {
   const [selectedLine, setSelectedLine] = useState('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(() => searchParams?.get('inquiryId') || null)
   const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
   const [filter, setFilter] = useState<MessageFilter>('all')
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
@@ -72,7 +73,9 @@ export function LuxorMessenger() {
         .then(async (response) => ({ response, payload: await response.json().catch(() => ({ numbers: [] })) as { numbers?: BusinessLine[] } }))
         .then(({ response, payload }) => { if (response.ok) setBusinessLines((payload.numbers || []).filter((line) => line.capabilities.sms)) }),
     ])
-    const intervalId = window.setInterval(() => void loadMessages(true), 15_000)
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadMessages(true)
+    }, 15_000)
     return () => window.clearInterval(intervalId)
   }, [loadMessages])
 
@@ -99,13 +102,13 @@ export function LuxorMessenger() {
   }), [messages, selectedLine])
   const conversations = useMemo(() => buildConversations(lineMessages), [lineMessages])
   const visibleConversations = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
+    const normalizedQuery = deferredQuery.trim().toLowerCase()
     return conversations.filter((conversation) => {
       if (filter === 'unread' && conversation.unreadCount === 0) return false
       if (!normalizedQuery) return true
       return `${conversation.contactName} ${conversation.phoneNumber} ${conversation.latest?.body || ''}`.toLowerCase().includes(normalizedQuery)
     })
-  }, [conversations, filter, query])
+  }, [conversations, filter, deferredQuery])
   const selectedConversation = conversations.find((conversation) => conversation.key === selectedKey) ?? (draftConversation?.key === selectedKey ? draftConversation : null) ?? conversations[0] ?? null
   const isComposing = Boolean(body.trim())
 
