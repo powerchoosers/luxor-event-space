@@ -6696,7 +6696,7 @@ function DetailItem({
             disabled={isSaving}
             placeholder={placeholder}
             onClick={(event) => event.stopPropagation()}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => setDraft(field === 'phone' ? formatUsDialInput(event.target.value) : event.target.value)}
             onBlur={() => {
               void commitDraft()
             }}

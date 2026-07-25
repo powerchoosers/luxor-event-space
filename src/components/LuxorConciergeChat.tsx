@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
+import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import {
   ArrowRight,
   CalendarDays,
@@ -411,10 +412,11 @@ export function LuxorConciergeChat() {
             <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
             <input
               value={contactDetails.phone}
-              onChange={(event) => updateContactDetail('phone', event.target.value)}
-              placeholder="Phone"
+              onChange={(event) => updateContactDetail('phone', formatStandardPhoneInput(event.target.value))}
+              placeholder="Phone (210) 000-0000 *"
               type="tel"
-              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+              required
+              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] font-mono outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
             />
           </label>
           <textarea

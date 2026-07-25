@@ -19,6 +19,21 @@ export function formatUsDialInput(value: string) {
   return formatted
 }
 
+export function formatStandardPhoneInput(value: string) {
+  const digits = getUsDialDigits(value)
+  if (!digits) return ''
+
+  const areaCode = digits.slice(0, 3)
+  const prefix = digits.slice(3, 6)
+  const line = digits.slice(6)
+
+  let formatted = `(${areaCode}`
+  if (areaCode.length === 3) formatted += ') '
+  if (prefix) formatted += prefix
+  if (line) formatted += `-${line}`
+  return formatted
+}
+
 export function formatPhoneDisplay(value: string | null | undefined) {
   if (!value) return ''
   return toUsE164(value) ? formatUsDialInput(value) : value

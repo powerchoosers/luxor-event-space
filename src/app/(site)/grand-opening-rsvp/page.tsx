@@ -8,6 +8,7 @@ import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
+import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 
 const showcaseDetails = [
   { label: 'Free tastings', icon: Utensils },
@@ -32,6 +33,7 @@ export default function GrandOpeningPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [eventInterest, setEventInterest] = useState('')
+  const [phone, setPhone] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(true)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -43,12 +45,12 @@ export default function GrandOpeningPage() {
     const firstName = String(form.get('firstName') ?? '').trim()
     const lastName = String(form.get('lastName') ?? '').trim()
     const email = String(form.get('email') ?? '').trim()
+    const cleanPhone = phone.trim()
     const attendeeCount = String(form.get('attendeeCount') ?? '').trim()
-    const willAttend = form.get('willAttend') === 'on'
 
-    if (!willAttend) {
+    if (!cleanPhone) {
+      setError('Please enter a valid mobile phone number so we can send your RSVP confirmation text.')
       setSubmitting(false)
-      setError('Please confirm that you will attend the Grand Opening event.')
       return
     }
 
@@ -169,9 +171,22 @@ export default function GrandOpeningPage() {
                   </div>
 
                   <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                    <TextField name="firstName" label="First name" required />
-                    <TextField name="lastName" label="Last name" required />
-                    <TextField name="email" label="Email" type="email" required className="sm:col-span-2" />
+                    <TextField name="firstName" label="First name *" required />
+                    <TextField name="lastName" label="Last name *" required />
+                    <TextField name="email" label="Email *" type="email" required className="sm:col-span-2" />
+                    <label className="block sm:col-span-2">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Mobile Phone *</span>
+                      <input
+                        name="phone"
+                        required
+                        type="tel"
+                        inputMode="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(formatStandardPhoneInput(e.target.value))}
+                        placeholder="(210) 000-0000"
+                        className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] font-mono outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+                      />
+                    </label>
                     <TextField name="attendeeCount" label="How many attending?" inputMode="numeric" placeholder="1, 2, 3..." />
                     <label className="block">
                       <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Event interest</span>

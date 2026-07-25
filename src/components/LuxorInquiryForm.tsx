@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { LUXOR_EVENT_TYPES, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
+import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -32,6 +33,8 @@ export function LuxorInquiryForm({
 
   const [eventType, setEventType] = useState('')
   const [targetDate, setTargetDate] = useState('')
+  const [phone, setPhone] = useState('')
+  const [smsOptIn, setSmsOptIn] = useState(true)
   const [packageInterest, setPackageInterest] = useState('')
   const [preferredTourSlotId, setPreferredTourSlotId] = useState('')
   const [preferredTourDate, setPreferredTourDate] = useState('')
@@ -52,21 +55,25 @@ export function LuxorInquiryForm({
 
     const form = new FormData(event.currentTarget)
     const email = String(form.get('email') ?? '').trim()
-    const phone = String(form.get('phone') ?? '').trim()
-    const smsOptIn = form.get('smsOptIn') === 'on'
+    const cleanPhone = phone.trim()
 
     if (!eventType) {
       setError('Please select the type of event you are planning.')
       return
     }
 
-    if (!email && !phone) {
-      setError('Please provide an email address or phone number so the Luxor team can respond.')
+    if (!cleanPhone) {
+      setError('Please provide a valid mobile phone number so the Luxor team can confirm your request.')
       return
     }
 
-    if (phone && !smsOptIn) {
-      setError('Please check the text-message consent box, or remove the phone number and provide an email address instead.')
+    if (!email) {
+      setError('Please provide an email address so we can send your event summary.')
+      return
+    }
+
+    if (cleanPhone && !smsOptIn) {
+      setError('Please check the text-message consent box to receive your tour and event confirmations.')
       return
     }
 
@@ -75,7 +82,7 @@ export function LuxorInquiryForm({
     const payload: LuxorInquiryInput = {
       fullName: String(form.get('fullName') ?? ''),
       email,
-      phone,
+      phone: cleanPhone,
       smsOptIn,
       eventType: eventType,
       targetDate: targetDate,
@@ -158,16 +165,34 @@ export function LuxorInquiryForm({
               />
             </div>
             <TextField name="guestCount" label="Guest count" placeholder="Estimated count" inputMode="numeric" />
-            <TextField name="fullName" label="Full name" placeholder="Your name" required />
-            <TextField name="email" label="Email" placeholder="you@example.com" type="email" describedBy="contact-method-help" />
-            <TextField name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" describedBy="contact-method-help" />
+            <TextField name="fullName" label="Full name *" placeholder="Your full name" required />
+            <TextField name="email" label="Email *" placeholder="you@example.com" type="email" required describedBy="contact-method-help" />
+            
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#caa24c]">Phone number *</span>
+              <input
+                name="phone"
+                required
+                type="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(formatStandardPhoneInput(e.target.value))}
+                placeholder="(210) 000-0000"
+                aria-describedby="contact-method-help"
+                className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] font-mono outline-none transition placeholder:text-[#d7c29a]/35 focus:border-[#f1d27a]/70"
+              />
+            </label>
+
             <p id="contact-method-help" className="-mt-1 text-xs leading-5 text-[#d7c29a]/58 sm:col-span-2">
-              Provide at least one contact method so the Luxor team can reply.
+              Phone number is required so Luxor coordinators can text or call you to confirm tour availability.
             </p>
+
             <label className="flex items-start gap-3 rounded-md border border-[#caa24c]/18 bg-black/25 p-4 sm:col-span-2">
               <input
                 name="smsOptIn"
                 type="checkbox"
+                checked={smsOptIn}
+                onChange={(e) => setSmsOptIn(e.target.checked)}
                 className="mt-1 h-4 w-4 shrink-0 accent-[#caa24c]"
               />
               <span className="text-xs leading-5 text-[#d7c29a]/72">
