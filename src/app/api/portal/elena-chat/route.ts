@@ -627,19 +627,109 @@ export async function POST(request: Request) {
       }
     ]
 
-    // Context Injection: Parse Path for Leads details
+    // Deep Screen Context Injection
     if (activePath) {
-      openrouterMessages.push({
-        role: 'system',
-        content: `User is currently browsing route: "${activePath}".`
-      })
-
       const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
       if (leadMatch) {
         const activeLeadId = leadMatch[1]
+        try {
+          const [leads, bookings] = await Promise.all([
+            supabaseRest<Array<{
+              id: string
+              full_name: string
+              email: string
+              phone?: string
+              event_type?: string
+              target_date?: string
+              guest_count?: number
+              pipeline_stage?: string
+              status?: string
+            }>>(
+              `luxor_inquiries?select=id,full_name,email,phone,event_type,target_date,guest_count,pipeline_stage,status&id=eq.${encodeURIComponent(activeLeadId)}&limit=1`
+            ),
+            supabaseRest<Array<{
+              id: string
+              contract_status?: string
+              contract_total?: number
+              deposit_required?: number
+              event_date?: string
+              package_name?: string
+            }>>(
+              `luxor_bookings?select=id,contract_status,contract_total,deposit_required,event_date,package_name&inquiry_id=eq.${encodeURIComponent(activeLeadId)}&order=created_at.desc&limit=1`
+            )
+          ])
+
+          const lead = leads[0]
+          const booking = bookings[0]
+
+          if (lead) {
+            openrouterMessages.push({
+              role: 'system',
+              content: `ACTIVE SCREEN CONTEXT (User is currently viewing the lead dossier for client "${lead.full_name}"):
+- Lead ID: "${lead.id}"
+- Client Full Name: "${lead.full_name}"
+- Client Email: "${lead.email}"
+- Client Phone: "${lead.phone || 'N/A'}"
+- Event Type: "${lead.event_type || 'Private Event'}"
+- Event Date: "${booking?.event_date || lead.target_date || 'To be confirmed'}"
+- Guest Count: ${lead.guest_count || 'N/A'}
+- Pipeline Stage: "${lead.pipeline_stage || lead.status || 'inquiry'}"
+- Package: "${(booking?.package_name || 'N/A').replace(/_/g, ' ')}"
+- Contract Status: "${booking?.contract_status || 'not_sent'}"
+- Contract Total: $${Number(booking?.contract_total || 0).toLocaleString()}
+- Deposit Required: $${Number(booking?.deposit_required || 0).toLocaleString()}
+
+CRITICAL DIRECTIVES FOR ELENA:
+1. SCREEN CONTEXT REASONING: If the user references "them", "this client", "this lead", "this event", or asks "what's next for them?", "send them an email", "send contract link", "update stage", or "add a note", IMMEDIATELY AND UNAMBIGUOUSLY apply the action to ${lead.full_name} (ID: ${lead.id}, Email: ${lead.email}). DO NOT ask "Which lead do you mean?" or request their name/ID.
+2. UNRELATED CONVERSATION HANDLER: If the user asks a question about something completely unrelated to ${lead.full_name} (e.g. "what is our total monthly revenue?", "how many tours are scheduled tomorrow?", "show low inventory"), DO NOT force the conversation back to ${lead.full_name}. Simply answer the unrelated question directly and accurately using database SQL query tools.`
+            })
+          } else {
+            openrouterMessages.push({
+              role: 'system',
+              content: `User is viewing lead dossier ID: '${activeLeadId}'. If the user references 'this lead' or 'this client', use ID: '${activeLeadId}'.`
+            })
+          }
+        } catch (err) {
+          console.warn('Elena chat context pre-fetch error:', err)
+          openrouterMessages.push({
+            role: 'system',
+            content: `User is viewing lead dossier ID: '${activeLeadId}'. If the user references 'this lead' or 'this client', use ID: '${activeLeadId}'.`
+          })
+        }
+      } else if (activePath.startsWith('/portal/leads')) {
         openrouterMessages.push({
           role: 'system',
-          content: `CONTEXT: The user is currently viewing the lead/inquiry record with ID: '${activeLeadId}'. If the user references 'this lead', 'them', 'this client', or asks you to create notes, tasks, or check details related to their screen, use this ID: '${activeLeadId}'.`
+          content: `ACTIVE SCREEN CONTEXT: User is viewing the All Leads Pipeline & Kanban board (/portal/leads).`
+        })
+      } else if (activePath.startsWith('/portal/calendar') || activePath.startsWith('/portal/events')) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `ACTIVE SCREEN CONTEXT: User is viewing the Calendar & Event Schedule (/portal/calendar).`
+        })
+      } else if (activePath.startsWith('/portal/marketing')) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `ACTIVE SCREEN CONTEXT: User is viewing the Marketing Hub & Email/Text Campaign Builder (/portal/marketing).`
+        })
+      } else if (activePath.startsWith('/portal/finances') || activePath.startsWith('/portal/invoices')) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `ACTIVE SCREEN CONTEXT: User is viewing Venue Finances, Revenue Metrics & Invoices (/portal/finances).`
+        })
+      } else if (activePath.startsWith('/portal/operations')) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `ACTIVE SCREEN CONTEXT: User is viewing Venue Operations, Cleaning Logs & Inventory (/portal/operations).`
+        })
+      } else if (activePath.startsWith('/portal/communications') || activePath.startsWith('/portal/messages')) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `ACTIVE SCREEN CONTEXT: User is viewing Customer Communications & Email/SMS Inbox (/portal/communications).`
+        })
+      } else {
+        openrouterMessages.push({
+          role: 'system',
+          content: `User is currently browsing route: "${activePath}".`
         })
       }
     }
