@@ -1,8 +1,8 @@
 'use client'
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Loader2, Mail, Phone } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
@@ -28,6 +28,10 @@ const TOUR_WINDOWS = [
   { value: 'Weekend', label: 'Weekend' },
   { value: 'Flexible', label: 'I am flexible' },
 ]
+
+const PUBLIC_SELECT_BUTTON_CLASS = '!h-12 !rounded-md !px-4 !py-0 !text-left !text-sm'
+const PUBLIC_DATE_PICKER_CLASS = 'w-full [&>button]:h-12 [&>button]:rounded-md [&>button]:px-4 [&>button]:py-0'
+const FORM_TRANSITION = { duration: 0.38, ease: [0.23, 1, 0.32, 1] as const }
 
 export function LuxorInquiryForm({
   source,
@@ -58,7 +62,21 @@ export function LuxorInquiryForm({
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const startedAt = useRef(Date.now())
   const trackedStart = useRef(false)
+  const formBodyRef = useRef<HTMLDivElement>(null)
+  const [formBodyHeight, setFormBodyHeight] = useState<number | null>(null)
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
+
+  useLayoutEffect(() => {
+    const body = formBodyRef.current
+    if (!body) return
+
+    const updateHeight = () => setFormBodyHeight(Math.ceil(body.getBoundingClientRect().height))
+    updateHeight()
+
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(body)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -197,33 +215,40 @@ export function LuxorInquiryForm({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d7b964]">{showTourFields ? 'Private tour' : 'Event inquiry'}</p>
           <h2 className="mt-2 font-serif text-3xl leading-none text-[#f7efe3]">{title}</h2>
         </div>
-        {!submitted ? <span className="shrink-0 text-xs font-semibold text-[#d7c29a]/70">Step {step} of 2</span> : null}
+        {!submitted ? <motion.span key={step} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={FORM_TRANSITION} className="shrink-0 text-xs font-semibold text-[#d7c29a]/70">Step {step} of 2</motion.span> : null}
       </div>
 
-      {submitted ? (
-        <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.06] p-6" role="status">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c] text-[#050505]"><Check className="h-6 w-6" /></div>
-          <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour time is reserved.' : 'We received your event details.'}</h3>
-          <p className="mt-3 text-sm leading-6 text-[#d7c29a]/78">
-            {reservedTour
-              ? 'A confirmation is on its way. A Luxor coordinator will review the details and contact you if anything needs clarification.'
-              : 'A Luxor coordinator will review your request and contact you within one business day with availability and next steps.'}
-          </p>
-        </div>
-      ) : (
-        <>
+      <motion.div
+        initial={false}
+        animate={formBodyHeight === null ? undefined : { height: formBodyHeight }}
+        transition={FORM_TRANSITION}
+        className="overflow-hidden"
+      >
+        <div ref={formBodyRef}>
+          {submitted ? (
+            <motion.div key="submitted" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={FORM_TRANSITION} className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.06] p-6" role="status">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c] text-[#050505]"><Check className="h-6 w-6" /></div>
+              <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour time is reserved.' : 'We received your event details.'}</h3>
+              <p className="mt-3 text-sm leading-6 text-[#d7c29a]/78">
+                {reservedTour
+                  ? 'A confirmation is on its way. A Luxor coordinator will review the details and contact you if anything needs clarification.'
+                  : 'A Luxor coordinator will review your request and contact you within one business day with availability and next steps.'}
+              </p>
+            </motion.div>
+          ) : (
+            <AnimatePresence initial={false} mode="popLayout">
           {step === 1 ? (
-            <div className="animate-in fade-in duration-300">
-              <div className="grid gap-4 sm:grid-cols-2">
+            <motion.div key="event-details" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={FORM_TRANSITION}>
+              <div className="grid items-start gap-x-4 gap-y-5 sm:grid-cols-2">
                 <FieldLabel label="Event type" required>
-                  <PortalSelect value={eventType} onChange={setEventType} className="w-full" buttonClassName="w-full text-left" placeholder="Select event type" options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} />
+                  <PortalSelect value={eventType} onChange={setEventType} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Select event type" options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} />
                 </FieldLabel>
                 <FieldLabel label="Target event date">
-                  <PortalDatePicker value={targetDate} onChange={setTargetDate} className="w-full" placeholder="Select date" />
+                  <PortalDatePicker value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
                 <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Estimated guests" placeholder="For example, 120" inputMode="numeric" />
                 <FieldLabel label="Which package fits best?">
-                  <PortalSelect value={packageInterest} onChange={setPackageInterest} className="w-full" buttonClassName="w-full text-left" placeholder="Choose a package or get guidance" options={LUXOR_PACKAGE_INTEREST_OPTIONS} />
+                  <PortalSelect value={packageInterest} onChange={setPackageInterest} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a package" options={LUXOR_PACKAGE_INTEREST_OPTIONS} />
                 </FieldLabel>
               </div>
 
@@ -234,13 +259,13 @@ export function LuxorInquiryForm({
                   {tourSlotsError ? <p className="mt-3 text-sm text-red-200">{tourSlotsError}</p> : null}
                   {!tourSlotsLoading && tourSlots.length > 0 ? (
                     <div className="mt-3">
-                      <PortalSelect value={preferredTourSlotId} onChange={handleTourSlotChange} className="w-full" buttonClassName="w-full text-left" placeholder="Choose an available tour" options={tourSlots.map((slot) => ({ value: slot.id, label: `${slot.label} · ${slot.availableSpots} open` }))} />
+                      <PortalSelect value={preferredTourSlotId} onChange={handleTourSlotChange} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose an available tour" options={tourSlots.map((slot) => ({ value: slot.id, label: `${slot.label} · ${slot.availableSpots} open` }))} />
                       <p className="mt-2 text-xs leading-5 text-[#d7c29a]/62">Choosing a published time reserves it when you submit the next step.</p>
                     </div>
                   ) : !tourSlotsLoading ? (
                     <div className="mt-3">
                       <p className="text-sm leading-6 text-[#d7c29a]/72">No published times are open right now. Choose the window that works best and the team will respond with options.</p>
-                      <PortalSelect value={preferredTourWindow} onChange={setPreferredTourWindow} className="mt-3 w-full" buttonClassName="w-full text-left" placeholder="Preferred tour window" options={TOUR_WINDOWS} />
+                      <PortalSelect value={preferredTourWindow} onChange={setPreferredTourWindow} className="mt-3 w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Preferred tour window" options={TOUR_WINDOWS} />
                     </div>
                   ) : null}
                 </div>
@@ -250,9 +275,9 @@ export function LuxorInquiryForm({
               <button type="button" onClick={goToContactStep} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-[#050505] transition hover:bg-[#dfbd68] sm:w-auto">
                 Continue <ArrowRight className="h-4 w-4" />
               </button>
-            </div>
+            </motion.div>
           ) : (
-            <div className="animate-in fade-in duration-300">
+            <motion.div key="contact-details" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={FORM_TRANSITION}>
               <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-[#d7c29a]/72">
                 <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{eventType}</span>
                 {targetDate ? <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{targetDate}</span> : null}
@@ -295,16 +320,18 @@ export function LuxorInquiryForm({
                   {submitting ? 'Sending…' : reservedTour ? 'Reserve this tour' : submitLabel}
                 </motion.button>
               </div>
-            </div>
+            </motion.div>
           )}
-        </>
-      )}
+            </AnimatePresence>
+          )}
+        </div>
+      </motion.div>
     </form>
   )
 }
 
 function FieldLabel({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return <div><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>{children}</div>
+  return <div className="flex h-full min-w-0 flex-col"><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>{children}</div>
 }
 
 function TextField({ value, onChange, name, label, placeholder, type = 'text', required, inputMode, autoComplete, icon }: {
@@ -320,11 +347,11 @@ function TextField({ value, onChange, name, label, placeholder, type = 'text', r
   icon?: React.ReactNode
 }) {
   return (
-    <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>
+    <label className="flex h-full min-w-0 flex-col">
+      <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>
       <span className="relative mt-2 block">
         {icon ? <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#caa24c]">{icon}</span> : null}
-        <input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} autoComplete={autoComplete} placeholder={placeholder} className={`w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 py-3 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/42 focus:border-[#f1d27a]/70 ${icon ? 'pl-10' : ''}`} />
+        <input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} autoComplete={autoComplete} placeholder={placeholder} className={`h-12 w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 py-0 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/42 focus:border-[#f1d27a]/70 ${icon ? 'pl-10' : ''}`} />
       </span>
     </label>
   )

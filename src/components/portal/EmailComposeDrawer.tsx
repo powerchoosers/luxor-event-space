@@ -81,6 +81,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const [fromName, setFromName] = useState('Luxor Event Space')
   const [senderRole, setSenderRole] = useState('Venue Team')
   const [senderAvatarUrl, setSenderAvatarUrl] = useState<string | null>(null)
+  const [senderPhone, setSenderPhone] = useState<string | null>(null)
   const [toAddress, setToAddress] = useState('')
   const [subject, setSubject] = useState('')
   const [track, setTrack] = useState(true)
@@ -202,6 +203,10 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
           setSenderAvatarUrl(typeof profile.avatar_url === 'string' && profile.avatar_url.trim() ? profile.avatar_url.trim() : null)
         })
         .catch((error) => console.warn('Failed to load email sender profile:', error))
+      void fetch('/api/public/phone-number', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data) => setSenderPhone(typeof data?.phoneNumber === 'string' && data.phoneNumber.trim() ? data.phoneNumber.trim() : null))
+        .catch((error) => console.warn('Failed to load selected Luxor phone number:', error))
     }
   }, [isOpen])
 
@@ -310,13 +315,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
         senderName: fromName,
         senderRole,
         senderEmail: fromAddress,
+        senderPhone,
         senderImageUrl: senderAvatarUrl,
       })
     } else {
       // Use configured template blocks
       return renderEmailToHtml(subject || 'Marketing Email', templateBlocks)
     }
-  }, [selectedTemplateId, bodyText, templateBlocks, subject, toAddress, fromName, senderRole, fromAddress, senderAvatarUrl])
+  }, [selectedTemplateId, bodyText, templateBlocks, subject, toAddress, fromName, senderRole, fromAddress, senderPhone, senderAvatarUrl])
 
   const updateIframeHeight = () => {
     if (iframeRef.current?.contentWindow?.document?.body) {

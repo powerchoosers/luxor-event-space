@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowRight, Check, Clock3, Sparkles } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { Reveal } from '@/components/Reveal'
 import { LUXOR_PACKAGE_PRESETS, getPackagePresetTotal, getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
@@ -95,8 +95,7 @@ export default function PricingPageContent() {
       <section id="quote" className="scroll-mt-24 bg-[#120d0c] py-16 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:items-start lg:px-8">
           <Reveal>
-            <Sparkles className="h-6 w-6 text-[#caa24c]" />
-            <p className="mt-6 font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Personalized pricing</p>
+            <p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Personalized pricing</p>
             <h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Get the number that matters: yours.</h2>
             <p className="mt-5 max-w-xl text-base leading-7 text-[#d7c29a]/72">Share the basics and a Luxor coordinator will confirm availability, package fit, and an exact proposal. Selecting a package is helpful, not a commitment.</p>
             <div className="mt-8 space-y-3 text-sm text-[#eadcc8]/78">
@@ -111,7 +110,7 @@ export default function PricingPageContent() {
 
       <section className="bg-[#080706] py-16 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
-          <Reveal><Clock3 className="h-6 w-6 text-[#caa24c]" /><h2 className="mt-5 font-serif text-4xl leading-none sm:text-6xl">What changes the final quote?</h2></Reveal>
+          <Reveal><h2 className="font-serif text-4xl leading-none sm:text-6xl">What changes the final quote?</h2></Reveal>
           <Reveal delay={100}><div className="grid gap-4 sm:grid-cols-2">{[
             ['Date and rental window', 'Weekday, Friday, Saturday, and Sunday rates differ, as do morning, evening, and full-day windows.'],
             ['Guest count', 'Cleaning, security, catering, and bar needs can change as the guest count grows.'],

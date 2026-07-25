@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Baby, Briefcase, Cake, Check, Heart } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
 
 const eventTypes = [
@@ -10,7 +10,6 @@ const eventTypes = [
     title: 'Weddings',
     copy: 'A polished room for ceremony moments, dinner, portraits, speeches, and dancing.',
     image: '/images/dining-hall/main-hall-wedding-dance-candid.png',
-    icon: Heart,
     slug: 'weddings',
     points: ['Ceremony and reception flow', 'Photo-ready room details', 'Dinner and dance floor planning'],
   },
@@ -18,7 +17,6 @@ const eventTypes = [
     title: 'Quinceañeras',
     copy: 'A dramatic setting for a grand entrance, court seating, cake, family photos, and dancing.',
     image: '/images/dining-hall/main-hall-quinceanera-angle.png',
-    icon: Cake,
     slug: 'quinceaneras',
     points: ['Grand entrance planning', 'Court and family seating', 'Feature moments for photos'],
   },
@@ -26,7 +24,6 @@ const eventTypes = [
     title: 'Baby showers',
     copy: 'A warm, elegant backdrop for lunch, gifts, photos, and a room that feels finished.',
     image: '/images/luxor-lounge/luxor-lounge-baby-shower.png',
-    icon: Baby,
     slug: 'baby-showers',
     points: ['Gift and dessert tables', 'Comfortable guest layout', 'Soft decor compatibility'],
   },
@@ -34,7 +31,6 @@ const eventTypes = [
     title: 'Corporate events',
     copy: 'A formal space for awards, company dinners, networking nights, and milestone events.',
     image: '/images/luxor-lounge/luxor-lounge-corporate.png',
-    icon: Briefcase,
     slug: 'corporate-events',
     points: ['Dinner and presentation flow', 'Networking layouts', 'Awards and company moments'],
   },
@@ -86,10 +82,7 @@ export default function EventsPage() {
           </Reveal>
 
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
-            {eventTypes.map((event, index) => {
-              const Icon = event.icon
-
-              return (
+            {eventTypes.map((event, index) => (
                 <Reveal key={event.title} delay={index * 70}>
                   <article className="grid overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] sm:grid-cols-[0.92fr_1.08fr]">
                     <div className="relative min-h-72 sm:min-h-full">
@@ -97,8 +90,7 @@ export default function EventsPage() {
                       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
                     </div>
                     <div className="p-6 sm:p-8">
-                      <Icon className="h-6 w-6 text-[#caa24c]" />
-                      <h3 className="mt-5 font-serif text-4xl leading-none text-[#f7efe3]">{event.title}</h3>
+                      <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{event.title}</h3>
                       <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{event.copy}</p>
                       <ul className="mt-6 grid gap-3">
                         {event.points.map((point) => (
@@ -114,8 +106,7 @@ export default function EventsPage() {
                     </div>
                   </article>
                 </Reveal>
-              )
-            })}
+            ))}
           </div>
         </div>
       </section>

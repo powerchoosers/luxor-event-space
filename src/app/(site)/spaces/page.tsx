@@ -63,9 +63,11 @@ export default function SpacesPage() {
             {zones.map(([title, copy, Icon], index) => (
               <Reveal key={title} delay={index * 70}>
                 <article className="h-full rounded-md border border-[#caa24c]/20 bg-white/[0.025] p-6">
-                  <Icon className="h-6 w-6 text-[#caa24c]" />
-                  <h3 className="mt-6 font-serif text-3xl text-[#f7efe3]">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5 shrink-0 text-[#caa24c]" />
+                    <h3 className="font-serif text-3xl leading-none text-[#f7efe3]">{title}</h3>
+                  </div>
+                  <p className="mt-4 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
                 </article>
               </Reveal>
             ))}

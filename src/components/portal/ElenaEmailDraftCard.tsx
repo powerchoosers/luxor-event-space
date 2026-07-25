@@ -37,6 +37,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
   const [isSent, setIsSent] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [trackEmail, setTrackEmail] = useState(true)
+  const [senderPhone, setSenderPhone] = useState<string | null>(null)
 
   const [refinePrompt, setRefinePrompt] = useState('')
   const [showRefineInput, setShowRefineInput] = useState(false)
@@ -70,6 +71,19 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
       active = false
     }
   }, [draft.senderProfile])
+
+  useEffect(() => {
+    let active = true
+    void fetch('/api/public/phone-number', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (active) setSenderPhone(typeof data?.phoneNumber === 'string' && data.phoneNumber.trim() ? data.phoneNumber.trim() : null)
+      })
+      .catch((error) => console.error('Failed to load selected Luxor phone number:', error))
+    return () => {
+      active = false
+    }
+  }, [])
   const senderInitials = senderProfile.displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -85,6 +99,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
     senderName: senderProfile.displayName,
     senderRole: senderProfile.roleTitle,
     senderEmail: senderProfile.email,
+    senderPhone,
     senderImageUrl: senderProfile.avatarUrl,
   })
 

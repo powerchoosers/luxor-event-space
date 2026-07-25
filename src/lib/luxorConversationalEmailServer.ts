@@ -25,7 +25,7 @@ export interface ConversationalEmailParams {
   senderName?: string
   senderRole?: string
   senderEmail?: string
-  senderPhone?: string
+  senderPhone?: string | null
   senderImageUrl?: string | null
 }
 
@@ -44,7 +44,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
     senderName = 'Luxor Event Space',
     senderRole = 'Venue Team',
     senderEmail = 'booking@luxoratlaspalmas.com',
-    senderPhone = '(210) 940-0902',
+    senderPhone = null,
     senderImageUrl,
   } = params
 
@@ -66,6 +66,11 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
       return null
     }
   })()
+  const senderPhoneDigits = String(senderPhone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')
+  const senderPhoneDisplay = senderPhoneDigits.length === 10
+    ? `(${senderPhoneDigits.slice(0, 3)}) ${senderPhoneDigits.slice(3, 6)}-${senderPhoneDigits.slice(6)}`
+    : String(senderPhone || '').trim()
+  const senderPhoneHref = senderPhoneDigits.length === 10 ? `+1${senderPhoneDigits}` : String(senderPhone || '').trim()
 
   const formattedBodyHtml = params.bodyHtml
     ? `<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:15px;line-height:1.75;color:#332c24;">${sanitizeRichEmailHtml(params.bodyHtml)}</div>`
@@ -164,7 +169,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
                       <tr><td height="1" style="height:1px;background-color:#d8bd7d;font-size:1px;line-height:1px;">&nbsp;</td></tr>
                     </table>
                     <p style="margin:0;font-family:Arial,'Helvetica Neue',sans-serif;font-size:11px;line-height:1.85;color:#71675c;word-break:break-word;">
-                      <a href="tel:${escapeHtml(senderPhone).replace(/\D/g, '')}" style="color:#52525b;text-decoration:none;">${escapeHtml(senderPhone)}</a><br />
+                      ${senderPhoneDisplay ? `<a href="tel:${escapeHtml(senderPhoneHref)}" style="color:#52525b;text-decoration:none;">${escapeHtml(senderPhoneDisplay)}</a><br />` : ''}
                       <a href="mailto:${escapeHtml(senderEmail)}" style="color:#caa24c;text-decoration:none;">${escapeHtml(senderEmail)}</a><br />
                       <a href="${websiteUrl}" target="_blank" style="color:#71675c;text-decoration:none;">luxoratlaspalmas.com</a>
                     </p>
