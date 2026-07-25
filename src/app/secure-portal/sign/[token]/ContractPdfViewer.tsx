@@ -36,6 +36,18 @@ export default function ContractPdfViewer({
     width: placement.width * scale,
     height: placement.height * scale,
   }
+  const dateStyle = {
+    left: placement.x * scale,
+    top: (LUXOR_CONTRACT_PAGE_SIZE.height - (placement.y - 74) - 9) * scale,
+    fontSize: 7.25 * scale,
+    lineHeight: `${9 * scale}px`,
+  }
+  const previewDate = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date())
 
   return (
     <Document
@@ -60,16 +72,23 @@ export default function ContractPdfViewer({
             loading={<div style={{ width: pageWidth, height: pageWidth * 1.294 }} className="bg-[#f7f0e4]" />}
           />
           {!complete && pageNumber === signaturePlacement.pageIndex + 1 && (
-            <div
-              className={`absolute z-10 flex items-center justify-center overflow-hidden rounded-sm transition ${signatureDataUrl ? 'bg-transparent' : 'border border-dashed border-[#b88a44] bg-[#fff9ed]/75'}`}
-              style={overlayStyle}
-            >
+            <>
+              <div
+                className={`absolute z-10 flex items-center justify-center overflow-hidden rounded-sm transition ${signatureDataUrl ? 'bg-transparent' : 'border border-dashed border-[#b88a44] bg-[#fff9ed]/75'}`}
+                style={overlayStyle}
+              >
+                {signatureDataUrl ? (
+                  <img src={signatureDataUrl} alt="Your signature preview" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="px-2 text-center text-[9px] font-semibold uppercase tracking-wider text-[#8b642e]">Your signature</span>
+                )}
+              </div>
               {signatureDataUrl ? (
-                <img src={signatureDataUrl} alt="Your signature preview" className="h-full w-full object-contain" />
-              ) : (
-                <span className="px-2 text-center text-[9px] font-semibold uppercase tracking-wider text-[#8b642e]">Your signature</span>
-              )}
-            </div>
+                <span className="pointer-events-none absolute z-10 whitespace-nowrap font-sans font-medium text-[#221d18]" style={dateStyle}>
+                  {previewDate}
+                </span>
+              ) : null}
+            </>
           )}
         </div>
       )}

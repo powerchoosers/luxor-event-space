@@ -29,6 +29,17 @@ function displayDate(value?: string | null) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+function displaySignatureDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) throw new Error('A valid signature timestamp is required.')
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parsed)
+}
+
 function displayTime(value?: string | null) {
   if (!value) return 'To be confirmed'
   const [hoursText, minutesText = '00'] = value.split(':')
@@ -552,19 +563,19 @@ export async function buildExecutedLuxorContract(input: {
       color: ink,
       maxWidth: ownerBox.width,
     })
-    signaturePage.drawText(`Signed ${new Date(input.clientSignedAt).toLocaleDateString('en-US')}`, {
+    signaturePage.drawText(displaySignatureDate(input.clientSignedAt), {
       x: clientBox.x,
       y: clientBox.y - 74,
-      size: 7.25,
-      font: regular,
-      color: muted,
+      size: 8.5,
+      font: bold,
+      color: ink,
     })
-    signaturePage.drawText(`Countersigned ${new Date(input.ownerSignedAt).toLocaleDateString('en-US')}`, {
+    signaturePage.drawText(displaySignatureDate(input.ownerSignedAt), {
       x: ownerBox.x,
       y: ownerBox.y - 74,
-      size: 7.25,
-      font: regular,
-      color: muted,
+      size: 8.5,
+      font: bold,
+      color: ink,
     })
 
     const page = pdf.addPage([pageWidth, pageHeight])

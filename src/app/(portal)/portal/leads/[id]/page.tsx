@@ -2633,7 +2633,7 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-10"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
           backdropFilter: 'blur(50px)',
@@ -6072,7 +6072,7 @@ function ClientDossierLoading() {
       </section>
 
       {/* 3. Sticky Tab Bar */}
-      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-8">
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-10">
         <div className="flex min-w-max gap-5">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="h-6 w-16 luxor-skeleton rounded-full" />
