@@ -336,7 +336,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.addPage()
   w.title('Signatures', 'Electronic execution')
   w.paragraph('By signing below, the Client confirms that they have read, understood, and agree to this Booking Agreement, the Venue Policies & Guest Guide, and all incorporated proposals, invoices, schedules, exhibits, and addenda.')
-  w.paragraph(`Client signer: ${names.fullName}  |  Email: ${booking.email || 'Not provided'}`)
+  w.paragraph(`Client signer: ${names.fullName || 'To be completed'}  |  Email: ${booking.email || 'To be completed'}`)
   if (names.additionalNames.length) w.paragraph(`Additional named party${names.additionalNames.length > 1 ? 'ies' : ''}: ${names.additionalNames.join(', ')}`)
 
   const signatureY = 496
@@ -498,7 +498,7 @@ export async function buildLuxorGuestGuidePdf(booking: LuxorBooking) {
   for (const [label, value] of fees) w.feeRow(label, value)
   w.note('The Client remains responsible for charges that exceed the security deposit. This schedule does not limit Luxor\'s right to recover the actual cost of repair, replacement, cleaning, or other event-related losses.')
   w.y -= 16
-  w.heading(`Thank you, ${names.firstName}`)
+  w.heading(names.firstName ? `Thank you, ${names.firstName}` : 'Thank you')
   w.paragraph('We are honored to host your celebration. Following this Guide helps the Event run smoothly and helps us care for the Venue for every family that celebrates here.', { gap: 4 })
   w.paragraph('For questions or written approvals, reply to your Luxor email thread or contact booking@luxoratlaspalmas.com.', { gap: 0 })
 
