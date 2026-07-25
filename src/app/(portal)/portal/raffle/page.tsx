@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleDotDashed, Expand, Loader2, Phone, RefreshCw, Search, TicketCheck, UserPlus, Users, X } from 'lucide-react'
+import { CircleDotDashed, Expand, Loader2, Minimize2, Phone, RefreshCw, Search, TicketCheck, UserPlus, Users, X } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 import type { GrandOpeningAttendee, GrandOpeningRsvpCandidate } from '@/lib/luxorGrandOpeningRaffleServer'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -25,6 +25,7 @@ export default function GrandOpeningRafflePage() {
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [drawing, setDrawing] = useState(false)
+  const [stageFullscreen, setStageFullscreen] = useState(false)
   const [error, setError] = useState('')
   const stageRef = useRef<HTMLDivElement>(null)
 
@@ -44,6 +45,11 @@ export default function GrandOpeningRafflePage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const syncFullscreenState = () => setStageFullscreen(document.fullscreenElement === stageRef.current)
+    document.addEventListener('fullscreenchange', syncFullscreenState)
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState)
+  }, [])
   useEffect(() => {
     if (search.trim().length < 2) { setMatches([]); return }
     const timer = window.setTimeout(() => load(search), 220)
@@ -146,6 +152,19 @@ export default function GrandOpeningRafflePage() {
     finally { setWorking(false) }
   }
 
+  async function toggleStageFullscreen() {
+    try {
+      setError('')
+      if (document.fullscreenElement === stageRef.current) {
+        await document.exitFullscreen()
+        return
+      }
+      await stageRef.current?.requestFullscreen()
+    } catch {
+      setError('The raffle display could not change screen mode. Please try again.')
+    }
+  }
+
   return (
     <PortalPageFrame className="min-h-0 pb-6">
       <PortalPageHeader icon={<TicketCheck size={19} />} title="Grand Opening Raffle" description="Check guests in on the iPad, then put the live drawing stage on the big screen. Only checked-in guests enter the draw." actions={<PortalButton onClick={() => load()}><RefreshCw size={13} /> Refresh</PortalButton>} />
@@ -206,7 +225,17 @@ export default function GrandOpeningRafflePage() {
           <div className="absolute inset-0 luxor-noise opacity-20" />
           <div className="relative flex items-center justify-between border-b border-[#caa24c]/15 px-6 py-5">
             <div><p className="font-serif text-2xl uppercase tracking-[0.2em] text-[#caa24c]">Luxor</p><p className="mt-1 text-[8px] uppercase tracking-[0.33em] text-[#9f8250]">Grand Opening Raffle</p></div>
-            <button onClick={() => stageRef.current?.requestFullscreen()} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#caa24c]/20 text-[#caa24c] hover:bg-[#caa24c]/10" aria-label="Show raffle full screen"><Expand size={17} /></button>
+            <button
+              type="button"
+              onClick={toggleStageFullscreen}
+              className={`flex h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/25 px-3 text-[#caa24c] transition-colors hover:border-[#caa24c]/45 hover:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f1d27a]/70 ${stageFullscreen ? 'bg-[#caa24c]/10' : ''}`}
+              aria-label={stageFullscreen ? 'Exit raffle full screen' : 'Show raffle full screen'}
+              aria-pressed={stageFullscreen}
+              title={stageFullscreen ? 'Exit full screen' : 'Show full screen'}
+            >
+              {stageFullscreen ? <Minimize2 size={17} /> : <Expand size={17} />}
+              {stageFullscreen ? <span className="text-[9px] font-black uppercase tracking-[0.16em]">Exit full screen</span> : null}
+            </button>
           </div>
           <div className="relative flex flex-1 flex-col items-center justify-center px-5 py-10 text-center sm:px-8">
             <DrawMechanism drawing={drawing} winner={Boolean(winner)} drawNumber={winners.length + (winner ? 0 : 1)} reduceMotion={Boolean(reduceMotion)} />
