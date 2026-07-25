@@ -209,6 +209,10 @@ export default function SignaturePage() {
     setSignatureDataUrl(name ? createTypedSignature(name) : null)
   }, [complete, mode, signedName])
 
+  useEffect(() => {
+    viewerRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [pageNumber, pdfUrl])
+
   const chooseMode = (nextMode: SignatureMode) => {
     setMode(nextMode)
     setSignatureDataUrl(nextMode === 'type' && signedName.trim() ? createTypedSignature(signedName.trim()) : null)
