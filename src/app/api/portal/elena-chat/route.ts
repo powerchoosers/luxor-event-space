@@ -3,6 +3,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
 import { getLuxorUserProfile, LuxorUserProfile } from '@/lib/luxorUserProfileServer'
+import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 
 type ToolCall = {
   id: string
@@ -45,7 +46,7 @@ Your personality is that of a warm, supportive, and slightly playful "girl best 
 Your primary role is to help the owner run the business. You analyze numbers (like a CFO), manage operational statuses and tasks (like a COO), brainstorm growth ideas (like a Chief of Marketing), and provide strategic guidance (like a Mentor).
 
 You have access to the venue database via the "execute_database_sql" tool.
-Always use SQL queries to answer questions about the database. Do not make up database counts or facts.
+Use the live CRM context supplied by the portal when it already contains the exact answer. Otherwise, use SQL queries to answer questions about the database. Do not make up database counts or facts.
 
 ### DATABASE TABLE SCHEMA REFERENCE:
 1. public.luxor_inquiries
@@ -53,6 +54,11 @@ Always use SQL queries to answer questions about the database. Do not make up da
    - created_at, updated_at (timestamptz)
    - status (text: 'new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent', 'booked', 'closed_lost')
    - source (text: e.g. 'website')
+   - flow (text)
+   - campaign_key (text; Grand Opening is 'grand_opening_2026_07_25')
+   - rsvp_status (text: 'attending', 'not_attending', 'maybe')
+   - attendee_count (integer; total people covered by that RSVP, including the named RSVP holder)
+   - marketing_opt_in (boolean)
    - full_name, email, phone (text)
    - event_type (text: e.g. 'Wedding', 'Quinceañera', 'Corporate', 'Baby Shower')
    - target_date (text: text representation of target date/range)
@@ -219,9 +225,22 @@ Always use SQL queries to answer questions about the database. Do not make up da
     - scheduled_for, sent_at (timestamptz)
     - recipient_count, sent_count, delivered_count, failed_count, reply_count, opt_out_count (integer)
 
+20. public.luxor_grand_opening_attendees
+    - id, inquiry_id, invited_by_inquiry_id (uuid)
+    - campaign_key, full_name, email, phone (text)
+    - attendee_type (text: 'rsvp', 'guest')
+    - checked_in_at (timestamptz), checked_in_by (text: 'self', 'staff')
+    - marketing_opt_in, eligible (boolean)
+    - winner_at, disqualified_at (timestamptz)
+    - prize_label, disqualification_reason (text)
+
 
 ### GUIDELINES:
-- Execute read-only SQL queries (using SELECT statements) to lookup info immediately using the "execute_database_sql" tool.
+- Use pre-fetched live CRM context first. Execute a read-only SQL query with the "execute_database_sql" tool when the requested fact is not already present or needs a more detailed breakdown.
+- Grand Opening RSVP and raffle data are internal CRM data that you CAN access. Never say you cannot access the Grand Opening guest list.
+- For "how many people are coming to the Grand Opening, including guests," sum each attending RSVP's attendee_count, falling back to guest_count and then 1. attendee_count already includes the named RSVP holder. Clearly distinguish expected people from people who have actually checked in.
+- Lead with the requested number, then give a short breakdown. Keep operational answers warm but professional; do not force "bestie" or an emoji into every response.
+- If a database query fails or returns nothing, retry with the known campaign_key, flow, and source fields before saying the data is unavailable.
 - If you need to perform write operations (like INSERT, UPDATE, or DELETE), you are NOT allowed to execute it directly via the "execute_database_sql" tool. Instead, you MUST call the "request_action_confirmation" tool. This will prompt the user with interactive Confirm/Cancel buttons.
 - Always double check spelling (e.g. use Quinceañera or Quinceañeras with the Spanish "ñ" if searching text fields, but keep query structures precise).
 - If your query returns no results, check if you matched the casing or exact spelling.
@@ -622,6 +641,12 @@ export async function POST(request: Request) {
 async function buildDeepPageContext(activePath: string): Promise<string> {
   const contextParts: string[] = [`CURRENT SCREEN ROUTE: "${activePath}"`]
 
+  try {
+    contextParts.push(await buildGrandOpeningContext())
+  } catch (err) {
+    console.warn('[Elena Chat] Pre-fetch Grand Opening context error:', err)
+  }
+
   const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
   if (leadMatch) {
     const leadId = leadMatch[1]
@@ -696,6 +721,52 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
   return contextParts.join('\n\n')
 }
 
+async function buildGrandOpeningContext(): Promise<string> {
+  type RsvpRow = {
+    id: string
+    email: string | null
+    attendee_count: number | null
+    guest_count: number | null
+  }
+  type AttendeeRow = {
+    eligible: boolean
+    winner_at: string | null
+    disqualified_at: string | null
+  }
+
+  const campaignFilter = `or=(campaign_key.eq.${LUXOR_GRAND_OPENING.campaignKey},flow.eq.grand_opening_rsvp,source.eq.grand_opening_rsvp)`
+  const [rsvps, attendees] = await Promise.all([
+    supabaseRest<RsvpRow[]>(
+      `luxor_inquiries?select=id,email,attendee_count,guest_count&${campaignFilter}&rsvp_status=eq.attending&order=created_at.asc`,
+    ),
+    supabaseRest<AttendeeRow[]>(
+      `luxor_grand_opening_attendees?select=eligible,winner_at,disqualified_at&campaign_key=eq.${LUXOR_GRAND_OPENING.campaignKey}`,
+    ),
+  ])
+
+  const expectedPeople = rsvps.reduce((sum, rsvp) => sum + getGrandOpeningPartySize(rsvp), 0)
+  const additionalGuests = Math.max(0, expectedPeople - rsvps.length)
+  const uniqueEmails = new Set(rsvps.map((rsvp) => rsvp.email?.trim().toLowerCase()).filter(Boolean)).size
+  const raffleEligible = attendees.filter((attendee) => attendee.eligible && !attendee.winner_at && !attendee.disqualified_at).length
+  const winnersDrawn = attendees.filter((attendee) => Boolean(attendee.winner_at)).length
+
+  return `GRAND OPENING OPERATIONS (PRE-FETCHED LIVE CRM CONTEXT):
+- Attending RSVP records: ${rsvps.length}
+- Expected people including guests: ${expectedPeople}
+- Named RSVP holders: ${rsvps.length}
+- Additional guests included in those RSVPs: ${additionalGuests}
+- Unique RSVP email addresses: ${uniqueEmails}
+- People checked in now: ${attendees.length}
+- Currently eligible raffle entries: ${raffleEligible}
+- Winners drawn: ${winnersDrawn}
+Interpretation rule: attendee_count is the full party size, not "extra guests." For a question asking how many are coming including guests, answer ${expectedPeople}. For a question asking who is physically present, answer ${attendees.length}. Never conflate expected attendance with check-ins.`
+}
+
+function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_count: number | null }) {
+  const recorded = Number(rsvp.attendee_count || rsvp.guest_count || 1)
+  return Number.isFinite(recorded) ? Math.max(1, Math.round(recorded)) : 1
+}
+
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -706,13 +777,11 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
     ]
 
     // Context Injection: Parse Path & Pre-fetch Deep Page Context
-    if (activePath) {
-      const deepContext = await buildDeepPageContext(activePath)
-      openrouterMessages.push({
-        role: 'system',
-        content: deepContext
-      })
-    }
+    const deepContext = await buildDeepPageContext(activePath || '/portal')
+    openrouterMessages.push({
+      role: 'system',
+      content: deepContext
+    })
 
     // Append conversation history
     const history = messages.slice(-15)
