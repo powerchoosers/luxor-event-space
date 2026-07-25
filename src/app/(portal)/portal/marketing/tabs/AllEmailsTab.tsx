@@ -1044,7 +1044,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 )}
                 {(thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
                   <ThreadMessage
-                    key={`${messageKey(message)}:${index}`}
+                    key={`${messageKey(message)}:${index}:${message.id === selectedId || index === all.length - 1 ? 'open' : 'closed'}`}
                     message={message}
                     expanded={message.id === selectedId || index === all.length - 1}
                     viewMode={viewMode}
@@ -1143,10 +1143,6 @@ function ThreadMessage({
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
   const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
-
-  useEffect(() => {
-    setExpanded(initiallyExpanded)
-  }, [initiallyExpanded, message.id])
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
     const document = frame.contentDocument
