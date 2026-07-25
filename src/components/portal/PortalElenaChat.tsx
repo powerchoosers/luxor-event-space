@@ -314,7 +314,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       setShowSessionsList(false)
     } catch (err) {
       console.error(err)
-    } fontally {
+    } finally {
       setIsLoading(false)
     }
   }
