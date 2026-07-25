@@ -233,13 +233,19 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   // Page 1 - Parties and event details
   w.title('Booking Agreement', `Agreement ${requestId.slice(0, 8).toUpperCase()}`)
   w.note('This Booking Agreement incorporates the Luxor Venue Policies & Guest Guide. By signing, the Client acknowledges receipt of the Guide and agrees to ensure that guests and vendors comply with it.')
+  w.y -= 14
   w.heading('1. Client information')
   w.fieldPair('Client / contract holder', names.fullName, 'Email', booking.email || 'Not provided')
+  w.y -= 10
   w.fieldPair('Phone', booking.phone || 'Not provided', 'Additional named party', names.additionalNames.join(', ') || 'None')
+  w.y -= 18
   w.heading('2. Event information')
   w.fieldPair('Event date', displayDate(booking.event_date), 'Event type', booking.event_type || 'Private event')
+  w.y -= 10
   w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Estimated guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`) 
+  w.y -= 10
   w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Event purpose', booking.event_type || 'Private celebration')
+  w.y -= 14
   w.paragraph('The Event may be conducted only for the purpose shown above. Any material change in event type, purpose, attendance, or public admission requires Luxor\'s prior written approval and may require updated pricing, insurance, security, permits, or a revised agreement.')
   w.paragraph('The approved rental period covers all client and vendor access. Guest arrival, entertainment, service, cleanup, and removal must remain within the start and end times shown above unless Luxor approves a written change.')
 
@@ -263,13 +269,20 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.title('Cancellation, liability & insurance', 'Client responsibilities')
   w.heading('4. Cancellation and rescheduling')
   w.paragraph('All payments made under this Agreement, including the reservation payment, are non-refundable. Luxor reserves the event date exclusively for the Client and may decline other booking opportunities for that date.')
+  w.y -= 8
   w.paragraph('Rescheduling requests must be submitted in writing and are subject to Luxor approval and date availability. An approved reschedule is subject to a $250.00 administrative fee, and the Client is responsible for any increase in pricing for the new date. Approval is not guaranteed.')
+  w.y -= 8
   w.paragraph('If Luxor cannot host the Event for reasons within its reasonable control, Luxor may reschedule the Event or refund payments received, less amounts for services already performed or expenses already incurred for the Client.')
+  w.y -= 18
   w.heading('5. Liability and insurance')
   w.paragraph('The Client is responsible for the conduct of all guests, vendors, contractors, entertainers, and invitees, and for damage, injury, loss, overtime, or additional cleaning resulting from their actions, except to the extent caused by Luxor.')
+  w.y -= 8
   w.paragraph('The Client must obtain special event liability insurance with minimum coverage of $1,000,000 per occurrence and provide proof of coverage no later than fourteen (14) days before the Event. Luxor may also require vendors to provide proof of liability insurance before entering or working at the Venue.')
+  w.y -= 8
   w.paragraph('Luxor is not responsible for loss, theft, or damage to personal property, vehicles, vendor equipment, rentals, or items left at the Venue. The Client is responsible for coordinating delivery, setup, removal, and return of all outside property.')
+  w.y -= 8
   w.paragraph('To the extent permitted by law, the Client agrees to protect and reimburse Luxor from third-party claims, losses, or reasonable costs caused by the Client, guests, invitees, or vendors, except to the extent caused by Luxor\'s own negligence or willful misconduct.')
+  w.y -= 18
   w.note('The Guest Guide contains the detailed access, vendor, decoration, alcohol, entertainment, damage, cleaning, and enforcement policies incorporated into this Agreement.')
 
   // Page 4 - Venue operations
@@ -295,17 +308,28 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.title('Legal terms & acknowledgements', 'Complete agreement')
   w.heading('9. Force majeure and legal terms')
   w.paragraph('Neither party is in breach for delay or nonperformance caused by severe weather, natural disaster, fire, utility outage, government order, public health emergency, civil unrest, terrorism, labor dispute, or another circumstance beyond reasonable control. Luxor will make reasonable efforts to reschedule, subject to availability, but is not responsible for third-party vendor, travel, lodging, or other indirect losses.')
+  w.y -= 10
   w.paragraph('Texas law governs this Agreement. This Agreement, the Venue Policies & Guest Guide, accepted proposal, invoices, payment schedule, and attached addenda form the complete agreement and supersede prior discussions. If documents conflict, this Agreement controls unless a later written amendment signed by both parties states otherwise.')
+  w.y -= 10
   w.paragraph('Changes must be in writing and signed by both parties. The Client may not assign this Agreement without Luxor\'s written consent. If one provision is invalid or unenforceable, the remaining provisions continue in effect. Electronic records, notices, and signatures have the same force as originals.')
+  w.y -= 10
   w.paragraph('Notices and approvals may be delivered through the Client\'s Luxor email thread or another written channel accepted by both parties. Verbal discussions do not change this Agreement unless confirmed in a signed writing.')
+  w.y -= 24
   w.heading('Client acknowledgements')
   w.bullet('I received and agree to the Venue Policies & Guest Guide incorporated into this Agreement.')
+  w.y -= 6
   w.bullet('I understand the reservation payment and all other payments are subject to the cancellation and refund terms above.')
+  w.y -= 6
   w.bullet('I will not exceed the maximum occupancy of 200 persons.')
+  w.y -= 6
   w.bullet('I understand setup, event time, cleanup, and breakdown must fit within the contracted rental period and overtime may apply.')
+  w.y -= 6
   w.bullet('I understand Luxor operates under a private BYOB policy and I am responsible for lawful alcohol service.')
+  w.y -= 6
   w.bullet('I am responsible for guests and vendors, and for resulting damage, cleaning, overtime, and other authorized charges.')
+  w.y -= 6
   w.bullet('I will obtain the required special event liability insurance and provide proof before the Event.')
+  w.y -= 6
   w.bullet('I understand force majeure events are governed by this Agreement.')
 
   // Page 6 - Fixed signature page. Keep coordinates synchronized with luxorSignaturePlacement.ts.
