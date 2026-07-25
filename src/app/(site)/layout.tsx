@@ -84,7 +84,7 @@ export default function RootLayout({
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <body className="min-h-full bg-[#050505] pb-16 text-[#f6efe8] sm:pb-0">
+      <body data-luxor-site className="min-h-full bg-[#050505] pb-16 text-[#f6efe8] sm:pb-0">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}
