@@ -3766,7 +3766,7 @@ export default function LeadDetailPage({
                                 transition={{ duration: 0.25 }}
                               >
                                 <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                                  {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
+                                  {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'viewed' ? 'Contract viewed by client' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
                                 </h4>
                                 <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
                                   {!latestBooking ? 'A booking record is required before agreement package generation.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to deposit / planning.' : 'Send agreement + venue guide to client for digital signoff.'}
@@ -4039,14 +4039,14 @@ export default function LeadDetailPage({
                               <div>
                                 <AnimatePresence mode="wait">
                                   <motion.p
-                                    key={latestBooking?.contract_status === 'signed' ? 'signed_title' : 'awaiting_title'}
+                                    key={latestBooking?.contract_status === 'signed' ? 'signed_title' : latestBooking?.contract_status === 'viewed' ? 'viewed_title' : 'awaiting_title'}
                                     initial={{ opacity: 0, y: 3 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -3 }}
                                     transition={{ duration: 0.2 }}
                                     className="font-bold text-[color:var(--portal-text)]"
                                   >
-                                    {latestBooking?.contract_status === 'signed' ? 'Contract signed' : 'Awaiting client signature'}
+                                    {latestBooking?.contract_status === 'signed' ? 'Contract signed' : latestBooking?.contract_status === 'viewed' ? 'Contract viewed by client' : 'Awaiting client signature'}
                                   </motion.p>
                                 </AnimatePresence>
                                 <p className="text-[9px] text-zinc-500">{latestBooking?.contract_signed_at ? formatTimelineDate(latestBooking.contract_signed_at) : 'No email or portal generated here'}</p>
