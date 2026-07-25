@@ -498,12 +498,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messages, activePath, confirmQuery, confirmSummary, chatId } = (await request.json()) as { 
+    const { messages, activePath, confirmQuery, confirmSummary, chatId, attachments } = (await request.json()) as { 
       messages?: ChatMessage[]
       activePath?: string
       confirmQuery?: string
       confirmSummary?: string
       chatId?: string
+      attachments?: Array<{ name: string; type: string; dataUrl?: string; textContent?: string }>
     }
 
     if (!Array.isArray(messages)) {
@@ -618,6 +619,83 @@ export async function POST(request: Request) {
       })
     }
 
+async function buildDeepPageContext(activePath: string): Promise<string> {
+  const contextParts: string[] = [`CURRENT SCREEN ROUTE: "${activePath}"`]
+
+  const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
+  if (leadMatch) {
+    const leadId = leadMatch[1]
+    try {
+      const [inquiries, bookings, payments, notes] = await Promise.all([
+        supabaseRest<Array<Record<string, unknown>>>(`luxor_inquiries?select=*&id=eq.${encodeURIComponent(leadId)}&limit=1`),
+        supabaseRest<Array<Record<string, unknown>>>(`luxor_bookings?select=*&inquiry_id=eq.${encodeURIComponent(leadId)}&limit=1`),
+        supabaseRest<Array<Record<string, unknown>>>(`luxor_payments?select=*&inquiry_id=eq.${encodeURIComponent(leadId)}`),
+        supabaseRest<Array<Record<string, unknown>>>(`luxor_notes?select=*&inquiry_id=eq.${encodeURIComponent(leadId)}&order=created_at.desc&limit=3`),
+      ])
+
+      const inquiry = inquiries[0]
+      if (inquiry) {
+        const booking = bookings[0]
+        const paidTotal = (payments || []).reduce((sum, p) => sum + (p.status === 'paid' ? Number(p.amount || 0) : 0), 0)
+        
+        contextParts.push(`ACTIVE DOSSIER SCREEN ENTITY (PRE-FETCHED REAL-TIME CONTEXT):
+- Lead ID: ${inquiry.id}
+- Client Name: ${inquiry.full_name || 'N/A'}
+- Email: ${inquiry.email || 'N/A'}
+- Phone: ${inquiry.phone || 'N/A'}
+- Event Type: ${inquiry.event_type || 'N/A'}
+- Target Date / Date: ${inquiry.target_date || booking?.event_date || 'N/A'}
+- Guest Count: ${inquiry.guest_count || booking?.guest_count || 'N/A'}
+- Inquiry Status: ${inquiry.status || 'N/A'}
+- Pipeline Stage: ${inquiry.pipeline_stage || 'N/A'}
+- Booking Details: ${booking ? `Status: ${booking.status}, Package: ${booking.package_name || 'N/A'}, Contract Total: $${booking.contract_total || 0}, Contract Status: ${booking.contract_status || 'not_sent'}, Security Deposit: ${booking.security_deposit_status || 'pending'}` : 'No booking record linked'}
+- Payments Collected: $${paidTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+- Flow Notes: ${(notes || []).map(n => `"${n.content}"`).join('; ') || 'None'}`)
+      }
+    } catch (err) {
+      console.warn('[Elena Chat] Pre-fetch lead dossier context error:', err)
+    }
+  } else if (activePath.startsWith('/portal/leads')) {
+    try {
+      const activeInquiries = await supabaseRest<Array<{ status: string; pipeline_stage: string }>>('luxor_inquiries?select=status,pipeline_stage&limit=200')
+      const counts: Record<string, number> = {}
+      ;(activeInquiries || []).forEach(i => {
+        const key = i.pipeline_stage || i.status || 'other'
+        counts[key] = (counts[key] || 0) + 1
+      })
+      contextParts.push(`ACTIVE LEADS PIPELINE SCREEN CONTEXT:
+- Total Inquiries: ${activeInquiries.length}
+- Pipeline Stages: ${Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(', ')}`)
+    } catch (err) {
+      console.warn('[Elena Chat] Pre-fetch pipeline context error:', err)
+    }
+  } else if (activePath.startsWith('/portal/calendar') || activePath.startsWith('/portal/events')) {
+    try {
+      const upcomingBookings = await supabaseRest<Array<{ client_name: string; event_type: string; event_date: string; status: string }>>('luxor_bookings?select=client_name,event_type,event_date,status&order=event_date.asc&limit=10')
+      contextParts.push(`ACTIVE CALENDAR SCREEN CONTEXT:
+- Upcoming Bookings: ${(upcomingBookings || []).map(b => `${b.event_date}: ${b.client_name} (${b.event_type}, ${b.status})`).join('; ') || 'None'}`)
+    } catch (err) {
+      console.warn('[Elena Chat] Pre-fetch calendar context error:', err)
+    }
+  } else if (activePath.startsWith('/portal/finances') || activePath.startsWith('/portal/invoices')) {
+    try {
+      const invoices = await supabaseRest<Array<{ status: string; total: number; client_name: string }>>('luxor_invoices?select=status,total,client_name&limit=100')
+      const unpaid = (invoices || []).filter(i => i.status !== 'paid')
+      const unpaidSum = unpaid.reduce((s, i) => s + Number(i.total || 0), 0)
+      contextParts.push(`ACTIVE FINANCES SCREEN CONTEXT:
+- Total Invoices: ${invoices.length}
+- Unpaid Total: $${unpaidSum.toLocaleString()} across ${unpaid.length} invoices
+- Outstanding Clients: ${unpaid.slice(0, 5).map(i => `${i.client_name} ($${i.total})`).join(', ') || 'None'}`)
+    } catch (err) {
+      console.warn('[Elena Chat] Pre-fetch finance context error:', err)
+    }
+  }
+
+  contextParts.push(`BEHAVIOR RULE: The user is currently on the screen described above. If the user asks about 'this lead', 'them', 'draft an email', 'what is their total?', or actions on this page, answer instantly using the pre-fetched screen context above. If the user asks an unrelated question (e.g. general strategy, venue rules, different topics), answer directly without being restricted by the screen context.`)
+
+  return contextParts.join('\n\n')
+}
+
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -627,115 +705,36 @@ export async function POST(request: Request) {
       }
     ]
 
-    // Deep Screen Context Injection
+    // Context Injection: Parse Path & Pre-fetch Deep Page Context
     if (activePath) {
-      const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
-      if (leadMatch) {
-        const activeLeadId = leadMatch[1]
-        try {
-          const [leads, bookings] = await Promise.all([
-            supabaseRest<Array<{
-              id: string
-              full_name: string
-              email: string
-              phone?: string
-              event_type?: string
-              target_date?: string
-              guest_count?: number
-              pipeline_stage?: string
-              status?: string
-            }>>(
-              `luxor_inquiries?select=id,full_name,email,phone,event_type,target_date,guest_count,pipeline_stage,status&id=eq.${encodeURIComponent(activeLeadId)}&limit=1`
-            ),
-            supabaseRest<Array<{
-              id: string
-              contract_status?: string
-              contract_total?: number
-              deposit_required?: number
-              event_date?: string
-              package_name?: string
-            }>>(
-              `luxor_bookings?select=id,contract_status,contract_total,deposit_required,event_date,package_name&inquiry_id=eq.${encodeURIComponent(activeLeadId)}&order=created_at.desc&limit=1`
-            )
-          ])
-
-          const lead = leads[0]
-          const booking = bookings[0]
-
-          if (lead) {
-            openrouterMessages.push({
-              role: 'system',
-              content: `ACTIVE SCREEN CONTEXT (User is currently viewing the lead dossier for client "${lead.full_name}"):
-- Lead ID: "${lead.id}"
-- Client Full Name: "${lead.full_name}"
-- Client Email: "${lead.email}"
-- Client Phone: "${lead.phone || 'N/A'}"
-- Event Type: "${lead.event_type || 'Private Event'}"
-- Event Date: "${booking?.event_date || lead.target_date || 'To be confirmed'}"
-- Guest Count: ${lead.guest_count || 'N/A'}
-- Pipeline Stage: "${lead.pipeline_stage || lead.status || 'inquiry'}"
-- Package: "${(booking?.package_name || 'N/A').replace(/_/g, ' ')}"
-- Contract Status: "${booking?.contract_status || 'not_sent'}"
-- Contract Total: $${Number(booking?.contract_total || 0).toLocaleString()}
-- Deposit Required: $${Number(booking?.deposit_required || 0).toLocaleString()}
-
-CRITICAL DIRECTIVES FOR ELENA:
-1. SCREEN CONTEXT REASONING: If the user references "them", "this client", "this lead", "this event", or asks "what's next for them?", "send them an email", "send contract link", "update stage", or "add a note", IMMEDIATELY AND UNAMBIGUOUSLY apply the action to ${lead.full_name} (ID: ${lead.id}, Email: ${lead.email}). DO NOT ask "Which lead do you mean?" or request their name/ID.
-2. UNRELATED CONVERSATION HANDLER: If the user asks a question about something completely unrelated to ${lead.full_name} (e.g. "what is our total monthly revenue?", "how many tours are scheduled tomorrow?", "show low inventory"), DO NOT force the conversation back to ${lead.full_name}. Simply answer the unrelated question directly and accurately using database SQL query tools.`
-            })
-          } else {
-            openrouterMessages.push({
-              role: 'system',
-              content: `User is viewing lead dossier ID: '${activeLeadId}'. If the user references 'this lead' or 'this client', use ID: '${activeLeadId}'.`
-            })
-          }
-        } catch (err) {
-          console.warn('Elena chat context pre-fetch error:', err)
-          openrouterMessages.push({
-            role: 'system',
-            content: `User is viewing lead dossier ID: '${activeLeadId}'. If the user references 'this lead' or 'this client', use ID: '${activeLeadId}'.`
-          })
-        }
-      } else if (activePath.startsWith('/portal/leads')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing the All Leads Pipeline & Kanban board (/portal/leads).`
-        })
-      } else if (activePath.startsWith('/portal/calendar') || activePath.startsWith('/portal/events')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing the Calendar & Event Schedule (/portal/calendar).`
-        })
-      } else if (activePath.startsWith('/portal/marketing')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing the Marketing Hub & Email/Text Campaign Builder (/portal/marketing).`
-        })
-      } else if (activePath.startsWith('/portal/finances') || activePath.startsWith('/portal/invoices')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing Venue Finances, Revenue Metrics & Invoices (/portal/finances).`
-        })
-      } else if (activePath.startsWith('/portal/operations')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing Venue Operations, Cleaning Logs & Inventory (/portal/operations).`
-        })
-      } else if (activePath.startsWith('/portal/communications') || activePath.startsWith('/portal/messages')) {
-        openrouterMessages.push({
-          role: 'system',
-          content: `ACTIVE SCREEN CONTEXT: User is viewing Customer Communications & Email/SMS Inbox (/portal/communications).`
-        })
-      } else {
-        openrouterMessages.push({
-          role: 'system',
-          content: `User is currently browsing route: "${activePath}".`
-        })
-      }
+      const deepContext = await buildDeepPageContext(activePath)
+      openrouterMessages.push({
+        role: 'system',
+        content: deepContext
+      })
     }
 
     // Append conversation history
-    openrouterMessages.push(...messages.slice(-15))
+    const history = messages.slice(-15)
+    openrouterMessages.push(...history)
+
+    // Process uploaded attachments if present on latest message
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      const attachmentSummaries: string[] = []
+      attachments.forEach((att) => {
+        if (att.textContent) {
+          attachmentSummaries.push(`[ATTACHED DOCUMENT "${att.name}"]:\n${att.textContent.slice(0, 4000)}`)
+        } else if (att.dataUrl) {
+          attachmentSummaries.push(`[ATTACHED IMAGE "${att.name}"]: Data URL image provided (${att.type})`)
+        }
+      })
+      if (attachmentSummaries.length > 0) {
+        openrouterMessages.push({
+          role: 'system',
+          content: `USER ATTACHMENTS:\n${attachmentSummaries.join('\n\n')}`
+        })
+      }
+    }
 
     let loopCount = 0
     const maxLoops = 5
