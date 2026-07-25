@@ -244,6 +244,7 @@ export default function LeadDetailPage({
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [sendingContractBookingId, setSendingContractBookingId] = useState<string | null>(null)
   const [contractActionKey, setContractActionKey] = useState<string | null>(null)
+  const contractStatusSnapshotRef = useRef<Record<string, string | null>>({})
   const [pendingLifecycleStatus, setPendingLifecycleStatus] = useState<LuxorInquiry['status'] | null>(null)
 
   // Timeline tab filtering
@@ -877,7 +878,21 @@ export default function LeadDetailPage({
       setNotes(notesData)
       setTasks(tasksData)
       setInvoices(invoicesData)
-      setBookings(bookingsData)
+      const nextBookings = bookingsData as LuxorBooking[]
+      const previousStatuses = contractStatusSnapshotRef.current
+      if (Object.keys(previousStatuses).length) {
+        nextBookings.forEach((booking) => {
+          if (previousStatuses[booking.id] === 'sent' && booking.contract_status === 'viewed') {
+            notify({
+              title: 'Contract viewed',
+              description: `${booking.client_name || leadData.full_name} opened the agreement in the secure portal.`,
+              variant: 'success',
+            })
+          }
+        })
+      }
+      contractStatusSnapshotRef.current = Object.fromEntries(nextBookings.map((booking) => [booking.id, booking.contract_status || 'not_sent']))
+      setBookings(nextBookings)
       setPayments(paymentsData)
       setTourEmailJobs(tourJobsData)
       setCallRecords(callsData)
@@ -1448,6 +1463,26 @@ export default function LeadDetailPage({
     } finally {
       setContractActionKey(null)
       setUpdatingStatus(false)
+    }
+  }
+
+  const openContractReview = async (booking: LuxorBooking) => {
+    const previewWindow = window.open('about:blank', '_blank')
+    try {
+      setContractActionKey(`review-${booking.id}`)
+      const response = await fetch(`/api/signatures?bookingId=${encodeURIComponent(booking.id)}`, { cache: 'no-store' })
+      const data = await response.json().catch(() => ({})) as { signingUrl?: string; error?: string }
+      if (!response.ok || !data.signingUrl) throw new Error(data.error || 'The contract could not be opened.')
+      if (previewWindow) {
+        previewWindow.location.href = data.signingUrl
+      } else {
+        window.location.href = data.signingUrl
+      }
+    } catch (err) {
+      previewWindow?.close()
+      notify({ title: 'Contract could not be opened', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setContractActionKey(null)
     }
   }
 
@@ -2598,7 +2633,7 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:top-0"
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
           backdropFilter: 'blur(50px)',
@@ -3746,7 +3781,7 @@ export default function LeadDetailPage({
                               layout
                               type="button"
                               disabled={updatingStatus || latestBooking.contract_status === 'signed'}
-                              onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')}
+                              onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : void openContractReview(latestBooking)}
                               whileTap={{ scale: 0.96 }}
                               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                               className={`relative overflow-hidden min-h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors cursor-pointer disabled:opacity-50 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#dfbd68]'}`}
@@ -3890,7 +3925,7 @@ export default function LeadDetailPage({
                                 layout
                                 type="button" 
                                 disabled={updatingStatus || latestBooking.contract_status === 'signed'} 
-                                onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : scrollToSection('lead-booking')} 
+                                onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : void openContractReview(latestBooking)}
                                 whileTap={{ scale: 0.97 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                 className={`flex-1 min-w-[120px] py-2 rounded text-[9px] font-black uppercase text-white shadow-sm transition-colors cursor-pointer disabled:opacity-45 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#a8792f]'}`}
@@ -3922,7 +3957,7 @@ export default function LeadDetailPage({
                                     type="button"
                                     disabled={updatingStatus}
                                     onClick={() => handleContractRequestAction(latestBooking, 'resend')}
-                                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                                   >
                                     <RefreshCw size={11} className={contractActionKey === `resend-${latestBooking.id}` ? 'animate-spin' : ''} /> Resend
                                   </button>
@@ -3930,7 +3965,7 @@ export default function LeadDetailPage({
                                     type="button"
                                     disabled={updatingStatus}
                                     onClick={() => handleContractRequestAction(latestBooking, 'cancel')}
-                                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 text-[9px] font-black uppercase tracking-wider text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
+                                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/20 bg-rose-500/5 px-3 text-[9px] font-black uppercase tracking-wider text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
                                   >
                                     <Trash2 size={11} /> Cancel
                                   </button>

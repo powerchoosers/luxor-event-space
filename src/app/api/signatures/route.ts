@@ -3,7 +3,7 @@ import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildSignatureEmail, buildSignatureEmailHtml, cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildContractReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequestByBooking, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 
@@ -15,6 +15,20 @@ export async function GET(request: NextRequest) {
     }
 
     const requestedLimit = Number.parseInt(request.nextUrl.searchParams.get('limit') || '100', 10)
+    const bookingId = request.nextUrl.searchParams.get('bookingId')
+    if (bookingId) {
+      const signature = await getLatestLuxorSignatureRequestByBooking(bookingId)
+      if (!signature) return NextResponse.json({ error: 'No contract was found for this booking.' }, { status: 404 })
+      return NextResponse.json({
+        signature: {
+          id: signature.id,
+          status: signature.status,
+          contract_title: signature.contract_title,
+          signed_at: signature.signed_at,
+        },
+        signingUrl: `/secure-portal/sign/${encodeURIComponent(signature.token)}`,
+      })
+    }
     const signatures = await listLuxorSignatureRequests(Number.isFinite(requestedLimit) ? requestedLimit : 100)
     return NextResponse.json(signatures.map((signature) => ({
       id: signature.id,

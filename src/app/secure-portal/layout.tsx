@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Manrope } from 'next/font/google'
+import { Alex_Brush, Cormorant_Garamond, Manrope } from 'next/font/google'
 import type { ReactNode } from 'react'
 import '../../app/globals.css'
 import Image from 'next/image'
@@ -17,6 +17,13 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 })
 
+const signature = Alex_Brush({
+  variable: '--font-signature',
+  subsets: ['latin'],
+  weight: '400',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
   title: 'Review your agreement | Luxor Event Space',
   description: 'Review and sign your Luxor Event Space agreement.',
@@ -25,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function SecurePortalLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${cormorant.variable} h-full antialiased`}>
+    <html lang="en" className={`${manrope.variable} ${cormorant.variable} ${signature.variable} h-full antialiased`}>
       <body className="min-h-full bg-[#171410] font-sans text-[#f7f1e8] selection:bg-[#b88a44]/35 selection:text-white lg:h-dvh lg:overflow-hidden">
         <header className="sticky top-0 z-50 h-14 border-b border-white/8 bg-[#171410]/96 px-4 backdrop-blur-xl sm:px-6">
           <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between">

@@ -225,7 +225,7 @@ async function createWriter(documentLabel: string) {
   }
 }
 
-export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: string) {
+export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: string, agreementDate = new Date().toISOString()) {
   const names = parseClientName(booking.client_name)
   const balance = Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0))
   const w = await createWriter('BOOKING AGREEMENT')
@@ -240,7 +240,8 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.fieldPair('Phone', booking.phone || 'Not provided', 'Additional named party', names.additionalNames.join(', ') || 'None')
   w.y -= 18
   w.heading('2. Event information')
-  w.fieldPair('Event date', displayDate(booking.event_date), 'Event type', booking.event_type || 'Private event')
+  w.fieldPair('Agreement date', displayDate(agreementDate), 'Event date', displayDate(booking.event_date))
+  w.fieldPair('Event type', booking.event_type || 'Private event', 'Email', booking.email || 'Not provided')
   w.y -= 10
   w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Estimated guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`) 
   w.y -= 10

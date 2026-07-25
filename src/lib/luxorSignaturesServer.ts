@@ -77,7 +77,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
   const contractPath = `contracts/${booking.id}/${created.id}/Luxor-Event-Agreement.pdf`
   const guidePath = `contracts/${booking.id}/${created.id}/Luxor-Guest-Guide.pdf`
   const [contractPdf, guestGuidePdf] = await Promise.all([
-    buildLuxorContractPdf(booking, created.id),
+    buildLuxorContractPdf(booking, created.id, created.created_at),
     buildLuxorGuestGuidePdf(booking),
   ])
   await Promise.all([
@@ -110,6 +110,14 @@ export async function getLuxorSignatureRequestByToken(token: string) {
 export async function getActiveLuxorSignatureRequestByBooking(bookingId: string) {
   const [signature] = await supabaseRest<LuxorSignatureRequest[]>(
     `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&status=in.(sent,viewed)&order=created_at.desc&limit=1`,
+  )
+
+  return signature ?? null
+}
+
+export async function getLatestLuxorSignatureRequestByBooking(bookingId: string) {
+  const [signature] = await supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=created_at.desc&limit=1`,
   )
 
   return signature ?? null

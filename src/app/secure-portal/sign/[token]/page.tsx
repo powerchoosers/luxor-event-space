@@ -46,10 +46,11 @@ function createTypedSignature(name: string) {
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   let size = 104
-  context.font = `italic ${size}px Georgia, serif`
+  const signatureFont = getComputedStyle(document.documentElement).getPropertyValue('--font-signature').trim() || '"Brush Script MT", "Segoe Script", cursive'
+  context.font = `${size}px ${signatureFont}`
   while (context.measureText(name).width > 900 && size > 42) {
     size -= 2
-    context.font = `italic ${size}px Georgia, serif`
+    context.font = `${size}px ${signatureFont}`
   }
   context.fillText(name, canvas.width / 2, canvas.height / 2 + 5)
   return canvas.toDataURL('image/png')
@@ -421,7 +422,7 @@ export default function SignaturePage() {
                   {mode === 'type' ? (
                     <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl border border-[#d8d0c4] bg-[#fffdfa] px-5">
                       {signedName.trim() ? (
-                        <span className="max-w-full truncate font-serif text-4xl italic text-[#2d251e]">{signedName}</span>
+                        <span className="max-w-full truncate text-4xl text-[#2d251e]" style={{ fontFamily: 'var(--font-signature)' }}>{signedName}</span>
                       ) : (
                         <span className="text-sm text-[#a39a8d]">Type your name above</span>
                       )}

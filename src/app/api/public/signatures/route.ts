@@ -3,6 +3,7 @@ import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent, signLuxorSi
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
+import { createNote } from '@/lib/luxorNotesServer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -48,6 +49,11 @@ export async function GET(request: NextRequest) {
         updateLuxorSignatureRequest(signature.id, { status: 'viewed' }),
         updateLuxorBooking(signature.booking_id, { contract_status: 'viewed' }),
       ])
+      if (signature.inquiry_id) {
+        void createNote(signature.inquiry_id, `Contract viewed by ${signature.client_name} in the secure signing portal.`, 'status_change', 'Signature Portal').catch((error) => {
+          console.error('Contract viewed, but the activity note could not be recorded:', error)
+        })
+      }
       if (signature.inquiry_id) await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder'])
       await recordLuxorSignatureEvent({
         signatureRequestId: signature.id,
