@@ -26,6 +26,7 @@ import {
   BarChart3,
   Phone,
   TrendingUp,
+  TicketCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -76,6 +77,7 @@ const navItems = [
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <Sparkles size={18} />, label: 'Events' },
+  { href: '/portal/raffle', icon: <TicketCheck size={18} />, label: 'Grand Opening Raffle' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
   { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
   { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing', isDropdown: true },

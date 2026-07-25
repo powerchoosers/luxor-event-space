@@ -287,6 +287,7 @@ export type LuxorEmailJobKind =
   | 'post_event_follow_up'
   | 'marketing_campaign'
   | 'grand_opening_rsvp_confirmation'
+  | 'grand_opening_check_in'
 
 export type LuxorEmailJob = {
   id: string
