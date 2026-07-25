@@ -244,6 +244,7 @@ export default function LeadDetailPage({
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [sendingContractBookingId, setSendingContractBookingId] = useState<string | null>(null)
   const [contractActionKey, setContractActionKey] = useState<string | null>(null)
+  const [contractToCancel, setContractToCancel] = useState<LuxorBooking | null>(null)
   const contractStatusSnapshotRef = useRef<Record<string, string | null>>({})
   const [pendingLifecycleStatus, setPendingLifecycleStatus] = useState<LuxorInquiry['status'] | null>(null)
 
@@ -1434,7 +1435,6 @@ export default function LeadDetailPage({
   }
 
   const handleContractRequestAction = async (booking: LuxorBooking, action: 'cancel' | 'resend') => {
-    if (action === 'cancel' && !window.confirm('Cancel this contract? The client’s current signing link will stop working immediately.')) return
     try {
       setContractActionKey(`${action}-${booking.id}`)
       setUpdatingStatus(true)
@@ -1452,6 +1452,7 @@ export default function LeadDetailPage({
         'status_change',
       )
       await fetchAllData(false)
+      if (action === 'cancel') setContractToCancel(null)
       notify({
         title: action === 'cancel' ? 'Contract cancelled' : 'Contract resent',
         description: action === 'cancel' ? 'The old signing link has been disabled.' : 'The client received the agreement and Guest Guide again.',
@@ -3964,7 +3965,7 @@ export default function LeadDetailPage({
                                   <button
                                     type="button"
                                     disabled={updatingStatus}
-                                    onClick={() => handleContractRequestAction(latestBooking, 'cancel')}
+                                    onClick={() => setContractToCancel(latestBooking)}
                                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/20 bg-rose-500/5 px-3 text-[9px] font-black uppercase tracking-wider text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
                                   >
                                     <Trash2 size={11} /> Cancel
@@ -5336,7 +5337,7 @@ export default function LeadDetailPage({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleContractRequestAction(booking, 'cancel')}
+                            onClick={() => setContractToCancel(booking)}
                             disabled={updatingStatus}
                             className="inline-flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
                           >
@@ -5662,6 +5663,44 @@ export default function LeadDetailPage({
             </div>
           </form>
 
+        ) : null}
+      </PortalModal>
+
+      <PortalModal
+        isOpen={Boolean(contractToCancel)}
+        onClose={() => !contractActionKey?.startsWith('cancel-') && setContractToCancel(null)}
+        maxWidth="max-w-md"
+      >
+        {contractToCancel ? (
+          <div className="bg-[color:var(--portal-bg)] p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-700 dark:text-red-300"><Trash2 size={18} /></div>
+              <div>
+                <h3 className="text-sm font-black text-[color:var(--portal-text)]">Cancel this contract?</h3>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
+                  This immediately disables <span className="font-semibold text-[color:var(--portal-text)]">{contractToCancel.client_name}&apos;s current signing link</span>. The booking and its documents remain saved, but this link cannot be used after cancellation.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setContractToCancel(null)}
+                disabled={contractActionKey === `cancel-${contractToCancel.id}`}
+                className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] disabled:opacity-40"
+              >
+                Keep link
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleContractRequestAction(contractToCancel, 'cancel')}
+                disabled={contractActionKey === `cancel-${contractToCancel.id}`}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-red-700 disabled:opacity-40"
+              >
+                {contractActionKey === `cancel-${contractToCancel.id}` ? 'Cancelling...' : 'Cancel contract'}
+              </button>
+            </div>
+          </div>
         ) : null}
       </PortalModal>
 
