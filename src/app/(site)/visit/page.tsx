@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, Check, Clock, MapPin } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
+import { PublicFaqList } from '@/components/PublicFaqList'
 
 const tourReasons = [
   'Confirm your guest flow',
@@ -105,17 +106,7 @@ export default function VisitPage() {
             </h2>
           </Reveal>
           <Reveal delay={120}>
-            <div className="divide-y divide-[#caa24c]/18 border-y border-[#caa24c]/18">
-              {questions.map(([question, answer]) => (
-                <details key={question} className="group py-5">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-5 font-serif text-xl leading-7 text-[#f7efe3] marker:hidden">
-                    {question}
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 text-[#caa24c] transition-transform group-open:rotate-45">+</span>
-                  </summary>
-                  <p className="max-w-2xl pt-4 text-sm leading-7 text-[#d7c29a]/68 sm:text-base">{answer}</p>
-                </details>
-              ))}
-            </div>
+            <PublicFaqList items={questions.map(([question, answer]) => ({ question, answer }))} />
           </Reveal>
         </div>
       </section>

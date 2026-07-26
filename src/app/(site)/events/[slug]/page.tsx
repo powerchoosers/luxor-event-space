@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowRight, Check, Users } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { PublicFaqList } from '@/components/PublicFaqList'
 import { LUXOR_PUBLIC_EVENT_PAGES, getLuxorPublicEventPage } from '@/lib/luxorPublicContent'
 
 export function generateStaticParams() {
@@ -78,7 +79,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
       <section className="bg-[#080706] py-16 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
           <Reveal><Users className="h-6 w-6 text-[#caa24c]" /><h2 className="mt-5 font-serif text-4xl leading-none sm:text-6xl">Questions worth asking before you book.</h2></Reveal>
-          <Reveal delay={100}><div className="divide-y divide-[#caa24c]/18 border-y border-[#caa24c]/18">{event.faqs.map((faq) => <details key={faq.question} className="group py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-5 font-serif text-2xl marker:hidden">{faq.question}<span className="text-[#caa24c] transition-transform group-open:rotate-45">+</span></summary><p className="max-w-2xl pt-4 text-sm leading-7 text-[#d7c29a]/72 sm:text-base">{faq.answer}</p></details>)}</div></Reveal>
+          <Reveal delay={100}><PublicFaqList items={event.faqs} /></Reveal>
         </div>
       </section>
 
