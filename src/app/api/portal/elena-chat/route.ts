@@ -225,19 +225,9 @@ Use the live CRM context supplied by the portal when it already contains the exa
     - scheduled_for, sent_at (timestamptz)
     - recipient_count, sent_count, delivered_count, failed_count, reply_count, opt_out_count (integer)
 
-20. public.luxor_grand_opening_attendees
-    - id, inquiry_id, invited_by_inquiry_id (uuid)
-    - campaign_key, full_name, email, phone (text)
-    - attendee_type (text: 'rsvp', 'guest')
-    - checked_in_at (timestamptz), checked_in_by (text: 'self', 'staff')
-    - marketing_opt_in, eligible (boolean)
-    - winner_at, disqualified_at (timestamptz)
-    - prize_label, disqualification_reason (text)
-
-
 ### GUIDELINES:
 - Use pre-fetched live CRM context first. Execute a read-only SQL query with the "execute_database_sql" tool when the requested fact is not already present or needs a more detailed breakdown.
-- Grand Opening RSVP and raffle data are internal CRM data that you CAN access. Never say you cannot access the Grand Opening guest list.
+- Grand Opening RSVP data is internal CRM data that you CAN access. Never say you cannot access the Grand Opening guest list.
 - For "how many people are coming to the Grand Opening, including guests," sum each attending RSVP's attendee_count, falling back to guest_count and then 1. attendee_count already includes the named RSVP holder. Clearly distinguish expected people from people who have actually checked in.
 - Lead with the requested number, then give a short breakdown. Keep operational answers warm but professional; do not force "bestie" or an emoji into every response.
 - If a database query fails or returns nothing, retry with the known campaign_key, flow, and source fields before saying the data is unavailable.
@@ -728,38 +718,21 @@ async function buildGrandOpeningContext(): Promise<string> {
     attendee_count: number | null
     guest_count: number | null
   }
-  type AttendeeRow = {
-    eligible: boolean
-    winner_at: string | null
-    disqualified_at: string | null
-  }
-
   const campaignFilter = `or=(campaign_key.eq.${LUXOR_GRAND_OPENING.campaignKey},flow.eq.grand_opening_rsvp,source.eq.grand_opening_rsvp)`
-  const [rsvps, attendees] = await Promise.all([
-    supabaseRest<RsvpRow[]>(
-      `luxor_inquiries?select=id,email,attendee_count,guest_count&${campaignFilter}&rsvp_status=eq.attending&order=created_at.asc`,
-    ),
-    supabaseRest<AttendeeRow[]>(
-      `luxor_grand_opening_attendees?select=eligible,winner_at,disqualified_at&campaign_key=eq.${LUXOR_GRAND_OPENING.campaignKey}`,
-    ),
-  ])
+  const rsvps = await supabaseRest<RsvpRow[]>(
+    `luxor_inquiries?select=id,email,attendee_count,guest_count&${campaignFilter}&rsvp_status=eq.attending&order=created_at.asc`,
+  )
 
   const expectedPeople = rsvps.reduce((sum, rsvp) => sum + getGrandOpeningPartySize(rsvp), 0)
   const additionalGuests = Math.max(0, expectedPeople - rsvps.length)
   const uniqueEmails = new Set(rsvps.map((rsvp) => rsvp.email?.trim().toLowerCase()).filter(Boolean)).size
-  const raffleEligible = attendees.filter((attendee) => attendee.eligible && !attendee.winner_at && !attendee.disqualified_at).length
-  const winnersDrawn = attendees.filter((attendee) => Boolean(attendee.winner_at)).length
-
   return `GRAND OPENING OPERATIONS (PRE-FETCHED LIVE CRM CONTEXT):
 - Attending RSVP records: ${rsvps.length}
 - Expected people including guests: ${expectedPeople}
 - Named RSVP holders: ${rsvps.length}
 - Additional guests included in those RSVPs: ${additionalGuests}
 - Unique RSVP email addresses: ${uniqueEmails}
-- People checked in now: ${attendees.length}
-- Currently eligible raffle entries: ${raffleEligible}
-- Winners drawn: ${winnersDrawn}
-Interpretation rule: attendee_count is the full party size, not "extra guests." For a question asking how many are coming including guests, answer ${expectedPeople}. For a question asking who is physically present, answer ${attendees.length}. Never conflate expected attendance with check-ins.`
+Interpretation rule: attendee_count is the full party size, not "extra guests." For a question asking how many are coming including guests, answer ${expectedPeople}.`
 }
 
 function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_count: number | null }) {

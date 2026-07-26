@@ -69,13 +69,6 @@ interface PortalElenaChatProps {
 }
 
 function getSuggestionsForPath(path: string) {
-  if (path.startsWith('/portal/raffle')) {
-    return [
-      'How many people are coming including guests?',
-      'How many guests have checked in?',
-      'How many raffle entries are eligible?'
-    ]
-  }
   if (path.startsWith('/portal/leads')) {
     return [
       'List details of the last 3 inquiries',
