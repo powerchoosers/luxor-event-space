@@ -128,6 +128,7 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing'))
   const [elenaOpen, setElenaOpen] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
 
   const loadUserProfile = useCallback(async () => {
@@ -457,29 +458,47 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
             <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} />
-            <form action="/api/auth/logout" method="post">
+            <div className="relative">
+              {accountMenuOpen ? (
+                <div className={`absolute bottom-full z-20 mb-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-2xl ${sidebarCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}>
+                  <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
+                    <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
+                    <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{userProfile.email}</p>
+                  </div>
+                  <form action="/api/auth/logout" method="post" className="mt-1">
+                    <button
+                      type="submit"
+                      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:text-red-400"
+                    >
+                      <LogOut size={17} className="transition-transform group-hover:translate-x-0.5" />
+                      Log Out
+                    </button>
+                  </form>
+                </div>
+              ) : null}
               <button
-                type="submit"
-                title={sidebarCollapsed ? 'Log Out' : undefined}
-                className={`group relative flex w-full items-center gap-3 rounded-lg border border-transparent py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:border-red-500/10 hover:text-red-400 cursor-pointer ${
-                  sidebarCollapsed ? 'px-[18px]' : 'px-3'
-                }`}
-                aria-label="Log out"
+                type="button"
+                onClick={() => {
+                  if (sidebarCollapsed) setSidebarCollapsed(false)
+                  setAccountMenuOpen((current) => !current)
+                }}
+                title={sidebarCollapsed ? userProfile.displayName : undefined}
+                aria-label="Open account menu"
+                aria-expanded={accountMenuOpen}
+              className={`group flex items-center rounded-lg border border-transparent py-2 transition-all hover:border-[#caa24c]/15 hover:bg-[#caa24c]/5 ${sidebarCollapsed ? 'mx-auto w-10 justify-center gap-0 px-0' : 'w-full gap-3 px-2'}`}
               >
-                <span className="w-5 h-5 flex items-center justify-center shrink-0">
-                  <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
-                </span>
-                <span
-                  className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                    sidebarCollapsed
-                      ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
-                      : 'max-w-[200px] opacity-100 translate-x-0'
-                  }`}
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)]"
+                  style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
                 >
-                  Log Out
+                  {userProfile.avatarUrl ? null : userInitials}
+                </div>
+                <span className={`min-w-0 overflow-hidden text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-w-0 opacity-0 -translate-x-1' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
+                  <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">Account</span>
                 </span>
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </aside>
@@ -647,20 +666,6 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
               />
             </button>
             
-            <div className="mx-1 hidden h-8 w-px bg-[color:var(--portal-border)] sm:block" />
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-xs font-semibold leading-none text-[color:var(--portal-text)]">{userProfile.displayName}</p>
-                <p className="mt-1 text-[10px] leading-none text-[color:var(--portal-muted)]">{userProfile.email}</p>
-              </div>
-              <div
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)]"
-                style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
-                aria-label={userProfile.displayName}
-              >
-                {userProfile.avatarUrl ? null : userInitials}
-              </div>
-            </div>
           </div>
         </header>
 

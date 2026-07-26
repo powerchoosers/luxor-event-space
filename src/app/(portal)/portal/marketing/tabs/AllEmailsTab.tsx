@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Inbox,
   Send,
@@ -28,7 +28,7 @@ import {
   Minimize2,
 } from 'lucide-react'
 import Link from 'next/link'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
@@ -201,6 +201,8 @@ interface AllEmailsTabProps {
 }
 
 export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabProps) {
+  const reduceMotion = useReducedMotion()
+  const appliedInitialMessageId = useRef<string | null>(null)
   const [messages, setMessages] = useState<EmailMessageItem[]>(() => mailboxCache || [])
   const [loading, setLoading] = useState(() => !mailboxCache)
   const [error, setError] = useState<string | null>(null)
@@ -272,8 +274,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }, [loadEmails])
 
   useEffect(() => {
-    const linkedTarget = initialMessageId ? messages.find((message) => message.id === initialMessageId) : null
-    if (linkedTarget) {
+    const shouldApplyLinkedMessage = initialMessageId && appliedInitialMessageId.current !== initialMessageId
+    const linkedTarget = shouldApplyLinkedMessage ? messages.find((message) => message.id === initialMessageId) : null
+    if (linkedTarget && initialMessageId) {
+      appliedInitialMessageId.current = initialMessageId
       const linkedKey = messageKey(linkedTarget)
       if (selectedId !== linkedTarget.id || selectedMessageKey !== linkedKey) {
         setSelectedId(linkedTarget.id)
@@ -283,12 +287,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       }
       return
     }
+    if (shouldApplyLinkedMessage && loading) return
+    if (shouldApplyLinkedMessage && initialMessageId) appliedInitialMessageId.current = initialMessageId
     if (selectedMessageKey && messages.some((message) => messageKey(message) === selectedMessageKey)) return
     const target = messages[0]
     if (!target) return
     setSelectedId(target.id)
     setSelectedMessageKey(messageKey(target))
-  }, [initialMessageId, messages, selectedId, selectedMessageKey])
+  }, [initialMessageId, loading, messages, selectedId, selectedMessageKey])
 
   const selectedSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)
@@ -864,8 +870,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex rounded-r-2xl">
+        <AnimatePresence mode="wait" initial={false}>
         {loadingDetail ? (
-          <div className="flex-1 flex flex-col p-8 space-y-6" aria-label="Loading email">
+          <motion.div
+            key={`loading:${selectedMessageKey || selectedId || 'email'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.08 : 0.16 }}
+            className="flex-1 flex flex-col p-8 space-y-6"
+            aria-label="Loading email"
+          >
             <div className="space-y-3 border-b border-[color:var(--portal-border)] pb-6">
               <div className="h-6 w-3/4 rounded-lg luxor-skeleton" />
               <div className="flex items-center gap-3">
@@ -882,9 +897,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               <div className="h-3.5 w-4/5 rounded luxor-skeleton" />
               <div className="h-3.5 w-full rounded luxor-skeleton" />
             </div>
-          </div>
+          </motion.div>
         ) : selectedId && messageDetail ? (
-          <>
+          <motion.div
+            key={selectedMessageKey || detailCacheKey(messageDetail.id, messageDetail.folderId)}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
+            transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             {/* Email Header Bar */}
             <div className="p-6 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 space-y-4">
               <div className="flex items-start justify-between gap-4">
@@ -1121,13 +1143,21 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
               </div>
             )}
-          </>
+          </motion.div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
+          <motion.div
+            key="empty-email-reader"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.08 : 0.16 }}
+            className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3"
+          >
             <Mail size={36} className="text-[color:var(--portal-faint)]" />
             <p className="text-xs font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Select an email to view full content</p>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -1178,6 +1208,7 @@ function ThreadMessage({
         <div className="border-t border-[color:var(--portal-border)] bg-white">
           {viewMode === 'html' ? (
             <iframe
+              key={`${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
               className="w-full border-0"
