@@ -28,17 +28,17 @@ export function PortalPageHeader({
 }: {
   icon?: React.ReactNode
   title: string
-  description: string
+  description?: string
   actions?: React.ReactNode
 }) {
   return (
-    <div className="flex shrink-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
-      <div className="space-y-2">
+    <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className={description ? 'space-y-1.5' : ''}>
         <div className="flex items-center gap-3">
           {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
-          <h1 className="text-2xl font-bold tracking-tight text-white/90 sm:text-3xl">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-white/90 sm:text-2xl">{title}</h1>
         </div>
-        <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p>
+        {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
     </div>

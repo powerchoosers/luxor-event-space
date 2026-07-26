@@ -208,7 +208,6 @@ type LuxorBookingExpense = {
       <PortalPageHeader
         icon={<DollarSign size={18} />}
         title="Finances"
-        description="Luxor Event Space financial overview, bookkeeping ledgers, invoices, and expense tracking."
         actions={
           <PortalButton onClick={fetchFinanceData}>
             <RefreshCw size={13} /> Refresh Ledger

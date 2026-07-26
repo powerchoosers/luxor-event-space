@@ -322,7 +322,6 @@ export default function LeadsPage() {
       <PortalPageHeader
         icon={<Users size={18} />}
         title="Leads & Clients"
-        description="Monitor and manage the intake pipeline of event space prospects."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
             {activeTab === 'pipeline' && (

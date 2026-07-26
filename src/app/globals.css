@@ -79,6 +79,22 @@ body[data-portal-theme='light'] .portal-surface {
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
+body[data-portal-theme='light'] .portal-activity-icon {
+  transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+body[data-portal-theme='light'] .group\/item:hover .portal-activity-icon {
+  background: #9a6a16 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(154, 106, 22, 0.18), 0 5px 12px -5px rgba(105, 70, 12, 0.42);
+  transform: scale(1.08);
+}
+
+body[data-portal-theme='light'] .group\/item:hover .portal-activity-icon svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 body[data-portal-theme='light'] .bg-\[\#050505\]\/90,
 body[data-portal-theme='light'] .bg-\[\#050505\]\/86,
 body[data-portal-theme='light'] .bg-\[\#050505\]\/75,

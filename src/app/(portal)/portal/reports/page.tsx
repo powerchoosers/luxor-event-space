@@ -68,7 +68,6 @@ export default function ReportsPage() {
       <PortalPageHeader
         icon={<BarChart3 size={18} />}
         title="Business Analytics & Reports"
-        description="Live calculations from the leads, bookings, invoices, and expenses currently recorded in Luxor."
         actions={<div className="flex gap-2"><PortalButton onClick={() => void loadReports()}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</PortalButton><PortalButton onClick={downloadCsv}><Download size={13} /> Export CSV</PortalButton></div>}
       />
 

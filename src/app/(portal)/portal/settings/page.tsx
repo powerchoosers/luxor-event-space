@@ -286,7 +286,6 @@ export default function SettingsPage() {
       <PortalPageHeader
         icon={<Settings size={18} />}
         title="System Settings"
-        description="Configure Luxor business configurations, brand assets, email automated routing, and external API channels."
       />
 
       {/* Sub-tab navigation */}

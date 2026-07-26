@@ -500,56 +500,47 @@ function MarketingPageContent() {
       case 'emails':
         return {
           title: 'Emails',
-          desc: 'One inbox for client conversations, sent messages, and marketing campaigns.',
           icon: <Mail size={18} />
         }
       case 'sources':
         return {
           title: 'Lead Sources',
-          desc: 'Track and analyze which marketing channels convert highest-intent clients.',
           icon: <TrendingUp size={18} />
         }
       case 'email-campaigns':
         return {
           title: 'Email Campaigns',
-          desc: 'Draft, queue, send, and analyze marketing email blasts to subscriber lists.',
           icon: <Mail size={18} />
         }
       case 'text-campaigns':
         return {
           title: 'Text Campaigns',
-          desc: 'Build, review, schedule, and track consent-based client texts with Elena-assisted drafting.',
           icon: <MessageSquare size={18} />
         }
       case 'builder-automation':
         return {
           title: 'Email Builder',
-          desc: 'Build email campaigns and review delivery and engagement activity.',
           icon: <LayoutTemplate size={18} />
         }
       case 'contact-lists':
         return {
           title: 'Contact Lists',
-          desc: 'Filter, sort, and search your entire marketing contact directory.',
           icon: <Users size={18} />
         }
       case 'call-center':
         return {
           title: 'Call Center',
-          desc: 'Speed call new inquiries, record outcomes, and trigger instant workflows from one screen.',
           icon: <Phone size={18} />
         }
       case 'calendar':
         return {
           title: 'Marketing Calendar',
-          desc: 'Review real campaign send dates and upcoming scheduled email deliveries.',
           icon: <Calendar size={18} />
         }
       case 'overview':
       default:
         return {
           title: 'Marketing Overview',
-          desc: 'Track audience growth and active marketing campaigns at a glance.',
           icon: <BarChart3 size={18} />
         }
     }
@@ -604,7 +595,6 @@ function MarketingPageContent() {
         <PortalPageHeader
           icon={header.icon}
           title={header.title}
-          description={header.desc}
           actions={headerActions}
         />
       )}

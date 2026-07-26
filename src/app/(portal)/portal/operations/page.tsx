@@ -381,7 +381,6 @@ function OperationsPageContent() {
       <PortalPageHeader
         icon={<Wrench size={18} />}
         title="Venue Operations"
-        description="Core logistics command: Monitor maintenance, track facility bills, manage supply counts, and verify venue event readiness."
         actions={
           activeTab === 'bills' ? (
             <PortalButton variant="primary" onClick={() => setIsBillModalOpen(true)}><Plus size={14} /> Log Bill</PortalButton>

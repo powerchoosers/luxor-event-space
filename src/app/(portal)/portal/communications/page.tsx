@@ -285,7 +285,6 @@ export default function CommunicationsPage() {
       <PortalPageHeader
         icon={<Inbox size={18} />}
         title="Communications"
-        description="Review client email history, send replies, and record follow-up notes from one workspace."
         actions={
           <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {inquiries.length} client email channels

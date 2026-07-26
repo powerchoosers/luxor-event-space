@@ -96,7 +96,6 @@ export default function EventsPage() {
       <PortalPageHeader
         icon={<Sparkles size={18} />}
         title="Event Operations"
-        description="Detail-level event planner and production readiness center for booked venue agreements."
         actions={
           <PortalButton onClick={fetchBookings}>
             <RefreshCw size={13} /> Reload Events

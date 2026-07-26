@@ -441,7 +441,6 @@ export default async function PortalOverview() {
       <PortalPageHeader
         icon={<Activity size={18} />}
         title="Luxor Operations Hub"
-        description="Live bookings, inquiries, tours, and owner operations for Luxor Event Space."
       />
 
       {/* Executive Telemetry Signal Bar */}
@@ -751,7 +750,7 @@ export default async function PortalOverview() {
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0 pr-2">
-                        <div className="w-7 h-7 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0 group-hover/item:bg-[#caa24c] group-hover/item:text-white transition-colors duration-150">
+                        <div className="portal-activity-icon w-7 h-7 rounded-full bg-[#fbf5eb] dark:bg-[#caa24c]/10 text-[#caa24c] flex items-center justify-center shrink-0 group-hover/item:bg-[#caa24c] group-hover/item:text-white transition-all duration-150">
                           <IconComp size={13} strokeWidth={1.75} />
                         </div>
                         <div className="min-w-0">

@@ -240,7 +240,6 @@ export default function CalendarPage() {
       <PortalPageHeader
         icon={<CalendarIcon size={18} />}
         title="Tours & Booked Events"
-        description="Tours, dated task follow-ups, and booked event days in one place."
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">

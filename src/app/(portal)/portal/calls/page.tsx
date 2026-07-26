@@ -146,7 +146,6 @@ export default function CallsPage() {
       <PortalPageHeader
         icon={<PhoneCall size={20} />}
         title="Calls & Voicemail"
-        description="Every inbound and outbound Luxor call, matched to the lead whenever the phone number is known."
         actions={(
           <>
             <PortalButton onClick={() => void loadCalls()}>
