@@ -103,7 +103,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   ease: [0.23, 1, 0.32, 1],
                   layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] },
                 }}
-                className={`pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-11 shadow-2xl backdrop-blur-xl ${toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''} ${style.className}`}
+                className={`portal-toast pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-11 shadow-2xl backdrop-blur-xl ${toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''} ${style.className}`}
+                data-toast-variant={toast.variant || 'info'}
                 role={toast.onClick ? 'button' : 'status'}
                 tabIndex={toast.onClick ? 0 : undefined}
                 onClick={toast.onClick}

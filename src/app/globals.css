@@ -878,13 +878,18 @@ input[type="reset"],
    Light Theme Toast Notifications Overrides
    ───────────────────────────────────────────────────────────────────────────── */
 
-body[data-portal-theme='light'] [role="status"] {
-  background-color: var(--portal-card) !important;
-  box-shadow: 0 16px 40px -10px rgba(48, 33, 14, 0.12) !important;
+body[data-portal-theme='light'] .portal-toast {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(250, 246, 238, 0.62)) !important;
+  box-shadow:
+    0 20px 50px -16px rgba(48, 33, 14, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  backdrop-filter: blur(22px) saturate(145%);
 }
 
 /* Success toast in light mode */
-body[data-portal-theme='light'] [role="status"].bg-emerald-500\/10 {
+body[data-portal-theme='light'] .portal-toast[data-toast-variant='success'] {
   border-color: rgba(16, 185, 129, 0.24) !important;
   color: #064e3b !important;
 }
@@ -896,7 +901,7 @@ body[data-portal-theme='light'] [role="status"].bg-emerald-500\/10 .text-emerald
 }
 
 /* Error toast in light mode */
-body[data-portal-theme='light'] [role="status"].bg-rose-500\/10 {
+body[data-portal-theme='light'] .portal-toast[data-toast-variant='error'] {
   border-color: rgba(244, 63, 94, 0.24) !important;
   color: #4c0519 !important;
 }
@@ -908,7 +913,7 @@ body[data-portal-theme='light'] [role="status"].bg-rose-500\/10 .text-rose-300 {
 }
 
 /* Warning toast in light mode */
-body[data-portal-theme='light'] [role="status"].bg-\[\#caa24c\]\/10 {
+body[data-portal-theme='light'] .portal-toast[data-toast-variant='warning'] {
   border-color: rgba(202, 162, 76, 0.28) !important;
   color: #451a03 !important;
 }
@@ -920,7 +925,7 @@ body[data-portal-theme='light'] [role="status"].bg-\[\#caa24c\]\/10 .text-\[\#f1
 }
 
 /* Info toast in light mode */
-body[data-portal-theme='light'] [role="status"].bg-blue-500\/10 {
+body[data-portal-theme='light'] .portal-toast[data-toast-variant='info'] {
   border-color: rgba(59, 130, 246, 0.24) !important;
   color: #1e3a8a !important;
 }

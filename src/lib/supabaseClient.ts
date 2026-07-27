@@ -6,13 +6,18 @@ export function getPortalSupabaseClient() {
   if (typeof window === 'undefined') return null
   if (clientInstance) return clientInstance
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ofjvbzdwijjnajgjotmx.supabase.co'
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    || ''
 
-  if (!url || !anonKey) return null
+  if (!url || !publishableKey) {
+    console.warn('Supabase Realtime is unavailable because the public project URL or publishable key is missing.')
+    return null
+  }
 
   try {
-    clientInstance = createClient(url, anonKey, {
+    clientInstance = createClient(url, publishableKey, {
       realtime: {
         params: {
           eventsPerSecond: 10,

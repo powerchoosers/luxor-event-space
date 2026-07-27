@@ -657,7 +657,10 @@ export function usePortalNotifications() {
     }
     window.addEventListener('visibilitychange', handleVisibilityChange)
     const generalInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') void fetchNotifications(true)
+      // Include webhook-backed email events in the safety poll. Realtime remains
+      // the fast path, while this makes a dropped or unavailable WebSocket heal
+      // automatically instead of requiring a full page refresh.
+      if (document.visibilityState === 'visible') void fetchNotifications(true, true)
     }, GENERAL_POLL_INTERVAL_MS)
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -714,7 +717,12 @@ export function usePortalNotifications() {
           fetchNotifications(true)
         }
       )
-      .subscribe()
+          .subscribe((status) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              console.warn(`Email arrival notification channel entered ${status}; secure polling remains active.`)
+              void fetchNotifications(true, true)
+            }
+          })
 
     return () => {
       supabase.removeChannel(channel)
