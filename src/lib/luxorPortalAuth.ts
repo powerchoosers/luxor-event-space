@@ -56,6 +56,18 @@ export function isAuthorizedLuxorPortalEmail(email: string) {
   return getAllowedZohoPortalEmails().includes(email.trim().toLowerCase())
 }
 
+export function getLuxorPhonePurchaserEmail() {
+  return String(
+    process.env.LUXOR_PHONE_PURCHASER_EMAIL
+      || process.env.LUXOR_ZOHO_LOGIN_EMAIL
+      || 'booking@luxoratlaspalmas.com'
+  ).trim().toLowerCase()
+}
+
+export function canPurchaseLuxorPhoneNumbers(email: string) {
+  return email.trim().toLowerCase() === getLuxorPhonePurchaserEmail()
+}
+
 export function createLuxorPortalSessionCookie(session: Omit<LuxorPortalSession, 'issuedAt' | 'expiresAt'>) {
   const issuedAt = Date.now()
   const payload: LuxorPortalSession = {

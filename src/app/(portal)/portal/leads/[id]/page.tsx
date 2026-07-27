@@ -2954,12 +2954,12 @@ export default function LeadDetailPage({
                             const isEmail = entry.kind === 'email'
                             const isCall = entry.kind === 'call'
                             return (
-                              <div key={entry.id} className="relative flex items-center justify-between rounded-lg py-1.5 border-b border-zinc-100/5 dark:border-zinc-850/50 last:border-0 transition-colors hover:bg-white/[0.03]">
+                              <div key={entry.id} className={`group relative flex items-center justify-between rounded-lg border-b border-zinc-100/5 px-2 py-2 dark:border-zinc-850/50 last:border-0 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${isEmail ? 'cursor-pointer hover:-translate-y-px hover:bg-[#caa24c]/10 hover:shadow-sm hover:shadow-[#caa24c]/10' : 'hover:bg-[color:var(--portal-soft)]'}`}>
                                 {isEmail ? (
                                   <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />
                                 ) : null}
                                 <div className="flex items-center gap-3 min-w-0">
-                                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 ${
+                                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105 ${
                                     isEmail
                                       ? 'bg-purple-500/10 text-purple-400' 
                                       : isCall || entry.note.note_type === 'call_log'
@@ -2977,14 +2977,17 @@ export default function LeadDetailPage({
                                     )}
                                   </span>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-bold text-white leading-tight truncate">
+                                    <p className="text-xs font-bold leading-tight text-[color:var(--portal-text)] truncate transition-colors duration-200 group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">
                                       {isEmail ? decodeHtmlEntities(entry.email.subject) : isCall ? describeActivityEntry(entry) : decodeHtmlEntities(entry.note.content).substring(0, 45)}
                                     </p>
                                   </div>
                                 </div>
-                                <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
-                                  {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                </span>
+                                <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                                  <span className="text-[10px] font-mono text-zinc-500 transition-transform duration-200 group-hover:-translate-x-0.5">
+                                    {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                  </span>
+                                  {isEmail ? <ChevronRight size={14} className="-translate-x-1 text-[#a8792f] opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 dark:text-[#f1d27a]" /> : null}
+                                </div>
                               </div>
                             )
                           })
@@ -5461,16 +5464,16 @@ export default function LeadDetailPage({
                 <p className="mt-1 text-xs font-bold text-[color:var(--portal-text)]">{lead.event_type || 'Private Event'} inspiration</p>
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+            <div className="grid auto-rows-fr gap-4 sm:grid-cols-2">
+              <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Tour date</label>
-                <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full" placeholder="Choose tour date" />
+                <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full [&>button]:min-h-10" placeholder="Choose tour date" />
               </div>
-              <div>
+              <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Start time</label>
-                <PortalSelect value={tourScheduleTime} onChange={setTourScheduleTime} options={EVENT_TIME_OPTIONS} className="w-full" placeholder="Choose tour time" />
+                <PortalSelect value={tourScheduleTime} onChange={setTourScheduleTime} options={EVENT_TIME_OPTIONS} className="w-full" buttonClassName="min-h-10" placeholder="Choose tour time" />
               </div>
-              <div>
+              <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Meeting type</label>
                 <PortalSelect value={tourMeetingType} onChange={setTourMeetingType} options={[
                   { value: 'Private Venue Tour', label: 'Private Venue Tour' },
@@ -5478,16 +5481,16 @@ export default function LeadDetailPage({
                   { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
                   { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
                   { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
-                ]} className="w-full" />
+                ]} className="w-full" buttonClassName="min-h-10" />
               </div>
-              <div>
+              <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Duration</label>
                 <PortalSelect value={tourScheduleDuration} onChange={setTourScheduleDuration} options={[
                   { value: '30', label: '30 minutes' },
                   { value: '45', label: '45 minutes' },
                   { value: '60', label: '60 minutes' },
                   { value: '90', label: '90 minutes' },
-                ]} className="w-full" />
+                ]} className="w-full" buttonClassName="min-h-10" />
               </div>
             </div>
             <div>
@@ -6279,6 +6282,7 @@ function ClientSummaryCard({
           />
         ))}
       </div>
+      <EventContacts inquiryId={lead.id} />
       <div className="mt-4 border-t border-zinc-100/5 pt-3 dark:border-zinc-850/30">
         <button type="button" onClick={onViewDetails} className="w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:bg-[#caa24c]/14 hover:text-[#f1d27a]">
           Open Messages &rarr;
@@ -6286,6 +6290,74 @@ function ClientSummaryCard({
       </div>
     </section>
   )
+}
+
+type EventContact = { id: string; full_name: string; email: string | null; phone: string | null; role_label: string | null }
+
+function EventContacts({ inquiryId }: { inquiryId: string }) {
+  const [contacts, setContacts] = useState<EventContact[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('')
+  const [removing, setRemoving] = useState<EventContact | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const loadContacts = async () => {
+    const response = await fetch(`/api/portal/event-contacts?inquiryId=${encodeURIComponent(inquiryId)}`)
+    const data = await response.json().catch(() => ({})) as { contacts?: EventContact[] }
+    setContacts(data.contacts || [])
+    setLoading(false)
+  }
+  useEffect(() => { void loadContacts() }, [inquiryId])
+
+  const addContact = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!name.trim()) return
+    setBusy(true)
+    try {
+      const response = await fetch('/api/portal/event-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, fullName: name, email, roleLabel: role }) })
+      const data = await response.json().catch(() => ({})) as { contact?: EventContact; error?: string }
+      if (!response.ok) throw new Error(data.error || 'Could not add this contact.')
+      setContacts((current) => [...current, data.contact!])
+      setName(''); setEmail(''); setRole(''); setAdding(false)
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Could not add this contact.') } finally { setBusy(false) }
+  }
+  const removeContact = async () => {
+    if (!removing) return
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/portal/event-contacts?id=${encodeURIComponent(removing.id)}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Could not remove this contact.')
+      setContacts((current) => current.filter((contact) => contact.id !== removing.id))
+      setRemoving(null)
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Could not remove this contact.') } finally { setBusy(false) }
+  }
+
+  return <>
+    <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event contacts</p>
+        <button type="button" onClick={() => setAdding((value) => !value)} className="inline-flex items-center gap-1 text-[10px] font-bold text-[#a8792f] hover:text-[#caa24c] dark:text-[#f1d27a]"><Plus size={12} /> Add</button>
+      </div>
+      {loading ? <div className="h-10 rounded-xl luxor-skeleton" /> : contacts.length === 0 && !adding ? <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#caa24c]/30 bg-[#caa24c]/5 px-3 py-2.5 text-left text-[10px] text-[color:var(--portal-muted)] hover:border-[#caa24c]/55"><Plus size={14} className="text-[#caa24c]" /> Add another person to this event</button> : null}
+      <div className="space-y-1.5">
+        {contacts.map((contact) => <div key={contact.id} className="group flex items-center gap-2 rounded-xl bg-[color:var(--portal-soft)] px-2 py-2">
+          <PortalContactAvatar name={contact.full_name} size="sm" />
+          <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="truncate text-[9px] text-[color:var(--portal-muted)]">{contact.email || 'No email — will not receive invite'}</p></div>
+          <button type="button" onClick={() => setRemoving(contact)} className="p-1 text-[color:var(--portal-muted)] opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${contact.full_name}`}><Trash2 size={12} /></button>
+        </div>)}
+      </div>
+      {adding ? <form onSubmit={addContact} className="mt-2 space-y-2 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] p-3">
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" autoFocus />
+        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email (optional)" type="email" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
+        <input value={role} onChange={(event) => setRole(event.target.value)} placeholder="Role, e.g. Co-host (optional)" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="px-2 py-1 text-[9px] font-bold text-[color:var(--portal-muted)]">Cancel</button><button type="submit" disabled={busy || !name.trim()} className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-[9px] font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Add contact'}</button></div>
+      </form> : null}
+    </div>
+    <PortalModal isOpen={Boolean(removing)} onClose={() => !busy && setRemoving(null)} maxWidth="max-w-sm"><div className="bg-[color:var(--portal-card)] p-5"><h3 className="text-sm font-bold text-[color:var(--portal-text)]">Remove event contact?</h3><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Remove {removing?.full_name} from this event? Their own record is not deleted.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setRemoving(null)} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-bold text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={removeContact} disabled={busy} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">{busy ? 'Removing…' : 'Remove person'}</button></div></div></PortalModal>
+  </>
 }
 
 function LeadLifecycleRail({

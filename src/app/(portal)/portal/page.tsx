@@ -441,31 +441,27 @@ export default async function PortalOverview() {
       <PortalPageHeader
         icon={<Activity size={18} />}
         title="Luxor Operations Hub"
+        description="Your daily view of bookings, revenue, and venue operations."
       />
 
-      {/* Executive Telemetry Signal Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-3 shadow-xl backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-5 text-xs">
+      {/* Quiet communications status; failures are surfaced below as an exception banner. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 px-1 text-xs" aria-label="Communications status">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex items-center gap-2 font-bold text-[color:var(--portal-text)]">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            </span>
-            <span className="font-mono text-[11px] uppercase tracking-wider">Live System Telemetry</span>
+            <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
+            <span className="font-mono text-[10px] uppercase tracking-wider">Communications operational</span>
           </div>
           <div className="hidden h-4 w-px bg-[color:var(--portal-border)] sm:block" />
           <div className="flex items-center gap-1.5 text-[color:var(--portal-muted)]">
             <Radio size={13} className="text-[#caa24c]" />
-            <span className="font-mono text-[10px]">Twilio SIP Online</span>
+            <span className="font-mono text-[10px]">Twilio SIP online</span>
           </div>
           <div className="flex items-center gap-1.5 text-[color:var(--portal-muted)]">
             <ShieldCheck size={13} className="text-emerald-400" />
-            <span className="font-mono text-[10px]">Mailbox Connected</span>
+            <span className="font-mono text-[10px]">Mailbox connected</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-3 py-1 rounded-full">
-          <span>LUXOR ATLAS PALMAS • HQ</span>
-        </div>
+        <span className="font-mono text-[10px] text-[color:var(--portal-faint)]">LUXOR ATLAS PALMAS • HQ</span>
       </div>
 
       {loadError && (

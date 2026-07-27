@@ -16,6 +16,7 @@ export type LuxorManagedPhoneNumber = {
   monthly_price: number | null
   price_unit: string | null
   is_active: boolean
+  is_public: boolean
   webhooks_configured: boolean
   purchased_by: string | null
   purchased_at: string | null
@@ -44,9 +45,20 @@ export async function getActiveLuxorPhoneNumber() {
   return getLuxorTwilioConfig().phoneNumber
 }
 
-export async function getSelectedLuxorPhoneNumber() {
-  const [active] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?select=*&is_active=eq.true&limit=1')
-  return active?.phone_number || null
+export async function getPublicLuxorPhoneNumber() {
+  try {
+    const [publicNumber] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?select=*&is_public=eq.true&limit=1')
+    if (publicNumber?.phone_number) return publicNumber.phone_number
+  } catch (error) {
+    console.warn('The separate public Luxor number is not available yet:', error)
+  }
+  try {
+    const [activeNumber] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?select=*&is_active=eq.true&limit=1')
+    if (activeNumber?.phone_number) return activeNumber.phone_number
+  } catch (error) {
+    console.warn('Falling back to the configured public Luxor number:', error)
+  }
+  return getLuxorTwilioConfig().phoneNumber || null
 }
 
 export async function searchAvailableLuxorNumbers(areaCode: string) {
@@ -80,6 +92,7 @@ export async function listOwnedLuxorNumbers() {
   ])
   const managedBySid = new Map(managed.map((number) => [number.twilio_number_sid, number]))
   const databaseActive = managed.find((number) => number.is_active)?.phone_number
+  const databasePublic = managed.find((number) => number.is_public)?.phone_number
   return owned.map((number) => {
     const saved = managedBySid.get(number.sid)
     return {
@@ -90,6 +103,11 @@ export async function listOwnedLuxorNumbers() {
       voiceUrl: number.voiceUrl,
       smsUrl: number.smsUrl,
       isActive: databaseActive ? number.phoneNumber === databaseActive : number.phoneNumber === config.phoneNumber,
+      isPublic: databasePublic
+        ? number.phoneNumber === databasePublic
+        : databaseActive
+          ? number.phoneNumber === databaseActive
+          : number.phoneNumber === config.phoneNumber,
       webhooksConfigured: number.voiceUrl === buildTwilioCallbackUrl('/api/twilio/incoming') && number.smsUrl === buildTwilioCallbackUrl('/api/twilio/messaging/incoming'),
     }
   })
@@ -118,13 +136,47 @@ async function configureTwilioNumber(sid: string) {
   })
 }
 
-async function saveManagedNumber(number: { sid: string; phoneNumber: string; friendlyName: string; capabilities: unknown }, input: { active: boolean; ownerEmail: string; monthlyPrice?: number | null; priceUnit?: string | null }) {
+async function ensurePublicNumberPersisted(ownerEmail: string) {
+  const [savedPublic] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?select=*&is_public=eq.true&limit=1')
+  if (savedPublic) return savedPublic
+
+  const currentPublicNumber = await getPublicLuxorPhoneNumber()
+  if (!currentPublicNumber) return null
+
+  const { client } = twilioClient()
+  const owned = await client.incomingPhoneNumbers.list({ phoneNumber: currentPublicNumber, limit: 1 })
+  const current = owned[0]
+  if (!current) return null
+
+  const configured = await configureTwilioNumber(current.sid)
+  return saveManagedNumber(configured, { public: true, ownerEmail })
+}
+
+async function saveManagedNumber(number: { sid: string; phoneNumber: string; friendlyName: string; capabilities: unknown }, input: { active?: boolean; public?: boolean; ownerEmail: string; recordPurchase?: boolean; monthlyPrice?: number | null; priceUnit?: string | null }) {
   if (input.active) {
     await supabaseRest('luxor_phone_numbers?is_active=eq.true', { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ is_active: false, updated_at: new Date().toISOString() }) })
   }
+  if (input.public) {
+    await supabaseRest('luxor_phone_numbers?is_public=eq.true', { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ is_public: false, updated_at: new Date().toISOString() }) })
+  }
+  const purchaseFields = input.recordPurchase
+    ? { purchased_by: input.ownerEmail, purchased_at: new Date().toISOString() }
+    : {}
   const [saved] = await supabaseRest<LuxorManagedPhoneNumber[]>('luxor_phone_numbers?on_conflict=twilio_number_sid&select=*', {
     method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify({ twilio_number_sid: number.sid, phone_number: number.phoneNumber, friendly_name: number.friendlyName, capabilities: number.capabilities, monthly_price: input.monthlyPrice ?? null, price_unit: input.priceUnit ?? null, is_active: input.active, webhooks_configured: true, purchased_by: input.ownerEmail, purchased_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+    body: JSON.stringify({
+      twilio_number_sid: number.sid,
+      phone_number: number.phoneNumber,
+      friendly_name: number.friendlyName,
+      capabilities: number.capabilities,
+      ...(input.monthlyPrice !== undefined ? { monthly_price: input.monthlyPrice } : {}),
+      ...(input.priceUnit !== undefined ? { price_unit: input.priceUnit } : {}),
+      ...(input.active !== undefined ? { is_active: input.active } : {}),
+      ...(input.public !== undefined ? { is_public: input.public } : {}),
+      webhooks_configured: true,
+      ...purchaseFields,
+      updated_at: new Date().toISOString(),
+    }),
   })
   return saved
 }
@@ -135,6 +187,7 @@ export async function purchaseLuxorNumber(input: { phoneNumber: string; confirma
   const areaCode = input.phoneNumber.slice(2, 5)
   const available = await client.availablePhoneNumbers('US').local.list({ areaCode: Number(areaCode), contains: input.phoneNumber.replace(/\D/g, ''), smsEnabled: true, voiceEnabled: true, limit: 20 })
   if (!available.some((number) => number.phoneNumber === input.phoneNumber)) throw new Error('That number is no longer available. Search again and choose another number.')
+  await ensurePublicNumberPersisted(input.ownerEmail)
   const purchased = await client.incomingPhoneNumbers.create({
     phoneNumber: input.phoneNumber,
     friendlyName: 'Luxor Event Space',
@@ -143,11 +196,18 @@ export async function purchaseLuxorNumber(input: { phoneNumber: string; confirma
     smsUrl: buildTwilioCallbackUrl('/api/twilio/messaging/incoming'), smsMethod: 'POST',
     smsFallbackUrl: buildTwilioCallbackUrl('/api/twilio/messaging/fallback'), smsFallbackMethod: 'POST',
   })
-  return saveManagedNumber(purchased, { active: true, ownerEmail: input.ownerEmail, monthlyPrice: input.monthlyPrice, priceUnit: input.priceUnit })
+  return saveManagedNumber(purchased, { active: true, ownerEmail: input.ownerEmail, recordPurchase: true, monthlyPrice: input.monthlyPrice, priceUnit: input.priceUnit })
 }
 
 export async function activateLuxorNumber(sid: string, ownerEmail: string) {
   if (!/^PN[0-9a-f]{32}$/i.test(sid)) throw new Error('Invalid Twilio phone-number SID.')
+  await ensurePublicNumberPersisted(ownerEmail)
   const number = await configureTwilioNumber(sid)
   return saveManagedNumber(number, { active: true, ownerEmail })
+}
+
+export async function setPublicLuxorNumber(sid: string, ownerEmail: string) {
+  if (!/^PN[0-9a-f]{32}$/i.test(sid)) throw new Error('Invalid Twilio phone-number SID.')
+  const number = await configureTwilioNumber(sid)
+  return saveManagedNumber(number, { public: true, ownerEmail })
 }

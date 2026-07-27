@@ -40,7 +40,7 @@ export async function recordLuxorSmsConsent(
   const timestamp = new Date().toISOString()
   const status: ConsentStatus = controlType === 'STOP' ? 'opted_out' : 'opted_in'
   const consentScopes = status === 'opted_in'
-    ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice']
+    ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing']
     : []
   const [saved] = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
     method: 'POST',

@@ -21,7 +21,9 @@ import {
   Sun,
   Moon,
   Camera,
-  UserRound
+  UserRound,
+  PanelLeftOpen,
+  PanelLeftClose
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -33,6 +35,7 @@ import {
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
+import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSettings'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -64,6 +67,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('business')
   const [saving, setSaving] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [sidebarLayout, setSidebarLayout] = useState<'expanded' | 'compact'>('expanded')
   const [notificationEmails, setNotificationEmails] = useState('booking@luxoratlaspalmas.com')
   const [profileEmail, setProfileEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -82,6 +86,7 @@ export default function SettingsPage() {
       if (saved === 'light' || saved === 'dark') {
         setTheme(saved)
       }
+      setSidebarLayout(window.localStorage.getItem('luxor-portal-sidebar') === 'compact' ? 'compact' : 'expanded')
     }
 
     // Load full settings from database preferences
@@ -129,6 +134,7 @@ export default function SettingsPage() {
   const handleUpdateTheme = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
     window.localStorage.setItem('luxor-portal-theme', newTheme)
+    document.cookie = `luxor-portal-theme=${newTheme}; path=/; max-age=31536000; samesite=lax`
     window.dispatchEvent(new Event('luxor-portal-theme'))
 
     // Save to Supabase
@@ -139,6 +145,13 @@ export default function SettingsPage() {
     }).catch(err => console.error('Failed to sync theme to Supabase:', err))
 
     notify({ title: `Switched to ${newTheme} theme.`, variant: 'success' })
+  }
+
+  const handleUpdateSidebarLayout = (layout: 'expanded' | 'compact') => {
+    setSidebarLayout(layout)
+    window.localStorage.setItem('luxor-portal-sidebar', layout)
+    window.dispatchEvent(new Event('luxor-portal-sidebar'))
+    notify({ title: `Sidebar switched to ${layout} view.`, variant: 'success' })
   }
 
   // Brand Assets Management States
@@ -307,53 +320,70 @@ export default function SettingsPage() {
 
       {/* Settings Forms */}
       <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
-        <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
+        <form onSubmit={handleSave} className="w-full space-y-6">
           <PortalTabTransition activeKey={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
           {activeTab === 'business' && (
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Business Details</h3>
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                <p className="text-xs font-bold text-amber-200">Business profile editing is not connected yet.</p>
-                <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">The public website remains the source of truth for the venue name, address, and contact details. This screen no longer shows editable fields that do not save.</p>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+              <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-5">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Venue Record</h3>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">The venue record keeps the public-facing identity separate from day-to-day CRM calling choices.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ['Venue', 'Luxor Event Space'],
+                    ['Location', 'San Antonio, Texas'],
+                    ['Primary mailbox', 'booking@luxoratlaspalmas.com'],
+                    ['Public website', 'www.luxoratlaspalmas.com'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{label}</p>
+                      <p className="mt-1.5 text-sm font-semibold text-[color:var(--portal-text)]">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+                <PortalPhoneRoleSettings mode="venue" />
               </div>
             </div>
           )}
 
           {/* PORTAL BRANDING */}
           {activeTab === 'branding' && (
-            <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-2">
               {/* Style Guide */}
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Branding & Style Guide</h3>
-                <div className="space-y-4 text-xs text-zinc-400">
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Branding & Style Guide</h3>
+                <div className="space-y-4 text-xs text-[color:var(--portal-muted)]">
+                  <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                     <div>
-                      <p className="font-bold text-white">Primary Brand Color</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5">Luxor Gold Lockup Accent</p>
+                      <p className="font-bold text-[color:var(--portal-text)]">Primary Brand Color</p>
+                      <p className="mt-0.5 text-[10px] text-[color:var(--portal-faint)]">Luxor Gold Lockup Accent</p>
                     </div>
                     <span className="font-mono text-xs font-bold text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-3 py-1 rounded">#CAA24C</span>
                   </div>
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                  <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                     <div>
-                      <p className="font-bold text-white">Interface Fonts</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5">Serif: Cormorant Garamond / Sans: Manrope</p>
+                      <p className="font-bold text-[color:var(--portal-text)]">Interface Fonts</p>
+                      <p className="mt-0.5 text-[10px] text-[color:var(--portal-faint)]">Serif: Cormorant Garamond / Sans: Manrope</p>
                     </div>
                     <span className="text-xs font-serif text-[#caa24c] italic">Garamond Active</span>
                   </div>
                   <div className="space-y-2">
-                    <p className="font-bold text-white">Venue Brand Tagline</p>
-                    <div className="w-full rounded-md border border-[color:var(--portal-border)] bg-[#050505] px-3 py-2 text-xs text-zinc-300">ELEGANT SPACES. UNFORGETTABLE EVENTS.</div>
-                    <p className="text-[9px] text-zinc-600">Display only. Public-site copy is managed in Site Content.</p>
+                    <p className="font-bold text-[color:var(--portal-text)]">Venue Brand Tagline</p>
+                    <div className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)]">ELEGANT SPACES. UNFORGETTABLE EVENTS.</div>
+                    <p className="text-[9px] text-[color:var(--portal-faint)]">Display only. Public-site copy is managed in Site Content.</p>
                   </div>
                 </div>
               </div>
 
               {/* Appearance Settings */}
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Appearance Settings</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Workspace Appearance</h3>
                 <div className="space-y-3">
-                  <p className="text-xs text-zinc-400">Choose your preferred workspace theme color. This setting is synced to your profile and active across devices.</p>
+                  <p className="text-xs text-[color:var(--portal-muted)]">Choose your portal theme and the navigation layout you want while working.</p>
                   <div className="flex items-center gap-4">
                     <button
                       type="button"
@@ -361,12 +391,12 @@ export default function SettingsPage() {
                       className={`flex-1 border rounded-xl p-4 flex flex-col items-center gap-2 transition-all cursor-pointer ${
                         theme === 'dark'
                           ? 'border-[#caa24c] bg-[#caa24c]/5 text-[#f1d27a]'
-                          : 'border-zinc-800 bg-black/20 text-zinc-400 hover:border-zinc-750'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35'
                       }`}
                     >
-                      <Moon size={18} className={theme === 'dark' ? 'text-[#caa24c]' : 'text-zinc-600'} />
+                      <Moon size={18} className={theme === 'dark' ? 'text-[#caa24c]' : 'text-[color:var(--portal-faint)]'} />
                       <span className="text-xs font-bold">Dark Mode</span>
-                      <span className="text-[9px] text-zinc-550">Luxor forensic dashboard</span>
+                      <span className="text-[9px] text-[color:var(--portal-faint)]">Dark workspace</span>
                     </button>
                     <button
                       type="button"
@@ -374,19 +404,34 @@ export default function SettingsPage() {
                       className={`flex-1 border rounded-xl p-4 flex flex-col items-center gap-2 transition-all cursor-pointer ${
                         theme === 'light'
                           ? 'border-[#caa24c] bg-[#caa24c]/5 text-[#f1d27a]'
-                          : 'border-zinc-800 bg-black/20 text-zinc-400 hover:border-zinc-750'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35'
                       }`}
                     >
-                      <Sun size={18} className={theme === 'light' ? 'text-[#caa24c]' : 'text-zinc-650'} />
+                      <Sun size={18} className={theme === 'light' ? 'text-[#caa24c]' : 'text-[color:var(--portal-faint)]'} />
                       <span className="text-xs font-bold">Light Mode</span>
-                      <span className="text-[9px] text-zinc-500">Refined gold and sand accents</span>
+                      <span className="text-[9px] text-[color:var(--portal-faint)]">Light workspace</span>
                     </button>
+                  </div>
+                  <div className="border-t border-[color:var(--portal-border)] pt-4">
+                    <p className="mb-3 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Sidebar layout on this browser</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button type="button" onClick={() => handleUpdateSidebarLayout('expanded')} className={`rounded-xl border p-3 text-left transition-colors ${sidebarLayout === 'expanded' ? 'border-[#caa24c] bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                        <PanelLeftOpen size={17} className="text-[#a8792f]" />
+                        <span className="mt-2 block text-xs font-bold text-[color:var(--portal-text)]">Expanded</span>
+                        <span className="mt-1 block text-[9px] text-[color:var(--portal-faint)]">Show icons and labels</span>
+                      </button>
+                      <button type="button" onClick={() => handleUpdateSidebarLayout('compact')} className={`rounded-xl border p-3 text-left transition-colors ${sidebarLayout === 'compact' ? 'border-[#caa24c] bg-[#caa24c]/8' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                        <PanelLeftClose size={17} className="text-[#a8792f]" />
+                        <span className="mt-2 block text-xs font-bold text-[color:var(--portal-text)]">Compact</span>
+                        <span className="mt-1 block text-[9px] text-[color:var(--portal-faint)]">Keep more room for work</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Brand Assets Manager */}
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6">
+              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 xl:col-span-2">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Brand Assets Manager</h3>
                   <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
@@ -434,7 +479,7 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] uppercase font-bold text-zinc-550">Category</label>
+                        <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Category</label>
                         <PortalSelect
                           value={assetCategory}
                           options={ASSET_CATEGORIES}
@@ -469,14 +514,14 @@ export default function SettingsPage() {
 
                 {/* Library grid */}
                 <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Asset Library</h4>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Asset Library</h4>
                   {loadingAssets ? (
-                    <div className="text-center py-6 text-xs text-zinc-500 flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-2 py-6 text-center text-xs text-[color:var(--portal-muted)]">
                       <Loader2 size={14} className="animate-spin text-[#caa24c]" />
                       <span>Loading library...</span>
                     </div>
                   ) : assets.length === 0 ? (
-                    <p className="text-xs italic text-zinc-650 py-4 text-center border border-zinc-900 border-dashed rounded-xl">
+                    <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-4 text-center text-xs italic text-[color:var(--portal-faint)]">
                       No assets in your brand library yet. Upload an image above to start.
                     </p>
                   ) : (
@@ -536,7 +581,7 @@ export default function SettingsPage() {
 
           {/* NOTIFICATION PREFERENCES */}
           {activeTab === 'notifications' && (
-            <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-2">
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Notifications</h3>
                 <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
@@ -548,15 +593,15 @@ export default function SettingsPage() {
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Internal Notification Recipients</h3>
                 <div className="space-y-4">
-                  <p className="text-xs text-zinc-400">Configure target email addresses to receive branded alerts and AI-summarized dossiers when inquiries are submitted.</p>
+                  <p className="text-xs text-[color:var(--portal-muted)]">Configure target email addresses to receive branded alerts and AI-summarized dossiers when inquiries are submitted.</p>
                   <div className="space-y-1.5">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Recipient Emails (comma-separated)</label>
+                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Recipient Emails (comma-separated)</label>
                     <input
                       type="text"
                       value={notificationEmails}
                       onChange={e => setNotificationEmails(e.target.value)}
                       placeholder="e.g. booking@luxoratlaspalmas.com, owner@luxoratlaspalmas.com"
-                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                      className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:ring-2 focus:ring-[#caa24c]/10"
                     />
                   </div>
                 </div>
@@ -566,7 +611,7 @@ export default function SettingsPage() {
 
           {/* TEAM & PERMISSIONS */}
           {activeTab === 'team' && (
-            <div className="space-y-6">
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
               <div className="luxor-glass-card space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Your Email Identity</h3>
@@ -608,19 +653,20 @@ export default function SettingsPage() {
                   <span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Signed-in Email</span>
                   <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-muted)]">{profileEmail || 'Loading...'}</div>
                 </label>
+                <PortalPhoneRoleSettings mode="profile" />
               </div>
 
               <div className="luxor-glass-card space-y-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Portal Access</h3>
                 <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">Portal access is controlled by the approved Zoho email list. Profile names and titles do not change anyone&apos;s permissions.</p>
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-700 dark:text-amber-200">Anyone on the approved email list currently has broad owner-workspace access.</div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-700 dark:text-amber-200">Approved users retain normal portal access, but only Arianna&apos;s approved owner login can search for and purchase new phone numbers.</div>
               </div>
             </div>
           )}
 
           {/* INTEGRATIONS */}
           {activeTab === 'integrations' && (
-            <div className="space-y-6">
+            <div className="grid items-start gap-6 xl:grid-cols-2">
             <div className="luxor-glass-card space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -663,20 +709,20 @@ export default function SettingsPage() {
               </ol>
             </div>
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">External API Channels</h3>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">External API Channels</h3>
               <div className="space-y-4">
                 {[
                   { name: 'Zoho Mail & Login', status: 'Available', desc: 'Used for portal login and email when server credentials are configured.' },
                   { name: 'Stripe Payment Processor', status: 'Not connected', desc: 'Online card and ACH collection has not been implemented.' },
                   { name: 'QuickBooks Bookkeeping Link', status: 'Not connected', desc: 'Bookkeeping synchronization has not been implemented.' }
                 ].map((api, idx) => (
-                  <div key={idx} className="flex justify-between items-center border-b border-zinc-900 pb-3 last:border-0 last:pb-0">
+                  <div key={idx} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 last:border-0 last:pb-0">
                     <div>
-                      <p className="text-xs font-bold text-white">{api.name}</p>
-                      <p className="text-[10px] text-zinc-550 mt-1 max-w-sm leading-relaxed">{api.desc}</p>
+                      <p className="text-xs font-bold text-[color:var(--portal-text)]">{api.name}</p>
+                      <p className="mt-1 max-w-sm text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{api.desc}</p>
                     </div>
                     <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded border ${
-                      api.status === 'Available' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : 'border-zinc-700 bg-zinc-900 text-zinc-400'
+                      api.status === 'Available' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                     }`}>
                       {api.status}
                     </span>
@@ -684,8 +730,8 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
-            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Twilio Phone Numbers</h3><p className="mt-1 text-[10px] leading-relaxed text-zinc-550">Search, purchase, configure, and choose the number Luxor uses for browser calls and text messages.</p></div>
+            <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 xl:col-span-2">
+              <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Twilio Phone Numbers</h3><p className="mt-1 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">Search, purchase, configure, and choose the number Luxor uses for browser calls and text messages.</p></div>
               <TwilioNumberManager />
             </div>
             </div>
@@ -695,16 +741,16 @@ export default function SettingsPage() {
           {/* SITE CONTENT */}
           {activeTab === 'content' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Manage Website Content</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Manage Website Content</h3>
+              <p className="text-xs text-[color:var(--portal-muted)] leading-relaxed">
                 Update the text, data, and layout definitions that power the public-facing pages of the Luxor event space site.
               </p>
-              <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
                 {['home', 'events', 'gallery', 'pricing', 'spaces', 'visit'].map(pageName => (
-                  <div key={pageName} className="border border-zinc-900 rounded p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div key={pageName} className="flex flex-col gap-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="font-bold text-white capitalize">{pageName} Page</p>
-                      <p className="text-[10px] text-zinc-550 mt-0.5">Edit JSON schema powering /public/{pageName}</p>
+                      <p className="font-bold text-[color:var(--portal-text)] capitalize">{pageName} Page</p>
+                      <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Edit the saved content record for {pageName}</p>
                     </div>
                     <button type="button" onClick={() => {
                         fetch('/api/public/content?page=' + pageName)
@@ -736,17 +782,17 @@ export default function SettingsPage() {
           {/* BUSINESS HOURS */}
           {activeTab === 'hours' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Venue Tour Availability Hours</h3>
-              <p className="text-[10px] leading-relaxed text-amber-300">Informational only. These hours are not currently connected to the public tour-slot calendar.</p>
-              <div className="space-y-3 font-mono text-xs">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Venue Tour Availability Hours</h3>
+              <p className="text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">Informational only. These hours are not currently connected to the public tour-slot calendar.</p>
+              <div className="grid gap-3 font-mono text-xs lg:grid-cols-3">
                 {[
                   { day: 'Monday - Thursday', hours: '9:00 AM - 5:00 PM' },
                   { day: 'Friday', hours: '9:00 AM - 3:00 PM' },
                   { day: 'Saturday - Sunday', hours: 'Events Only (Closed for Tours)' }
                 ].map((item, idx) => (
-                  <div key={idx} className="flex justify-between border-b border-zinc-900/60 pb-2.5 last:border-0 last:pb-0">
-                    <span className="text-zinc-500 font-sans">{item.day}</span>
-                    <span className="text-white font-semibold">{item.hours}</span>
+                  <div key={idx} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                    <span className="block font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{item.day}</span>
+                    <span className="mt-2 block font-semibold text-[color:var(--portal-text)]">{item.hours}</span>
                   </div>
                 ))}
               </div>

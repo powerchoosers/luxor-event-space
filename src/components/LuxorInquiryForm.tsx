@@ -375,7 +375,7 @@ function SmsConsentRow({ checked, onChange }: { checked: boolean; onChange: (che
           className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]"
         />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
-          By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+          By checking this box, I agree to receive customer-care and occasional promotional text messages from Luxor Event Space about my inquiry, tour, booking, payment, event, or Luxor open-house invitation. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
         </span>
       </label>
       <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">

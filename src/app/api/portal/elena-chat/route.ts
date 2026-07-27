@@ -37,6 +37,27 @@ type ChatMessage = {
   contractCard?: Record<string, unknown>
   invoiceCard?: Record<string, unknown>
   taskCard?: Record<string, unknown>
+  contactCard?: {
+    inquiryId: string
+    clientName: string
+    email?: string | null
+    phone?: string | null
+    eventType?: string | null
+    targetDate?: string | null
+    guestCount?: number | null
+    status?: string | null
+  }
+  tourInviteCard?: {
+    inquiryId: string
+    clientName: string
+    clientEmail: string | null
+    eventType: string | null
+    tourDate: string
+    tourTime: string
+    meetingType: string
+    durationMinutes: number
+    clientFacingNotes: string
+  }
 }
 
 const SYSTEM_PROMPT = `You are Elena, the internal AI concierge, COO, CFO, Chief of Marketing, and business mentor all-in-one for the Luxor Event Space Owner Portal.
@@ -243,6 +264,8 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - When the owner asks you to send or resend a contract or digital agreement, call "prepare_contract_card".
 - When the owner asks you to send or resend an invoice, payment link, or proposal, call "prepare_invoice_card".
 - When the owner asks you to create a task, reminder, or follow-up note, call "prepare_task_card".
+- When the owner asks you to take them to, open, pull up, or show a specific lead or client, first resolve that person exactly. For duplicate first names, never choose one arbitrarily: prefer the active dossier only when the owner says "this lead" or gives matching context; otherwise query Luxor inquiries and use email, event type, target date, phone, or prior conversation context to identify one person. If more than one candidate still fits, ask the owner a short disambiguation question using useful human details such as name, email, event type, or date. Never show, ask for, or explain database IDs to the owner. Once the record is uniquely resolved, call "navigate_to_lead" so the portal opens that dossier and Elena shows a read-only contact card.
+- When the owner asks you to schedule a tour or send a tour invite, first resolve one exact lead. Then call "prepare_tour_invite_card". Include any date, time, meeting type, duration, and client-safe notes that are known from the active dossier, prior conversation, or query results. The card gives the owner the final review and Send Invite button. Never claim an invite was sent until that button succeeds. If the client's email, date, or time is missing, say precisely what is missing; the compact card will make the missing fields visible.
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
@@ -260,6 +283,40 @@ const TOOLS_DEFINITION = [
           }
         },
         required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'navigate_to_lead',
+      description: 'Open a uniquely identified Luxor lead dossier and show a read-only contact card in Elena Chat. Use only after resolving one exact inquiry ID from active dossier context or a SELECT result. Never use this for an ambiguous first-name match.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string', description: 'The exact UUID of the uniquely resolved Luxor inquiry.' },
+          clientName: { type: 'string', description: 'The verified client name from the CRM record.' }
+        },
+        required: ['inquiryId', 'clientName']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_tour_invite_card',
+      description: 'Prepare a compact, editable tour invite card for one verified Luxor lead. This does not send anything; the owner must review and click Send invite in the card.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inquiryId: { type: 'string', description: 'The exact UUID of the uniquely resolved Luxor inquiry.' },
+          tourDate: { type: 'string', description: 'Tour date in YYYY-MM-DD when known, otherwise an empty string.' },
+          tourTime: { type: 'string', description: 'Tour start time, such as 3:00 PM, when known, otherwise an empty string.' },
+          meetingType: { type: 'string', description: 'Private Venue Tour unless a more specific meeting type is known.' },
+          durationMinutes: { type: 'number', description: 'Duration in minutes; default 60.' },
+          clientFacingNotes: { type: 'string', description: 'Only client-safe details that may appear in the invite email.' }
+        },
+        required: ['inquiryId']
       }
     }
   },
@@ -788,6 +845,9 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
     let contractPayload: Record<string, unknown> | null = null
     let invoicePayload: Record<string, unknown> | null = null
     let taskPayload: Record<string, unknown> | null = null
+    let contactCardPayload: ChatMessage['contactCard'] | null = null
+    let tourInviteCardPayload: ChatMessage['tourInviteCard'] | null = null
+    let navigationPayload: { href: string } | null = null
 
     while (loopCount < maxLoops) {
       loopCount++
@@ -999,7 +1059,97 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
               })
             }
           }
-          // F. CRM Update card
+          // F. Navigate to a verified lead dossier with a read-only contact card.
+          else if (toolCall.function?.name === 'navigate_to_lead') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const inquiryId = String(args.inquiryId || '').trim()
+              if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('A valid Luxor inquiry ID is required before navigation.')
+
+              const records = await supabaseRest<Array<Record<string, unknown>>>(
+                `luxor_inquiries?select=id,full_name,email,phone,event_type,target_date,guest_count,status&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+              )
+              const record = records?.[0]
+              if (!record) throw new Error('That lead record could not be verified.')
+
+              const guestCount = Number(record.guest_count)
+              contactCardPayload = {
+                inquiryId: String(record.id),
+                clientName: String(record.full_name || args.clientName || 'Luxor client'),
+                email: typeof record.email === 'string' ? record.email : null,
+                phone: typeof record.phone === 'string' ? record.phone : null,
+                eventType: typeof record.event_type === 'string' ? record.event_type : null,
+                targetDate: typeof record.target_date === 'string' ? record.target_date : null,
+                guestCount: Number.isFinite(guestCount) ? guestCount : null,
+                status: typeof record.status === 'string' ? record.status : null,
+              }
+              navigationPayload = { href: `/portal/leads/${contactCardPayload.inquiryId}` }
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'navigate_to_lead',
+                content: JSON.stringify({ ok: true, message: `Opened the verified dossier for ${contactCardPayload.clientName}.` })
+              })
+            } catch (navigationError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'navigate_to_lead',
+                content: JSON.stringify({ error: navigationError instanceof Error ? navigationError.message : 'Could not verify that lead for navigation.' })
+              })
+            }
+          }
+          // G. Compact tour invite card. The lead is re-fetched so Elena cannot invent a recipient.
+          else if (toolCall.function?.name === 'prepare_tour_invite_card') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const inquiryId = String(args.inquiryId || '').trim()
+              if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('A verified Luxor lead is required before preparing an invite.')
+
+              const records = await supabaseRest<Array<Record<string, unknown>>>(
+                `luxor_inquiries?select=id,full_name,email,event_type,message,preferred_tour_date,preferred_tour_time,metadata&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+              )
+              const record = records?.[0]
+              if (!record) throw new Error('That lead record could not be verified.')
+
+              const metadata = record.metadata && typeof record.metadata === 'object' ? record.metadata as Record<string, unknown> : {}
+              const requestedDuration = Number(args.durationMinutes)
+              tourInviteCardPayload = {
+                inquiryId: String(record.id),
+                clientName: String(record.full_name || 'Luxor client'),
+                clientEmail: typeof record.email === 'string' && record.email.trim() ? record.email : null,
+                eventType: typeof record.event_type === 'string' ? record.event_type : null,
+                tourDate: String(args.tourDate || record.preferred_tour_date || '').trim(),
+                tourTime: String(args.tourTime || record.preferred_tour_time || '').trim(),
+                meetingType: String(args.meetingType || metadata.tourMeetingType || 'Private Venue Tour').trim().slice(0, 120),
+                durationMinutes: Number.isFinite(requestedDuration) && requestedDuration >= 30 && requestedDuration <= 180
+                  ? requestedDuration
+                  : Number(metadata.tourDurationMinutes) || 60,
+                clientFacingNotes: String(args.clientFacingNotes || metadata.tourClientFacingNotes || record.message || '').trim().slice(0, 2_000),
+              }
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_tour_invite_card',
+                content: JSON.stringify({
+                  ok: true,
+                  message: `Tour invite card is ready for ${tourInviteCardPayload.clientName}. ${!tourInviteCardPayload.clientEmail ? 'The lead needs an email address before an invite can be sent.' : !tourInviteCardPayload.tourDate || !tourInviteCardPayload.tourTime ? 'The card needs a tour date and time before it can be sent.' : 'The owner can review and send the invite from the card.'}`,
+                })
+              })
+            } catch (tourInviteError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'prepare_tour_invite_card',
+                content: JSON.stringify({ error: tourInviteError instanceof Error ? tourInviteError.message : 'Could not prepare the tour invite.' })
+              })
+            }
+          }
+          // H. CRM Update card
           else if (toolCall.function?.name === 'prepare_crm_update_card') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -1016,7 +1166,7 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
               console.error(err)
             }
           }
-          // G. Contract signature card
+          // I. Contract signature card
           else if (toolCall.function?.name === 'prepare_contract_card') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -1033,7 +1183,7 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
               console.error(err)
             }
           }
-          // H. Invoice & Payment link card
+          // J. Invoice & Payment link card
           else if (toolCall.function?.name === 'prepare_invoice_card') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -1050,7 +1200,7 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
               console.error(err)
             }
           }
-          // I. Task card
+          // K. Task card
           else if (toolCall.function?.name === 'prepare_task_card') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -1091,7 +1241,9 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
         crmUpdateCard: crmUpdatePayload || undefined,
         contractCard: contractPayload || undefined,
         invoiceCard: invoicePayload || undefined,
-        taskCard: taskPayload || undefined
+        taskCard: taskPayload || undefined,
+        contactCard: contactCardPayload || undefined,
+        tourInviteCard: tourInviteCardPayload || undefined,
       }
     ]
 
@@ -1111,7 +1263,10 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
       crmUpdateCard: crmUpdatePayload || undefined,
       contractCard: contractPayload || undefined,
       invoiceCard: invoicePayload || undefined,
-      taskCard: taskPayload || undefined
+      taskCard: taskPayload || undefined,
+      contactCard: contactCardPayload || undefined,
+      tourInviteCard: tourInviteCardPayload || undefined,
+      navigation: navigationPayload || undefined,
     })
   } catch (err: unknown) {
     console.error('Internal Elena API error:', err)

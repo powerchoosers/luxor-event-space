@@ -375,7 +375,7 @@ export async function sendLuxorZohoEmail(input: {
 }
 
 export async function createLuxorZohoCalendarEvent(input: {
-  attendeeEmail: string
+  attendeeEmails: string[]
   title: string
   description: string
   location: string
@@ -384,8 +384,8 @@ export async function createLuxorZohoCalendarEvent(input: {
   timezone?: string
   existingEventUid?: string | null
 }) {
-  const attendeeEmail = normalizeEmailAddress(input.attendeeEmail)
-  if (!attendeeEmail) throw new Error('Please add a valid attendee email address.')
+  const attendeeEmails = Array.from(new Set(input.attendeeEmails.map(normalizeEmailAddress).filter(Boolean)))
+  if (attendeeEmails.length === 0) throw new Error('Please add at least one valid attendee email address.')
 
   const { calendarBaseUrl, calendarUid } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
@@ -401,7 +401,7 @@ export async function createLuxorZohoCalendarEvent(input: {
     isprivate: true,
     location: input.location.trim(),
     description: input.description.trim().slice(0, 10_000),
-    attendees: [{ email: attendeeEmail, permission: 1, attendance: 1 }],
+    attendees: attendeeEmails.map((email) => ({ email, permission: 1, attendance: 1 })),
     notify_attendee: 2,
     allowForwarding: true,
     transparency: 0,

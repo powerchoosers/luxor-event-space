@@ -14,6 +14,7 @@ import { LuxorEmailJobKind, LuxorTourAttendanceStatus } from '@/lib/luxorInquiry
 import { createLuxorZohoCalendarEvent } from '@/lib/zohoMailServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor Event Space, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -87,8 +88,12 @@ export async function POST(request: NextRequest) {
       }
       const confirmation = await buildAiTourConfirmationEmail(emailContext)
 
+      const eventContacts = await supabaseRest<Array<{ email: string | null }>>(
+        `luxor_event_contacts?select=email&inquiry_id=eq.${encodeURIComponent(inquiryId)}`
+      )
+      const recipientEmails = Array.from(new Set([inquiry.email, ...eventContacts.map((contact) => contact.email)].filter((email): email is string => Boolean(email && email.trim()))))
       const calendar = await createLuxorZohoCalendarEvent({
-        attendeeEmail: inquiry.email,
+        attendeeEmails: recipientEmails,
         title: `${meetingType} · ${inquiry.full_name}`,
         description: [
           `Private appointment for ${inquiry.full_name}.`,
@@ -120,15 +125,16 @@ export async function POST(request: NextRequest) {
         requested_by: session.email,
       }
 
-      const confirmationJob = await createLuxorEmailJob({
+      const confirmationJobs = await Promise.all(recipientEmails.map((recipientEmail) => createLuxorEmailJob({
         inquiryId,
         jobType: 'tour_confirmation',
-        recipientEmail: inquiry.email,
+        recipientEmail,
         subject: confirmation.subject,
         body: confirmation.body,
-        metadata: { ...sharedMetadata, ai_generated: confirmation.aiGenerated, delivery: 'branded_confirmation' },
-      })
-      if (!confirmationJob) throw new Error('The calendar invite was created, but the confirmation email could not be saved.')
+        metadata: { ...sharedMetadata, ai_generated: confirmation.aiGenerated, delivery: 'branded_confirmation', sender_from: 'booking@luxoratlaspalmas.com' },
+      })))
+      const confirmationJob = confirmationJobs[0]
+      if (confirmationJobs.some((job) => !job)) throw new Error('The calendar invite was created, but a confirmation email could not be saved.')
 
       const reminderJobs = []
       for (const reminder of [
@@ -138,16 +144,8 @@ export async function POST(request: NextRequest) {
         const scheduledFor = new Date(startUtc.getTime() - reminder.hours * 60 * 60_000)
         if (scheduledFor.getTime() <= Date.now()) continue
         const email = buildTourReminderEmail(emailContext, reminder.label)
-        const job = await createLuxorEmailJob({
-          inquiryId,
-          jobType: 'tour_reminder',
-          recipientEmail: inquiry.email,
-          subject: email.subject,
-          body: email.body,
-          scheduledFor: scheduledFor.toISOString(),
-          metadata: { ...sharedMetadata, reminder_hours_before: reminder.hours },
-        })
-        if (job) reminderJobs.push(job)
+        const jobs = await Promise.all(recipientEmails.map((recipientEmail) => createLuxorEmailJob({ inquiryId, jobType: 'tour_reminder', recipientEmail, subject: email.subject, body: email.body, scheduledFor: scheduledFor.toISOString(), metadata: { ...sharedMetadata, reminder_hours_before: reminder.hours, sender_from: 'booking@luxoratlaspalmas.com' } })))
+        reminderJobs.push(...jobs.filter(Boolean))
       }
 
       const updated = await updateLuxorInquiry(inquiryId, {

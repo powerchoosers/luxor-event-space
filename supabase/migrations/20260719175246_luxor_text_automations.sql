@@ -41,11 +41,13 @@ revoke all on table public.luxor_text_automation_events from public, anon, authe
 grant all on table public.luxor_sms_consents to service_role;
 grant all on table public.luxor_text_automation_events to service_role;
 
+drop policy if exists "Service role can manage Luxor SMS consent" on public.luxor_sms_consents;
 create policy "Service role can manage Luxor SMS consent"
   on public.luxor_sms_consents for all to service_role
   using ((select current_setting('role'::text, true)) = 'service_role'::text)
   with check ((select current_setting('role'::text, true)) = 'service_role'::text);
 
+drop policy if exists "Service role can manage Luxor text automation events" on public.luxor_text_automation_events;
 create policy "Service role can manage Luxor text automation events"
   on public.luxor_text_automation_events for all to service_role
   using ((select current_setting('role'::text, true)) = 'service_role'::text)

@@ -715,9 +715,15 @@ export function PortalSelect({
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isOpen ? (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+            className="fixed inset-0 z-[9990]"
+          >
             {createPortal(
               <>
                 <motion.div
@@ -778,7 +784,7 @@ export function PortalSelect({
               </>,
               document.body
             )}
-          </>
+          </motion.div>
         ) : null}
       </AnimatePresence>
     </div>
@@ -861,7 +867,9 @@ export function PortalDatePicker({
   
   // Current navigation view month and year
   const [viewDate, setViewDate] = React.useState(() => {
-    const initial = value ? new Date(value) : new Date()
+    // A YYYY-MM-DD value is a calendar day, not midnight UTC. Parsing it as UTC
+    // shifts the displayed day backward for portal users west of Greenwich.
+    const initial = value ? new Date(`${value}T12:00:00`) : new Date()
     return isNaN(initial.getTime()) ? new Date() : initial
   })
 
@@ -914,7 +922,7 @@ export function PortalDatePicker({
   }
 
   const formattedDisplay = value
-    ? new Date(value).toLocaleDateString(undefined, {
+    ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -938,9 +946,15 @@ export function PortalDatePicker({
         <Calendar size={13} className="text-[#caa24c]/80" />
       </button>
       
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isOpen ? (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+            className="fixed inset-0 z-[9990]"
+          >
             {createPortal(
               <>
                 <motion.div
@@ -1028,7 +1042,7 @@ export function PortalDatePicker({
               </>,
               document.body
             )}
-          </>
+          </motion.div>
         ) : null}
       </AnimatePresence>
     </div>

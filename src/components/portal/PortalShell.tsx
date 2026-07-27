@@ -49,6 +49,12 @@ type PortalUserProfile = {
   avatarUrl: string | null
 }
 
+type PortalTheme = 'light' | 'dark'
+
+function persistPortalThemeCookie(theme: PortalTheme) {
+  document.cookie = `luxor-portal-theme=${theme}; path=/; max-age=31536000; samesite=lax`
+}
+
 const EmailComposeDrawer = dynamic(
   () => import('@/components/portal/EmailComposeDrawer').then((mod) => mod.EmailComposeDrawer),
   { ssr: false }
@@ -64,7 +70,10 @@ const PortalElenaChat = dynamic(
   {
     ssr: false,
     loading: () => (
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]" />
+      <aside
+        aria-hidden="true"
+        className="pointer-events-none fixed right-0 top-0 z-50 flex h-full w-full translate-x-full flex-col border-l border-[#caa24c]/10 bg-[#050505] opacity-0 shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+      />
     ),
   }
 )
@@ -105,17 +114,17 @@ const marketingSubItems = [
   { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },
 ]
 
-export function PortalShell({ children, session, initialProfile }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile }) {
+export function PortalShell({ children, session, initialProfile, initialTheme }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session} initialProfile={initialProfile}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session, initialProfile }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile }) {
+function PortalShellContent({ children, session, initialProfile, initialTheme }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme }) {
   const pathname = usePathname()
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
@@ -130,6 +139,16 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
+
+  useEffect(() => {
+    const applySidebarLayout = () => {
+      setSidebarCollapsed(window.localStorage.getItem('luxor-portal-sidebar') === 'compact')
+    }
+
+    applySidebarLayout()
+    window.addEventListener('luxor-portal-sidebar', applySidebarLayout)
+    return () => window.removeEventListener('luxor-portal-sidebar', applySidebarLayout)
+  }, [])
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -183,10 +202,15 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
     },
     () => {
       const savedTheme = window.localStorage.getItem('luxor-portal-theme')
-      return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark'
+      return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : initialTheme
     },
-    () => 'dark'
+    () => initialTheme
   )
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('luxor-portal-theme')
+    if (savedTheme === 'light' || savedTheme === 'dark') persistPortalThemeCookie(savedTheme)
+  }, [])
 
   // Notification State & Popover Modal
   const { notify } = useToast()
@@ -311,6 +335,7 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
             window.localStorage.setItem('luxor-portal-theme', data.theme)
             window.dispatchEvent(new Event('luxor-portal-theme'))
           }
+          persistPortalThemeCookie(data.theme)
         }
       })
       .catch((err) => console.error('Failed to sync theme preference:', err))
@@ -522,7 +547,11 @@ function PortalShellContent({ children, session, initialProfile }: { children: R
 
             <button
               type="button"
-              onClick={() => setSidebarCollapsed((current) => !current)}
+              onClick={() => setSidebarCollapsed((current) => {
+                const next = !current
+                window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
+                return next
+              })}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 rounded-lg"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!sidebarCollapsed}

@@ -16,11 +16,15 @@ import {
   Mic,
   MicOff,
   Paperclip,
-  FileText
+  FileText,
+  CalendarDays,
+  ExternalLink,
 } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { PortalCloseButton } from './PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import {
   ElenaLeadUpdateCard,
@@ -53,6 +57,31 @@ type Message = {
   contractCard?: ContractCardPayload
   invoiceCard?: InvoiceCardPayload
   taskCard?: TaskCardPayload
+  contactCard?: LeadContactCardPayload
+  tourInviteCard?: TourInviteCardPayload
+}
+
+type LeadContactCardPayload = {
+  inquiryId: string
+  clientName: string
+  email?: string | null
+  phone?: string | null
+  eventType?: string | null
+  targetDate?: string | null
+  guestCount?: number | null
+  status?: string | null
+}
+
+type TourInviteCardPayload = {
+  inquiryId: string
+  clientName: string
+  clientEmail: string | null
+  eventType: string | null
+  tourDate: string
+  tourTime: string
+  meetingType: string
+  durationMinutes: number
+  clientFacingNotes: string
 }
 
 interface ChatSession {
@@ -125,6 +154,7 @@ function getQueryIndicatorText(sql: string) {
 }
 
 export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChatProps) {
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -133,12 +163,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   // Sessions History States
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const [showSessionsList, setShowSessionsList] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
 
   const [smartSuggestions, setSmartSuggestions] = useState<string[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const sessionRequestRef = useRef(0)
+  const messageRequestRef = useRef(0)
 
   type AttachedFile = {
     id: string
@@ -237,7 +270,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   useEffect(() => {
     if (isOpen) {
+      setShowSessionsList(false)
       loadSessionsList()
+    } else {
+      setShowSessionsList(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -265,21 +301,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const loadSessionsList = async (selectSessionId?: string) => {
+    const requestId = ++sessionRequestRef.current
     try {
       const response = await fetch('/api/portal/elena-chat/sessions')
       if (!response.ok) throw new Error('Failed to load sessions list')
       const data = (await response.json()) as ChatSession[]
+      if (requestId !== sessionRequestRef.current) return
       setSessions(data)
 
       if (data.length > 0) {
         const targetId = selectSessionId || currentSessionId || data[0].id
         // Only load messages if we switch to a different active session or initializing
-        if (targetId !== currentSessionId || messages.length <= 1) {
+        if (targetId !== currentSessionId || messages.length <= 1 || loadedSessionId !== targetId) {
           setCurrentSessionId(targetId)
-          loadSessionMessages(targetId)
+          await loadSessionMessages(targetId)
         }
       } else {
-        handleCreateSession()
+        await handleCreateSession()
       }
     } catch (err) {
       console.error(err)
@@ -287,11 +325,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const loadSessionMessages = async (sessionId: string) => {
+    const requestId = ++messageRequestRef.current
+    setLoadedSessionId(null)
     setIsLoading(true)
     try {
       const response = await fetch(`/api/portal/elena-chat/sessions?id=${sessionId}`)
       if (!response.ok) throw new Error('Failed to load messages')
       const data = (await response.json()) as { messages: Message[] }
+      if (requestId !== messageRequestRef.current) return
       const raw = data.messages || []
       const hasUserMsg = raw.some((m) => m.role === 'user')
       if (!hasUserMsg) {
@@ -305,14 +346,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         })
         setMessages(cleaned)
       }
+      setLoadedSessionId(sessionId)
     } catch (err) {
       console.error(err)
     } finally {
-      setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
   const handleCreateSession = async () => {
+    const requestId = ++messageRequestRef.current
+    setLoadedSessionId(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/portal/elena-chat/sessions', {
@@ -320,6 +364,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       })
       if (!response.ok) throw new Error('Failed to create session')
       const newSession = (await response.json()) as { id: string; title: string; messages: Message[] }
+      if (requestId !== messageRequestRef.current) return
       
       setSessions(prev => [{
         id: newSession.id,
@@ -329,6 +374,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       }, ...prev])
       setCurrentSessionId(newSession.id)
       setMessages(newSession.messages)
+      setLoadedSessionId(newSession.id)
       setShowSessionsList(false)
     } catch (err) {
       console.error(err)
@@ -339,7 +385,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   const handleLoadSession = (sessionId: string) => {
     setCurrentSessionId(sessionId)
-    loadSessionMessages(sessionId)
+    void loadSessionMessages(sessionId)
     setShowSessionsList(false)
   }
 
@@ -376,7 +422,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       if (currentSessionId === sessionId) {
         if (remaining.length > 0) {
           setCurrentSessionId(remaining[0].id)
-          loadSessionMessages(remaining[0].id)
+          void loadSessionMessages(remaining[0].id)
         } else {
           handleCreateSession()
         }
@@ -442,12 +488,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         contractCard?: ContractCardPayload
         invoiceCard?: InvoiceCardPayload
         taskCard?: TaskCardPayload
+        contactCard?: LeadContactCardPayload
+        tourInviteCard?: TourInviteCardPayload
+        navigation?: { href: string }
       }
 
       if (data.textCampaignDraft) {
         window.localStorage.setItem('luxor_elena_text_campaign_draft', JSON.stringify(data.textCampaignDraft))
         window.dispatchEvent(new CustomEvent('luxor:text-campaign-draft', { detail: data.textCampaignDraft }))
       }
+
+      if (data.navigation?.href) router.push(data.navigation.href)
       
       setMessages(prev => [
         ...prev,
@@ -460,7 +511,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           crmUpdateCard: data.crmUpdateCard,
           contractCard: data.contractCard,
           invoiceCard: data.invoiceCard,
-          taskCard: data.taskCard
+          taskCard: data.taskCard,
+          contactCard: data.contactCard,
+          tourInviteCard: data.tourInviteCard,
         }
       ])
       
@@ -553,6 +606,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const pathSuggestions = getSuggestionsForPath(activePath)
+  const isSessionHydrating = Boolean(currentSessionId && loadedSessionId !== currentSessionId)
 
   return (
     <motion.aside 
@@ -716,7 +770,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className={`portal-scrollbar min-h-0 flex-1 p-4 ${messages.length === 0 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'}`}>
+        <div className={`portal-scrollbar min-h-0 flex-1 p-4 ${isSessionHydrating || messages.length === 0 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -726,7 +780,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
               className={messages.length === 0 ? 'h-full flex flex-col justify-center' : 'min-h-full flex flex-col justify-between space-y-4'}
             >
-              {messages.length === 0 ? (
+              {isSessionHydrating ? (
+                <div className="flex flex-col items-center justify-center gap-3 text-center text-zinc-500" role="status" aria-live="polite">
+                  <Loader2 size={20} className="animate-spin text-[#caa24c]" />
+                  <p className="text-xs">Opening Elena’s conversation…</p>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center px-2 py-2 space-y-4 my-auto">
                   <div className="relative">
                     <div className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
@@ -849,6 +908,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             {renderFormattedContent(msg.content)}
                           </div>
                         </motion.div>
+
+                        {msg.contactCard && <ElenaContactCard payload={msg.contactCard} />}
+
+                        {msg.tourInviteCard && (
+                          <ElenaTourInviteCard
+                            payload={msg.tourInviteCard}
+                            onSuccess={(successMessage) => {
+                              setMessages((prev) => [...prev, { role: 'assistant', content: successMessage }])
+                            }}
+                          />
+                        )}
 
                         {/* Render SQL execution indicators */}
                         {msg.executedQueries && msg.executedQueries.length > 0 && (
@@ -1106,6 +1176,148 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     </motion.aside>
   )
 }
+
+function ElenaContactCard({ payload }: { payload: LeadContactCardPayload }) {
+  const detailLine = [
+    payload.eventType,
+    payload.guestCount ? `${payload.guestCount} guests` : null,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div className="ml-8 mt-3 w-[calc(88%-2rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-lg shadow-black/10">
+      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <PortalContactAvatar name={payload.clientName} size="md" className="shrink-0 border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]" />
+          <div className="min-w-0">
+            <h4 className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{payload.clientName}</h4>
+            <p className="text-[10px] text-[color:var(--portal-muted)]">Contact card · opened in CRM</p>
+          </div>
+        </div>
+        {payload.status && <span className="shrink-0 rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a]">{payload.status.replace(/_/g, ' ')}</span>}
+      </div>
+      <div className="space-y-2.5 p-4 text-[11px] text-[color:var(--portal-muted)]">
+        {payload.email && <p className="truncate">{payload.email}</p>}
+        {payload.phone && <p>{payload.phone}</p>}
+        {detailLine && <p>{detailLine}</p>}
+        {payload.targetDate && <p className="flex items-center gap-1.5"><CalendarDays size={12} className="text-[#caa24c]" /> {payload.targetDate}</p>}
+        <Link href={`/portal/leads/${payload.inquiryId}`} className="inline-flex items-center gap-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a] dark:hover:text-white">
+          View contact <ExternalLink size={11} />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPayload; onSuccess: (message: string) => void }) {
+  const [tourDate, setTourDate] = useState(payload.tourDate)
+  const [tourTime, setTourTime] = useState(payload.tourTime)
+  const [meetingType, setMeetingType] = useState(payload.meetingType || 'Private Venue Tour')
+  const [durationMinutes, setDurationMinutes] = useState(String(payload.durationMinutes || 60))
+  const [clientFacingNotes, setClientFacingNotes] = useState(payload.clientFacingNotes)
+  const [isSending, setIsSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const missingItems = [
+    !payload.clientEmail ? 'client email' : null,
+    !tourDate ? 'tour date' : null,
+    !tourTime ? 'start time' : null,
+  ].filter(Boolean) as string[]
+
+  const handleSend = async () => {
+    if (missingItems.length > 0 || isSending) return
+    setIsSending(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: payload.inquiryId,
+          action: 'schedule-tour',
+          tourDate,
+          tourTime,
+          meetingType,
+          durationMinutes: Number(durationMinutes),
+          clientFacingNotes,
+        }),
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string; reminderJobs?: unknown[] }
+      if (!response.ok) throw new Error(result.error || 'The invite could not be sent.')
+      onSuccess(`Tour invite sent to ${payload.clientName}. The calendar invite and branded confirmation are on their way${result.reminderJobs?.length ? `, with ${result.reminderJobs.length} reminder${result.reminderJobs.length === 1 ? '' : 's'} queued` : ''}.`)
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : 'The invite could not be sent.')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  return (
+    <div className="ml-8 mt-3 w-[calc(88%-2rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-lg shadow-black/10">
+      <div className="flex items-start gap-2.5 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
+        <CalendarDays size={15} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
+        <div className="min-w-0">
+          <h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Send tour invite</h4>
+          <p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{payload.clientName}{payload.clientEmail ? ` · ${payload.clientEmail}` : ' · email needed first'}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3.5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Date</label>
+            <PortalDatePicker value={tourDate} onChange={setTourDate} className="!min-w-0 w-full [&>button]:min-h-9 [&>button]:px-2.5 [&>button]:py-1.5 [&>button]:text-[10px]" placeholder="Choose date" />
+          </div>
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Time</label>
+            <PortalSelect value={tourTime} onChange={setTourTime} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" placeholder="Choose time" options={TOUR_TIME_OPTIONS} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Meeting</label>
+            <PortalSelect value={meetingType} onChange={setMeetingType} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={TOUR_MEETING_TYPE_OPTIONS} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Length</label>
+            <PortalSelect value={durationMinutes} onChange={setDurationMinutes} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={TOUR_DURATION_OPTIONS} />
+          </div>
+        </div>
+
+        <textarea value={clientFacingNotes} onChange={(event) => setClientFacingNotes(event.target.value)} rows={2} maxLength={2000} placeholder="Client-safe tour details (optional)" className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] leading-4 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
+
+        {missingItems.length > 0 ? (
+          <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-[10px] leading-4 text-amber-800 dark:text-amber-200">Still needed: {missingItems.join(', ')}.</p>
+        ) : null}
+        {error ? <p className="rounded-lg bg-rose-500/10 px-2.5 py-2 text-[10px] leading-4 text-rose-700 dark:text-rose-200">{error}</p> : null}
+
+        <button type="button" onClick={handleSend} disabled={isSending || missingItems.length > 0} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-[10px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)]">
+          {isSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} {isSending ? 'Sending invite…' : 'Send invite'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const TOUR_TIME_OPTIONS = Array.from({ length: 19 }, (_, index) => {
+  const hour = index + 8
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  const displayHour = hour % 12 || 12
+  return { value: `${displayHour}:00 ${suffix}`, label: `${displayHour}:00 ${suffix}` }
+})
+
+const TOUR_MEETING_TYPE_OPTIONS = [
+  { value: 'Private Venue Tour', label: 'Private Venue Tour' },
+  { value: 'Wedding Walkthrough', label: 'Wedding Walkthrough' },
+  { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
+  { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
+  { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
+]
+
+const TOUR_DURATION_OPTIONS = [
+  { value: '30', label: '30 minutes' },
+  { value: '45', label: '45 minutes' },
+  { value: '60', label: '60 minutes' },
+  { value: '90', label: '90 minutes' },
+]
 
 /* Local formatting helper function */
 function renderFormattedContent(content: string) {

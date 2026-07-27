@@ -7,7 +7,7 @@ import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServ
 import { LuxorMarketingCampaign, LuxorMarketingRecipient } from '@/lib/luxorInquiryTypes'
 import crypto from 'crypto'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
-import { getSelectedLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { getPublicLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 
 export async function POST(request: NextRequest) {
   const startedAt = Date.now()
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const { to, subject, content, from, track, campaignName, format, recipientName, contentMode } = body
     const [senderProfile, senderPhone] = await Promise.all([
       getLuxorUserProfile(session.email),
-      getSelectedLuxorPhoneNumber(),
+      getPublicLuxorPhoneNumber(),
     ])
     const signatureEmail = typeof from === 'string' && from.trim()
       ? from.trim().toLowerCase()

@@ -22,6 +22,7 @@ import {
   FileCheck
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -995,9 +996,19 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function formatTourDate(value: string) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
 // --- SUB-TAB COMPONENTS FOR LEADS & CLIENTS ---
 
 function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: boolean }) {
+  const router = useRouter()
   const newInquiries = leads.filter(l => l.status === 'new').length
   const toursScheduled = leads.filter(l => l.status === 'tour_requested').length
   const toursCompleted = leads.filter(l => l.status === 'tour_confirmed' || l.tour_attendance_status === 'attended').length
@@ -1087,36 +1098,67 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
         </div>
 
         {/* Upcoming Tours */}
-        <div className="luxor-glass-card rounded-2xl p-6 lg:col-span-2 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
-              <Calendar size={15} className="text-[#caa24c]" /> Upcoming Scheduled Tours
-            </h3>
-            {upcomingTours.length === 0 ? (
-              <p className="text-xs text-zinc-500 font-medium py-4 text-center">No upcoming tours scheduled this week.</p>
-            ) : (
-              <div className="space-y-4">
-                {upcomingTours.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between border-b border-[color:var(--portal-border)]/50 pb-3 border-dashed last:border-b-0 last:pb-0">
-                    <div>
-                      <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-white hover:text-[#caa24c] transition-colors">{t.full_name}</Link>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">{t.event_type || 'Event'} • {t.guest_count || 'Flexible'} guests</p>
+        <PortalTableCard
+          className="lg:col-span-2"
+          controls={
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] flex items-center gap-2">
+                <Calendar size={15} className="text-[#caa24c]" /> Upcoming Scheduled Tours
+              </h3>
+              <Link href="/portal/calendar" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:text-[#caa24c]">
+                View Calendar <ChevronRight size={13} />
+              </Link>
+            </div>
+          }
+        >
+          <PortalStickyTable minWidth="560px">
+            <PortalStickyThead>
+              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+                <th className="px-6 py-3.5">Client</th>
+                <th className="px-4 py-3.5">Event</th>
+                <th className="px-6 py-3.5 text-right">Date &amp; Time</th>
+              </tr>
+            </PortalStickyThead>
+            <tbody className="divide-y divide-[color:var(--portal-border)]">
+              {upcomingTours.length === 0 ? (
+                <tr><td colSpan={3} className="px-6 py-10 text-center text-xs text-[color:var(--portal-muted)]">No upcoming tours scheduled this week.</td></tr>
+              ) : upcomingTours.map((tour) => (
+                <tr
+                  key={tour.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open ${tour.full_name}`}
+                  onClick={() => router.push(`/portal/leads/${tour.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      router.push(`/portal/leads/${tour.id}`)
+                    }
+                  }}
+                  className="group cursor-pointer transition-colors hover:bg-[#caa24c]/7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/60"
+                >
+                  <td className="px-6 py-3">
+                    <div className="flex items-center gap-3">
+                      <PortalContactAvatar
+                        name={tour.full_name}
+                        size="md"
+                        className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
+                      />
+                      <p className="text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{tour.full_name}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-[#caa24c]">{t.preferred_tour_date}</p>
-                      <p className="text-[9px] text-zinc-500 mt-0.5">{t.preferred_tour_time || 'Flexible'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="pt-4 border-t border-[color:var(--portal-border)]/50 mt-4">
-            <Link href="/portal/calendar" className="text-xs font-bold text-[#caa24c] hover:text-[#b0883b] flex items-center gap-1 justify-center">
-              View Calendar Schedule <ChevronRight size={13} />
-            </Link>
-          </div>
-        </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-[color:var(--portal-text)]">
+                    {tour.event_type || 'Event'} <span className="text-[color:var(--portal-muted)]">• {tour.guest_count || 'Flexible'} guests</span>
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <p className="text-xs font-semibold text-[color:var(--portal-text)]">{formatTourDate(tour.preferred_tour_date || '')}</p>
+                    <p className="mt-0.5 text-[10px] font-medium text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Flexible'}</p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </PortalStickyTable>
+        </PortalTableCard>
       </div>
 
       {/* Recent Activity / Inquiries List */}
