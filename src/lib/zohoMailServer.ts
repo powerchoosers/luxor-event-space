@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { decodeHtmlEntities } from './luxorTextUtils'
+import { supabaseRest } from './supabaseRestServer'
 
 type ZohoTokenResponse = {
   access_token?: string
@@ -56,6 +57,10 @@ export type LuxorZohoMessage = {
   htmlContent?: string | null
   hasAttachment: boolean
   attachments?: LuxorZohoAttachment[]
+  engagement?: {
+    openCount: number
+    clickCount: number
+  }
   isRead?: boolean
   direction?: 'incoming' | 'outgoing'
 }
@@ -183,6 +188,42 @@ function getZohoConfig() {
   }
 
   return { clientId, clientSecret, refreshToken, accountId, accountsServer, baseUrl, calendarBaseUrl, calendarUid, loginEmail, allowedSenders }
+}
+
+async function getLuxorEmailEngagement(to: string, subject: string) {
+  const recipientEmail = normalizeEmailAddress(to)
+  if (!recipientEmail || !subject.trim()) return undefined
+
+  try {
+    const recipients = await supabaseRest<Array<{
+      campaign_id: string
+      open_count?: number
+      click_count?: number
+    }>>(
+      `luxor_marketing_recipients?select=campaign_id,open_count,click_count&email=eq.${encodeURIComponent(recipientEmail)}&order=sent_at.desc&limit=25`,
+    )
+    if (!recipients.length) return undefined
+
+    const campaignIds = Array.from(new Set(recipients.map((recipient) => recipient.campaign_id).filter(Boolean)))
+    const campaigns = await supabaseRest<Array<{ id: string; subject?: string }>>(
+      `luxor_marketing_campaigns?select=id,subject&id=in.(${campaignIds.join(',')})`,
+    )
+    const matchingIds = new Set(
+      campaigns
+        .filter((campaign) => String(campaign.subject || '').trim().toLowerCase() === subject.trim().toLowerCase())
+        .map((campaign) => campaign.id),
+    )
+    const matchingRecipients = recipients.filter((recipient) => matchingIds.has(recipient.campaign_id))
+    if (!matchingRecipients.length) return undefined
+
+    return {
+      openCount: matchingRecipients.reduce((sum, recipient) => sum + Number(recipient.open_count || 0), 0),
+      clickCount: matchingRecipients.reduce((sum, recipient) => sum + Number(recipient.click_count || 0), 0),
+    }
+  } catch (error) {
+    console.warn('[Zoho] Email engagement lookup skipped:', error)
+    return undefined
+  }
 }
 
 export function normalizeEmailAddress(value: unknown) {
@@ -765,7 +806,7 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
   const accessToken = await getZohoAccessToken()
 
   // Helper to parse a Zoho message data payload into our detail shape
-  function parseMessageData(data: Record<string, unknown>, content: string, attachments: LuxorZohoAttachment[] = []) {
+  function parseMessageData(data: Record<string, unknown>, content: string, attachments: LuxorZohoAttachment[] = [], engagement?: { openCount: number; clickCount: number }) {
     const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress as string || data.sender as string || ''))
       ? 'outgoing' as const
       : 'incoming' as const
@@ -783,6 +824,7 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
       htmlContent: content,
       hasAttachment: zohoBoolean(data.hasAttachment),
       attachments,
+      engagement,
       direction,
     }
   }
@@ -815,7 +857,8 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
 
           if (Object.keys(data).length > 0) {
             const attachments = await getLuxorZohoMessageAttachments(messageId, String(data.folderId || folderId || ''))
-            return parseMessageData(data, content, attachments)
+            const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
+            return parseMessageData(data, content, attachments, engagement)
           }
         }
       } catch (err) {
@@ -881,7 +924,8 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
     fullContent ||= String(data.summary || '')
 
     const attachments = await getLuxorZohoMessageAttachments(messageId, resolvedFolderId)
-    return parseMessageData(data, fullContent, attachments)
+    const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
+    return parseMessageData(data, fullContent, attachments, engagement)
   } catch (err) {
     console.error('Failed fetching Zoho message detail:', err)
     return null

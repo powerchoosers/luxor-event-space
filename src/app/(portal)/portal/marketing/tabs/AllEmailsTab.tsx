@@ -27,12 +27,17 @@ import {
   MoreVertical,
   Download,
   FileText,
+  Eye,
+  MousePointerClick,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
+import { Document, Page, pdfjs } from 'react-pdf'
+import { PortalCloseButton, PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 
 export interface EmailMessageItem {
   id: string
@@ -46,6 +51,10 @@ export interface EmailMessageItem {
   htmlContent?: string | null
   hasAttachment: boolean
   attachments?: EmailAttachment[]
+  engagement?: {
+    openCount: number
+    clickCount: number
+  }
   direction?: 'incoming' | 'outgoing' | 'campaign'
   folder?: 'inbox' | 'sent' | 'campaigns'
   category?: string
@@ -202,7 +211,6 @@ async function requestMailbox(force = false) {
 }
 
 type ActiveFolder = 'all' | 'inbox' | 'sent' | 'campaigns' | 'starred'
-type FilterChip = 'all' | 'unread' | 'incoming' | 'outgoing' | 'campaigns' | 'attachments'
 
 const PANEL_TRANSITION = { duration: 0.32, ease: [0.23, 1, 0.32, 1] as const }
 
@@ -224,7 +232,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   // Active navigation & filters
   const [activeFolder, setActiveFolder] = useState<ActiveFolder>('inbox')
-  const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy] = useState<'newest' | 'oldest'>('newest')
 
@@ -257,6 +264,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<(EmailAttachment & { url: string; mimeType: string }) | null>(null)
+  const [previewPdfPages, setPreviewPdfPages] = useState(0)
 
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
@@ -521,13 +529,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         if (activeFolder === 'campaigns' && msg.direction !== 'campaign') return false
         if (activeFolder === 'starred' && !starredIds.has(msg.id)) return false
 
-        // Quick filter chips
-        if (activeFilter === 'unread' && readIds.has(msg.id)) return false
-        if (activeFilter === 'incoming' && msg.direction !== 'incoming') return false
-        if (activeFilter === 'outgoing' && msg.direction !== 'outgoing') return false
-        if (activeFilter === 'campaigns' && msg.direction !== 'campaign') return false
-        if (activeFilter === 'attachments' && !msg.hasAttachment) return false
-
         // Search query
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim()
@@ -545,12 +546,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         const timeB = b.receivedAt ? new Date(b.receivedAt).getTime() : 0
         return sortBy === 'newest' ? timeB - timeA : timeA - timeB
       })
-  }, [messages, activeFolder, activeFilter, searchQuery, sortBy, starredIds, readIds, inquiryByEmail])
+  }, [messages, activeFolder, searchQuery, sortBy, starredIds, inquiryByEmail])
 
   // Reset to page 1 whenever filters/search changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [activeFolder, activeFilter, searchQuery])
+  }, [activeFolder, searchQuery])
 
   const totalPages = Math.max(1, Math.ceil(filteredMessages.length / PAGE_SIZE))
   const pagedMessages = filteredMessages.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
@@ -594,6 +595,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       const contentType = response.headers.get('content-type') || attachment.mimeType || 'application/octet-stream'
       const bytes = await response.arrayBuffer()
       const url = URL.createObjectURL(new Blob([bytes], { type: contentType }))
+      setPreviewPdfPages(0)
       setPreviewAttachment({ ...attachment, mimeType: contentType, url })
     } catch (error) {
       console.error('Error opening email attachment:', error)
@@ -603,6 +605,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }
 
   const closeAttachmentPreview = () => {
+    setPreviewPdfPages(0)
     setPreviewAttachment((current) => {
       if (current?.url) URL.revokeObjectURL(current.url)
       return null
@@ -786,14 +789,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               placeholder="Search subject, sender, text..."
               className="w-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-xl pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
-          </div>
-
-          {/* Quick Filter Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto portal-scrollbar pb-1">
-            <FilterChipItem label="All" active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
-            <FilterChipItem label="Incoming" active={activeFilter === 'incoming'} onClick={() => setActiveFilter('incoming')} />
-            <FilterChipItem label="Outgoing" active={activeFilter === 'outgoing'} onClick={() => setActiveFilter('outgoing')} />
-            <FilterChipItem label="Campaigns" active={activeFilter === 'campaigns'} onClick={() => setActiveFilter('campaigns')} />
           </div>
 
           {error && messages.length > 0 && (
@@ -1294,12 +1289,33 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{previewAttachment.filename}</p>
                     <p className="mt-0.5 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">Attachment preview</p>
                   </div>
-                  <button type="button" onClick={closeAttachmentPreview} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close attachment preview">
-                    <X size={15} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={previewAttachment.url}
+                      download={previewAttachment.filename}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[#a8792f]"
+                    >
+                      <Download size={12} /> Download
+                    </a>
+                    <PortalCloseButton onClick={closeAttachmentPreview} aria-label="Close attachment preview" size={15} />
+                  </div>
                 </div>
                 <div className="min-h-0 flex-1 bg-white">
-                  {previewAttachment.mimeType.startsWith('image/') ? (
+                  {previewAttachment.mimeType.startsWith('application/pdf') || /\.pdf$/i.test(previewAttachment.filename) ? (
+                    <div className="h-full overflow-y-auto bg-zinc-100 p-5">
+                      <Document
+                        file={previewAttachment.url}
+                        onLoadSuccess={({ numPages }) => setPreviewPdfPages(numPages)}
+                        loading={<div className="flex min-h-48 items-center justify-center text-xs text-zinc-500">Loading PDF…</div>}
+                        error={<div className="flex min-h-48 items-center justify-center text-xs text-rose-600">This PDF could not be rendered.</div>}
+                        className="flex flex-col items-center gap-3"
+                      >
+                        {previewPdfPages > 0 && Array.from({ length: previewPdfPages }, (_, index) => (
+                          <Page key={index + 1} pageNumber={index + 1} width={Math.min(typeof window !== 'undefined' ? window.innerWidth * 0.7 : 900, 900)} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-lg" />
+                        ))}
+                      </Document>
+                    </div>
+                  ) : previewAttachment.mimeType.startsWith('image/') ? (
                     <div className="flex h-full items-center justify-center bg-zinc-950 p-5">
                       <img src={previewAttachment.url} alt={previewAttachment.filename} className="max-h-full max-w-full object-contain" />
                     </div>
@@ -1333,6 +1349,7 @@ function ThreadMessage({
   onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
   openingAttachment: string | null
 }) {
+  const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
   const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
@@ -1356,13 +1373,23 @@ function ThreadMessage({
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{message.direction === 'outgoing' ? `Luxor to ${mailboxLabel(message.to, inquiryByEmail)}` : mailboxLabel(message.from, inquiryByEmail)}</p>
-            <p className="shrink-0 text-[9px] font-mono text-[color:var(--portal-muted)]">{formatEmailDateDetailed(message.receivedAt)}</p>
+            <div className="flex shrink-0 items-center gap-2">
+              <EngagementIndicators engagement={message.engagement} />
+              <p className="text-[9px] font-mono text-[color:var(--portal-muted)]">{formatEmailDateDetailed(message.receivedAt)}</p>
+            </div>
           </div>
           <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${mailboxLabel(message.to, inquiryByEmail, 'Client')}${ccLabel ? ` · CC ${ccLabel}` : ''}` : decodeHtmlEntities(message.summary || message.subject)}</p>
         </div>
       </button>
+      <AnimatePresence initial={false}>
       {expanded && (
-        <div className="border-t border-[color:var(--portal-border)] bg-white">
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+          className="overflow-hidden border-t border-[color:var(--portal-border)] bg-white"
+        >
           {viewMode === 'html' ? (
             <iframe
               key={`${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
@@ -1409,9 +1436,26 @@ function ThreadMessage({
               </div>
             </div>
           ) : null}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </article>
+  )
+}
+
+function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['engagement'] }) {
+  if (!engagement) return null
+  return (
+    <div className="flex items-center gap-1.5 text-[color:var(--portal-faint)]" aria-label={`${engagement.openCount} opens, ${engagement.clickCount} clicks`}>
+      <span className="inline-flex items-center gap-0.5" title={`${engagement.openCount} opens`}>
+        <Eye size={11} strokeWidth={1.8} />
+        <span className="font-mono text-[8px]">{engagement.openCount}</span>
+      </span>
+      <span className="inline-flex items-center gap-0.5" title={`${engagement.clickCount} clicks`}>
+        <MousePointerClick size={11} strokeWidth={1.8} />
+        <span className="font-mono text-[8px]">{engagement.clickCount}</span>
+      </span>
+    </div>
   )
 }
 
@@ -1453,22 +1497,6 @@ function FolderNavItem({
       <span className={`text-[10px] font-mono rounded-full px-2 py-0.5 ${active ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'}`}>
         {count}
       </span>
-    </button>
-  )
-}
-
-function FilterChipItem({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-        active
-          ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/40 font-bold'
-          : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] border border-[color:var(--portal-border)]'
-      }`}
-    >
-      {label}
     </button>
   )
 }

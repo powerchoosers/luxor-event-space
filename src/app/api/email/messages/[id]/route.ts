@@ -69,6 +69,7 @@ export async function GET(
         content: `Campaign Blast: ${campaign.name}\nSubject: ${campaign.subject}\nAudience: ${campaign.audience_label}\nSent: ${campaign.sent_count} | Opens: ${campaign.open_count} (${campaign.open_rate}%) | Clicks: ${campaign.click_count} (${campaign.click_rate}%)`,
         htmlContent: htmlBody,
         hasAttachment: false,
+        engagement: { openCount: Number(campaign.open_count || 0), clickCount: Number(campaign.click_count || 0) },
         direction: 'campaign',
       })
     }

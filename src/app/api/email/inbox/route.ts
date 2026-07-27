@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       receivedAt: string | null
       summary: string
       hasAttachment: boolean
+      engagement?: { openCount: number; clickCount: number }
       direction: 'incoming' | 'outgoing' | 'campaign'
       folder: 'inbox' | 'sent' | 'campaigns'
       category?: string
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
             receivedAt: camp.sent_at || camp.created_at,
             summary: `Marketing Campaign Blast: ${camp.name}. ${camp.sent_count} sent, ${camp.open_count} opens, ${camp.click_count} clicks.`,
             hasAttachment: false,
+            engagement: { openCount: Number(camp.open_count || 0), clickCount: Number(camp.click_count || 0) },
             direction: 'campaign',
             folder: 'campaigns',
             category: 'Marketing Blast',
