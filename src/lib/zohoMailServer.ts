@@ -856,7 +856,9 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
           content ||= String(data.summary || '')
 
           if (Object.keys(data).length > 0) {
-            const attachments = await getLuxorZohoMessageAttachments(messageId, String(data.folderId || folderId || ''))
+            const attachments = zohoBoolean(data.hasAttachment)
+              ? await getLuxorZohoMessageAttachments(messageId, String(data.folderId || folderId || ''))
+              : []
             const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
             return parseMessageData(data, content, attachments, engagement)
           }
@@ -923,7 +925,9 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
 
     fullContent ||= String(data.summary || '')
 
-    const attachments = await getLuxorZohoMessageAttachments(messageId, resolvedFolderId)
+    const attachments = zohoBoolean(data.hasAttachment)
+      ? await getLuxorZohoMessageAttachments(messageId, resolvedFolderId)
+      : []
     const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
     return parseMessageData(data, fullContent, attachments, engagement)
   } catch (err) {

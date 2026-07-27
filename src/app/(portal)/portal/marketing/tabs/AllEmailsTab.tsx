@@ -185,7 +185,7 @@ async function requestMailbox(force = false) {
   if (mailboxCache && !force) return mailboxCache
   if (mailboxRequest && !force) return mailboxRequest
 
-  const request = fetch('/api/email/inbox?limit=1000&folder=all', { cache: 'no-store' })
+  const request = fetch('/api/email/inbox?limit=250&folder=all', { cache: 'no-store' })
     .then(async (response) => {
       const data = (await response.json().catch(() => ({}))) as {
         messages?: EmailMessageItem[]
@@ -354,8 +354,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           setReadIds((prev) => new Set(prev).add(selectedId))
         }
       } catch (err) {
-        console.error('Error loading email message detail:', err)
         const fallback = messageDetailCache.get(cacheKey) || selectedSummary || null
+        if (fallback) {
+          console.warn('Full email body is temporarily unavailable; showing the synced message summary instead.', err)
+        } else {
+          console.error('Error loading email message detail:', err)
+        }
         if (isCurrent) setMessageDetail(fallback)
       } finally {
         if (isCurrent) setLoadingDetail(false)
@@ -1384,11 +1388,13 @@ function ThreadMessage({
       <AnimatePresence initial={false}>
       {expanded && (
         <motion.div
+          layout="size"
           initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
           transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
           className="overflow-hidden border-t border-[color:var(--portal-border)] bg-white"
+          style={{ willChange: 'height, opacity' }}
         >
           {viewMode === 'html' ? (
             <iframe

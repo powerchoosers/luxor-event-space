@@ -1,18 +1,15 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Mail,
   Send,
-  X,
-  Minimize2,
   Maximize2,
   AlertCircle,
   Eye,
   Pencil,
   Sparkles,
-  ChevronUp,
   ExternalLink,
   Minus,
   Plus,
@@ -50,9 +47,17 @@ interface EmailComposeDrawerProps {
 }
 
 export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailComposeDrawerProps) {
+  const reduceMotion = useReducedMotion()
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
+
+  useEffect(() => {
+    if (isOpen) setIsClosing(false)
+  }, [isOpen])
+
+  const requestClose = () => setIsClosing(true)
 
   // Preview Scaling & Zoom States & Ref
   const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit')
@@ -388,7 +393,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
       
       // Auto-close after brief delay
       setTimeout(() => {
-        onClose()
+        requestClose()
         if (onSuccess) onSuccess()
       }, 1500)
 
@@ -412,42 +417,41 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   return (
     <motion.div
       initial={{ y: '100%', opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+      animate={isClosing ? { y: '100%', opacity: 0 } : { y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
       transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      onAnimationComplete={() => {
+        if (isClosing) onClose()
+      }}
       className={drawerClasses}
     >
       {/* Header Bar */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#caa24c]/20 bg-black/40 px-4 py-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="relative flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2">
+        <button
+          type="button"
+          onClick={() => setIsMinimized((minimized) => !minimized)}
+          aria-label={isMinimized ? 'Restore email composer' : 'Minimize email composer'}
+          className="absolute inset-0 z-0 cursor-pointer rounded-t-2xl transition-colors hover:bg-[color:var(--portal-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
+        />
+        <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2">
           <Mail size={14} className="text-[#caa24c]" />
-          <span className="truncate text-xs font-black uppercase tracking-wider text-white">
+          <span className="truncate text-xs font-black uppercase tracking-wider text-[color:var(--portal-text)]">
             {isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Minimize / Expand Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsMinimized(!isMinimized)}
-            title={isMinimized ? 'Restore Compose Drawer' : 'Minimize'}
-            className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"
-          >
-            {isMinimized ? <ChevronUp size={13} /> : <Minimize2 size={13} />}
-          </button>
-          
+        <div className="relative z-10 flex items-center gap-1">
           {!isMinimized && (
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
               title={isExpanded ? 'Exit Full Screen' : 'Full Screen'}
-              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"
+              className="rounded-lg p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
             >
               <Maximize2 size={13} />
             </button>
           )}
 
-          <PortalCloseButton onClick={onClose} aria-label="Close drawer" />
+          <PortalCloseButton onClick={requestClose} aria-label="Close drawer" />
         </div>
       </div>
 
@@ -455,7 +459,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
       {!isMinimized && (
         <div className="flex flex-1 min-h-0">
           {/* Main Edit Form */}
-          <div className={`flex flex-col flex-1 min-w-0 p-4 space-y-3 ${isExpanded && activeTab === 'preview' ? 'hidden md:flex' : ''}`}>
+          <div className={`flex flex-col flex-1 min-w-0 p-4 space-y-3 ${!isExpanded && activeTab === 'preview' ? 'hidden' : ''}`}>
             {/* Senders and Recipients */}
             <div className="grid grid-cols-2 gap-3 shrink-0">
               <div className="space-y-1">
@@ -1018,28 +1022,46 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
           </div>
 
           {/* Right Side Live HTML Preview (Always visible in expanded mode, or toggled on in default size) */}
+          <AnimatePresence initial={false}>
           {(isExpanded || activeTab === 'preview') && (
-            <div className={`flex flex-col ${isExpanded ? 'w-[440px] border-l border-[#caa24c]/20' : 'flex-1'} min-w-0 bg-zinc-950 p-4`}>
+            <motion.div
+              key={isExpanded ? 'expanded-preview' : 'drawer-preview'}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 18 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
+              transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+              className={`flex flex-col ${isExpanded ? 'w-[440px] border-l border-[color:var(--portal-border)]' : 'flex-1'} min-w-0 bg-[color:var(--portal-card)] p-4`}
+            >
               <div className="mb-2 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-1.5">
                   <Eye size={12} className="text-[#caa24c]" />
-                  <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Live Brand Preview</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Live Brand Preview</span>
                 </div>
                 
                 {/* Zoom Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-0.5 select-none">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {!isExpanded && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('edit')}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                    >
+                      <Pencil size={10} /> Edit
+                    </button>
+                  )}
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 select-none">
                   <button
                     type="button"
                     onClick={() => {
                       setZoomMode('custom')
                       setZoomLevel(prev => Math.max(0.2, Number((prev - 0.1).toFixed(1))))
                     }}
-                    className="p-0.5 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                    className="cursor-pointer rounded p-0.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"
                     title="Zoom Out"
                   >
                     <Minus size={11} />
                   </button>
-                  <span className="text-[9px] font-mono text-zinc-400 min-w-[28px] text-center">
+                  <span className="min-w-[28px] text-center font-mono text-[9px] text-[color:var(--portal-muted)]">
                     {Math.round(zoomLevel * 100)}%
                   </span>
                   <button
@@ -1048,12 +1070,12 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       setZoomMode('custom')
                       setZoomLevel(prev => Math.min(2.0, Number((prev + 0.1).toFixed(1))))
                     }}
-                    className="p-0.5 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                    className="cursor-pointer rounded p-0.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"
                     title="Zoom In"
                   >
                     <Plus size={11} />
                   </button>
-                  <span className="h-2.5 w-px bg-zinc-800" />
+                  <span className="h-2.5 w-px bg-[color:var(--portal-border)]" />
                   <button
                     type="button"
                     onClick={() => {
@@ -1062,15 +1084,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     className={`px-1 py-0.5 text-[8px] font-black uppercase tracking-wider rounded transition-colors cursor-pointer ${
                       zoomMode === 'fit'
                         ? 'text-[#caa24c] bg-[#caa24c]/10'
-                        : 'text-zinc-500 hover:text-white'
+                        : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                     title="Fit to Screen"
                   >
                     Auto Fit
                   </button>
+                  </div>
                 </div>
               </div>
-              <div ref={containerRef} className="flex-1 rounded-xl border border-zinc-900 bg-black overflow-auto portal-scrollbar relative w-full h-full">
+              <div ref={containerRef} className="relative h-full w-full flex-1 overflow-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] portal-scrollbar">
                 <div
                   style={{
                     width: `${600 * zoomLevel}px`,
@@ -1096,8 +1119,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
         </div>
       )}
 

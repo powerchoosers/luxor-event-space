@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import { PortalModal, PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
+import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'
 
 type BrandAsset = {
   id: string
@@ -63,6 +64,7 @@ export function BrandAssetPicker({
   const [uploadName, setUploadName] = useState('')
   const [uploadCategory, setUploadCategory] = useState('general')
   const [saveAsBrandAsset, setSaveAsBrandAsset] = useState(true)
+  const [previewAsset, setPreviewAsset] = useState<BrandAsset | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -72,6 +74,7 @@ export function BrandAssetPicker({
       setUploadName('')
       setUploadCategory('general')
       setSaveAsBrandAsset(true)
+      setPreviewAsset(null)
     }
   }, [isOpen])
 
@@ -180,7 +183,7 @@ export function BrandAssetPicker({
         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-6 py-4">
           <div className="flex items-center gap-2">
             <ImageIcon size={18} className="text-[#caa24c]" />
-            <h3 className="font-serif text-sm font-bold text-white uppercase tracking-wider">{title}</h3>
+            <h3 className="font-serif text-sm font-bold uppercase tracking-wider text-[color:var(--portal-text)]">{title}</h3>
           </div>
           <PortalCloseButton onClick={onClose} aria-label="Close brand asset picker" />
         </div>
@@ -194,13 +197,13 @@ export function BrandAssetPicker({
             {/* Search & Tabs */}
             <div className="space-y-4 shrink-0">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
                 <input
                   type="text"
                   placeholder="Search assets by name..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md pl-9 pr-4 py-2 text-xs text-zinc-300 outline-none"
+                  className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45"
                 />
               </div>
 
@@ -214,7 +217,7 @@ export function BrandAssetPicker({
                     className={`shrink-0 rounded-md px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
                       selectedCategory === cat.value
                         ? 'bg-[#caa24c]/15 text-[#f1d27a] border border-[#caa24c]/30'
-                        : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-white'
+                        : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     {cat.label}
@@ -226,13 +229,13 @@ export function BrandAssetPicker({
             {/* Assets Grid */}
             <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar mt-4 pr-1">
               {loading ? (
-                <div className="flex h-full items-center justify-center py-12 text-xs text-zinc-500 gap-2">
+                <div className="flex h-full items-center justify-center gap-2 py-12 text-xs text-[color:var(--portal-muted)]">
                   <Loader2 className="animate-spin text-[#caa24c]" size={16} />
                   <span>Loading brand assets...</span>
                 </div>
               ) : filteredAssets.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center py-12 text-zinc-500">
-                  <ImageIcon size={32} className="text-zinc-700 mb-2" />
+                <div className="flex h-full flex-col items-center justify-center py-12 text-[color:var(--portal-muted)]">
+                  <ImageIcon size={32} className="mb-2 text-[color:var(--portal-faint)]" />
                   <p className="text-xs italic">No brand assets found matching filters.</p>
                 </div>
               ) : (
@@ -240,37 +243,34 @@ export function BrandAssetPicker({
                   {filteredAssets.map(asset => (
                     <div
                       key={asset.id}
-                      onClick={() => onSelect(asset.url)}
-                      className="group relative cursor-pointer rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 hover:border-[#caa24c]/40 transition-all flex flex-col h-[140px]"
+                      className="group relative flex h-[190px] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/40 hover:shadow-lg hover:shadow-[#caa24c]/5"
                     >
                       {/* Image Thumbnail Container */}
-                      <div className="flex-1 rounded-lg bg-black overflow-hidden flex items-center justify-center relative">
+                      <button type="button" onClick={() => setPreviewAsset(asset)} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/60">
                         <img
                           src={asset.url}
                           alt={asset.name}
-                          className="max-w-full max-h-full object-contain"
+                          className="h-full w-full object-contain p-3 transition-transform duration-500 group-hover:scale-[1.04]"
                         />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="rounded bg-[#caa24c] px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white shadow-lg">
-                            Use Image
-                          </span>
-                        </div>
-                      </div>
+                      </button>
 
                       {/* Info Footer */}
-                      <div className="mt-2 shrink-0 min-w-0">
-                        <p className="truncate text-[10px] font-bold text-zinc-300 leading-tight">
+                      <div className="shrink-0 border-t border-[color:var(--portal-border)] p-3">
+                        <p className="truncate text-[10px] font-bold leading-tight text-[color:var(--portal-text)]">
                           {asset.name}
                         </p>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="rounded bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-zinc-500">
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="rounded bg-[color:var(--portal-card)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
                             {asset.category}
                           </span>
+                          <button type="button" onClick={() => onSelect(asset.url)} className="ml-auto rounded-lg bg-[#caa24c] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68]">
+                            Use image
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => handleDeleteAsset(e, asset.id)}
                             aria-label="Delete asset"
-                            className="text-zinc-650 hover:text-red-400 transition-colors p-1 cursor-pointer"
+                            className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-red-500/8 hover:text-red-500"
                           >
                             <Trash2 size={11} />
                           </button>
@@ -285,29 +285,29 @@ export function BrandAssetPicker({
           </div>
 
           {/* Upload Sidebar Panel */}
-          <div className="flex min-h-[24rem] flex-1 flex-col justify-between bg-[#030303]/40 p-5 md:overflow-y-auto md:p-6 md:portal-scrollbar">
+          <div className="flex min-h-[24rem] flex-1 flex-col justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-5 md:overflow-y-auto md:border-t-0 md:border-l md:p-6 md:portal-scrollbar">
             <form onSubmit={handleUploadSubmit} className="space-y-4 flex flex-col h-full justify-between">
               
               <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c] border-b border-zinc-900 pb-2">
+                <h4 className="border-b border-[color:var(--portal-border)] pb-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#caa24c]">
                   Upload Direct Image
                 </h4>
 
                 {/* Drag-drop/file select zone */}
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-zinc-500">File Image</label>
-                  <div className="relative border border-dashed border-[color:var(--portal-border)] hover:border-[#caa24c]/45 rounded-xl bg-black/40 p-4 transition-colors flex flex-col items-center justify-center text-center">
+                  <label className="text-[9px] font-bold uppercase text-[color:var(--portal-muted)]">File Image</label>
+                  <div className="relative flex flex-col items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-center transition-colors hover:border-[#caa24c]/45">
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handleFileChange}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     />
-                    <Upload size={18} className="text-zinc-500 mb-1" />
-                    <p className="text-[10px] text-zinc-400 truncate max-w-full font-medium px-2">
+                    <Upload size={18} className="mb-1 text-[color:var(--portal-muted)]" />
+                    <p className="max-w-full truncate px-2 text-[10px] font-medium text-[color:var(--portal-text)]">
                       {uploadFile ? uploadFile.name : 'Select or drop image file'}
                     </p>
-                    <p className="text-[8px] text-zinc-600 mt-0.5">JPG, PNG, GIF, WebP up to 5MB</p>
+                    <p className="mt-0.5 text-[8px] text-[color:var(--portal-faint)]">JPG, PNG, GIF, WebP up to 5MB</p>
                   </div>
                 </div>
 
@@ -315,20 +315,20 @@ export function BrandAssetPicker({
                   <>
                     {/* Asset Name */}
                     <div className="space-y-1">
-                      <label className="text-[9px] uppercase font-bold text-zinc-500">Asset Name</label>
+                      <label className="text-[9px] font-bold uppercase text-[color:var(--portal-muted)]">Asset Name</label>
                       <input
                         type="text"
                         required
                         value={uploadName}
                         onChange={e => setUploadName(e.target.value)}
                         placeholder="e.g. Quinceanera promo logo"
-                        className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/45"
                       />
                     </div>
 
                     {/* Category */}
                     <div className="space-y-1">
-                      <label className="text-[9px] uppercase font-bold text-zinc-500">Category</label>
+                      <label className="text-[9px] font-bold uppercase text-[color:var(--portal-muted)]">Category</label>
                       <PortalSelect
                         value={uploadCategory}
                         options={UPLOAD_CATEGORIES}
@@ -342,9 +342,9 @@ export function BrandAssetPicker({
                         type="checkbox"
                         checked={saveAsBrandAsset}
                         onChange={e => setSaveAsBrandAsset(e.target.checked)}
-                        className="rounded border-[color:var(--portal-border)] bg-black text-[#caa24c] focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#caa24c] focus:ring-0"
                       />
-                      <span className="text-[10px] text-zinc-400 group-hover:text-white transition-colors">
+                      <span className="text-[10px] text-[color:var(--portal-muted)] transition-colors group-hover:text-[color:var(--portal-text)]">
                         Add to Brand Assets library
                       </span>
                     </label>
@@ -356,7 +356,7 @@ export function BrandAssetPicker({
               <button
                 type="submit"
                 disabled={uploading || !uploadFile}
-                className="w-full rounded-xl bg-[#caa24c]/15 hover:bg-[#caa24c]/20 border border-[#caa24c]/30 text-white font-serif py-2.5 text-xs font-bold uppercase tracking-wider disabled:opacity-30 disabled:pointer-events-none transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/15 py-2.5 font-serif text-xs font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:bg-[#caa24c]/20 disabled:pointer-events-none disabled:opacity-30 dark:text-[#f1d27a]"
               >
                 {uploading ? (
                   <>
@@ -375,6 +375,8 @@ export function BrandAssetPicker({
           </div>
 
         </div>
+
+        <BrandAssetLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
 
       </div>
     </PortalModal>

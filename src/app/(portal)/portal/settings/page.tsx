@@ -23,7 +23,9 @@ import {
   Camera,
   UserRound,
   PanelLeftOpen,
-  PanelLeftClose
+  PanelLeftClose,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -33,6 +35,7 @@ import {
   PortalTableCard,
   PortalSelect
 } from '@/components/portal/PortalUI'
+import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'
 import { useToast } from '@/components/portal/ToastProvider'
 import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
 import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSettings'
@@ -162,6 +165,8 @@ export default function SettingsPage() {
   const [assetName, setAssetName] = useState('')
   const [assetCategory, setAssetCategory] = useState('general')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [previewAsset, setPreviewAsset] = useState<BrandAsset | null>(null)
+  const [assetPage, setAssetPage] = useState(1)
 
   useEffect(() => {
     void fetchAssets()
@@ -174,6 +179,7 @@ export default function SettingsPage() {
       if (res.ok) {
         const data = await res.json()
         setAssets(data.assets || [])
+        setAssetPage(1)
       }
     } catch (e) {
       console.error(e)
@@ -227,6 +233,7 @@ export default function SettingsPage() {
       if (res.ok) {
         notify({ title: 'Asset deleted successfully.', variant: 'success' })
         setAssets(prev => prev.filter(a => a.id !== id))
+        setAssetPage((page) => Math.min(page, Math.max(1, Math.ceil((assets.length - 1) / ASSETS_PER_PAGE))))
       } else {
         throw new Error('Deletion failed')
       }
@@ -271,6 +278,10 @@ export default function SettingsPage() {
       setSaving(false)
     }
   }
+
+  const ASSETS_PER_PAGE = 6
+  const assetPageCount = Math.max(1, Math.ceil(assets.length / ASSETS_PER_PAGE))
+  const visibleAssets = assets.slice((assetPage - 1) * ASSETS_PER_PAGE, assetPage * ASSETS_PER_PAGE)
 
   const handleProfileImageUpload = async (file: File | undefined) => {
     if (!file) return
@@ -495,7 +506,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={handleUploadAsset}
                       disabled={uploading || !assetFile || !assetName.trim()}
-                      className="inline-flex items-center gap-2 rounded-lg bg-[#caa24c]/10 border border-[#caa24c]/30 hover:bg-[#caa24c]/20 text-[#f1d27a] px-4 py-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] transition-colors hover:bg-[#caa24c]/20 disabled:pointer-events-none disabled:opacity-30 dark:text-[#f1d27a] cursor-pointer"
                     >
                       {uploading ? (
                         <>
@@ -525,19 +536,20 @@ export default function SettingsPage() {
                       No assets in your brand library yet. Upload an image above to start.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {assets.map(asset => (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {visibleAssets.map(asset => (
                         <div
                           key={asset.id}
-                          className="flex items-center gap-3 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-xl p-3 hover:border-[#caa24c]/30 transition-colors"
+                          className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/40 hover:shadow-lg hover:shadow-[#caa24c]/5"
                         >
                           {/* Image box */}
-                          <div className="w-12 h-12 bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-lg overflow-hidden flex items-center justify-center shrink-0">
-                            <img src={asset.url} alt={asset.name} className="max-w-full max-h-full object-contain" />
-                          </div>
+                          <button type="button" onClick={() => setPreviewAsset(asset)} className="relative block aspect-[4/3] w-full overflow-hidden bg-[color:var(--portal-card)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/60">
+                            <img src={asset.url} alt={asset.name} className="h-full w-full object-contain p-3 transition-transform duration-500 group-hover:scale-[1.04]" />
+                          </button>
 
                           {/* Info */}
-                          <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 border-t border-[color:var(--portal-border)] p-3">
+                          <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold text-[color:var(--portal-text)] truncate">{asset.name}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="rounded bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
@@ -570,10 +582,25 @@ export default function SettingsPage() {
                           </div>
 
                         </div>
+                        </div>
                       ))}
                     </div>
                   )}
+                  {assets.length > ASSETS_PER_PAGE ? (
+                    <div className="mt-4 flex items-center justify-between border-t border-[color:var(--portal-border)] pt-3">
+                      <span className="text-[9px] font-mono text-[color:var(--portal-muted)]">{assetPage} / {assetPageCount}</span>
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setAssetPage((page) => Math.max(1, page - 1))} disabled={assetPage === 1} aria-label="Previous asset page" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[#a8792f] disabled:opacity-35">
+                          <ChevronLeft size={14} />
+                        </button>
+                        <button type="button" onClick={() => setAssetPage((page) => Math.min(assetPageCount, page + 1))} disabled={assetPage === assetPageCount} aria-label="Next asset page" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[#a8792f] disabled:opacity-35">
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
+                <BrandAssetLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
 
               </div>
             </div>

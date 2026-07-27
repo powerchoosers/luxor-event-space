@@ -12,7 +12,8 @@ import {
   LayoutTemplate,
   Users,
   Phone,
-  Calendar
+  Calendar,
+  Megaphone
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -541,7 +542,7 @@ function MarketingPageContent() {
       default:
         return {
           title: 'Marketing Overview',
-          icon: <BarChart3 size={18} />
+          icon: <Megaphone size={18} />
         }
     }
   }

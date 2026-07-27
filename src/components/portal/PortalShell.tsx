@@ -27,6 +27,7 @@ import {
   Phone,
   TrendingUp,
   Workflow,
+  Megaphone,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -88,7 +89,7 @@ const navItems = [
   { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
   { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
-  { href: '/portal/marketing', icon: <Mail size={18} />, label: 'Marketing', isDropdown: true },
+  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
 
@@ -135,7 +136,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
-  const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing'))
+  const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
@@ -187,10 +188,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
     if (pathname.startsWith('/portal/operations')) {
       setOperationsExpanded(true)
     }
-    if (pathname.startsWith('/portal/marketing')) {
+    if (pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails') {
       setMarketingExpanded(true)
     }
   }
+
   const portalTheme = useSyncExternalStore(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -393,7 +395,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                 const isCurrentGroup = item.href === '/portal/marketing'
                   ? pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails'
                   : pathname.startsWith(item.href)
-                const isExpanded = item.href === '/portal/operations' ? operationsExpanded : marketingExpanded
+                const isExpanded = item.href === '/portal/operations'
+                  ? operationsExpanded
+                  : marketingExpanded && !(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') === 'emails')
                 return (
                   <div key={item.href} className="space-y-1">
                     <button
