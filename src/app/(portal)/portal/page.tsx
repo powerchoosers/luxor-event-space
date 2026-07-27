@@ -461,7 +461,7 @@ export default async function PortalOverview() {
             <span className="font-mono text-[10px]">Mailbox connected</span>
           </div>
         </div>
-        <span className="font-mono text-[10px] text-[color:var(--portal-faint)]">LUXOR ATLAS PALMAS • HQ</span>
+        <span className="font-mono text-[10px] text-[color:var(--portal-faint)]">LUXOR AT LAS PALMAS • HQ</span>
       </div>
 
       {loadError && (
