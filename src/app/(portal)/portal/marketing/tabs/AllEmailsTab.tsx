@@ -9,7 +9,6 @@ import {
   Search,
   RefreshCw,
   Mail,
-  Plus,
   Paperclip,
   ExternalLink,
   Monitor,
@@ -19,7 +18,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Loader2,
-  Check,
   BrainCircuit,
   X,
   PanelLeftClose,
@@ -203,13 +201,15 @@ interface AllEmailsTabProps {
 export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabProps) {
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
+  const replyComposerRef = useRef<HTMLDivElement | null>(null)
+  const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const [messages, setMessages] = useState<EmailMessageItem[]>(() => mailboxCache || [])
   const [loading, setLoading] = useState(() => !mailboxCache)
   const [error, setError] = useState<string | null>(null)
   const [reconnectRequired, setReconnectRequired] = useState(false)
 
   // Active navigation & filters
-  const [activeFolder, setActiveFolder] = useState<ActiveFolder>('all')
+  const [activeFolder, setActiveFolder] = useState<ActiveFolder>('inbox')
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy] = useState<'newest' | 'oldest'>('newest')
@@ -462,13 +462,26 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       }
       setReplyText('')
       setReplyInstruction('')
-      setReplyStatus('Reply sent and added to the client activity log.')
+      setReplyStatus(null)
+      setReplyOpen(false)
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Reply could not be sent.')
     } finally {
       setSendingReply(false)
     }
   }
+
+  useEffect(() => {
+    if (!replyOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      const scrollPane = threadScrollRef.current
+      scrollPane?.scrollTo({
+        top: scrollPane.scrollHeight,
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [replyOpen, reduceMotion])
 
   // Toggle star status
   const toggleStar = (id: string, e?: React.MouseEvent) => {
@@ -479,19 +492,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       else next.add(id)
       return next
     })
-  }
-
-  // Open global compose drawer pre-filled
-  const triggerCompose = (lead?: LuxorInquiry, toEmail?: string, replySubject?: string) => {
-    window.dispatchEvent(
-      new CustomEvent('luxor-compose-email', {
-        detail: {
-          lead: lead || null,
-          email: toEmail || '',
-          subject: replySubject || '',
-        },
-      })
-    )
   }
 
   // Derive filtered message list
@@ -594,39 +594,22 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         className="w-64 [--folder-pane-width:16rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex rounded-l-2xl"
       >
         {/* Scrollable folder list area */}
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4 space-y-6">
-          {/* Primary Action Button */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => triggerCompose()}
-              className="min-w-0 flex-1 flex items-center justify-center gap-2.5 rounded-xl bg-[#caa24c] hover:bg-[#d4b060] px-3 py-3 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all cursor-pointer"
-            >
-              <Plus size={16} className="shrink-0 stroke-[2.5]" />
-              Compose
-            </button>
-            <button
-              type="button"
-              onClick={() => setFolderPaneOpen(false)}
-              className="rounded-xl bg-transparent p-3 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
-              title="Collapse mailbox folders"
-              aria-label="Collapse mailbox folders"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          </div>
-
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4">
           {/* Mailbox Navigation List */}
           <div className="space-y-1">
-            <p className="px-3 text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-faint)] mb-2">Mailboxes</p>
+            <div className="mb-2 flex items-center justify-between gap-3 px-3">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-faint)]">Mailboxes</p>
+              <button
+                type="button"
+                onClick={() => setFolderPaneOpen(false)}
+                className="rounded-lg bg-transparent p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                title="Collapse mailbox folders"
+                aria-label="Collapse mailbox folders"
+              >
+                <PanelLeftClose size={14} />
+              </button>
+            </div>
             
-            <FolderNavItem
-              icon={<Mail size={15} />}
-              label="All Mail"
-              count={stats.total}
-              active={activeFolder === 'all'}
-              onClick={() => setActiveFolder('all')}
-            />
             <FolderNavItem
               icon={<Inbox size={15} />}
               label="Inbox"
@@ -640,6 +623,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               count={stats.sentCount}
               active={activeFolder === 'sent'}
               onClick={() => setActiveFolder('sent')}
+            />
+            <FolderNavItem
+              icon={<Mail size={15} />}
+              label="All Mail"
+              count={stats.total}
+              active={activeFolder === 'all'}
+              onClick={() => setActiveFolder('all')}
             />
             <FolderNavItem
               icon={<Megaphone size={15} />}
@@ -1050,7 +1040,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </div>
 
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
+            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -1080,69 +1070,83 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     inquiryByEmail={inquiryByEmail}
                   />
                 ))}
+
+                <AnimatePresence initial={false}>
+                  {messageDetail.direction !== 'campaign' && replyOpen && (
+                    <motion.div
+                      ref={replyComposerRef}
+                      key="inline-thread-reply"
+                      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.985 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
+                      transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+                      className="overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[color:var(--portal-card)] shadow-sm"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[#caa24c]/6 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#caa24c] text-white"><Send size={12} /></span>
+                          <div>
+                            <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}</p>
+                            <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">Your reply will become the newest message in this conversation.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {currentInquiry && (
+                            <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:underline dark:text-[#f1d27a]">
+                              View client file
+                            </Link>
+                          )}
+                          <button type="button" onClick={() => setReplyOpen(false)} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={replyInstruction}
+                            onChange={(event) => setReplyInstruction(event.target.value)}
+                            placeholder="Optional direction for Elena..."
+                            className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void draftWithElena()}
+                            disabled={draftingReply || loadingThread}
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] hover:bg-[#caa24c]/20 disabled:opacity-50 dark:text-[#f1d27a]"
+                          >
+                            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                            Draft with Elena
+                          </button>
+                        </div>
+                        <textarea
+                          value={replyText}
+                          onChange={(event) => setReplyText(event.target.value)}
+                          rows={5}
+                          autoFocus
+                          placeholder="Write your reply..."
+                          className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="min-h-4 text-[10px] text-[color:var(--portal-muted)]">{replyStatus}</p>
+                          <button
+                            type="button"
+                            onClick={() => void sendInlineReply()}
+                            disabled={sendingReply || !replyText.trim()}
+                            className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-[#d4b060] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            {sendingReply ? 'Sending' : 'Send reply'}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
-            {/* Reply composer stays hidden until Reply is selected. */}
-            {messageDetail.direction !== 'campaign' && replyOpen && (
-              <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply in this conversation</p>
-                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">
-                      To {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}
-                      {thread?.messages?.length ? ` · ${thread.messages.length} messages in thread` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {currentInquiry && (
-                      <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:underline">
-                        {currentInquiry.full_name} · View client file
-                      </Link>
-                    )}
-                    <button type="button" onClick={() => setReplyOpen(false)} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={replyInstruction}
-                    onChange={(event) => setReplyInstruction(event.target.value)}
-                    placeholder="Optional note for Elena: confirm the tour and ask about guest count..."
-                    className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void draftWithElena()}
-                    disabled={draftingReply || loadingThread}
-                    className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 cursor-pointer disabled:opacity-50"
-                  >
-                    {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
-                    Draft with Elena
-                  </button>
-                </div>
-                <textarea
-                  value={replyText}
-                  onChange={(event) => setReplyText(event.target.value)}
-                  rows={4}
-                  placeholder="Write your reply here, or ask Elena to draft it from the full email chain and client history."
-                  className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className={`text-[10px] ${replyStatus?.startsWith('Reply sent') ? 'text-emerald-500 font-medium' : 'text-[color:var(--portal-muted)]'}`}>{replyStatus}</p>
-                  <button
-                    type="button"
-                    onClick={() => void sendInlineReply()}
-                    disabled={sendingReply || !replyText.trim()}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {sendingReply ? <Loader2 size={14} className="animate-spin" /> : replyStatus?.startsWith('Reply sent') ? <Check size={14} /> : <Send size={14} />}
-                    Send reply
-                  </button>
-                </div>
-              </div>
-            )}
           </motion.div>
         ) : (
           <motion.div
