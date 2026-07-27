@@ -24,6 +24,9 @@ import {
   PanelLeftOpen,
   Maximize2,
   Minimize2,
+  MoreVertical,
+  Download,
+  FileText,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -42,6 +45,7 @@ export interface EmailMessageItem {
   content?: string
   htmlContent?: string | null
   hasAttachment: boolean
+  attachments?: EmailAttachment[]
   direction?: 'incoming' | 'outgoing' | 'campaign'
   folder?: 'inbox' | 'sent' | 'campaigns'
   category?: string
@@ -49,6 +53,15 @@ export interface EmailMessageItem {
   isRead?: boolean
   threadId?: string
   folderId?: string
+}
+
+interface EmailAttachment {
+  filename: string
+  mimeType?: string
+  size?: number
+  messageId: string
+  attachmentId?: string
+  attachmentPath?: string
 }
 
 interface EmailThreadData {
@@ -203,6 +216,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
+  const readerMenuRef = useRef<HTMLDivElement | null>(null)
   const [messages, setMessages] = useState<EmailMessageItem[]>(() => mailboxCache || [])
   const [loading, setLoading] = useState(() => !mailboxCache)
   const [error, setError] = useState<string | null>(null)
@@ -240,6 +254,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [blockExternalImages, setBlockExternalImages] = useState(false)
   const [folderPaneOpen, setFolderPaneOpen] = useState(true)
   const [readerExpanded, setReaderExpanded] = useState(false)
+  const [readerMenuOpen, setReaderMenuOpen] = useState(false)
+  const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
+  const [previewAttachment, setPreviewAttachment] = useState<(EmailAttachment & { url: string; mimeType: string }) | null>(null)
 
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
@@ -561,6 +578,57 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     window.print()
   }
 
+  const openAttachmentPreview = async (attachment: EmailAttachment, message: EmailMessageItem) => {
+    const reference = attachment.attachmentId || attachment.attachmentPath
+    if (!reference) return
+    setOpeningAttachment(reference)
+    try {
+      const params = new URLSearchParams({
+        attachmentId: attachment.attachmentId || '',
+        attachmentPath: attachment.attachmentPath || '',
+        folderId: message.folderId || '',
+        filename: attachment.filename,
+      })
+      const response = await fetch(`/api/email/attachments/${encodeURIComponent(message.id)}?${params.toString()}`)
+      if (!response.ok) throw new Error('The attachment could not be opened.')
+      const contentType = response.headers.get('content-type') || attachment.mimeType || 'application/octet-stream'
+      const bytes = await response.arrayBuffer()
+      const url = URL.createObjectURL(new Blob([bytes], { type: contentType }))
+      setPreviewAttachment({ ...attachment, mimeType: contentType, url })
+    } catch (error) {
+      console.error('Error opening email attachment:', error)
+    } finally {
+      setOpeningAttachment(null)
+    }
+  }
+
+  const closeAttachmentPreview = () => {
+    setPreviewAttachment((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url)
+      return null
+    })
+  }
+
+  useEffect(() => {
+    if (!readerMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (readerMenuRef.current && !readerMenuRef.current.contains(event.target as Node)) {
+        setReaderMenuOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setReaderMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [readerMenuOpen])
+
   const selectMessage = (message: EmailMessageItem) => {
     const cached = messageDetailCache.get(detailCacheKey(message.id, message.folderId))
     setSelectedId(message.id)
@@ -570,6 +638,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
     setThreadError(null)
     setReplyOpen(false)
+    setReaderMenuOpen(false)
     setReplyText('')
     setReplyInstruction('')
     setReplyStatus(null)
@@ -913,7 +982,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
 
                 {/* Main Action Buttons */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setReplyOpen(true)}
@@ -923,29 +992,126 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => toggleStar(messageDetail.id, e)}
-                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                    title="Star message"
-                  >
-                    <Star size={14} className={starredIds.has(messageDetail.id) ? 'fill-[#caa24c] text-[#caa24c]' : ''} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReaderExpanded((expanded) => !expanded)}
-                    className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
+                    onClick={() => {
+                      setReaderMenuOpen(false)
+                      setReaderExpanded((expanded) => !expanded)
+                    }}
+                    className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
                     title={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                     aria-label={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                   >
                     {readerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handlePrint}
-                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                    title="Print Email"
-                  >
-                    <Printer size={14} />
-                  </button>
+                  <div ref={readerMenuRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setReaderMenuOpen((open) => !open)}
+                      className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                      title="More email actions"
+                      aria-label="More email actions"
+                      aria-expanded={readerMenuOpen}
+                      aria-haspopup="menu"
+                    >
+                      <MoreVertical size={14} />
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {readerMenuOpen && (
+                        <motion.div
+                          role="menu"
+                          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.985 }}
+                          transition={{ duration: reduceMotion ? 0.08 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+                          className="absolute right-0 top-11 z-30 w-64 origin-top-right rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 text-[10px] shadow-2xl backdrop-blur-xl"
+                        >
+                          <div className="border-b border-[color:var(--portal-border)] px-2.5 pb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">
+                            Message actions
+                          </div>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(event) => {
+                              toggleStar(messageDetail.id, event)
+                              setReaderMenuOpen(false)
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                          >
+                            <Star size={13} className={starredIds.has(messageDetail.id) ? 'fill-[#caa24c] text-[#caa24c]' : ''} />
+                            {starredIds.has(messageDetail.id) ? 'Remove star' : 'Star message'}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              handlePrint()
+                              setReaderMenuOpen(false)
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                          >
+                            <Printer size={13} />
+                            Print email
+                          </button>
+
+                          <div className="my-1.5 border-t border-[color:var(--portal-border)]" />
+                          <div className="px-2.5 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">
+                            Message view
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { setViewMode('html'); setReaderMenuOpen(false) }}
+                              className={`rounded-lg px-2.5 py-2 text-left font-bold uppercase tracking-wider transition-colors ${viewMode === 'html' ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                            >
+                              HTML view
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { setViewMode('text'); setReaderMenuOpen(false) }}
+                              className={`rounded-lg px-2.5 py-2 text-left font-bold uppercase tracking-wider transition-colors ${viewMode === 'text' ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                            >
+                              Plain text
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setBlockExternalImages((blocked) => !blocked); setReaderMenuOpen(false) }}
+                            className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-mono transition-colors ${blockExternalImages ? 'bg-amber-500/10 text-amber-500' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                          >
+                            {blockExternalImages ? <ShieldAlert size={13} /> : <ShieldCheck size={13} />}
+                            {blockExternalImages ? 'Images blocked' : 'Images safe'}
+                          </button>
+
+                          <div className="my-1.5 border-t border-[color:var(--portal-border)]" />
+                          <div className="px-2.5 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">
+                            Preview width
+                          </div>
+                          <div className="flex items-center gap-1 rounded-lg bg-[color:var(--portal-soft)] p-1">
+                            {([
+                              ['full', Monitor, 'Full width'],
+                              ['tablet', Tablet, 'Tablet preview'],
+                              ['mobile', Smartphone, 'Mobile preview'],
+                            ] as const).map(([width, Icon, label]) => (
+                              <button
+                                key={width}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { setViewportWidth(width); setReaderMenuOpen(false) }}
+                                className={`flex flex-1 items-center justify-center rounded-md p-1.5 transition-colors ${viewportWidth === width ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                                title={label}
+                                aria-label={label}
+                              >
+                                <Icon size={13} />
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
 
@@ -976,67 +1142,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
               </div>
 
-              {/* Reader Controls Toolbar */}
-              <div className="flex items-center justify-between gap-3 pt-2 text-[10px]">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('html')}
-                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                      viewMode === 'html' ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                    }`}
-                  >
-                    HTML View
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('text')}
-                    className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                      viewMode === 'text' ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                    }`}
-                  >
-                    Plain Text
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBlockExternalImages(!blockExternalImages)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-mono transition-colors cursor-pointer ${
-                      blockExternalImages ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                    }`}
-                  >
-                    {blockExternalImages ? <ShieldAlert size={12} /> : <ShieldCheck size={12} />}
-                    {blockExternalImages ? 'Images Blocked' : 'Images Safe'}
-                  </button>
-                </div>
-
-                {/* Device Viewport Preview Mode */}
-                <div className="flex items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewportWidth('full')}
-                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'full' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-                    title="Full Width View"
-                  >
-                    <Monitor size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewportWidth('tablet')}
-                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'tablet' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-                    title="Tablet Preview (768px)"
-                  >
-                    <Tablet size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewportWidth('mobile')}
-                    className={`p-1.5 rounded cursor-pointer ${viewportWidth === 'mobile' ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-                    title="Mobile Preview (375px)"
-                  >
-                    <Smartphone size={13} />
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Scrollable email thread — grows to fill, reply pinned below */}
@@ -1068,6 +1173,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     viewMode={viewMode}
                     blockExternalImages={blockExternalImages}
                     inquiryByEmail={inquiryByEmail}
+                    onOpenAttachment={openAttachmentPreview}
+                    openingAttachment={openingAttachment}
                   />
                 ))}
 
@@ -1084,7 +1191,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[#caa24c]/6 px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#caa24c] text-white"><Send size={12} /></span>
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#caa24c] text-white"><Send size={12} className="text-white" /></span>
                           <div>
                             <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}</p>
                             <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">Your reply will become the newest message in this conversation.</p>
@@ -1162,6 +1269,48 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           </motion.div>
         )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {previewAttachment && (
+            <motion.div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeAttachmentPreview}
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${previewAttachment.filename} preview`}
+                className="flex h-[min(88vh,760px)] w-[min(94vw,1100px)] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{previewAttachment.filename}</p>
+                    <p className="mt-0.5 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">Attachment preview</p>
+                  </div>
+                  <button type="button" onClick={closeAttachmentPreview} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close attachment preview">
+                    <X size={15} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 bg-white">
+                  {previewAttachment.mimeType.startsWith('image/') ? (
+                    <div className="flex h-full items-center justify-center bg-zinc-950 p-5">
+                      <img src={previewAttachment.url} alt={previewAttachment.filename} className="max-h-full max-w-full object-contain" />
+                    </div>
+                  ) : (
+                    <iframe src={previewAttachment.url} title={previewAttachment.filename} className="h-full w-full border-0" />
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -1173,12 +1322,16 @@ function ThreadMessage({
   viewMode,
   blockExternalImages,
   inquiryByEmail,
+  onOpenAttachment,
+  openingAttachment,
 }: {
   message: EmailMessageItem
   expanded: boolean
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
   inquiryByEmail: Map<string, LuxorInquiry>
+  onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
+  openingAttachment: string | null
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
@@ -1226,6 +1379,36 @@ function ThreadMessage({
               {message.content || message.summary || 'No message body available.'}
             </div>
           )}
+          {message.attachments?.length ? (
+            <div className="border-t border-[color:var(--portal-border)] p-4">
+              <div className="mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
+                <Paperclip size={12} /> Attachments ({message.attachments.length})
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {message.attachments.map((attachment, index) => {
+                  const reference = attachment.attachmentId || attachment.attachmentPath || ''
+                  return (
+                    <button
+                      key={`${attachment.filename}-${index}`}
+                      type="button"
+                      onClick={() => onOpenAttachment(attachment, message)}
+                      disabled={!reference || openingAttachment === reference}
+                      className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-3 py-2.5 text-left transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/8 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] group-hover:text-[#a8792f]">
+                        {openingAttachment === reference ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{attachment.filename}</span>
+                        <span className="mt-0.5 block text-[9px] text-[color:var(--portal-muted)]">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : 'Open preview'}</span>
+                      </span>
+                      <Download size={13} className="shrink-0 text-[color:var(--portal-faint)] transition-colors group-hover:text-[#a8792f]" />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </article>

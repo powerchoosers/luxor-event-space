@@ -55,8 +55,18 @@ export type LuxorZohoMessage = {
   content?: string
   htmlContent?: string | null
   hasAttachment: boolean
+  attachments?: LuxorZohoAttachment[]
   isRead?: boolean
   direction?: 'incoming' | 'outgoing'
+}
+
+export type LuxorZohoAttachment = {
+  filename: string
+  mimeType?: string
+  size?: number
+  messageId: string
+  attachmentId?: string
+  attachmentPath?: string
 }
 
 const DEFAULT_LOGIN_EMAIL = 'booking@luxoratlaspalmas.com'
@@ -644,12 +654,118 @@ export async function getLuxorZohoMessageDetail(messageId: string, folderId?: st
   }
 }
 
+function normalizeZohoAttachment(raw: Record<string, unknown>, messageId: string): LuxorZohoAttachment | null {
+  const filename = String(raw.filename || raw.attachmentName || raw.name || '').trim()
+  if (!filename) return null
+  const attachmentPath = String(raw.attachmentPath || '').trim()
+  const attachmentId = String(raw.attachmentId || raw.storeName || attachmentPath || '').trim()
+  const sizeValue = Number(raw.size || raw.attachmentSize || 0)
+  return {
+    filename,
+    mimeType: String(raw.mimeType || raw.type || raw.contentType || '').trim() || undefined,
+    size: Number.isFinite(sizeValue) && sizeValue > 0 ? sizeValue : undefined,
+    messageId: String(raw.messageId || raw.zohoMessageId || messageId),
+    attachmentId: attachmentId || undefined,
+    attachmentPath: attachmentPath || undefined,
+  }
+}
+
+export async function getLuxorZohoMessageAttachments(messageId: string, folderId?: string): Promise<LuxorZohoAttachment[]> {
+  if (!messageId) return []
+  const { accountId, baseUrl } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const resolvedFolderId = String(folderId || '').trim()
+  const candidates = resolvedFolderId
+    ? [
+        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/attachmentinfo`,
+        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/attachments`,
+        `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/attachmentinfo`,
+        `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/attachments`,
+      ]
+    : [
+        `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/attachmentinfo`,
+        `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/attachments`,
+      ]
+
+  for (const url of candidates) {
+    try {
+      const response = await fetchZohoMailRead(url, {
+        headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+        cache: 'no-store',
+      })
+      if (!response.ok) continue
+      const result = await response.json().catch(() => ({})) as {
+        data?: unknown
+      }
+      const data = result.data as { attachments?: unknown } | unknown
+      const rawAttachments = Array.isArray(data)
+        ? data
+        : data && typeof data === 'object' && Array.isArray((data as { attachments?: unknown[] }).attachments)
+          ? (data as { attachments: unknown[] }).attachments
+          : []
+      return rawAttachments
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        .map((item) => normalizeZohoAttachment(item, messageId))
+        .filter((item): item is LuxorZohoAttachment => Boolean(item))
+    } catch (error) {
+      console.warn(`[Zoho] Attachment list failed for ${messageId}:`, error)
+    }
+  }
+
+  return []
+}
+
+export async function downloadLuxorZohoAttachment(input: {
+  messageId: string
+  attachmentId?: string
+  attachmentPath?: string
+  folderId?: string
+}) {
+  const { accountId, baseUrl } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const resolvedFolderId = String(input.folderId || '').trim()
+  const tokens = Array.from(new Set([input.attachmentId, input.attachmentPath]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .flatMap((value) => [value, encodeURIComponent(value)])))
+
+  if (!input.messageId || !tokens.length) throw new Error('Attachment reference is incomplete.')
+
+  const urls = tokens.flatMap((token) => {
+    const candidates = [
+      `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(input.messageId)}/attachments/${token}`,
+      `${baseUrl}/accounts/${accountId}/messages/attachments/${token}`,
+    ]
+    if (resolvedFolderId) {
+      candidates.unshift(`${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(input.messageId)}/attachments/${token}`)
+    }
+    return candidates
+  })
+
+  let lastStatus = 0
+  for (const url of urls) {
+    const response = await fetchZohoMailRead(url, {
+      headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+      cache: 'no-store',
+    })
+    if (response.ok) {
+      return {
+        bytes: new Uint8Array(await response.arrayBuffer()),
+        contentType: response.headers.get('content-type') || 'application/octet-stream',
+      }
+    }
+    lastStatus = response.status
+  }
+
+  throw new Error(`Zoho attachment fetch failed with ${lastStatus}.`)
+}
+
 async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string): Promise<LuxorZohoMessage | null> {
   const { accountId, baseUrl, allowedSenders } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
 
   // Helper to parse a Zoho message data payload into our detail shape
-  function parseMessageData(data: Record<string, unknown>, content: string) {
+  function parseMessageData(data: Record<string, unknown>, content: string, attachments: LuxorZohoAttachment[] = []) {
     const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress as string || data.sender as string || ''))
       ? 'outgoing' as const
       : 'incoming' as const
@@ -666,6 +782,7 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
       content,
       htmlContent: content,
       hasAttachment: zohoBoolean(data.hasAttachment),
+      attachments,
       direction,
     }
   }
@@ -697,7 +814,8 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
           content ||= String(data.summary || '')
 
           if (Object.keys(data).length > 0) {
-            return parseMessageData(data, content)
+            const attachments = await getLuxorZohoMessageAttachments(messageId, String(data.folderId || folderId || ''))
+            return parseMessageData(data, content, attachments)
           }
         }
       } catch (err) {
@@ -762,7 +880,8 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
 
     fullContent ||= String(data.summary || '')
 
-    return parseMessageData(data, fullContent)
+    const attachments = await getLuxorZohoMessageAttachments(messageId, resolvedFolderId)
+    return parseMessageData(data, fullContent, attachments)
   } catch (err) {
     console.error('Failed fetching Zoho message detail:', err)
     return null
