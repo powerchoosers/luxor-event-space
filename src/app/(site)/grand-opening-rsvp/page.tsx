@@ -68,7 +68,7 @@ export default function GrandOpeningPage() {
       rsvpStatus: 'attending',
       marketingOptIn,
       pagePath: window.location.pathname,
-      referrer: document.referrer,
+      referrer: typeof document !== 'undefined' ? document.referrer : '',
       metadata: {
         campaignName: LUXOR_GRAND_OPENING.name,
         eventDateLabel: LUXOR_GRAND_OPENING.dateLabel,
