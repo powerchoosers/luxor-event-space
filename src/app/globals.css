@@ -339,6 +339,71 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
   color: #100b0d;
 }
 
+@layer components {
+  .planning-editor-label {
+    display: block;
+    color: var(--portal-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .planning-editor-input {
+    margin-top: 0.5rem;
+    width: 100%;
+    border: 1px solid var(--portal-border);
+    border-radius: 0.75rem;
+    background: var(--portal-soft);
+    padding: 0.7rem 0.8rem;
+    color: var(--portal-text);
+    font-size: 0.75rem;
+    outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .planning-editor-input:focus {
+    border-color: rgba(202, 162, 76, 0.65);
+    box-shadow: 0 0 0 3px rgba(202, 162, 76, 0.1);
+  }
+
+  .layout-builder-preview {
+    position: relative;
+    display: grid;
+    height: 3.5rem;
+    width: 4.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(202, 162, 76, 0.35);
+    border-radius: 0.6rem;
+    background: linear-gradient(135deg, rgba(202, 162, 76, 0.18), rgba(255, 255, 255, 0.04));
+  }
+
+  .layout-builder-preview::before {
+    position: absolute;
+    inset: 0.45rem;
+    border: 1px dashed rgba(202, 162, 76, 0.55);
+    content: '';
+  }
+
+  .layout-builder-preview i {
+    position: relative;
+    z-index: 1;
+    display: block;
+    height: 0.48rem;
+    width: 0.48rem;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .layout-builder-preview.banquet { grid-template-columns: repeat(3, 0.5rem); gap: 0.35rem; }
+  .layout-builder-preview.dance { grid-template-columns: repeat(2, 0.5rem); gap: 1rem; }
+  .layout-builder-preview.ceremony { grid-template-columns: repeat(3, 0.5rem); gap: 0.3rem; transform: rotate(90deg); }
+  .layout-builder-preview.lounge { grid-template-columns: repeat(3, 0.5rem); gap: 0.25rem; }
+}
+
 @layer utilities {
   .luxor-noise {
     background-image:

@@ -163,6 +163,23 @@ const EVENT_TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
   return { value, label: formatTimeString(value) }
 })
 
+const PLANNING_COLOR_OPTIONS = [
+  { id: 'black-gold', label: 'Black & gold', colors: ['#111111', '#caa24c', '#f1d27a', '#f7f3eb'] },
+  { id: 'ivory-sage', label: 'Ivory & sage', colors: ['#f5f0e8', '#b9c7ad', '#6f8068', '#343b32'] },
+  { id: 'terracotta', label: 'Terracotta', colors: ['#f3e2d2', '#d8895b', '#a94e39', '#51362d'] },
+  { id: 'blush', label: 'Blush & champagne', colors: ['#f5e4e3', '#d9a6a5', '#caa24c', '#6a4b4d'] },
+  { id: 'navy', label: 'Navy & ivory', colors: ['#18243d', '#304a73', '#d8c39a', '#f7f3eb'] },
+] as const
+
+const PLANNING_LAYOUT_OPTIONS = [
+  { id: 'classic-banquet', label: 'Classic banquet', detail: 'Guest tables facing a centered head table', kind: 'banquet' },
+  { id: 'dance-floor-center', label: 'Dance floor center', detail: 'Open dance floor at the heart of the room', kind: 'dance' },
+  { id: 'ceremony-to-reception', label: 'Ceremony to reception', detail: 'Clear aisle with a reception reset', kind: 'ceremony' },
+  { id: 'cocktail-lounge', label: 'Cocktail lounge', detail: 'Flexible clusters for mingling and conversation', kind: 'lounge' },
+] as const
+
+type PlanningEditSection = 'event' | 'preferences' | 'layout' | 'decor' | null
+
 export default function LeadDetailPage({
   params,
 }: {
@@ -252,6 +269,10 @@ export default function LeadDetailPage({
   const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
   const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
   const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
+  const [planningEditSection, setPlanningEditSection] = useState<PlanningEditSection>(null)
+  const [savingPlanningSection, setSavingPlanningSection] = useState(false)
+  const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
+  const [planningColors, setPlanningColors] = useState<string[]>([])
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
@@ -1434,6 +1455,48 @@ export default function LeadDetailPage({
     } finally {
       setSendingContractBookingId(null)
       setUpdatingStatus(false)
+    }
+  }
+
+  const beginPlanningEdit = (section: Exclude<PlanningEditSection, null>) => {
+    if (!lead) return
+    const metadata = lead.metadata || {}
+    setPlanningEditSection(section)
+    setPlanningDraft({
+      event_style: String(metadata.event_style || ''),
+      music_style: String(metadata.music_style || ''),
+      lighting_preference: String(metadata.lighting_preference || ''),
+      special_requests: String(metadata.special_requests || lead.message || ''),
+      head_table: String(metadata.head_table || ''),
+      dance_floor: String(metadata.dance_floor || ''),
+      stage_needed: String(metadata.stage_needed || ''),
+      other_areas: String(metadata.other_areas || ''),
+      floor_plan_layout: String(metadata.floor_plan_layout || 'classic-banquet'),
+      decor_style: String(metadata.decor_style || ''),
+      centerpieces: String(metadata.centerpieces || ''),
+      linens: String(metadata.linens || ''),
+    })
+    const storedColors = Array.isArray(metadata.color_palette) ? metadata.color_palette.map(String) : []
+    setPlanningColors(storedColors)
+  }
+
+  const savePlanningSection = async () => {
+    if (!planningEditSection) return
+    setSavingPlanningSection(true)
+    const fieldsBySection: Record<Exclude<PlanningEditSection, null>, string[]> = {
+      event: ['event_style'],
+      preferences: ['music_style', 'lighting_preference', 'special_requests'],
+      layout: ['head_table', 'dance_floor', 'stage_needed', 'other_areas', 'floor_plan_layout'],
+      decor: ['decor_style', 'centerpieces', 'linens'],
+    }
+    const updates: Record<string, unknown> = {}
+    for (const field of fieldsBySection[planningEditSection]) updates[field] = planningDraft[field]?.trim() || null
+    if (planningEditSection === 'preferences') updates.color_palette = planningColors
+    const saved = await handleMetadataUpdate(updates)
+    setSavingPlanningSection(false)
+    if (saved) {
+      setPlanningEditSection(null)
+      notify({ title: 'Planning details saved', description: 'The lead record is up to date.', variant: 'success' })
     }
   }
 
@@ -3371,12 +3434,52 @@ export default function LeadDetailPage({
                     {/* Planning sub-tab contents */}
                     {planningSubTab === 'details' && (
                       <div className="space-y-6 luxor-soft-enter">
+                        {planningEditSection && (
+                          <section className="rounded-2xl border border-[#caa24c]/30 bg-[#caa24c]/[0.04] p-5 shadow-sm">
+                            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Editing planning details</p>
+                                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Changes save to this lead when you choose Save changes.</p>
+                              </div>
+                              <button type="button" onClick={() => setPlanningEditSection(null)} className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Cancel</button>
+                            </div>
+
+                            {planningEditSection === 'event' && (
+                              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                <label className="sm:col-span-2"><span className="planning-editor-label">Theme / style</span><input value={planningDraft.event_style || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, event_style: event.target.value }))} placeholder="e.g. modern desert, black tie, garden romance" className="planning-editor-input" /></label>
+                                <div className="sm:col-span-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">Event date, time, type, and guest count stay connected to the lead and booking records. Edit those from the Client Summary above so there is one source of truth.</div>
+                              </div>
+                            )}
+
+                            {planningEditSection === 'preferences' && (
+                              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                <div className="sm:col-span-2"><span className="planning-editor-label">Color palette</span><div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">{PLANNING_COLOR_OPTIONS.map((palette) => { const selected = planningColors.join(',') === palette.colors.join(','); return <button key={palette.id} type="button" onClick={() => setPlanningColors([...palette.colors])} className={`rounded-xl border p-3 text-left transition-colors ${selected ? 'border-[#caa24c] bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/45'}`} aria-pressed={selected}><span className="flex gap-1.5">{palette.colors.map((color) => <span key={color} className="h-7 flex-1 rounded-md border border-black/10" style={{ backgroundColor: color }} />)}</span><span className={`mt-2 block text-[10px] font-bold ${selected ? 'text-[#caa24c]' : 'text-[color:var(--portal-text)]'}`}>{palette.label}</span></button> })}</div></div>
+                                <label><span className="planning-editor-label">Music style</span><input value={planningDraft.music_style || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, music_style: event.target.value }))} placeholder="DJ, live band, playlist…" className="planning-editor-input" /></label>
+                                <label><span className="planning-editor-label">Lighting</span><input value={planningDraft.lighting_preference || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, lighting_preference: event.target.value }))} placeholder="Warm uplighting, candlelight…" className="planning-editor-input" /></label>
+                                <label className="sm:col-span-2"><span className="planning-editor-label">Special requests</span><textarea value={planningDraft.special_requests || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, special_requests: event.target.value }))} rows={3} placeholder="Anything the planning team needs to remember" className="planning-editor-input resize-y" /></label>
+                              </div>
+                            )}
+
+                            {planningEditSection === 'layout' && (
+                              <div className="mt-4 space-y-4">
+                                <div><span className="planning-editor-label">Choose a starting layout</span><div className="mt-2 grid gap-3 sm:grid-cols-2">{PLANNING_LAYOUT_OPTIONS.map((layout) => { const selected = planningDraft.floor_plan_layout === layout.id; return <button key={layout.id} type="button" onClick={() => setPlanningDraft((current) => ({ ...current, floor_plan_layout: layout.id }))} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-[#caa24c] bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/45'}`} aria-pressed={selected}><span className={`layout-builder-preview ${layout.kind}`}><i /><i /><i /></span><span><span className="block text-[11px] font-bold text-[color:var(--portal-text)]">{layout.label}</span><span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">{layout.detail}</span></span></button> })}</div></div>
+                                <div className="grid gap-4 sm:grid-cols-2"><label><span className="planning-editor-label">Head table</span><input value={planningDraft.head_table || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, head_table: event.target.value }))} placeholder="Centered, sweetheart, none…" className="planning-editor-input" /></label><label><span className="planning-editor-label">Dance floor</span><input value={planningDraft.dance_floor || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, dance_floor: event.target.value }))} placeholder="Center, west wall, size…" className="planning-editor-input" /></label><label><span className="planning-editor-label">Stage / DJ area</span><input value={planningDraft.stage_needed || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, stage_needed: event.target.value }))} placeholder="Stage, DJ booth, none…" className="planning-editor-input" /></label><label><span className="planning-editor-label">Other areas</span><input value={planningDraft.other_areas || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, other_areas: event.target.value }))} placeholder="Photo booth, bar, gift table…" className="planning-editor-input" /></label></div>
+                              </div>
+                            )}
+
+                            {planningEditSection === 'decor' && (
+                              <div className="mt-4 grid gap-4 sm:grid-cols-2"><label><span className="planning-editor-label">Décor style</span><input value={planningDraft.decor_style || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, decor_style: event.target.value }))} placeholder="Romantic, modern, minimal…" className="planning-editor-input" /></label><label><span className="planning-editor-label">Centerpieces</span><input value={planningDraft.centerpieces || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, centerpieces: event.target.value }))} placeholder="Florals, candles, greenery…" className="planning-editor-input" /></label><label className="sm:col-span-2"><span className="planning-editor-label">Linens</span><input value={planningDraft.linens || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, linens: event.target.value }))} placeholder="Ivory napkins, black runners…" className="planning-editor-input" /></label></div>
+                            )}
+
+                            <div className="mt-5 flex justify-end gap-2 border-t border-[color:var(--portal-border)] pt-4"><button type="button" onClick={() => setPlanningEditSection(null)} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={() => void savePlanningSection()} disabled={savingPlanningSection} className="rounded-lg bg-[#caa24c] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68] disabled:opacity-50">{savingPlanningSection ? 'Saving…' : 'Save changes'}</button></div>
+                          </section>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {/* Event Information */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Information</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                              <button type="button" onClick={() => beginPlanningEdit('event')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
                             </div>
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
@@ -3414,16 +3517,15 @@ export default function LeadDetailPage({
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Preferences</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                              <button type="button" onClick={() => beginPlanningEdit('preferences')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
                             </div>
                             <div className="space-y-3 text-xs">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Color Palette</span>
                                 <div className="flex gap-1.5">
-                                  <span className="h-4.5 w-4.5 rounded-full bg-black border border-zinc-800" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-[#caa24c]" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-[#f1d27a]" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-white border border-zinc-800" />
+                                  {(Array.isArray(lead.metadata?.color_palette) && lead.metadata.color_palette.length > 0 ? lead.metadata.color_palette.map(String) : PLANNING_COLOR_OPTIONS[0].colors).map((color) => (
+                                    <span key={color} title={color} className="h-4.5 w-4.5 rounded-full border border-black/10" style={{ backgroundColor: color }} />
+                                  ))}
                                 </div>
                               </div>
                               <div className="flex justify-between">
@@ -3447,12 +3549,11 @@ export default function LeadDetailPage({
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                              <button type="button" onClick={() => beginPlanningEdit('layout')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
                             </div>
                             <div className="grid grid-cols-5 gap-4">
                               <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
-                                <Sparkles size={20} />
-                                <span className="text-[8px] font-bold uppercase mt-1 text-center">Floor Plan Layout</span>
+                                <span className="text-[8px] font-bold uppercase text-center">{PLANNING_LAYOUT_OPTIONS.find((option) => option.id === lead.metadata?.floor_plan_layout)?.label || 'Layout not selected'}</span>
                               </div>
                               <div className="col-span-3 space-y-2 text-xs">
                                 <div className="flex justify-between">
@@ -3479,7 +3580,7 @@ export default function LeadDetailPage({
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Decor Overview</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
+                              <button type="button" onClick={() => beginPlanningEdit('decor')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
                             </div>
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
