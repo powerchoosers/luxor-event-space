@@ -363,10 +363,10 @@ export function CallCenterTab({
                       >
                         <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
                           checked
-                            ? 'border-[#caa24c] bg-[#caa24c] text-white'
+                            ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-sm'
                             : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-muted)]'
                         }`}>
-                          {checked && <Check size={10} strokeWidth={3} />}
+                          {checked && <Check size={10} strokeWidth={3} className="!text-white !stroke-white text-white stroke-white" style={{ color: '#ffffff', stroke: '#ffffff' }} />}
                         </div>
                         <span className="truncate">{out.label}</span>
                       </button>

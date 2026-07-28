@@ -187,6 +187,33 @@ body[data-portal-theme='light'] .group:hover .group-hover\:text-\[\#f1d27a\] {
   color: #a8792f !important;
 }
 
+/* Golden checkbox boxes with pure white checkmark in both light and dark mode */
+.bg-\[\#caa24c\],
+.bg-\[\#caa24c\] *,
+.bg-\[\#caa24c\] svg,
+.bg-\[\#dfbd68\],
+.bg-\[\#dfbd68\] *,
+.bg-\[\#dfbd68\] svg,
+.bg-[#caa24c],
+.bg-[#caa24c] *,
+.bg-[#caa24c] svg,
+.bg-[#dfbd68],
+.bg-[#dfbd68] *,
+.bg-[#dfbd68] svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+body[data-portal-theme='light'] .bg-\[\#caa24c\],
+body[data-portal-theme='light'] .bg-\[\#caa24c\] *,
+body[data-portal-theme='light'] .bg-\[\#caa24c\] svg,
+body[data-portal-theme='light'] .bg-[#caa24c],
+body[data-portal-theme='light'] .bg-[#caa24c] *,
+body[data-portal-theme='light'] .bg-[#caa24c] svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 /* Light mode overrides for EXACT solid gold buttons and notification numbers ONLY */
 body[data-portal-theme='light'] .portal-notification-number,
 body[data-portal-theme='light'] .portal-notification-number *,
