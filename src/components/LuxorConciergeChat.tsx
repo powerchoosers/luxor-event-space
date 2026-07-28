@@ -62,7 +62,7 @@ const eventCards = [
   },
 ]
 
-const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event', 'Packages & rates', 'Check tour times']
+const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event']
 
 function createId() {
   return Math.random().toString(36).slice(2)
@@ -123,6 +123,22 @@ function inferGuestCount(messages: Message[], notes: string) {
   return guestMatch?.[1] ?? ''
 }
 
+function getVisitorGreeting() {
+  const attribution = getLuxorPublicAttribution()
+  const source = `${attribution.utmSource ?? ''} ${attribution.initialReferrer ?? ''}`.toLowerCase()
+  const medium = attribution.utmMedium?.toLowerCase() ?? ''
+
+  if (source.includes('instagram')) {
+    return 'Hi, I am Elena. Welcome from Instagram. Ask me about the room, pricing, or tour times, and I can help you take the next step.'
+  }
+
+  if (attribution.gclid || attribution.fbclid || /paid|cpc|ppc|display|social/.test(medium)) {
+    return 'Hi, I am Elena. Welcome to Luxor. Ask me about the room, pricing, or tour times, and I can help you take the next step.'
+  }
+
+  return 'Hi, I am Elena. I can help you picture your event at Luxor, compare options, and request a private tour.'
+}
+
 export function LuxorConciergeChat() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -153,7 +169,7 @@ export function LuxorConciergeChat() {
       id: createId(),
       role: 'assistant',
       content:
-        'Hi, I am Elena. If you found Luxor through Instagram or an ad, you are in the right place. Ask me about pricing, availability, or the room, and I can help you request a private tour.',
+        'Hi, I am Elena. I can help you picture your event at Luxor, compare options, and request a private tour.',
     },
   ])
 
@@ -171,6 +187,10 @@ export function LuxorConciergeChat() {
   useEffect(() => {
     if (!open) return
     trackLuxorPublicEvent('concierge_opened')
+    setMessages((current) => {
+      if (current.length !== 1 || current[0]?.role !== 'assistant') return current
+      return [{ ...current[0], content: getVisitorGreeting() }]
+    })
     window.requestAnimationFrame(() => inputRef.current?.focus())
 
     function onKeyDown(event: KeyboardEvent) {
@@ -601,6 +621,24 @@ export function LuxorConciergeChat() {
                       </button>
                     ))}
                   </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#caa24c]/12 pt-3">
+                    <Link
+                      href="/pricing"
+                      className="rounded-md border border-[#caa24c]/18 bg-black/18 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/78 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
+                    >
+                      Compare packages
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEventPickerOpen(false)
+                        showBookingCard()
+                      }}
+                      className="rounded-md border border-[#caa24c]/18 bg-black/18 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/78 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
+                    >
+                      Check tour times
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -627,7 +665,7 @@ export function LuxorConciergeChat() {
               ) : null}
             </div>
 
-            <div className="border-t border-[#caa24c]/18 bg-[#0d0908] px-3 py-2">
+            {!hasBookingCard ? <div className="border-t border-[#caa24c]/18 bg-[#0d0908] px-3 py-2">
               <button
                 type="button"
                 onClick={() => {
@@ -719,7 +757,7 @@ export function LuxorConciergeChat() {
                   </motion.div>
                 ) : null}
               </AnimatePresence>
-            </div>
+            </div> : null}
 
             <form
               onSubmit={(event) => {
