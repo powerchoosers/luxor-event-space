@@ -73,7 +73,7 @@ const PortalElenaChat = dynamic(
     loading: () => (
       <aside
         aria-hidden="true"
-        className="pointer-events-none fixed right-0 top-0 z-50 flex h-full w-full translate-x-full flex-col border-l border-[#caa24c]/10 bg-[#050505] opacity-0 shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+        className="pointer-events-none fixed right-0 top-0 z-50 flex h-full w-full translate-x-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] opacity-0 shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
       />
     ),
   }

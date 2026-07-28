@@ -613,10 +613,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[#caa24c]/10 bg-[#050505] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
     >
       {/* Header */}
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#caa24c]/10 px-4">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
         <div className="flex items-center gap-3">
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-[#caa24c]/30 ring-2 ring-[#caa24c]/10">
             <Image 
@@ -671,7 +671,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -15 }}
               transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute inset-0 z-20 flex flex-col bg-[#050505] p-4 space-y-4"
+              className="absolute inset-0 z-20 flex flex-col bg-[color:var(--portal-bg)] p-4 space-y-4"
             >
               <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                 <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Chat Sessions</h4>

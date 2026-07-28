@@ -522,7 +522,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                           className="fixed inset-0 z-40" 
                           onClick={() => setShowClientDropdown(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-2xl portal-scrollbar">
+                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl portal-scrollbar">
                           {allInquiries.filter(inq => 
                             inq.full_name.toLowerCase().includes(toAddress.toLowerCase()) ||
                             (inq.email && inq.email.toLowerCase().includes(toAddress.toLowerCase()))
@@ -534,11 +534,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                 setToAddress(inq.email || '')
                                 setShowClientDropdown(false)
                               }}
-                              className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors cursor-pointer"
+                              className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                             >
                               <div>
-                                <p className="font-bold text-white/90">{inq.full_name}</p>
-                                <p className="text-[10px] text-zinc-550 font-mono mt-0.5">{inq.email || 'No email'}</p>
+                                <p className="font-bold text-[color:var(--portal-text)]">{inq.full_name}</p>
+                                <p className="text-[10px] text-[color:var(--portal-faint)] font-mono mt-0.5">{inq.email || 'No email'}</p>
                               </div>
                               {inq.event_type && (
                                 <span className="text-[8px] font-bold uppercase tracking-wider text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-1.5 py-0.5 rounded">
@@ -551,7 +551,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                             inq.full_name.toLowerCase().includes(toAddress.toLowerCase()) ||
                             (inq.email && inq.email.toLowerCase().includes(toAddress.toLowerCase()))
                           ).length === 0 && (
-                            <div className="py-3 text-center text-xs text-zinc-650 italic">
+                            <div className="py-3 text-center text-xs text-[color:var(--portal-faint)] italic">
                               No matching clients found.
                             </div>
                           )}
