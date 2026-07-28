@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
+  ChevronRight,
   Mail,
   MessageCircle,
   Phone,
@@ -123,6 +124,33 @@ function inferGuestCount(messages: Message[], notes: string) {
   return guestMatch?.[1] ?? ''
 }
 
+function toCalendarDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, (month || 1) - 1, day || 1)
+}
+
+function toIsoDate(value: Date) {
+  return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
+}
+
+function getCalendarDays(monthValue: string) {
+  const [year, month] = monthValue.split('-').map(Number)
+  const firstDay = new Date(year, (month || 1) - 1, 1)
+  const start = new Date(year, firstDay.getMonth(), 1 - firstDay.getDay())
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + index)
+    return date
+  })
+}
+
+function shiftCalendarMonth(monthValue: string, amount: number) {
+  const [year, month] = monthValue.split('-').map(Number)
+  const shifted = new Date(year, (month || 1) - 1 + amount, 1)
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}`
+}
+
 function getVisitorGreeting() {
   const attribution = getLuxorPublicAttribution()
   const source = `${attribution.utmSource ?? ''} ${attribution.initialReferrer ?? ''}`.toLowerCase()
@@ -146,7 +174,9 @@ export function LuxorConciergeChat() {
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots({ enabled: open })
-  const [showAllTourSlots, setShowAllTourSlots] = useState(false)
+  const [bookingStep, setBookingStep] = useState<1 | 2>(1)
+  const [selectedTourDate, setSelectedTourDate] = useState('')
+  const [calendarMonth, setCalendarMonth] = useState('')
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
@@ -182,9 +212,20 @@ export function LuxorConciergeChat() {
   const hasBookingCard = messages.some((message) => message.ui === 'booking')
   const contactComplete =
     contactDetails.name.trim().length > 1 &&
-    (contactDetails.email.includes('@') || contactDetails.phone.replace(/\D/g, '').length >= 10)
+    contactDetails.phone.replace(/\D/g, '').length >= 10
   const bookingReady = contactComplete && Boolean(tourSelection || preferredTourWindow)
-  const displayedTourSlots = showAllTourSlots ? tourSlots : tourSlots.slice(0, 8)
+  const availableTourDates = useMemo(() => new Set(tourSlots.map((slot) => slot.date)), [tourSlots])
+  const selectedDateSlots = useMemo(
+    () => tourSlots.filter((slot) => slot.date === selectedTourDate),
+    [selectedTourDate, tourSlots],
+  )
+  const calendarDays = useMemo(() => (calendarMonth ? getCalendarDays(calendarMonth) : []), [calendarMonth])
+
+  useEffect(() => {
+    if (tourSlots.length && !calendarMonth) {
+      setCalendarMonth(tourSlots[0].date.slice(0, 7))
+    }
+  }, [calendarMonth, tourSlots])
 
   useEffect(() => {
     if (!open) return
@@ -379,6 +420,91 @@ export function LuxorConciergeChat() {
     }
   }
 
+  function renderTourPicker() {
+    if (tourSlotsLoading) {
+      return <p className="rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">Loading current tour openings...</p>
+    }
+
+    if (tourSlotsError) {
+      return <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs leading-5 text-red-200">{tourSlotsError}</p>
+    }
+
+    if (!tourSlots.length) {
+      return (
+        <div className="rounded-md border border-[#caa24c]/18 bg-black/25 p-3">
+          <p className="text-xs leading-5 text-[#d7c29a]/70">No exact times are published right now. Pick a preferred window and the team will offer options.</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {['Morning', 'Afternoon', 'Evening'].map((window) => (
+              <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>
+                {window}
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="rounded-md border border-[#caa24c]/18 bg-black/25 p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Step {bookingStep} of 2</p>
+            <p className="mt-1 text-xs text-[#d7c29a]/70">{bookingStep === 1 ? 'Choose a tour day' : 'Choose an available time'}</p>
+          </div>
+          {bookingStep === 2 ? (
+            <button type="button" onClick={() => setBookingStep(1)} className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#d7c29a]/70 transition hover:text-[#f1d27a]">
+              Change day
+            </button>
+          ) : null}
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          {bookingStep === 1 ? (
+            <motion.div key="tour-day" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22 }}>
+              <div className="mb-2 flex items-center justify-between">
+                <button type="button" onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, -1))} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#caa24c]/18 text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]" aria-label="Previous month">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <p className="font-serif text-lg text-[#f7efe3]">{calendarMonth ? toCalendarDate(`${calendarMonth}-01`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Available dates'}</p>
+                <button type="button" onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, 1))} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#caa24c]/18 text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]" aria-label="Next month">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center font-mono text-[9px] uppercase tracking-wider text-[#d7c29a]/45">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`} className="py-1">{day}</span>)}
+                {calendarDays.map((day) => {
+                  const isoDate = toIsoDate(day)
+                  const available = availableTourDates.has(isoDate)
+                  const inMonth = day.getMonth() === toCalendarDate(`${calendarMonth}-01`).getMonth()
+                  const active = selectedTourDate === isoDate
+
+                  return (
+                    <button key={isoDate} type="button" disabled={!available} onClick={() => { setSelectedTourDate(isoDate); setTourSelection(null); setBookingStep(2) }} className={`rounded-md py-2 text-xs transition ${active ? 'bg-[#caa24c] font-bold text-[#050505]' : available ? 'border border-[#caa24c]/25 text-[#eadcc8] hover:border-[#f1d27a]/60 hover:text-[#f1d27a]' : `text-[#d7c29a]/20 ${inMonth ? '' : 'opacity-40'}`}`} aria-label={available ? `Choose ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : undefined}>
+                      {day.getDate()}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-3 text-[10px] leading-4 text-[#d7c29a]/55">Available days are highlighted. Tours are 30 minutes.</p>
+            </motion.div>
+          ) : (
+            <motion.div key="tour-time" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22 }}>
+              <p className="mb-2 font-serif text-lg text-[#f7efe3]">{toCalendarDate(selectedTourDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              <label className="block">
+                <span className="sr-only">Choose a tour time</span>
+                <select value={tourSelection?.id ?? ''} onChange={(event) => setTourSelection(selectedDateSlots.find((slot) => slot.id === event.target.value) ?? null)} className="w-full rounded-md border border-[#caa24c]/25 bg-[#080706] px-3 py-3 text-sm text-[#eadcc8] outline-none focus:border-[#f1d27a]/65">
+                  <option value="">Choose a time</option>
+                  {selectedDateSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.time}</option>)}
+                </select>
+              </label>
+              {tourSelection ? <p className="mt-2 text-[10px] text-[#d7c29a]/60">Selected: {tourSelection.label}</p> : null}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   function renderBookingCard(messageId: string) {
     return (
       <motion.div
@@ -402,55 +528,7 @@ export function LuxorConciergeChat() {
           ) : null}
         </div>
 
-        <div className="mt-3 grid gap-2">
-          {tourSlotsLoading ? (
-            <p className="rounded-md border border-[#caa24c]/18 bg-black/25 px-3 py-3 text-xs leading-5 text-[#d7c29a]/70">
-              Loading current tour openings...
-            </p>
-          ) : tourSlotsError ? (
-            <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs leading-5 text-red-200">
-              {tourSlotsError}
-            </p>
-          ) : tourSlots.length === 0 ? (
-            <div className="rounded-md border border-[#caa24c]/18 bg-black/25 p-3">
-              <p className="text-xs leading-5 text-[#d7c29a]/70">No exact times are published right now. Pick a preferred window and the team will offer options.</p>
-              <div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div>
-            </div>
-          ) : (
-            displayedTourSlots.map((slot) => {
-              const active = tourSelection?.id === slot.id
-
-              return (
-                <button
-                  key={`${slot.id}-card`}
-                  type="button"
-                  onClick={() => setTourSelection(slot)}
-                  className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
-                    active
-                      ? 'border-[#f1d27a]/55 bg-[#caa24c] text-[#050505]'
-                      : 'border-[#caa24c]/18 bg-black/25 text-[#eadcc8] hover:border-[#f1d27a]/45'
-                  }`}
-                >
-                  <span>
-                    <span className="block text-sm font-semibold">{slot.dateLabel}</span>
-                    <span className="block text-xs opacity-75">{slot.time}</span>
-                  </span>
-                  {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-                </button>
-              )
-            })
-          )}
-        </div>
-
-        {!tourSlotsLoading && !tourSlotsError && tourSlots.length > displayedTourSlots.length ? (
-          <button
-            type="button"
-            onClick={() => setShowAllTourSlots(true)}
-            className="mt-2 w-full rounded-md border border-[#caa24c]/18 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
-          >
-            Show more times
-          </button>
-        ) : null}
+        <div className="mt-3">{renderTourPicker()}</div>
 
         <div className="mt-3 grid gap-2">
           <label className="relative block">
@@ -467,7 +545,7 @@ export function LuxorConciergeChat() {
             <input
               value={contactDetails.email}
               onChange={(event) => updateContactDetail('email', event.target.value)}
-              placeholder="Email (or use phone)"
+              placeholder="Email (optional)"
               type="email"
               className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
             />
@@ -477,8 +555,10 @@ export function LuxorConciergeChat() {
             <input
               value={contactDetails.phone}
               onChange={(event) => updateContactDetail('phone', formatStandardPhoneInput(event.target.value))}
-              placeholder="Phone (optional if you add email)"
+              placeholder="Phone (required)"
               type="tel"
+              required
+              aria-required="true"
               className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] font-mono outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
             />
           </label>
@@ -710,50 +790,8 @@ export function LuxorConciergeChat() {
                     transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                     className="overflow-hidden"
                   >
-                    <div className="grid gap-2 pt-2">
-                      {tourSlotsLoading ? (
-                        <p className="rounded-md border border-[#caa24c]/18 bg-[#080706] px-3 py-3 text-xs text-[#d7c29a]/70">
-                          Loading current tour openings...
-                        </p>
-                      ) : tourSlotsError ? (
-                        <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-3 text-xs text-red-200">
-                          {tourSlotsError}
-                        </p>
-                      ) : tourSlots.length === 0 ? (
-                        <div className="rounded-md border border-[#caa24c]/18 bg-[#080706] p-3"><p className="text-xs leading-5 text-[#d7c29a]/70">Choose a preferred window.</p><div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div></div>
-                      ) : (
-                        displayedTourSlots.map((slot) => {
-                        const active = tourSelection?.id === slot.id
-
-                        return (
-                          <button
-                            key={slot.id}
-                            type="button"
-                            onClick={() => setTourSelection(slot)}
-                            className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition ${
-                              active
-                                ? 'border-[#f1d27a]/55 bg-[#caa24c] text-[#050505]'
-                                : 'border-[#caa24c]/18 bg-[#080706] text-[#eadcc8] hover:border-[#f1d27a]/45'
-                            }`}
-                          >
-                            <span>
-                              <span className="block text-sm font-semibold">{slot.dateLabel}</span>
-                              <span className="block text-xs opacity-75">{slot.time}</span>
-                            </span>
-                            {active ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-                          </button>
-                        )
-                      })
-                      )}
-                      {!tourSlotsLoading && !tourSlotsError && tourSlots.length > displayedTourSlots.length ? (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllTourSlots(true)}
-                          className="rounded-md border border-[#caa24c]/18 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
-                        >
-                          Show more times
-                        </button>
-                      ) : null}
+                    <div className="pt-2">
+                      {renderTourPicker()}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         {tourSelection || preferredTourWindow ? (
                           <button
