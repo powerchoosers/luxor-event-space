@@ -740,44 +740,37 @@ export function PortalSelect({
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
-      <AnimatePresence mode="wait">
-        {isOpen ? (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[9990]"
-          >
-            {createPortal(
-              <>
-                <motion.div
-                  aria-hidden="true"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="fixed inset-0 z-[9990] cursor-default"
-                  onClick={() => setIsOpen(false)}
-                />
-                <motion.div
-                  ref={dropdownRef}
-                  role="listbox"
-                  data-portal-popover="true"
-                  initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.985 }}
-                  transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                  className="portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
-                  style={{ 
-                    top: `${coords.top}px`,
-                    left: `${coords.left}px`,
-                    width: `${coords.width}px`,
-                    backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                    backdropFilter: 'blur(24px)', 
-                    WebkitBackdropFilter: 'blur(24px)' 
-                  }}
-                >
+      {createPortal(
+        <AnimatePresence initial={false}>
+          {isOpen ? (
+            <React.Fragment key="portal-select">
+              <motion.div
+                aria-hidden="true"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                className="fixed inset-0 z-[9990] cursor-default"
+                onClick={() => setIsOpen(false)}
+              />
+              <motion.div
+                ref={dropdownRef}
+                role="listbox"
+                data-portal-popover="true"
+                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                className="portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                style={{
+                  top: `${coords.top}px`,
+                  left: `${coords.left}px`,
+                  width: `${coords.width}px`,
+                  backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)'
+                }}
+              >
                   <div className="space-y-0.5">
                     {options.map((opt) => {
                       const isSelected = opt.value === value
@@ -805,13 +798,12 @@ export function PortalSelect({
                       )
                     })}
                   </div>
-                </motion.div>
-              </>,
-              document.body
-            )}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+              </motion.div>
+            </React.Fragment>
+          ) : null}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }
@@ -971,44 +963,37 @@ export function PortalDatePicker({
         <Calendar size={13} className="text-[#caa24c]/80" />
       </button>
       
-      <AnimatePresence mode="wait">
-        {isOpen ? (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[9990]"
-          >
-            {createPortal(
-              <>
-                <motion.div
-                  aria-hidden="true"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="fixed inset-0 z-[9990] cursor-default"
-                  onClick={() => setIsOpen(false)}
-                />
-                <motion.div
-                  ref={dropdownRef}
-                  role="dialog"
-                  data-portal-popover="true"
-                  initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.985 }}
-                  transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                  className="portal-scrollbar fixed z-[9999] w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
-                  style={{ 
-                    top: `${coords.top}px`,
-                    left: `${coords.left}px`,
-                    width: '256px',
-                    backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                    backdropFilter: 'blur(24px)', 
-                    WebkitBackdropFilter: 'blur(24px)' 
-                  }}
-                >
+      {createPortal(
+        <AnimatePresence initial={false}>
+          {isOpen ? (
+            <React.Fragment key="portal-date-picker">
+              <motion.div
+                aria-hidden="true"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                className="fixed inset-0 z-[9990] cursor-default"
+                onClick={() => setIsOpen(false)}
+              />
+              <motion.div
+                ref={dropdownRef}
+                role="dialog"
+                data-portal-popover="true"
+                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                className="portal-scrollbar fixed z-[9999] w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                style={{
+                  top: `${coords.top}px`,
+                  left: `${coords.left}px`,
+                  width: '256px',
+                  backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)'
+                }}
+              >
                   {/* Header navigation */}
                   <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
                     <button
@@ -1063,13 +1048,12 @@ export function PortalDatePicker({
                       )
                     })}
                   </div>
-                </motion.div>
-              </>,
-              document.body
-            )}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+              </motion.div>
+            </React.Fragment>
+          ) : null}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

@@ -17,6 +17,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent } from '../page'
+import { PortalSelect } from '@/components/portal/PortalUI'
 
 interface EmailBuilderTabProps {
   initialTemplate: EmailTemplate | null
@@ -434,16 +435,18 @@ export function EmailBuilderTab({
                     <label className="block text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] mb-1.5">
                       Email Tone of Voice
                     </label>
-                    <select
+                    <PortalSelect
                       value={tone}
-                      onChange={(e) => setTone(e.target.value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
-                      className="w-full sm:w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 cursor-pointer"
-                    >
-                      <option value="friendly">💅 Warm & Friendly</option>
-                      <option value="professional">💼 Corporate & Professional</option>
-                      <option value="urgent">🔥 Urgent (FOMO)</option>
-                      <option value="elegant">✨ Luxurious & Elegant</option>
-                    </select>
+                      onChange={(value) => setTone(value as 'friendly' | 'professional' | 'urgent' | 'elegant')}
+                      className="w-full sm:w-64"
+                      buttonClassName="!h-11 !rounded-xl !px-3.5 !py-2.5 !text-left !text-xs !font-bold"
+                      options={[
+                        { value: 'friendly', label: '💅 Warm & Friendly' },
+                        { value: 'professional', label: '💼 Corporate & Professional' },
+                        { value: 'urgent', label: '🔥 Urgent (FOMO)' },
+                        { value: 'elegant', label: '✨ Luxurious & Elegant' },
+                      ]}
+                    />
                   </div>
 
                   <div>

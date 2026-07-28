@@ -15,6 +15,7 @@ import {
   Calendar,
   Users
 } from 'lucide-react'
+import { PortalSelect } from './PortalUI'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -100,41 +101,45 @@ export function ElenaLeadUpdateCard({
           {/* Pipeline Stage Select */}
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Pipeline Stage</label>
-            <select
+            <PortalSelect
               value={pipelineStage}
-              onChange={(e) => setPipelineStage(e.target.value)}
+              onChange={setPipelineStage}
               disabled={isDone}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c] disabled:opacity-60"
-            >
-              <option value="inquiry">1. Inquiry</option>
-              <option value="tour">2. Tour Requested / Attended</option>
-              <option value="proposal_sent">3. Proposal Sent</option>
-              <option value="book_reserve">4. Book & Reserve</option>
-              <option value="planning_begins">5. Planning Begins</option>
-              <option value="final_details">6. Final Details</option>
-              <option value="setup_event_day">7. Event Day</option>
-              <option value="after_event">8. After Event</option>
-              <option value="closed_lost">Closed / Lost</option>
-            </select>
+              className="w-full"
+              buttonClassName="!h-8 !rounded-lg !px-2.5 !py-1.5 !text-left !text-xs"
+              options={[
+                { value: 'inquiry', label: '1. Inquiry' },
+                { value: 'tour', label: '2. Tour Requested / Attended' },
+                { value: 'proposal_sent', label: '3. Proposal Sent' },
+                { value: 'book_reserve', label: '4. Book & Reserve' },
+                { value: 'planning_begins', label: '5. Planning Begins' },
+                { value: 'final_details', label: '6. Final Details' },
+                { value: 'setup_event_day', label: '7. Event Day' },
+                { value: 'after_event', label: '8. After Event' },
+                { value: 'closed_lost', label: 'Closed / Lost' },
+              ]}
+            />
           </div>
 
           {/* Inquiry Status Select */}
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Lead Status</label>
-            <select
+            <PortalSelect
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={setStatus}
               disabled={isDone}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c] disabled:opacity-60"
-            >
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="tour_requested">Tour Requested</option>
-              <option value="tour_confirmed">Tour Confirmed</option>
-              <option value="proposal_sent">Proposal Sent</option>
-              <option value="booked">Booked</option>
-              <option value="closed_lost">Closed Lost</option>
-            </select>
+              className="w-full"
+              buttonClassName="!h-8 !rounded-lg !px-2.5 !py-1.5 !text-left !text-xs"
+              options={[
+                { value: 'new', label: 'New' },
+                { value: 'contacted', label: 'Contacted' },
+                { value: 'tour_requested', label: 'Tour Requested' },
+                { value: 'tour_confirmed', label: 'Tour Confirmed' },
+                { value: 'proposal_sent', label: 'Proposal Sent' },
+                { value: 'booked', label: 'Booked' },
+                { value: 'closed_lost', label: 'Closed Lost' },
+              ]}
+            />
           </div>
         </div>
 
@@ -592,16 +597,18 @@ export function ElenaTaskCard({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Priority</label>
-            <select
+            <PortalSelect
               value={priority}
-              onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+              onChange={(value) => setPriority(value as 'low' | 'medium' | 'high')}
               disabled={isSaved}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c] disabled:opacity-60 capitalize"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
+              className="w-full"
+              buttonClassName="!h-8 !rounded-lg !px-2.5 !py-1.5 !text-left !text-xs"
+              options={[
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+              ]}
+            />
           </div>
 
           <div>
