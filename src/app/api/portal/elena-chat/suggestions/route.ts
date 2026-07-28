@@ -86,19 +86,17 @@ export async function GET(request: Request) {
             messages: [
               {
                 role: 'system',
-                content: `You are Elena, COO & Chief Concierge of Luxor Event Space. Generate exactly 4 distinct, fresh, highly actionable prompt suggestions for the business owner based on the provided live CRM snapshot.
+                content: `You are Elena, COO & Chief Concierge of Luxor Event Space. Generate exactly 4 distinct, fresh, highly useful prompt suggestions for the business owner based on the provided live CRM snapshot.
 
 GUIDELINES FOR SUGGESTIONS:
-- Each suggestion MUST be short (under 75 characters) and 9/10 executable in Elena Chat.
-- Make them specific by referencing real client names, exact invoice amounts, or event types from the snapshot if available.
-- Cover 4 distinct action areas:
-  1. Direct Email/SMS action (e.g., "Draft tour confirmation email for [Client]" or "Send SMS update to [Client]")
-  2. Contract/Invoice action (e.g., "Send contract signature link to [Client]" or "Send payment link for [Client] invoice")
-  3. CRM Field Update/Task action (e.g., "Update pipeline stage for [Client] to Booked" or "Create task to check catering")
-  4. Revenue/Analytics query (e.g., "Show unpaid invoice totals this month" or "Check low stock inventory items")
+- Each suggestion MUST be short (under 75 characters) and directly usable as a read-only question in Elena Chat.
+- Prefer questions that help the owner understand what needs attention before taking action.
+- Do not suggest sending, drafting, scheduling, creating, updating, deleting, or preparing anything.
+- Cover 4 distinct areas: lead follow-up, upcoming bookings, money owed or bills, and operations/tasks/inventory.
+- Good examples: "Which inquiries need follow-up this week?", "What is our next event and what remains?", "What money needs attention today?", "Show overdue tasks and low-stock items."
 - You MUST respond ONLY with a valid JSON array of 4 strings. No markdown formatting, backticks, or explanation.
 Example output format:
-["Draft tour follow-up email for Sarah Smith", "Send contract signature link to Alex Johnson", "Update pipeline stage for Sarah to Booked", "Show total unpaid invoice balances"]`
+["Which inquiries need follow-up this week?", "What is our next event and what remains?", "What money needs attention today?", "Show overdue tasks and low-stock items"]`
               },
               {
                 role: 'user',
@@ -116,7 +114,14 @@ Example output format:
           }
           const parsed = JSON.parse(rawText) as string[]
           if (Array.isArray(parsed) && parsed.length >= 3) {
-            return NextResponse.json({ suggestions: parsed.slice(0, 4) })
+            const safeSuggestions = parsed
+              .filter((suggestion): suggestion is string => typeof suggestion === 'string')
+              .filter((suggestion) => !/\b(send|draft|schedule|create|update|delete|prepare|text|email|payment link|signature link)\b/i.test(suggestion))
+              .map((suggestion) => suggestion.trim().slice(0, 75))
+              .filter(Boolean)
+            if (safeSuggestions.length >= 3) {
+              return NextResponse.json({ suggestions: safeSuggestions.slice(0, 4) })
+            }
           }
         }
       } catch (aiErr) {
@@ -128,22 +133,22 @@ Example output format:
     const fallbackSuggestions: string[] = []
 
     if (inquiries.length > 0 && inquiries[0].full_name) {
-      fallbackSuggestions.push(`Draft tour follow-up email for ${inquiries[0].full_name}`)
+      fallbackSuggestions.push(`What does ${inquiries[0].full_name} need next?`)
     }
     if (bookings.length > 0 && bookings[0].client_name) {
-      fallbackSuggestions.push(`Send contract signature link to ${bookings[0].client_name}`)
+      fallbackSuggestions.push(`What remains for ${bookings[0].client_name}?`)
     }
     if (invoices.length > 0 && invoices[0].client_name) {
-      fallbackSuggestions.push(`Send payment link to ${invoices[0].client_name} ($${invoices[0].total})`)
+      fallbackSuggestions.push(`What is still owed by ${invoices[0].client_name}?`)
     }
     if (tasks.length > 0 && tasks[0].title) {
-      fallbackSuggestions.push(`Review pending task: ${tasks[0].title}`)
+      fallbackSuggestions.push(`Show overdue tasks and low-stock items`)
     }
 
     if (fallbackSuggestions.length < 4) {
       fallbackSuggestions.push('Show upcoming venue bookings for this month')
       fallbackSuggestions.push('Check active venue inquiries')
-      fallbackSuggestions.push('What is our invoice revenue this year?')
+      fallbackSuggestions.push('What money needs attention today?')
     }
 
     return NextResponse.json({ suggestions: Array.from(new Set(fallbackSuggestions)).slice(0, 4) })

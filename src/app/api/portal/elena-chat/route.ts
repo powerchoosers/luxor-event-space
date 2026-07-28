@@ -1274,6 +1274,12 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
       }
     }
 
+    if (!finalContent.trim()) {
+      finalContent = executedQueries.length > 0
+        ? 'I pulled the live Luxor records, but I could not turn them into a clear summary this time. Ask me to show the results by lead, booking, task, or invoice and I will try again.'
+        : 'I did not get a usable answer from the query service. Please try that question once more, or ask me for a daily brief.'
+    }
+
     const updatedMessages = [
       ...messages,
       {

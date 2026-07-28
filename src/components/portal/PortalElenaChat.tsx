@@ -504,7 +504,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         ...prev,
         {
           role: 'assistant',
-          content: data.reply,
+          content: data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.',
           executedQueries: data.executedQueries,
           confirmation: data.confirmation,
           emailDraft: data.emailDraft,
