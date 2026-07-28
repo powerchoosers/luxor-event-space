@@ -146,6 +146,7 @@ export function LuxorConciergeChat() {
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots({ enabled: open })
+  const [showAllTourSlots, setShowAllTourSlots] = useState(false)
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
@@ -183,6 +184,7 @@ export function LuxorConciergeChat() {
     contactDetails.name.trim().length > 1 &&
     (contactDetails.email.includes('@') || contactDetails.phone.replace(/\D/g, '').length >= 10)
   const bookingReady = contactComplete && Boolean(tourSelection || preferredTourWindow)
+  const displayedTourSlots = showAllTourSlots ? tourSlots : tourSlots.slice(0, 8)
 
   useEffect(() => {
     if (!open) return
@@ -415,7 +417,7 @@ export function LuxorConciergeChat() {
               <div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div>
             </div>
           ) : (
-            tourSlots.map((slot) => {
+            displayedTourSlots.map((slot) => {
               const active = tourSelection?.id === slot.id
 
               return (
@@ -439,6 +441,16 @@ export function LuxorConciergeChat() {
             })
           )}
         </div>
+
+        {!tourSlotsLoading && !tourSlotsError && tourSlots.length > displayedTourSlots.length ? (
+          <button
+            type="button"
+            onClick={() => setShowAllTourSlots(true)}
+            className="mt-2 w-full rounded-md border border-[#caa24c]/18 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
+          >
+            Show more times
+          </button>
+        ) : null}
 
         <div className="mt-3 grid gap-2">
           <label className="relative block">
@@ -710,7 +722,7 @@ export function LuxorConciergeChat() {
                       ) : tourSlots.length === 0 ? (
                         <div className="rounded-md border border-[#caa24c]/18 bg-[#080706] p-3"><p className="text-xs leading-5 text-[#d7c29a]/70">Choose a preferred window.</p><div className="mt-2 grid grid-cols-3 gap-2">{['Morning', 'Afternoon', 'Evening'].map((window) => <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>{window}</button>)}</div></div>
                       ) : (
-                        tourSlots.map((slot) => {
+                        displayedTourSlots.map((slot) => {
                         const active = tourSelection?.id === slot.id
 
                         return (
@@ -733,6 +745,15 @@ export function LuxorConciergeChat() {
                         )
                       })
                       )}
+                      {!tourSlotsLoading && !tourSlotsError && tourSlots.length > displayedTourSlots.length ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllTourSlots(true)}
+                          className="rounded-md border border-[#caa24c]/18 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
+                        >
+                          Show more times
+                        </button>
+                      ) : null}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         {tourSelection || preferredTourWindow ? (
                           <button

@@ -1045,14 +1045,26 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                 : toolCall.function.arguments
               const body = String(args.body || '').trim()
               if (!body || body.length > 1600) throw new Error('The text must be between 1 and 1,600 characters.')
+              const inquiryId = String(args.inquiryId || '').trim()
+              if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('A verified Luxor lead is required before preparing a text.')
+              const records = await supabaseRest<Array<{ id: string; full_name: string | null; phone: string | null }>>(
+                `luxor_inquiries?select=id,full_name,phone&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+              )
+              const record = records?.[0]
+              const canonicalPhone = record?.phone?.trim() || ''
+              if (!record || !canonicalPhone) throw new Error('That lead does not have a verified phone number.')
+              const suppliedPhone = String(args.phone || '').replace(/\D/g, '')
+              if (!suppliedPhone || suppliedPhone !== canonicalPhone.replace(/\D/g, '')) {
+                throw new Error('The phone number did not match the verified lead record. I refreshed the lead details instead of preparing the text.')
+              }
               confirmationPayload = {
                 query: `SEND_TEXT:${JSON.stringify({
-                  inquiryId: String(args.inquiryId || ''),
-                  phone: String(args.phone || ''),
-                  contactName: String(args.contactName || ''),
+                  inquiryId,
+                  phone: canonicalPhone,
+                  contactName: record.full_name || String(args.contactName || 'this client'),
                   body,
                 })}`,
-                summary: String(args.summary || `Send a text to ${args.contactName || 'this client'}`),
+                summary: String(args.summary || `Send a text to ${record.full_name || args.contactName || 'this client'}`),
               }
               confirmationInterrupted = true
             } catch (textError) {
@@ -1072,13 +1084,28 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               const args = typeof toolCall.function.arguments === 'string'
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments
+              const inquiryId = String(args.inquiryId || '').trim()
+              if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('I need to verify the lead before preparing an email draft.')
+              const records = await supabaseRest<Array<{ id: string; full_name: string | null; email: string | null }>>(
+                `luxor_inquiries?select=id,full_name,email&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+              )
+              const record = records?.[0]
+              const canonicalEmail = record?.email?.trim().toLowerCase() || ''
+              if (!record || !canonicalEmail) throw new Error('That lead does not have a verified email address.')
+              const suppliedEmail = String(args.recipientEmail || '').trim().toLowerCase()
+              if (suppliedEmail && suppliedEmail !== canonicalEmail) {
+                throw new Error('The recipient email did not match the verified lead record. I refreshed the lead details instead of preparing the draft.')
+              }
+              const subject = String(args.subject || '').trim()
+              const body = String(args.body || '').replace(/\[(?:your\s+)?name\]/gi, senderProfile.displayName).trim()
+              if (!subject || !body) throw new Error('An email subject and body are required before preparing a draft.')
 
               emailDraftPayload = {
-                recipientEmail: String(args.recipientEmail || ''),
-                recipientName: String(args.recipientName || ''),
-                inquiryId: String(args.inquiryId || ''),
-                subject: String(args.subject || ''),
-                body: String(args.body || '').replace(/\[(?:your\s+)?name\]/gi, senderProfile.displayName),
+                recipientEmail: canonicalEmail,
+                recipientName: record.full_name || String(args.recipientName || ''),
+                inquiryId,
+                subject,
+                body,
                 templateType: args.templateType === 'marketing' ? 'marketing' : 'conversational',
                 senderProfile,
               }
