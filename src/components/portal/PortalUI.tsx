@@ -53,15 +53,15 @@ export function PortalPageHeader({
             <button
               type="button"
               onClick={goBack}
-              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               aria-label="Go back"
+              title="Go back"
             >
               <ArrowLeft size={14} />
-              <span>Back</span>
             </button>
           ) : null}
           {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
-          <h1 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)] sm:text-2xl">{title}</h1>
+          <h1 className="font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-3xl">{title}</h1>
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>

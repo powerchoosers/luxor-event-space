@@ -797,6 +797,37 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
   return Number.isFinite(recorded) ? Math.max(1, Math.round(recorded)) : 1
 }
 
+function isDailyBriefRequest(message: string) {
+  return /\b(what should i focus on|where should i focus|what are my priorities|what needs my attention|what should i do today|today(?:'s|s) priorities|daily brief|morning brief|what(?:'s| is) urgent)\b/i.test(message)
+}
+
+async function buildDailyBriefContext() {
+  const today = new Date().toISOString().slice(0, 10)
+  const [tasks, bills, inquiries, bookings] = await Promise.all([
+    supabaseRest<Array<Record<string, unknown>>>('luxor_tasks?select=title,description,due_date,priority,status&status=eq.pending&order=due_date.asc&limit=8').catch(() => []),
+    supabaseRest<Array<Record<string, unknown>>>('luxor_bills?select=service,provider,amount,status,due_date&status=in.(overdue,unpaid)&order=due_date.asc&limit=8').catch(() => []),
+    supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=full_name,event_type,status,pipeline_stage,target_date,created_at&status=in.(new,contacted,tour_requested,proposal_sent)&order=created_at.desc&limit=8').catch(() => []),
+    supabaseRest<Array<Record<string, unknown>>>(`luxor_bookings?select=client_name,event_type,event_date,start_time,status&event_date=gte.${today}&status=neq.cancelled&order=event_date.asc&limit=8`).catch(() => []),
+  ])
+
+  const formatRows = (rows: Array<Record<string, unknown>>, fields: string[]) => rows.length > 0
+    ? rows.map((row) => fields.map((field) => `${field}: ${row[field] ?? '—'}`).join(' | ')).join('\n')
+    : 'None found.'
+
+  return `DAILY BRIEF LIVE CONTEXT (today is ${today}; read-only):
+PENDING TASKS:
+${formatRows(tasks, ['title', 'due_date', 'priority'])}
+
+OVERDUE OR UNPAID BILLS:
+${formatRows(bills, ['service', 'provider', 'amount', 'status', 'due_date'])}
+
+ACTIVE INQUIRIES NEEDING FOLLOW-UP:
+${formatRows(inquiries, ['full_name', 'event_type', 'status', 'pipeline_stage', 'target_date', 'created_at'])}
+
+UPCOMING BOOKINGS:
+${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time', 'status'])}`
+}
+
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -816,6 +847,19 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
     // Append conversation history
     const history = messages.slice(-15)
     openrouterMessages.push(...history)
+
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')?.content || ''
+    const dailyBriefRequest = isDailyBriefRequest(latestUserMessage)
+    if (dailyBriefRequest) {
+      openrouterMessages.push({
+        role: 'system',
+        content: `The latest request is a broad read-only daily-priorities question. Do not schedule, draft, send, update, navigate, or prepare any action card. Use only the read-only daily brief context below and execute_database_sql if a small follow-up query is needed. Give the owner a concise ranked briefing with the reason for each priority and a suggested next step. If there are no live records for a category, say so plainly.\n\n${await buildDailyBriefContext()}`
+      })
+    }
+
+    const requestTools = dailyBriefRequest
+      ? TOOLS_DEFINITION.filter((tool) => tool.function.name === 'execute_database_sql')
+      : TOOLS_DEFINITION
 
     // Process uploaded attachments if present on latest message
     if (Array.isArray(attachments) && attachments.length > 0) {
@@ -864,7 +908,7 @@ function getGrandOpeningPartySize(rsvp: { attendee_count: number | null; guest_c
           model: 'google/gemini-2.5-flash',
           temperature: 0.1,
           messages: openrouterMessages,
-          tools: TOOLS_DEFINITION,
+          tools: requestTools,
           tool_choice: 'auto'
         })
       })

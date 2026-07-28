@@ -15,7 +15,19 @@ function isoDate(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-export function TourAvailabilityManager() {
+type TourAvailabilityManagerProps = {
+  title?: string
+  description?: string
+  publishLabel?: string
+  onUpdated?: () => void | Promise<void>
+}
+
+export function TourAvailabilityManager({
+  title = 'Tour booking days',
+  description = 'Select several Tuesdays or Wednesdays, then open or close them together. Each open day publishes eleven 30-minute times; every time accepts one client and closes 24 hours before it starts.',
+  publishLabel = 'Open selected days',
+  onUpdated,
+}: TourAvailabilityManagerProps = {}) {
   const { notify } = useToast()
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [selectedDates, setSelectedDates] = useState<string[]>([])
@@ -94,6 +106,7 @@ export function TourAvailabilityManager() {
         variant: 'success',
       })
       setSelectedDates([])
+      await onUpdated?.()
     } catch (error) {
       notify({ title: error instanceof Error ? error.message : `Could not ${action} those tour days.`, variant: 'error' })
     } finally {
@@ -105,9 +118,9 @@ export function TourAvailabilityManager() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Tour booking days</h3>
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{title}</h3>
           <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">
-            Select several Tuesdays or Wednesdays, then open or close them together. Each open day publishes eleven 30-minute times; every time accepts one client and closes 24 hours before it starts.
+            {description}
           </p>
         </div>
         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-right">
@@ -162,7 +175,7 @@ export function TourAvailabilityManager() {
           {loading ? <p className="mt-4 flex items-center gap-2 text-xs text-[color:var(--portal-muted)]"><Loader2 size={13} className="animate-spin" /> Loading current schedule…</p> : null}
           <div className="mt-auto space-y-2 pt-6">
             <PortalButton type="button" variant="primary" className="w-full" disabled={!selectedDates.length || Boolean(saving)} onClick={() => void updateDays('publish')}>
-              {saving === 'publish' ? <Loader2 size={13} className="animate-spin" /> : null} Open selected days
+              {saving === 'publish' ? <Loader2 size={13} className="animate-spin" /> : null} {publishLabel}
             </PortalButton>
             <PortalButton type="button" className="w-full" disabled={!selectedDates.length || Boolean(saving)} onClick={() => void updateDays('unpublish')}>
               {saving === 'unpublish' ? <Loader2 size={13} className="animate-spin" /> : null} Close selected days

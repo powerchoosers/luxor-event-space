@@ -2,9 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, CalendarPlus, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
-import { PortalButton, PortalDatePicker, PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
+import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 
@@ -15,14 +16,6 @@ type CalendarPayload = {
   tasks: LuxorTask[]
 }
 
-const TOUR_TIME_OPTIONS = Array.from({ length: 20 }, (_, index) => {
-  const totalMinutes = 9 * 60 + index * 30
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-  return { value, label: formatTime(value) }
-})
-
 export default function CalendarPage() {
   const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
   const [view, setView] = useState<PortalCalendarView>('month')
@@ -30,8 +23,6 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [publishingSlot, setPublishingSlot] = useState(false)
-  const [slotDraft, setSlotDraft] = useState({ slotDate: '', startTime: '10:00', endTime: '10:30', capacity: '1' })
 
   const loadData = async () => {
     try {
@@ -51,25 +42,6 @@ export default function CalendarPage() {
   useEffect(() => {
     loadData()
   }, [])
-
-  const publishTourSlot = async () => {
-    try {
-      setPublishingSlot(true)
-      const response = await fetch('/api/tour-slots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...slotDraft, capacity: Number(slotDraft.capacity), title: 'Private venue tour' }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Unable to publish this tour time.')
-      setSlotDraft((current) => ({ ...current, slotDate: '' }))
-      await loadData()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Unable to publish this tour time.')
-    } finally {
-      setPublishingSlot(false)
-    }
-  }
 
   const updatePublishedSlot = async (slot: LuxorTourSlot, action: 'toggle' | 'delete') => {
     const deleting = action === 'delete'
@@ -271,32 +243,12 @@ export default function CalendarPage() {
 
       {activeCalendar === 'tours' ? (
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl sm:p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-[color:var(--portal-text)]">
-                <CalendarPlus size={16} className="text-[#caa24c]" />
-                <h2 className="text-sm font-bold">Publish tour availability</h2>
-              </div>
-              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">These are the exact times clients can reserve on the public website.</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:items-end">
-              <FieldLabel label="Date">
-                <PortalDatePicker value={slotDraft.slotDate} onChange={(slotDate) => setSlotDraft((current) => ({ ...current, slotDate }))} className="w-full xl:w-44" placeholder="Choose date" />
-              </FieldLabel>
-              <FieldLabel label="Starts">
-                <PortalSelect value={slotDraft.startTime} onChange={(startTime) => setSlotDraft((current) => ({ ...current, startTime }))} options={TOUR_TIME_OPTIONS} className="w-full xl:w-36" buttonClassName="min-h-10" />
-              </FieldLabel>
-              <FieldLabel label="Ends">
-                <PortalSelect value={slotDraft.endTime} onChange={(endTime) => setSlotDraft((current) => ({ ...current, endTime }))} options={TOUR_TIME_OPTIONS} className="w-full xl:w-36" buttonClassName="min-h-10" />
-              </FieldLabel>
-              <FieldLabel label="Appointments">
-                <PortalSelect value={slotDraft.capacity} onChange={(capacity) => setSlotDraft((current) => ({ ...current, capacity }))} options={[1, 2, 3, 4].map((value) => ({ value: String(value), label: String(value) }))} className="w-full xl:w-28" buttonClassName="min-h-10" />
-              </FieldLabel>
-              <PortalButton variant="primary" disabled={!slotDraft.slotDate || publishingSlot} onClick={publishTourSlot} className="min-h-10">
-                <CalendarPlus size={14} /> {publishingSlot ? 'Publishing…' : 'Publish time'}
-              </PortalButton>
-            </div>
-          </div>
+          <TourAvailabilityManager
+            title="Publish tour availability"
+            description="Select one or several Tuesdays and Wednesdays. Publishing a day adds the approved tour times to the public booking page."
+            publishLabel="Publish"
+            onUpdated={loadData}
+          />
         </section>
       ) : null}
 
@@ -323,15 +275,6 @@ export default function CalendarPage() {
         <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />
       )}
     </PortalPageFrame>
-  )
-}
-
-function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{label}</span>
-      {children}
-    </label>
   )
 }
 

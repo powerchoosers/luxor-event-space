@@ -22,8 +22,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ reply: fallbackReply, mode: 'fallback' }, { status: 200 })
     }
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8_000)
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
           ...messages.slice(-8),
         ],
       }),
-    })
+    }).finally(() => clearTimeout(timeout))
 
     if (!response.ok) {
       return NextResponse.json({ reply: fallbackReply, mode: 'fallback' }, { status: 200 })

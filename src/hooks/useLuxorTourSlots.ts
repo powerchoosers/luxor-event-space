@@ -3,13 +3,19 @@
 import { useEffect, useState } from 'react'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 
-export function useLuxorTourSlots() {
+export function useLuxorTourSlots({ enabled = true }: { enabled?: boolean } = {}) {
   const [slots, setSlots] = useState<PublicLuxorTourSlot[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
+
     let active = true
+    setLoading(true)
 
     async function loadSlots() {
       try {
@@ -44,7 +50,7 @@ export function useLuxorTourSlots() {
     return () => {
       active = false
     }
-  }, [])
+  }, [enabled])
 
   return { slots, loading, error }
 }

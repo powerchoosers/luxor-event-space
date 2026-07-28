@@ -62,7 +62,7 @@ const eventCards = [
   },
 ]
 
-const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event']
+const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event', 'Packages & rates', 'Check tour times']
 
 function createId() {
   return Math.random().toString(36).slice(2)
@@ -72,7 +72,7 @@ function fallbackResponse(input: string) {
   const text = input.toLowerCase()
 
   if (text.includes('price') || text.includes('cost') || text.includes('package')) {
-    return 'Packages depend on date, guest count, and event type. The smartest next step is a private tour so the team can confirm the room setup and package fit.'
+    return 'Packages depend on your date, guest count, and event type. You can compare the current package options on the pricing page, or I can help you request a private tour so the team can talk through the best fit.'
   }
 
   if (text.includes('wedding')) {
@@ -129,7 +129,7 @@ export function LuxorConciergeChat() {
   const [pending, setPending] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
-  const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
+  const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots({ enabled: open })
   const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
@@ -153,7 +153,7 @@ export function LuxorConciergeChat() {
       id: createId(),
       role: 'assistant',
       content:
-        'Hi, I am Elena. I can help you picture your event at Luxor, show event examples, and start a private tour request right here.',
+        'Hi, I am Elena. If you found Luxor through Instagram or an ad, you are in the right place. Ask me about pricing, availability, or the room, and I can help you request a private tour.',
     },
   ])
 
@@ -217,11 +217,14 @@ export function LuxorConciergeChat() {
     setMessages((current) => [...current, userMessage])
     setInput('')
     setPending(true)
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 12_000)
 
     try {
       const response = await fetch('/api/luxor-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({ messages: [...apiMessages, userMessage] }),
       })
       const data = (await response.json()) as { reply?: string }
@@ -266,6 +269,7 @@ export function LuxorConciergeChat() {
         return next
       })
     } finally {
+      window.clearTimeout(timeout)
       setPending(false)
       window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
     }
@@ -431,7 +435,7 @@ export function LuxorConciergeChat() {
             <input
               value={contactDetails.email}
               onChange={(event) => updateContactDetail('email', event.target.value)}
-              placeholder="Email"
+              placeholder="Email (or use phone)"
               type="email"
               className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
             />
@@ -441,9 +445,8 @@ export function LuxorConciergeChat() {
             <input
               value={contactDetails.phone}
               onChange={(event) => updateContactDetail('phone', formatStandardPhoneInput(event.target.value))}
-              placeholder="Phone (210) 000-0000 *"
+              placeholder="Phone (optional if you add email)"
               type="tel"
-              required
               className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] font-mono outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
             />
           </label>
