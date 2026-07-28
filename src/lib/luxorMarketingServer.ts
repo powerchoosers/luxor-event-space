@@ -24,6 +24,7 @@ const PUBLIC_BASE_URL =
   'http://localhost:3000'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const BULK_LIST_EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
 const INTERNAL_EMAIL_ADDRESSES = [
   'booking@luxoratlaspalmas.com',
   'hello@luxoratlaspalmas.com',
@@ -678,6 +679,10 @@ export async function recordMarketingUnsubscribe(trackingToken: string, request:
     }),
   })
 
+  // A recipient-initiated unsubscribe applies across every saved list. Keep
+  // the suppression record as the permanent sending safeguard as well.
+  await removeMarketingMember(recipient.email)
+
   return recipient
 }
 
@@ -849,8 +854,9 @@ export async function addMarketingMember(
 ): Promise<MarketingListMember | null> {
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedEmail) throw new Error('Email is required.')
+  const normalizedSource = source?.trim() || 'Uncategorized'
 
-  const result = await supabaseRest<MarketingListMember[]>('luxor_marketing_list', {
+  const result = await supabaseRest<MarketingListMember[]>('luxor_marketing_list?on_conflict=email,source', {
     method: 'POST',
     headers: {
       'Prefer': 'resolution=merge-duplicates, return=representation',
@@ -858,17 +864,18 @@ export async function addMarketingMember(
     body: JSON.stringify({
       email: normalizedEmail,
       full_name: fullName || null,
-      source: source || null,
+      source: normalizedSource,
     }),
   })
   return result?.[0] ?? null
 }
 
-export async function removeMarketingMember(email: string): Promise<boolean> {
+export async function removeMarketingMember(email: string, source?: string | null): Promise<boolean> {
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedEmail) return false
 
-  await supabaseRest('luxor_marketing_list?email=eq.' + encodeURIComponent(normalizedEmail), {
+  const sourceFilter = source?.trim() ? `&source=eq.${encodeURIComponent(source.trim())}` : ''
+  await supabaseRest('luxor_marketing_list?email=eq.' + encodeURIComponent(normalizedEmail) + sourceFilter, {
     method: 'DELETE',
   })
   return true
@@ -1089,22 +1096,55 @@ export async function getMarketingLists(): Promise<MarketingList[]> {
 export async function bulkAddMarketingMembers(
   listName: string,
   recipients: { email: string; name?: string | null }[]
-): Promise<void> {
+): Promise<{ added: number; skippedSuppressed: number }> {
   const normalizedListName = listName.trim()
   if (!normalizedListName) throw new Error('List name is required.')
-  if (!recipients.length) return
+  if (!recipients.length) return { added: 0, skippedSuppressed: 0 }
 
-  await supabaseRest('luxor_marketing_list', {
+  const uniqueRecipients = Array.from(new Map(
+    recipients
+      .map((recipient) => ({ email: recipient.email.trim().toLowerCase(), name: recipient.name?.trim() || null }))
+      .filter((recipient) => BULK_LIST_EMAIL_RE.test(recipient.email))
+      .map((recipient) => [recipient.email, recipient]),
+  ).values())
+  if (!uniqueRecipients.length) return { added: 0, skippedSuppressed: 0 }
+
+  const suppressed = await supabaseRest<Array<{ email: string }>>(
+    `luxor_marketing_suppressions?select=email&email=in.(${uniqueRecipients.map((recipient) => encodeURIComponent(recipient.email)).join(',')})`,
+  )
+  const suppressedEmails = new Set(suppressed.map((row) => row.email.trim().toLowerCase()))
+  const allowedRecipients = uniqueRecipients.filter((recipient) => !suppressedEmails.has(recipient.email))
+
+  if (!allowedRecipients.length) return { added: 0, skippedSuppressed: suppressedEmails.size }
+
+  await supabaseRest('luxor_marketing_list?on_conflict=email,source', {
     method: 'POST',
     headers: {
       'Prefer': 'resolution=merge-duplicates',
     },
     body: JSON.stringify(
-      recipients.map(r => ({
+      allowedRecipients.map(r => ({
         email: r.email.trim().toLowerCase(),
         full_name: r.name || null,
         source: normalizedListName,
       }))
     ),
   })
+
+  return { added: allowedRecipients.length, skippedSuppressed: suppressedEmails.size }
+}
+
+export async function bulkRemoveMarketingMembers(listName: string, emails: string[]): Promise<number> {
+  const normalizedListName = listName.trim()
+  if (!normalizedListName) throw new Error('List name is required.')
+  const normalizedEmails = Array.from(new Set(
+    emails.map((email) => email.trim().toLowerCase()).filter((email) => BULK_LIST_EMAIL_RE.test(email)),
+  ))
+  if (!normalizedEmails.length) return 0
+
+  const deleted = await supabaseRest<Array<{ id: string }>>(
+    `luxor_marketing_list?select=id&source=eq.${encodeURIComponent(normalizedListName)}&email=in.(${normalizedEmails.map((email) => encodeURIComponent(email)).join(',')})`,
+    { method: 'DELETE', headers: { Prefer: 'return=representation' } },
+  )
+  return deleted.length
 }

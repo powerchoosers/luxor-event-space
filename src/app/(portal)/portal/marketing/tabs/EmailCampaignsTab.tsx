@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { AlertCircle, Eye, Loader2, Mail, Send, X } from 'lucide-react'
+import { AlertCircle, Eye, Loader2, Mail, Send, Trash2, X } from 'lucide-react'
 import {
   PortalStatusBadge,
   PortalStickyTable,
@@ -10,6 +10,14 @@ import {
 } from '@/components/portal/PortalUI'
 import type { Campaign } from '../page'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { useToast } from '@/components/portal/ToastProvider'
+import {
+  PortalBulkActionDeck,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 
 interface EmailCampaignsTabProps {
   campaigns: Campaign[]
@@ -20,6 +28,7 @@ interface EmailCampaignsTabProps {
   onReport: (id: string) => void
   onCancel: (id: string) => void
   onSendNow: (id: string) => void
+  onChanged: () => Promise<void> | void
 }
 
 type CampaignFilter = 'all' | 'sent' | 'scheduled' | 'draft' | 'automations'
@@ -33,8 +42,13 @@ export function EmailCampaignsTab({
   onReport,
   onCancel,
   onSendNow,
+  onChanged,
 }: EmailCampaignsTabProps) {
+  const { notify } = useToast()
   const [filter, setFilter] = useState<CampaignFilter>('all')
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   const stats = useMemo(() => {
     const recipients = campaigns.reduce((sum, campaign) => sum + Number(campaign.recipient_count || 0), 0)
@@ -59,6 +73,48 @@ export function EmailCampaignsTab({
     if (filter === 'automations') return campaign.audience_label?.toLowerCase().includes('automat') ?? false
     return campaign.status === filter
   }), [campaigns, filter])
+  const matchingCampaignIds = useMemo(() => filteredCampaigns.map((campaign) => campaign.id), [filteredCampaigns])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingCampaignIds.length)
+
+  async function runCampaignBulkAction(action: 'cancel' | 'delete') {
+    const ids = bulkSelection.resolveIds(matchingCampaignIds)
+    if (!ids.length) return
+    setBulkBusy(action)
+    try {
+      let affected = 0
+      let warning: string | undefined
+      if (action === 'cancel') {
+        for (const id of ids) {
+          const response = await fetch(`/api/marketing/campaigns/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'cancel' }),
+          })
+          const payload = await response.json().catch(() => ({})) as { error?: string }
+          if (!response.ok) throw new Error(payload.error || 'Unable to cancel campaigns.')
+          affected += 1
+        }
+      } else {
+        const response = await fetch('/api/portal/bulk-actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resource: 'marketing_campaigns', action: 'delete', ids }),
+        })
+        const payload = await response.json().catch(() => ({})) as { error?: string; warning?: string; affected?: number }
+        if (!response.ok) throw new Error(payload.error || 'Unable to delete campaigns.')
+        affected = payload.affected || 0
+        warning = payload.warning
+      }
+      bulkSelection.clear()
+      setConfirmBulkDelete(false)
+      await onChanged()
+      notify({ title: action === 'delete' ? 'Campaigns deleted' : 'Campaigns cancelled', description: warning || `${affected} campaign${affected === 1 ? '' : 's'} changed.`, variant: warning ? 'info' : 'success' })
+    } catch (bulkError) {
+      notify({ title: 'Bulk action failed', description: bulkError instanceof Error ? bulkError.message : 'Unable to update campaigns.', variant: 'error' })
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -108,7 +164,8 @@ export function EmailCampaignsTab({
         <PortalStickyTable>
           <thead>
             <tr className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 text-left text-[8.5px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
-              <th className="px-6 py-3.5">Campaign Name</th>
+              <th className="w-14 px-4 py-3.5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingCampaignIds)} onChange={() => bulkSelection.selectPage(matchingCampaignIds)} /></th>
+              <th className="px-4 py-3.5">Campaign Name</th>
               <th className="px-4 py-3.5">Status</th>
               <th className="px-4 py-3.5 text-right">Recipients</th>
               <th className="px-4 py-3.5 text-right">Sent</th>
@@ -125,7 +182,8 @@ export function EmailCampaignsTab({
             {loading ? (
               [1, 2, 3, 4].map((i) => (
                 <tr key={i} className="border-b border-[color:var(--portal-border)]">
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4"><div className="h-7 w-7 rounded-md luxor-skeleton" /></td>
+                  <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-xl luxor-skeleton shrink-0" />
                       <div className="space-y-1.5 min-w-0 flex-1">
@@ -148,19 +206,20 @@ export function EmailCampaignsTab({
               ))
             ) : !filteredCampaigns.length ? (
               <tr>
-                <td colSpan={11} className="px-6 py-12 text-center text-xs text-[color:var(--portal-muted)]">
+                <td colSpan={12} className="px-6 py-12 text-center text-xs text-[color:var(--portal-muted)]">
                   {campaigns.length ? 'No campaigns match this filter.' : 'No marketing campaigns have been saved yet.'}
                 </td>
               </tr>
             ) : null}
-            {filteredCampaigns.map((campaign) => {
+            {filteredCampaigns.map((campaign, rowIndex) => {
               const rowBusy = busyId === campaign.id
               const reportBusy = detailLoadingId === campaign.id
               const canManageQueue = campaign.queued_count > 0
 
               return (
-                <tr key={campaign.id} className="border-b border-zinc-900/40 transition-colors hover:bg-zinc-900/10">
-                  <td className="px-6 py-4">
+                <tr key={campaign.id} className={`border-b border-zinc-900/40 transition-colors hover:bg-zinc-900/10 ${bulkSelection.isSelected(campaign.id) ? 'bg-[#caa24c]/5' : ''}`}>
+                  <td className="px-4 py-4 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(campaign.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(campaign.id)} label={decodeHtmlEntities(campaign.name)} /></td>
+                  <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-400"><Mail size={13} /></div>
                       <div className="min-w-0">
@@ -197,6 +256,33 @@ export function EmailCampaignsTab({
           </tbody>
         </PortalStickyTable>
       </PortalTableCard>
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={matchingCampaignIds.length}
+        totalCount={matchingCampaignIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="campaign"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'cancel') void runCampaignBulkAction('cancel')
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'cancel', label: 'Cancel', icon: <X size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} selected campaign${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="This permanently removes eligible campaigns and their recipient and engagement reports. Campaigns that are actively sending are protected and will be kept."
+        confirmLabel="Delete eligible campaigns"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void runCampaignBulkAction('delete')}
+      />
     </div>
   )
 }

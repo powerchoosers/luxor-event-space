@@ -19,7 +19,9 @@ import {
   ClipboardList,
   Building,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  ArrowRightLeft,
+  Trash2
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -33,7 +35,23 @@ import {
   PortalStickyThead,
   PortalButton
 } from '@/components/portal/PortalUI'
-import type { LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import {
+  PortalBulkActionDeck,
+  PortalBulkChoiceDialog,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
+import type { LuxorBooking, LuxorBookingStatus, LuxorPayment } from '@/lib/luxorInquiryTypes'
+
+const BOOKING_STATUS_OPTIONS: Array<{ value: LuxorBookingStatus; label: string }> = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'tentative', label: 'Tentative' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -49,6 +67,11 @@ export default function EventsPage() {
   const deferredSearchTerm = useDeferredValue(searchTerm)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [activeDetailTab, setActiveDetailTab] = useState<'timeline' | 'layout' | 'vendors' | 'payments' | 'checklist' | 'walkthrough'>('timeline')
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<LuxorBookingStatus>('confirmed')
 
   const fetchBookings = async () => {
     try {
@@ -87,6 +110,58 @@ export default function EventsPage() {
   }, [bookings, deferredSearchTerm])
 
   const selectedEvent = useMemo(() => bookings.find((b) => b.id === selectedEventId), [bookings, selectedEventId])
+  const matchingBookingIds = useMemo(() => filteredBookings.map((booking) => booking.id), [filteredBookings])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingBookingIds.length)
+
+  const runBookingStatusAction = async (status: LuxorBookingStatus) => {
+    const ids = bulkSelection.resolveIds(matchingBookingIds)
+    if (!ids.length) return
+    setBulkBusy(status)
+    const updatedIds: string[] = []
+    const errors: string[] = []
+    for (const id of ids) {
+      try {
+        const response = await fetch('/api/bookings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status }),
+        })
+        const payload = await response.json().catch(() => ({})) as BookingWithPayments & { error?: string }
+        if (!response.ok) throw new Error(payload.error || 'Event could not be updated.')
+        updatedIds.push(id)
+      } catch (updateError) {
+        errors.push(updateError instanceof Error ? updateError.message : 'Event could not be updated.')
+      }
+    }
+    setBookings((current) => current.map((booking) => updatedIds.includes(booking.id) ? { ...booking, status } : booking))
+    bulkSelection.clear()
+    setBulkBusy(null)
+    if (errors.length) alert(`${updatedIds.length} event${updatedIds.length === 1 ? '' : 's'} updated. ${errors.length} could not be changed.`)
+  }
+
+  const deleteSelectedBookings = async () => {
+    const ids = bulkSelection.resolveIds(matchingBookingIds)
+    if (!ids.length) return
+    setBulkBusy('delete')
+    try {
+      const response = await fetch('/api/portal/bulk-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'bookings', action: 'delete', ids }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; ids?: string[]; warning?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to delete events.')
+      const deletedIds = payload.ids || []
+      setBookings((current) => current.filter((booking) => !deletedIds.includes(booking.id)))
+      bulkSelection.clear()
+      setConfirmBulkDelete(false)
+      if (payload.warning) alert(payload.warning)
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : 'Unable to delete events.')
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   // Sub-metrics
   const confirmedCount = useMemo(() => bookings.filter((b) => b.status === 'confirmed').length, [bookings])
@@ -122,6 +197,12 @@ export default function EventsPage() {
                     {confirmedCount} Confirmed / {bookings.length} Total
                   </span>
                 </div>
+                {matchingBookingIds.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingBookingIds)} onChange={() => bulkSelection.selectPage(matchingBookingIds)} label="Select all visible events" />
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all visible events</span>
+                  </div>
+                ) : null}
                 <div className="relative group">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
                   <input
@@ -148,18 +229,19 @@ export default function EventsPage() {
               ) : filteredBookings.length === 0 ? (
                 <div className="p-8 text-center text-xs text-zinc-500">No events matched search criteria.</div>
               ) : (
-                filteredBookings.map((b) => {
+                filteredBookings.map((b, rowIndex) => {
                   const active = b.id === selectedEventId
                   return (
-                    <button
+                    <div
                       key={b.id}
-                      onClick={() => setSelectedEventId(b.id)}
-                      className={`w-full text-left p-4 flex flex-col gap-2 transition-all border-l-2 cursor-pointer ${
+                      className={`group flex w-full items-start border-l-2 transition-all ${
                         active
                           ? 'bg-[#caa24c]/5 border-[#caa24c]'
                           : 'border-transparent hover:bg-zinc-950/20'
-                      }`}
+                      } ${bulkSelection.isSelected(b.id) ? 'bg-[#caa24c]/5' : ''}`}
                     >
+                      <div className="shrink-0 py-4 pl-3"><PortalBulkRowSelector checked={bulkSelection.isSelected(b.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(b.id)} label={b.client_name} /></div>
+                      <button type="button" onClick={() => setSelectedEventId(b.id)} className="flex min-w-0 flex-1 flex-col gap-2 p-4 text-left">
                       <div className="flex items-start justify-between gap-3">
                         <div className="truncate">
                           <p className={`text-xs font-bold leading-none truncate transition-colors ${active ? 'text-[#f1d27a]' : 'text-white/90'}`}>
@@ -180,7 +262,8 @@ export default function EventsPage() {
                           <span>${Number(b.contract_total || 0).toLocaleString()}</span>
                         </div>
                       </div>
-                    </button>
+                      </button>
+                    </div>
                   )
                 })
               )}
@@ -328,6 +411,46 @@ export default function EventsPage() {
           )}
         </div>
       </div>
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={matchingBookingIds.length}
+        totalCount={matchingBookingIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="event"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'status') setBulkStatusOpen(true)
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkChoiceDialog
+        open={bulkStatusOpen}
+        title="Change event status"
+        description={`Update ${bulkSelectedCount} selected ${bulkSelectedCount === 1 ? 'event' : 'events'} through the normal booking workflow.`}
+        label="New status"
+        value={bulkStatus}
+        options={BOOKING_STATUS_OPTIONS}
+        confirmLabel="Update events"
+        busy={Boolean(bulkBusy)}
+        onValueChange={(value) => setBulkStatus(value as LuxorBookingStatus)}
+        onConfirm={() => { setBulkStatusOpen(false); void runBookingStatusAction(bulkStatus) }}
+        onClose={() => setBulkStatusOpen(false)}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} selected event${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="This permanently removes eligible booking records and their booking expenses. Events with paid payment history are protected and will be kept. The original lead is not deleted."
+        confirmLabel="Delete eligible events"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void deleteSelectedBookings()}
+      />
     </PortalPageFrame>
   )
 }

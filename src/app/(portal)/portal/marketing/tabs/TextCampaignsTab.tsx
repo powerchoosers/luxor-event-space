@@ -10,11 +10,19 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Trash2,
   Users,
   X,
 } from 'lucide-react'
 import { PortalButton, PortalDatePicker, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
+import {
+  PortalBulkActionDeck,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 import type {
   LuxorTextAudienceRecipient,
   LuxorTextCampaign,
@@ -81,6 +89,9 @@ export function TextCampaignsTab() {
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('10:00')
   const [aiPrompt, setAiPrompt] = useState('')
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -95,6 +106,53 @@ export function TextCampaignsTab() {
       setLoading(false)
     }
   }, [notify])
+
+  const recentCampaigns = useMemo(() => dashboard.campaigns.slice(0, 12), [dashboard.campaigns])
+  const recentCampaignIds = useMemo(() => recentCampaigns.map((campaign) => campaign.id), [recentCampaigns])
+  const bulkSelectedCount = bulkSelection.selectedCount(recentCampaignIds.length)
+
+  const runTextCampaignBulkAction = useCallback(async (action: 'cancel' | 'delete') => {
+    const ids = bulkSelection.resolveIds(recentCampaignIds)
+    if (!ids.length) return
+    setBulkBusy(action)
+    try {
+      let affected = 0
+      let warning = ''
+      if (action === 'cancel') {
+        const eligible = recentCampaigns.filter((campaign) => ids.includes(campaign.id) && ['draft', 'scheduled', 'sending', 'failed'].includes(campaign.status))
+        for (const campaign of eligible) {
+          const response = await fetch(`/api/text-campaigns/${campaign.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'cancel' }),
+          })
+          const payload = await response.json().catch(() => ({})) as { error?: string }
+          if (!response.ok) throw new Error(payload.error || 'Unable to cancel text campaigns.')
+          affected += 1
+        }
+        const skipped = ids.length - eligible.length
+        if (skipped) warning = `${skipped} already-finished ${skipped === 1 ? 'campaign was' : 'campaigns were'} left unchanged.`
+      } else {
+        const response = await fetch('/api/portal/bulk-actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resource: 'text_campaigns', action: 'delete', ids }),
+        })
+        const payload = await response.json().catch(() => ({})) as { error?: string; affected?: number; warning?: string }
+        if (!response.ok) throw new Error(payload.error || 'Unable to delete text campaigns.')
+        affected = payload.affected || 0
+        warning = payload.warning || ''
+      }
+      notify({ title: action === 'cancel' ? 'Text campaigns cancelled' : 'Text campaigns deleted', description: warning || `${affected} ${affected === 1 ? 'campaign' : 'campaigns'} changed.`, variant: warning ? 'info' : 'success' })
+      bulkSelection.clear()
+      setConfirmBulkDelete(false)
+      await load()
+    } catch (error) {
+      notify({ title: 'Bulk action failed', description: error instanceof Error ? error.message : 'Unable to update text campaigns.', variant: 'error' })
+    } finally {
+      setBulkBusy(null)
+    }
+  }, [bulkSelection, load, notify, recentCampaignIds, recentCampaigns])
 
   useEffect(() => {
     void load()
@@ -359,7 +417,16 @@ export function TextCampaignsTab() {
         </section>
 
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-          <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--portal-text)]"><CalendarClock size={17} className="text-[#caa24c]" /> Recent campaigns</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--portal-text)]"><CalendarClock size={17} className="text-[#caa24c]" /> Recent campaigns</h3>
+            {recentCampaignIds.length ? (
+              <PortalBulkHeaderSelector
+                state={bulkSelection.pageSelectionState(recentCampaignIds)}
+                onChange={() => bulkSelection.selectPage(recentCampaignIds)}
+                label="Select recent text campaigns"
+              />
+            ) : null}
+          </div>
           <div className="mt-4 space-y-3">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
@@ -379,12 +446,20 @@ export function TextCampaignsTab() {
                   </div>
                 </div>
               ))
-            ) : dashboard.campaigns.length ? dashboard.campaigns.slice(0, 12).map((campaign) => (
+            ) : recentCampaigns.length ? recentCampaigns.map((campaign, index) => (
               <article key={campaign.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{campaign.name}</p>
-                    <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{formatDateTime(campaign.scheduled_for)}</p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <PortalBulkRowSelector
+                      checked={bulkSelection.isSelected(campaign.id)}
+                      index={index + 1}
+                      onChange={() => bulkSelection.toggle(campaign.id)}
+                      label={campaign.name}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{campaign.name}</p>
+                      <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{formatDateTime(campaign.scheduled_for)}</p>
+                    </div>
                   </div>
                   <PortalStatusBadge status={campaign.status} />
                 </div>
@@ -401,6 +476,34 @@ export function TextCampaignsTab() {
           </div>
         </section>
       </div>
+
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={recentCampaignIds.length}
+        totalCount={recentCampaignIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="text campaign"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'cancel') void runTextCampaignBulkAction('cancel')
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'cancel', label: 'Cancel', icon: <X size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} selected text campaign${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="This removes eligible campaign summaries and recipient rows. Campaigns with queued or sending text jobs are protected and kept. Delivery history remains available in text job records."
+        confirmLabel="Delete eligible campaigns"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void runTextCampaignBulkAction('delete')}
+      />
 
       {reviewing ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Review text campaign">

@@ -37,6 +37,13 @@ import {
   PortalCardSkeleton,
   PortalTableSkeleton
 } from '@/components/portal/PortalUI'
+import {
+  PortalBulkActionDeck,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 
 type SubTab =
@@ -110,6 +117,9 @@ function OperationsPageContent() {
   const [deletingItem, setDeletingItem] = useState<{ type: 'bill' | 'task' | 'inventory' | 'vendor'; id: string; name: string } | null>(null)
   const [submittingEdit, setSubmittingEdit] = useState(false)
   const [submittingDelete, setSubmittingDelete] = useState(false)
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   useEffect(() => {
     if (editingItem) {
@@ -180,6 +190,58 @@ function OperationsPageContent() {
   useEffect(() => {
     loadOperationsData()
   }, [])
+
+  useEffect(() => {
+    bulkSelection.clear()
+  }, [activeTab, bulkSelection.clear])
+
+  const bulkType = activeTab === 'bills' ? 'bill' : activeTab === 'maintenance' ? 'task' : activeTab === 'inventory' ? 'inventory' : activeTab === 'vendors' ? 'vendor' : null
+  const bulkRecords = bulkType === 'bill' ? bills : bulkType === 'task' ? maintenanceTasks : bulkType === 'inventory' ? inventory : bulkType === 'vendor' ? vendors : []
+  const bulkRecordIds = bulkRecords.map((record) => record.id)
+  const bulkSelectedCount = bulkSelection.selectedCount(bulkRecordIds.length)
+
+  const runOperationsBulkUpdate = async (updates: Record<string, unknown>, actionId: string) => {
+    if (!bulkType) return
+    const ids = bulkSelection.resolveIds(bulkRecordIds)
+    if (!ids.length) return
+    setBulkBusy(actionId)
+    const updatedIds: string[] = []
+    for (const id of ids) {
+      const response = await fetch('/api/operations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: bulkType, id, ...updates }),
+      })
+      if (response.ok) updatedIds.push(id)
+    }
+    if (bulkType === 'bill') setBills((current) => current.map((record) => updatedIds.includes(record.id) ? { ...record, ...updates } as LuxorBill : record))
+    if (bulkType === 'task') setMaintenanceTasks((current) => current.map((record) => updatedIds.includes(record.id) ? { ...record, ...updates } as LuxorMaintenanceTask : record))
+    if (bulkType === 'inventory') setInventory((current) => current.map((record) => updatedIds.includes(record.id) ? { ...record, ...updates } as LuxorInventoryItem : record))
+    if (bulkType === 'vendor') setVendors((current) => current.map((record) => updatedIds.includes(record.id) ? { ...record, ...updates } as LuxorVendor : record))
+    bulkSelection.clear()
+    setBulkBusy(null)
+    if (updatedIds.length !== ids.length) alert(`${updatedIds.length} of ${ids.length} records were updated. Reload the page before retrying the others.`)
+  }
+
+  const deleteSelectedOperationsRecords = async () => {
+    if (!bulkType) return
+    const ids = bulkSelection.resolveIds(bulkRecordIds)
+    if (!ids.length) return
+    setBulkBusy('delete')
+    const deletedIds: string[] = []
+    for (const id of ids) {
+      const response = await fetch(`/api/operations?type=${bulkType}&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (response.ok) deletedIds.push(id)
+    }
+    if (bulkType === 'bill') setBills((current) => current.filter((record) => !deletedIds.includes(record.id)))
+    if (bulkType === 'task') setMaintenanceTasks((current) => current.filter((record) => !deletedIds.includes(record.id)))
+    if (bulkType === 'inventory') setInventory((current) => current.filter((record) => !deletedIds.includes(record.id)))
+    if (bulkType === 'vendor') setVendors((current) => current.filter((record) => !deletedIds.includes(record.id)))
+    bulkSelection.clear()
+    setConfirmBulkDelete(false)
+    setBulkBusy(null)
+    if (deletedIds.length !== ids.length) alert(`${deletedIds.length} of ${ids.length} records were deleted. Reload the page before retrying the others.`)
+  }
 
   const handleToggleReadinessTask = (id: string) => {
     setReadinessTasks((prev) =>
@@ -525,7 +587,8 @@ function OperationsPageContent() {
                 <PortalStickyTable minWidth="800px">
                   <PortalStickyThead>
                     <tr className="text-[10px] uppercase font-bold text-zinc-550 tracking-[0.2em] border-b border-zinc-900 bg-[#0c0c0c]/80">
-                      <th className="px-8 py-5">Recurring Service</th>
+                      <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /></th>
+                      <th className="px-4 py-5">Recurring Service</th>
                       <th className="px-6 py-5">Billing Frequency</th>
                       <th className="px-6 py-5">Provider / Account</th>
                       <th className="px-6 py-5">Status</th>
@@ -535,12 +598,13 @@ function OperationsPageContent() {
                   <tbody className="divide-y divide-zinc-900/30">
                     {bills.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
+                        <td colSpan={6} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
                       </tr>
                     ) : (
                       bills.map((bill, idx) => (
-                        <tr key={bill.id || idx} className="hover:bg-zinc-900/40 transition-colors cursor-pointer" onClick={() => setEditingItem({ type: 'bill', data: bill })}>
-                          <td className="px-8 py-5 font-bold text-white">{bill.service}</td>
+                        <tr key={bill.id || idx} className={`hover:bg-zinc-900/40 transition-colors cursor-pointer ${bulkSelection.isSelected(bill.id) ? 'bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'bill', data: bill })}>
+                          <td className="px-4 py-5 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(bill.id)} index={idx + 1} onChange={() => bulkSelection.toggle(bill.id)} label={bill.service} /></td>
+                          <td className="px-4 py-5 font-bold text-white">{bill.service}</td>
                           <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
                           <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
                           <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
@@ -583,7 +647,8 @@ function OperationsPageContent() {
                 <PortalStickyTable minWidth="800px">
                   <PortalStickyThead>
                     <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.2em] border-b border-zinc-900 bg-[#0c0c0c]/80">
-                      <th className="px-8 py-5">Task Details</th>
+                      <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /></th>
+                      <th className="px-4 py-5">Task Details</th>
                       <th className="px-6 py-5">Priority</th>
                       <th className="px-6 py-5">Assigned Technician</th>
                       <th className="px-8 py-5 text-right">Lifecycle Status</th>
@@ -592,12 +657,13 @@ function OperationsPageContent() {
                   <tbody className="divide-y divide-zinc-900/30">
                     {maintenanceTasks.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-8 py-12 text-center text-xs text-zinc-500">No active maintenance tickets logged.</td>
+                        <td colSpan={5} className="px-8 py-12 text-center text-xs text-zinc-500">No active maintenance tickets logged.</td>
                       </tr>
                     ) : (
-                      maintenanceTasks.map((task) => (
-                        <tr key={task.id} className="hover:bg-zinc-900/40 transition-colors cursor-pointer" onClick={() => setEditingItem({ type: 'task', data: task })}>
-                          <td className="px-8 py-5">
+                      maintenanceTasks.map((task, rowIndex) => (
+                        <tr key={task.id} className={`hover:bg-zinc-900/40 transition-colors cursor-pointer ${bulkSelection.isSelected(task.id) ? 'bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'task', data: task })}>
+                          <td className="px-4 py-5 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(task.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(task.id)} label={task.title} /></td>
+                          <td className="px-4 py-5">
                             <p className="text-xs font-bold text-white leading-none">{task.title}</p>
                             <p className="text-[9px] text-zinc-550 mt-1.5">Ticket ID: #{task.id.slice(0, 8)}</p>
                           </td>
@@ -655,6 +721,7 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Venue Stock & Asset Audits</h3>
+            {bulkRecordIds.length ? <div className="flex items-center gap-2"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /><span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all inventory</span></div> : null}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
@@ -669,10 +736,13 @@ function OperationsPageContent() {
                     <p className="text-xs text-zinc-555 italic">No furniture items audited.</p>
                   ) : (
                     furnitureCounts.map((item, idx) => (
-                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded" onClick={() => setEditingItem({ type: 'inventory', data: item })}>
-                        <div>
+                      <div key={item.id || idx} className={`flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded ${bulkSelection.isSelected(item.id) ? 'bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'inventory', data: item })}>
+                        <div className="flex items-center gap-3">
+                          <PortalBulkRowSelector checked={bulkSelection.isSelected(item.id)} index={inventory.findIndex((record) => record.id === item.id) + 1} onChange={() => bulkSelection.toggle(item.id)} label={item.name} />
+                          <div>
                           <p className="text-xs font-bold text-white">{item.name}</p>
                           <p className="text-[10px] text-zinc-550 mt-0.5">Asset verification logged</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
@@ -698,10 +768,13 @@ function OperationsPageContent() {
                     <p className="text-xs text-zinc-555 italic">No supplies items audited.</p>
                   ) : (
                     suppliesCounts.map((item, idx) => (
-                      <div key={item.id || idx} className="flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded" onClick={() => setEditingItem({ type: 'inventory', data: item })}>
-                        <div>
+                      <div key={item.id || idx} className={`flex justify-between items-center border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0 cursor-pointer hover:bg-zinc-900/30 transition-colors px-2 -mx-2 rounded ${bulkSelection.isSelected(item.id) ? 'bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'inventory', data: item })}>
+                        <div className="flex items-center gap-3">
+                          <PortalBulkRowSelector checked={bulkSelection.isSelected(item.id)} index={inventory.findIndex((record) => record.id === item.id) + 1} onChange={() => bulkSelection.toggle(item.id)} label={item.name} />
+                          <div>
                           <p className="text-xs font-bold text-white">{item.name}</p>
                           <p className="text-[10px] text-zinc-550 mt-0.5">Audit: weekly auto-replenish</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
@@ -724,6 +797,7 @@ function OperationsPageContent() {
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Preferred Vendor Roster</h3>
+            {bulkRecordIds.length ? <div className="flex items-center gap-2"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /><span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all vendors</span></div> : null}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
@@ -732,11 +806,14 @@ function OperationsPageContent() {
                 <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
               ) : (
                 vendors.map((v, idx) => (
-                  <div key={v.id || idx} className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3 cursor-pointer hover:border-[#caa24c]/40 transition-all" onClick={() => setEditingItem({ type: 'vendor', data: v })}>
+                  <div key={v.id || idx} className={`luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3 cursor-pointer hover:border-[#caa24c]/40 transition-all ${bulkSelection.isSelected(v.id) ? 'border-[#caa24c]/45 bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'vendor', data: v })}>
                     <div className="flex justify-between items-start">
-                      <div>
+                      <div className="flex items-start gap-3">
+                        <PortalBulkRowSelector checked={bulkSelection.isSelected(v.id)} index={idx + 1} onChange={() => bulkSelection.toggle(v.id)} label={v.name} />
+                        <div>
                         <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
                         <h4 className="text-sm font-serif text-white mt-1">{v.name}</h4>
+                        </div>
                       </div>
                       <span className="text-[10px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">{v.rating || '5.0 ⭐'}</span>
                     </div>
@@ -839,6 +916,46 @@ function OperationsPageContent() {
       )}
       </>
       )}
+
+      {bulkType ? (
+        <>
+          <PortalBulkActionDeck
+            selectedCount={bulkSelectedCount}
+            pageCount={bulkRecordIds.length}
+            totalCount={bulkRecordIds.length}
+            allMatching={bulkSelection.allMatching}
+            busyAction={bulkBusy}
+            noun={bulkType === 'bill' ? 'bill' : bulkType === 'task' ? 'task' : bulkType === 'inventory' ? 'item' : 'vendor'}
+            onSelectAll={bulkSelection.selectAllMatching}
+            onClear={bulkSelection.clear}
+            onAction={(action) => {
+              if (action === 'primary' && bulkType === 'bill') void runOperationsBulkUpdate({ status: 'paid' }, action)
+              if (action === 'secondary' && bulkType === 'bill') void runOperationsBulkUpdate({ status: 'unpaid' }, action)
+              if (action === 'primary' && bulkType === 'task') void runOperationsBulkUpdate({ status: 'completed', completed_at: new Date().toISOString() }, action)
+              if (action === 'secondary' && bulkType === 'task') void runOperationsBulkUpdate({ status: 'pending', completed_at: null }, action)
+              if (action === 'primary' && bulkType === 'inventory') void runOperationsBulkUpdate({ status: 'Good' }, action)
+              if (action === 'secondary' && bulkType === 'inventory') void runOperationsBulkUpdate({ status: 'Low' }, action)
+              if (action === 'primary' && bulkType === 'vendor') void runOperationsBulkUpdate({ coi_active: true }, action)
+              if (action === 'secondary' && bulkType === 'vendor') void runOperationsBulkUpdate({ coi_active: false }, action)
+              if (action === 'delete') setConfirmBulkDelete(true)
+            }}
+            actions={[
+              { id: 'primary', label: bulkType === 'bill' ? 'Mark paid' : bulkType === 'task' ? 'Complete' : bulkType === 'inventory' ? 'Stock good' : 'Verify COI', icon: <CheckCircle2 size={13} /> },
+              { id: 'secondary', label: bulkType === 'bill' ? 'Mark unpaid' : bulkType === 'task' ? 'Reopen' : bulkType === 'inventory' ? 'Mark low' : 'COI inactive', icon: bulkType === 'inventory' ? <AlertTriangle size={13} /> : <Clock size={13} /> },
+              { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+            ]}
+          />
+          <PortalBulkConfirmDialog
+            open={confirmBulkDelete}
+            title={`Delete ${bulkSelectedCount} selected ${bulkType === 'inventory' ? 'inventory item' : bulkType}${bulkSelectedCount === 1 ? '' : 's'}?`}
+            description="This permanently removes the selected operational records from Supabase. This cannot be undone."
+            confirmLabel="Delete selected records"
+            busy={bulkBusy === 'delete'}
+            onClose={() => setConfirmBulkDelete(false)}
+            onConfirm={() => void deleteSelectedOperationsRecords()}
+          />
+        </>
+      ) : null}
 
       {/* 1. New Bill Modal */}
       <PortalModal

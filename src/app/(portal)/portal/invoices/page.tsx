@@ -1,13 +1,15 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   FileText,
   Search,
-  ExternalLink
+  ExternalLink,
+  ArrowRightLeft,
+  Trash2
 } from 'lucide-react'
 import Link from 'next/link'
-import { LuxorInvoice } from '@/lib/luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceStatus } from '@/lib/luxorInquiryTypes'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -18,12 +20,33 @@ import {
   PortalSelect,
   PortalTableSkeleton
 } from '@/components/portal/PortalUI'
+import {
+  PortalBulkActionDeck,
+  PortalBulkChoiceDialog,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
+
+type EditableInvoiceStatus = Exclude<LuxorInvoiceStatus, 'paid'>
+const INVOICE_STATUS_OPTIONS: Array<{ value: EditableInvoiceStatus; label: string }> = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<EditableInvoiceStatus>('sent')
 
   const fetchInvoices = async () => {
     try {
@@ -74,6 +97,53 @@ export default function InvoicesPage() {
       (inv.event_type && inv.event_type.toLowerCase().includes(searchTerm.toLowerCase()))
     )
   })
+  const matchingInvoiceIds = useMemo(() => filteredInvoices.map((invoice) => invoice.id), [filteredInvoices])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingInvoiceIds.length)
+
+  const runInvoiceBulkStatus = async (status: EditableInvoiceStatus) => {
+    const ids = bulkSelection.resolveIds(matchingInvoiceIds)
+    if (!ids.length) return
+    setBulkBusy(status)
+    try {
+      const response = await fetch('/api/portal/bulk-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'invoices', action: 'set_status', ids, value: status }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to update invoices.')
+      setInvoices((current) => current.map((invoice) => ids.includes(invoice.id) ? { ...invoice, status, paid_at: null } : invoice))
+      bulkSelection.clear()
+    } catch (bulkError) {
+      alert(bulkError instanceof Error ? bulkError.message : 'Unable to update invoices.')
+      void fetchInvoices()
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  const deleteSelectedInvoices = async () => {
+    const ids = bulkSelection.resolveIds(matchingInvoiceIds)
+    if (!ids.length) return
+    setBulkBusy('delete')
+    const deletedIds: string[] = []
+    const blockedMessages: string[] = []
+    for (const id of ids) {
+      try {
+        const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE' })
+        const payload = await response.json().catch(() => ({})) as { error?: string }
+        if (!response.ok) throw new Error(payload.error || `Invoice ${id.slice(0, 8)} could not be deleted.`)
+        deletedIds.push(id)
+      } catch (deleteError) {
+        blockedMessages.push(deleteError instanceof Error ? deleteError.message : `Invoice ${id.slice(0, 8)} could not be deleted.`)
+      }
+    }
+    setInvoices((current) => current.filter((invoice) => !deletedIds.includes(invoice.id)))
+    bulkSelection.clear()
+    setConfirmBulkDelete(false)
+    setBulkBusy(null)
+    if (blockedMessages.length) alert(`${deletedIds.length} invoice${deletedIds.length === 1 ? '' : 's'} deleted. ${blockedMessages.length} kept:\n${blockedMessages.join('\n')}`)
+  }
 
   // Computations
   const paidInvoices = invoices.filter((inv) => inv.status === 'paid')
@@ -137,7 +207,8 @@ export default function InvoicesPage() {
         <PortalStickyTable minWidth="980px">
           <PortalStickyThead>
             <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.2em] border-b border-zinc-900/50 bg-[#0c0c0c]">
-              <th className="px-8 py-5">Invoice ID</th>
+              <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingInvoiceIds)} onChange={() => bulkSelection.selectPage(matchingInvoiceIds)} /></th>
+              <th className="px-4 py-5">Invoice ID</th>
               <th className="px-6 py-5">Client Portfolio</th>
               <th className="px-6 py-5">Value (USD)</th>
               <th className="px-6 py-5">Date Summary</th>
@@ -147,23 +218,24 @@ export default function InvoicesPage() {
           </PortalStickyThead>
           <tbody className="divide-y divide-zinc-900/30">
             {loading ? (
-              <PortalTableSkeleton cols={6} rows={5} />
+              <PortalTableSkeleton cols={7} rows={5} />
             ) : error ? (
               <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-red-350">
+                <td colSpan={7} className="px-8 py-12 text-sm text-red-350">
                   {error}
                 </td>
               </tr>
             ) : filteredInvoices.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-8 py-12 text-sm text-zinc-550 text-center">
+                <td colSpan={7} className="px-8 py-12 text-sm text-zinc-550 text-center">
                   No invoice records match search parameters.
                 </td>
               </tr>
             ) : (
-              filteredInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-zinc-900/40 transition-colors group">
-                  <td className="px-8 py-6 font-mono text-sm text-zinc-400 group-hover:text-[#caa24c] transition-colors">
+              filteredInvoices.map((inv, rowIndex) => (
+                <tr key={inv.id} className={`hover:bg-zinc-900/40 transition-colors group ${bulkSelection.isSelected(inv.id) ? 'bg-[#caa24c]/5' : ''}`}>
+                  <td className="px-4 py-6 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(inv.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(inv.id)} label={`invoice ${inv.id.slice(0, 8)}`} /></td>
+                  <td className="px-4 py-6 font-mono text-sm text-zinc-400 group-hover:text-[#caa24c] transition-colors">
                     {inv.id.slice(0, 8).toUpperCase()}
                   </td>
                   <td className="px-6 py-6">
@@ -215,6 +287,46 @@ export default function InvoicesPage() {
           </tbody>
         </PortalStickyTable>
       </PortalTableCard>
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={matchingInvoiceIds.length}
+        totalCount={matchingInvoiceIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="invoice"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'status') setBulkStatusOpen(true)
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkChoiceDialog
+        open={bulkStatusOpen}
+        title="Change invoice status"
+        description="Paid is intentionally excluded. Payments must be recorded through the payment workflow."
+        label="New status"
+        value={bulkStatus}
+        options={INVOICE_STATUS_OPTIONS}
+        confirmLabel="Update invoices"
+        busy={Boolean(bulkBusy)}
+        onValueChange={(value) => setBulkStatus(value as EditableInvoiceStatus)}
+        onConfirm={() => { setBulkStatusOpen(false); void runInvoiceBulkStatus(bulkStatus) }}
+        onClose={() => setBulkStatusOpen(false)}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} selected invoice${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="Draft, sent, overdue, and cancelled invoices can be permanently deleted. Paid invoices are protected and will be kept because they are part of the payment record. Open Stripe checkout sessions are expired before deletion."
+        confirmLabel="Delete eligible invoices"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void deleteSelectedInvoices()}
+      />
     </PortalPageFrame>
   )
 }

@@ -14,6 +14,10 @@ import {
   Search,
   Voicemail,
   FileText,
+  CheckCheck,
+  Circle,
+  Tags,
+  Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -22,6 +26,14 @@ import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
+import {
+  PortalBulkActionDeck,
+  PortalBulkChoiceDialog,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 
 type DirectionFilter = 'all' | 'inbound' | 'outbound' | 'voicemail' | 'missed'
 
@@ -47,6 +59,11 @@ export default function CallsPage() {
   const [search, setSearch] = useState('')
   const [notes, setNotes] = useState('')
   const [outcome, setOutcome] = useState('')
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkOutcomeOpen, setBulkOutcomeOpen] = useState(false)
+  const [bulkOutcome, setBulkOutcome] = useState('follow_up')
 
   const loadCalls = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -94,6 +111,36 @@ export default function CallsPage() {
   }, [calls, filter, search])
 
   const selectedCall = calls.find((call) => call.id === selectedId) || null
+  const matchingCallIds = useMemo(() => filteredCalls.map((call) => call.id), [filteredCalls])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingCallIds.length)
+
+  async function runCallBulkAction(action: 'mark_read' | 'mark_unread' | 'set_outcome' | 'delete', value?: string) {
+    const ids = bulkSelection.resolveIds(matchingCallIds)
+    if (!ids.length) return
+    const busyId = action === 'set_outcome' ? (value || action) : action
+    setBulkBusy(busyId)
+    try {
+      const response = await fetch('/api/portal/bulk-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'calls', action, ids, value }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to update the selected calls.')
+      if (action === 'delete') setCalls((current) => current.filter((call) => !ids.includes(call.id)))
+      if (action === 'mark_read') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, is_read: true } : call))
+      if (action === 'mark_unread') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, is_read: false } : call))
+      if (action === 'set_outcome') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, outcome: value || null } : call))
+      bulkSelection.clear()
+      setConfirmBulkDelete(false)
+      notify({ title: 'Calls updated', description: `${ids.length} call record${ids.length === 1 ? '' : 's'} updated.`, variant: 'success' })
+    } catch (bulkError) {
+      notify({ title: 'Bulk action failed', description: bulkError instanceof Error ? bulkError.message : 'Unable to update calls.', variant: 'error' })
+      void loadCalls(true)
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   useEffect(() => {
     if (!selectedCall) return
@@ -201,6 +248,12 @@ export default function CallsPage() {
                   {value}
                 </button>
               ))}
+              {matchingCallIds.length > 0 ? (
+                <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+                  <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingCallIds)} onChange={() => bulkSelection.selectPage(matchingCallIds)} label="Select all visible calls" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all</span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -224,17 +277,19 @@ export default function CallsPage() {
                 <p className="mt-3 text-sm font-bold text-[color:var(--portal-muted)]">No calls found</p>
                 <p className="mt-1 text-xs text-[color:var(--portal-faint)]">Calls will appear here after the Twilio setup is connected.</p>
               </div>
-            ) : filteredCalls.map((call) => (
-              <button
+            ) : filteredCalls.map((call, rowIndex) => (
+              <div
                 key={call.id}
-                type="button"
-                onClick={() => setSelectedId(call.id)}
-                className={`flex w-full items-start gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors cursor-pointer ${
+                className={`group flex w-full items-start border-b border-[color:var(--portal-border)] text-left transition-colors ${
                   selectedId === call.id
                     ? 'bg-[#caa24c]/7 border-l-2 border-l-[#caa24c]'
                     : 'border-l-2 border-l-transparent hover:bg-[color:var(--portal-soft)]'
-                }`}
+                } ${bulkSelection.isSelected(call.id) ? 'bg-[#caa24c]/5' : ''}`}
               >
+                <div className="shrink-0 py-4 pl-3">
+                  <PortalBulkRowSelector checked={bulkSelection.isSelected(call.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(call.id)} label={call.contact_name || 'call'} />
+                </div>
+                <button type="button" onClick={() => setSelectedId(call.id)} className="flex min-w-0 flex-1 items-start gap-3 px-3 py-4 text-left">
                 <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
                   isMissed(call)
                     ? 'border-red-500/20 bg-red-500/8 text-red-400'
@@ -264,7 +319,8 @@ export default function CallsPage() {
                     <span>{formatRelativeDate(call.created_at)}</span>
                   </div>
                 </div>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
         </section>
@@ -398,6 +454,50 @@ export default function CallsPage() {
           )}
         </section>
       </div>
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={matchingCallIds.length}
+        totalCount={matchingCallIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="call"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'read') void runCallBulkAction('mark_read')
+          if (action === 'unread') void runCallBulkAction('mark_unread')
+          if (action === 'outcome') setBulkOutcomeOpen(true)
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'read', label: 'Mark read', icon: <CheckCheck size={13} /> },
+          { id: 'unread', label: 'Mark unread', icon: <Circle size={13} /> },
+          { id: 'outcome', label: 'Set outcome', icon: <Tags size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkChoiceDialog
+        open={bulkOutcomeOpen}
+        title="Set call outcome"
+        description={`Apply one outcome to ${bulkSelectedCount} selected ${bulkSelectedCount === 1 ? 'call' : 'calls'}.`}
+        label="Outcome"
+        value={bulkOutcome}
+        options={OUTCOME_OPTIONS.filter((option) => option.value)}
+        confirmLabel="Update calls"
+        busy={Boolean(bulkBusy)}
+        onValueChange={setBulkOutcome}
+        onConfirm={() => { setBulkOutcomeOpen(false); void runCallBulkAction('set_outcome', bulkOutcome) }}
+        onClose={() => setBulkOutcomeOpen(false)}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} call record${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="This permanently removes the selected call history, including saved notes and recording references. It does not delete the related lead."
+        confirmLabel="Delete call records"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void runCallBulkAction('delete')}
+      />
     </PortalPageFrame>
   )
 }

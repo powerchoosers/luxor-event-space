@@ -1,19 +1,15 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Users,
   Search,
-  Filter,
   Plus,
   Mail,
-  Phone,
-  MessageSquare,
-  Sparkles,
   Download,
-  Trash2,
-  AlertCircle,
-  MoreVertical
+  MoreVertical,
+  ListPlus,
+  ListMinus
 } from 'lucide-react'
 import {
   PortalTableCard,
@@ -26,6 +22,13 @@ import {
   PortalContactAvatar,
   PortalPagination
 } from '@/components/portal/PortalUI'
+import {
+  PortalBulkActionDeck,
+  PortalBulkHeaderSelector,
+  PortalBulkListDialog,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -53,6 +56,7 @@ interface ContactListsTabProps {
   loading?: boolean
   initialSourceFilter?: string
   onAddContact: (contact: Partial<LuxorInquiry>) => Promise<void>
+  onChanged?: () => void | Promise<void>
   isAddModalOpen: boolean
   onAddModalOpenChange: (isOpen: boolean) => void
 }
@@ -71,6 +75,7 @@ export function ContactListsTab({
   loading = false,
   initialSourceFilter = '',
   onAddContact,
+  onChanged,
   isAddModalOpen,
   onAddModalOpenChange
 }: ContactListsTabProps) {
@@ -88,6 +93,9 @@ export function ContactListsTab({
   const PAGE_SIZE = 25
 
   const [submittingContact, setSubmittingContact] = useState(false)
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkListMode, setBulkListMode] = useState<'add' | 'remove' | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   // Add Contact Form State
   const [newFullName, setNewFullName] = useState('')
@@ -312,6 +320,66 @@ export function ContactListsTab({
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const startIndex = (currentPage - 1) * PAGE_SIZE
   const paginatedContacts = filteredContacts.slice(startIndex, startIndex + PAGE_SIZE)
+  const pageContactIds = useMemo(() => paginatedContacts.map((contact) => contact.id), [paginatedContacts])
+  const matchingContactIds = useMemo(() => filteredContacts.map((contact) => contact.id), [filteredContacts])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingContactIds.length)
+  const marketingListNames = useMemo(() => marketingLists.map((list) => list.name).sort(), [marketingLists])
+
+  const selectedContacts = useCallback(() => {
+    const ids = bulkSelection.resolveIds(matchingContactIds)
+    return filteredContacts.filter((contact) => ids.includes(contact.id))
+  }, [bulkSelection, filteredContacts, matchingContactIds])
+
+  const runMarketingListAction = useCallback(async (listName: string) => {
+    if (!bulkListMode) return
+    const contacts = selectedContacts().filter((contact) => contact.email)
+    if (!contacts.length) return notify({ title: 'No usable email addresses', description: 'The selected contacts do not have an email address.', variant: 'error' })
+    setBulkBusy(true)
+    try {
+      const response = await fetch('/api/marketing/lists', {
+        method: bulkListMode === 'add' ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bulkListMode === 'add'
+          ? { listName, recipients: contacts.map((contact) => ({ email: contact.email, name: contact.full_name })) }
+          : { listName, emails: contacts.map((contact) => contact.email) }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; added?: number; removed?: number; skippedSuppressed?: number }
+      if (!response.ok) throw new Error(payload.error || 'Unable to update the marketing list.')
+      const affected = bulkListMode === 'add' ? payload.added || 0 : payload.removed || 0
+      const skipped = payload.skippedSuppressed || 0
+      notify({
+        title: bulkListMode === 'add' ? 'Contacts added' : 'Contacts removed',
+        description: `${affected} ${affected === 1 ? 'contact' : 'contacts'} updated in ${listName}.${skipped ? ` ${skipped} suppressed ${skipped === 1 ? 'address was' : 'addresses were'} skipped.` : ''}`,
+        variant: 'success',
+      })
+      bulkSelection.clear()
+      setBulkListMode(null)
+      await onChanged?.()
+    } catch (error) {
+      notify({ title: 'List update failed', description: error instanceof Error ? error.message : 'Unable to update the marketing list.', variant: 'error' })
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [bulkListMode, bulkSelection, notify, onChanged, selectedContacts])
+
+  const exportSelectedContacts = useCallback(() => {
+    const contacts = selectedContacts()
+    const csvCell = (value: string) => {
+      const safe = /^[=+@-]/.test(value) ? `'${value}` : value
+      return `"${safe.replaceAll('"', '""')}"`
+    }
+    const rows = [
+      ['Name', 'Email', 'Phone', 'Event type', 'Source', 'Email status'],
+      ...contacts.map((contact) => [contact.full_name, contact.email, contact.phone, contact.event_type, contact.source, contact.emailStatus]),
+    ]
+    const blob = new Blob([rows.map((row) => row.map((cell) => csvCell(String(cell || ''))).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `luxor-contacts-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [selectedContacts])
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -445,6 +513,13 @@ export function ContactListsTab({
             <PortalStickyTable minWidth="1050px">
               <PortalStickyThead>
                 <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+                  <th className="w-12 px-4 py-3.5">
+                    <PortalBulkHeaderSelector
+                      state={bulkSelection.pageSelectionState(pageContactIds)}
+                      onChange={() => bulkSelection.selectPage(pageContactIds)}
+                      label="Select contacts on this page"
+                    />
+                  </th>
                   <th className="px-6 py-3.5">Contact</th>
                   <th className="px-4 py-3.5">Event Type</th>
                   <th className="px-4 py-3.5">Lead Source</th>
@@ -460,6 +535,7 @@ export function ContactListsTab({
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
+                      <td className="px-4 py-3.5"><div className="h-5 w-5 rounded luxor-skeleton" /></td>
                       <td className="flex items-center gap-4 px-6 py-3.5">
                         <div className="h-9 w-9 rounded-full luxor-skeleton" />
                         <div className="space-y-1.5">
@@ -481,6 +557,14 @@ export function ContactListsTab({
                   paginatedContacts.map((contact) => {
                     return (
                       <tr key={contact.id} className="group transition-colors hover:bg-[#caa24c]/7">
+                        <td className="px-4 py-3.5">
+                          <PortalBulkRowSelector
+                            checked={bulkSelection.isSelected(contact.id)}
+                            index={startIndex + paginatedContacts.indexOf(contact) + 1}
+                            onChange={() => bulkSelection.toggle(contact.id)}
+                            label={contact.full_name}
+                          />
+                        </td>
                         <td className="flex items-center gap-4 px-6 py-3.5">
                           <PortalContactAvatar name={contact.full_name} avatarUrl={contact.avatar_url} size="md" className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent" />
                           <div>
@@ -554,7 +638,7 @@ export function ContactListsTab({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-xs font-semibold text-[color:var(--portal-muted)]">
+                    <td colSpan={10} className="px-6 py-12 text-center text-xs font-semibold text-[color:var(--portal-muted)]">
                       No contacts found matching the selected filters.
                     </td>
                   </tr>
@@ -562,6 +646,36 @@ export function ContactListsTab({
               </tbody>
             </PortalStickyTable>
           </PortalTableCard>
+
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={pageContactIds.length}
+        totalCount={matchingContactIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy ? 'list' : null}
+        noun="contact"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'add-list') setBulkListMode('add')
+          if (action === 'remove-list') setBulkListMode('remove')
+          if (action === 'export') exportSelectedContacts()
+        }}
+        actions={[
+          { id: 'add-list', label: 'Add to list', icon: <ListPlus size={13} /> },
+          { id: 'remove-list', label: 'Remove from list', icon: <ListMinus size={13} /> },
+          { id: 'export', label: 'Export CSV', icon: <Download size={13} /> },
+        ]}
+      />
+      <PortalBulkListDialog
+        open={bulkListMode !== null}
+        mode={bulkListMode || 'add'}
+        selectedCount={bulkSelectedCount}
+        listNames={marketingListNames}
+        busy={bulkBusy}
+        onConfirm={(listName) => void runMarketingListAction(listName)}
+        onClose={() => setBulkListMode(null)}
+      />
 
       {/* Add Contact Modal */}
       <PortalModal

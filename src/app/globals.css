@@ -111,12 +111,8 @@ input[type='checkbox']:focus-visible {
 /* Ensure all golden checkbox containers in light and dark mode render white checkmarks */
 .bg-\[\#caa24c\] svg,
 .bg-\[\#dfbd68\] svg,
-.bg-[#caa24c] svg,
-.bg-[#dfbd68] svg,
 body[data-portal-theme='light'] .bg-\[\#caa24c\] svg,
-body[data-portal-theme='light'] .bg-\[\#dfbd68\] svg,
-body[data-portal-theme='light'] .bg-[#caa24c] svg,
-body[data-portal-theme='light'] .bg-[#dfbd68] svg {
+body[data-portal-theme='light'] .bg-\[\#dfbd68\] svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
   fill: none !important;
@@ -231,23 +227,14 @@ body[data-portal-theme='light'] .group:hover .group-hover\:text-\[\#f1d27a\] {
 .bg-\[\#caa24c\] svg,
 .bg-\[\#dfbd68\],
 .bg-\[\#dfbd68\] *,
-.bg-\[\#dfbd68\] svg,
-.bg-[#caa24c],
-.bg-[#caa24c] *,
-.bg-[#caa24c] svg,
-.bg-[#dfbd68],
-.bg-[#dfbd68] *,
-.bg-[#dfbd68] svg {
+.bg-\[\#dfbd68\] svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
 
 body[data-portal-theme='light'] .bg-\[\#caa24c\],
 body[data-portal-theme='light'] .bg-\[\#caa24c\] *,
-body[data-portal-theme='light'] .bg-\[\#caa24c\] svg,
-body[data-portal-theme='light'] .bg-[#caa24c],
-body[data-portal-theme='light'] .bg-[#caa24c] *,
-body[data-portal-theme='light'] .bg-[#caa24c] svg {
+body[data-portal-theme='light'] .bg-\[\#caa24c\] svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }

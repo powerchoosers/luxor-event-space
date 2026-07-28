@@ -644,6 +644,7 @@ function MarketingPageContent() {
                 onReport={openCampaignReport}
                 onCancel={cancelCampaign}
                 onSendNow={sendCampaignNow}
+                onChanged={() => loadCampaigns()}
               />
             )}
 
@@ -669,6 +670,7 @@ function MarketingPageContent() {
                 loading={loadingInquiries || loadingLists}
                 initialSourceFilter={initialSourceFilter}
                 onAddContact={handleAddContact}
+                onChanged={loadMarketingLists}
                 isAddModalOpen={isAddContactModalOpen}
                 onAddModalOpenChange={setIsAddContactModalOpen}
               />

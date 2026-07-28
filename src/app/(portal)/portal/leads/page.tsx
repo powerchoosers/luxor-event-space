@@ -19,7 +19,11 @@ import {
   X,
   TrendingUp,
   UserCheck,
-  FileCheck
+  FileCheck,
+  Trash2,
+  ArrowRightLeft,
+  ListPlus,
+  ListMinus
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -41,6 +45,15 @@ import {
   PortalPagination,
   PortalTableSkeleton
 } from '@/components/portal/PortalUI'
+import {
+  PortalBulkActionDeck,
+  PortalBulkChoiceDialog,
+  PortalBulkConfirmDialog,
+  PortalBulkHeaderSelector,
+  PortalBulkListDialog,
+  PortalBulkRowSelector,
+  usePortalBulkSelection,
+} from '@/components/portal/PortalBulkSelection'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -107,6 +120,13 @@ export default function LeadsPage() {
   const [newLeadTargetDate, setNewLeadTargetDate] = useState('')
   const [newLeadMessage, setNewLeadMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const bulkSelection = usePortalBulkSelection<string>()
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<LuxorInquiryStatus>('contacted')
+  const [bulkListMode, setBulkListMode] = useState<'add' | 'remove' | null>(null)
+  const [marketingListNames, setMarketingListNames] = useState<string[]>([])
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -303,6 +323,73 @@ export default function LeadsPage() {
   const totalPages = Math.ceil(totalCount / 25)
   const startIndex = (currentPage - 1) * 25
   const paginatedLeads = useMemo(() => sortedLeads.slice(startIndex, startIndex + 25), [sortedLeads, startIndex])
+  const pageLeadIds = useMemo(() => paginatedLeads.map((lead) => lead.id), [paginatedLeads])
+  const matchingLeadIds = useMemo(() => sortedLeads.map((lead) => lead.id), [sortedLeads])
+  const bulkSelectedCount = bulkSelection.selectedCount(matchingLeadIds.length)
+
+  const runLeadBulkAction = useCallback(async (action: 'set_status' | 'delete', value?: LuxorInquiryStatus) => {
+    const ids = bulkSelection.resolveIds(matchingLeadIds)
+    if (!ids.length) return
+    setBulkBusy(action === 'set_status' ? (value || action) : action)
+    try {
+      const response = await fetch('/api/portal/bulk-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'inquiries', action, ids, value }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; warning?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to update the selected leads.')
+      if (action === 'delete') setLeads((current) => current.filter((lead) => !ids.includes(lead.id)))
+      else if (value) setLeads((current) => current.map((lead) => ids.includes(lead.id) ? { ...lead, status: value, pipeline_stage: stageForBulkStatus(value) } : lead))
+      bulkSelection.clear()
+      setConfirmBulkDelete(false)
+      if (payload.warning) alert(payload.warning)
+    } catch (bulkError) {
+      alert(bulkError instanceof Error ? bulkError.message : 'The bulk action failed.')
+      void fetchLeads()
+    } finally {
+      setBulkBusy(null)
+    }
+  }, [bulkSelection, fetchLeads, matchingLeadIds])
+
+  const openBulkList = useCallback(async (mode: 'add' | 'remove') => {
+    setBulkListMode(mode)
+    try {
+      const response = await fetch('/api/marketing/lists', { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({})) as { lists?: Array<{ name: string }> }
+      if (response.ok) setMarketingListNames((payload.lists || []).map((list) => list.name).sort())
+    } catch {
+      // Adding can still create a new list if the saved list lookup fails.
+    }
+  }, [])
+
+  const runMarketingListAction = useCallback(async (listName: string) => {
+    if (!bulkListMode) return
+    const ids = bulkSelection.resolveIds(matchingLeadIds)
+    const selected = leads.filter((lead) => ids.includes(lead.id) && lead.email)
+    if (!selected.length) return alert('None of the selected leads has an email address.')
+    setBulkBusy(`list-${bulkListMode}`)
+    try {
+      const response = await fetch('/api/marketing/lists', {
+        method: bulkListMode === 'add' ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bulkListMode === 'add'
+          ? { listName, recipients: selected.map((lead) => ({ email: lead.email, name: lead.full_name })) }
+          : { listName, emails: selected.map((lead) => lead.email) }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; added?: number; removed?: number; skippedSuppressed?: number }
+      if (!response.ok) throw new Error(payload.error || 'Unable to update the marketing list.')
+      const affected = bulkListMode === 'add' ? payload.added || 0 : payload.removed || 0
+      const skipped = payload.skippedSuppressed || 0
+      alert(`${affected} ${affected === 1 ? 'contact was' : 'contacts were'} ${bulkListMode === 'add' ? 'added to' : 'removed from'} ${listName}.${skipped ? ` ${skipped} suppressed ${skipped === 1 ? 'address was' : 'addresses were'} skipped.` : ''}`)
+      bulkSelection.clear()
+      setBulkListMode(null)
+    } catch (listError) {
+      alert(listError instanceof Error ? listError.message : 'Unable to update the marketing list.')
+    } finally {
+      setBulkBusy(null)
+    }
+  }, [bulkListMode, bulkSelection, leads, matchingLeadIds])
 
   // Ensure current page bounds stay valid when filters change
   useEffect(() => {
@@ -507,7 +594,10 @@ export default function LeadsPage() {
           <PortalStickyTable minWidth="1060px">
             <PortalStickyThead>
               <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-                <th className="px-8 py-3.5">Full Name & Contact</th>
+                <th className="w-14 px-4 py-3.5 text-center">
+                  <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(pageLeadIds)} onChange={() => bulkSelection.selectPage(pageLeadIds)} />
+                </th>
+                <th className="px-4 py-3.5">Full Name & Contact</th>
                 <th className="px-6 py-3.5">Step</th>
                 <th className="px-6 py-3.5">Event Parameters</th>
                 <th className="px-6 py-3.5">Intake Date</th>
@@ -517,16 +607,16 @@ export default function LeadsPage() {
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
               {loading ? (
-                <PortalTableSkeleton cols={6} rows={6} />
+                <PortalTableSkeleton cols={7} rows={6} />
               ) : error ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-sm text-red-300">
+                  <td colSpan={7} className="px-8 py-12 text-sm text-red-300">
                     {error}
                   </td>
                 </tr>
               ) : sortedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-sm text-zinc-500">
+                  <td colSpan={7} className="px-8 py-12 text-sm text-zinc-500">
                     <div className="max-w-xl">
                       <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
                       <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
@@ -534,9 +624,12 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedLeads.map((lead) => (
-                  <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
-                    <td className="px-8 py-3">
+                paginatedLeads.map((lead, rowIndex) => (
+                  <tr key={lead.id} className={`group transition-colors hover:bg-[#caa24c]/7 ${bulkSelection.isSelected(lead.id) ? 'bg-[#caa24c]/5' : ''}`}>
+                    <td className="px-4 py-3 text-center">
+                      <PortalBulkRowSelector checked={bulkSelection.isSelected(lead.id)} index={startIndex + rowIndex + 1} onChange={() => bulkSelection.toggle(lead.id)} label={lead.full_name} />
+                    </td>
+                    <td className="px-4 py-3">
                       <Link
                         href={`/portal/leads/${lead.id}`}
                         className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
@@ -916,6 +1009,60 @@ export default function LeadsPage() {
           </form>
         </PortalModal>
       )}
+
+      <PortalBulkActionDeck
+        selectedCount={bulkSelectedCount}
+        pageCount={pageLeadIds.length}
+        totalCount={matchingLeadIds.length}
+        allMatching={bulkSelection.allMatching}
+        busyAction={bulkBusy}
+        noun="lead"
+        onSelectAll={bulkSelection.selectAllMatching}
+        onClear={bulkSelection.clear}
+        onAction={(action) => {
+          if (action === 'status') setBulkStatusOpen(true)
+          if (action === 'add-list') void openBulkList('add')
+          if (action === 'remove-list') void openBulkList('remove')
+          if (action === 'delete') setConfirmBulkDelete(true)
+        }}
+        actions={[
+          { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
+          { id: 'add-list', label: 'Add to list', icon: <ListPlus size={13} /> },
+          { id: 'remove-list', label: 'Remove from list', icon: <ListMinus size={13} /> },
+          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+        ]}
+      />
+      <PortalBulkChoiceDialog
+        open={bulkStatusOpen}
+        title="Change lead status"
+        description={`Update ${bulkSelectedCount} selected ${bulkSelectedCount === 1 ? 'lead' : 'leads'} together.`}
+        label="New status"
+        value={bulkStatus}
+        options={INQUIRY_STATUS_OPTIONS}
+        confirmLabel="Update leads"
+        busy={Boolean(bulkBusy)}
+        onValueChange={(value) => setBulkStatus(value as LuxorInquiryStatus)}
+        onConfirm={() => { setBulkStatusOpen(false); void runLeadBulkAction('set_status', bulkStatus) }}
+        onClose={() => setBulkStatusOpen(false)}
+      />
+      <PortalBulkListDialog
+        open={bulkListMode !== null}
+        mode={bulkListMode || 'add'}
+        selectedCount={bulkSelectedCount}
+        listNames={marketingListNames}
+        busy={bulkBusy?.startsWith('list-') || false}
+        onConfirm={(listName) => void runMarketingListAction(listName)}
+        onClose={() => setBulkListMode(null)}
+      />
+      <PortalBulkConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedCount} selected lead${bulkSelectedCount === 1 ? '' : 's'}?`}
+        description="This permanently removes the lead records plus their notes and tasks. Linked invoices, calls, messages, bookings, and payments are preserved but detached from the deleted leads."
+        confirmLabel="Delete selected leads"
+        busy={bulkBusy === 'delete'}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => void runLeadBulkAction('delete')}
+      />
     </PortalPageFrame>
   )
 }
@@ -984,6 +1131,14 @@ function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   if (lead.status === 'proposal_sent') return 'proposal'
   if (lead.status === 'booked') return 'contract'
   if (lead.status === 'closed_lost') return 'closed_lost'
+  return 'inquiry'
+}
+
+function stageForBulkStatus(status: LuxorInquiryStatus): LuxorPipelineStage {
+  if (status === 'tour_requested' || status === 'tour_confirmed') return 'tour'
+  if (status === 'proposal_sent') return 'proposal'
+  if (status === 'booked') return 'contract'
+  if (status === 'closed_lost') return 'closed_lost'
   return 'inquiry'
 }
 

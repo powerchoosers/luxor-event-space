@@ -2,11 +2,17 @@
 create table if not exists public.luxor_marketing_list (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default timezone('utc'::text, now()),
-  email text not null unique,
+  email text not null check (email = lower(trim(email))),
   full_name text,
-  source text,
+  source text not null default 'Uncategorized' check (char_length(source) between 1 and 120),
   metadata jsonb not null default '{}'::jsonb
 );
+
+create unique index if not exists luxor_marketing_list_email_source_uidx
+  on public.luxor_marketing_list (email, source);
+
+create index if not exists luxor_marketing_list_source_idx
+  on public.luxor_marketing_list (source, created_at desc);
 
 -- Enable RLS
 alter table public.luxor_marketing_list enable row level security;
