@@ -9,6 +9,7 @@ import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
+import { PortalSelect } from '@/components/portal/PortalUI'
 import {
   ArrowRight,
   CalendarDays,
@@ -490,13 +491,14 @@ export function LuxorConciergeChat() {
           ) : (
             <motion.div key="tour-time" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22 }}>
               <p className="mb-2 font-serif text-lg text-[#f7efe3]">{toCalendarDate(selectedTourDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-              <label className="block">
-                <span className="sr-only">Choose a tour time</span>
-                <select value={tourSelection?.id ?? ''} onChange={(event) => setTourSelection(selectedDateSlots.find((slot) => slot.id === event.target.value) ?? null)} className="w-full rounded-md border border-[#caa24c]/25 bg-[#080706] px-3 py-3 text-sm text-[#eadcc8] outline-none focus:border-[#f1d27a]/65">
-                  <option value="">Choose a time</option>
-                  {selectedDateSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.time}</option>)}
-                </select>
-              </label>
+              <PortalSelect
+                value={tourSelection?.id ?? ''}
+                onChange={(value) => setTourSelection(selectedDateSlots.find((slot) => slot.id === value) ?? null)}
+                className="w-full"
+                buttonClassName="!h-12 !rounded-md !border-[#caa24c]/25 !bg-[#080706] !px-3 !py-0 !text-left !text-sm !text-[#eadcc8]"
+                placeholder="Choose a time"
+                options={selectedDateSlots.map((slot) => ({ value: slot.id, label: slot.time }))}
+              />
               {tourSelection ? <p className="mt-2 text-[10px] text-[#d7c29a]/60">Selected: {tourSelection.label}</p> : null}
             </motion.div>
           )}
