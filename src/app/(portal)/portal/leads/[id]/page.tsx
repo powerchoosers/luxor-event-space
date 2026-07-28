@@ -1151,6 +1151,36 @@ export default function LeadDetailPage({
     }
   }
 
+
+  const handleBookingFieldUpdate = async (field: string, nextValue: string): Promise<boolean> => {
+    if (!latestBooking) return false
+    const trimmed = nextValue.trim()
+    try {
+      let update: Record<string, unknown> = {}
+      if (field === 'guest_count') {
+        const parsed = Number.parseInt(trimmed.replace(/[^\\d]/g, ''), 10)
+        update = { guest_count: Number.isFinite(parsed) && parsed > 0 ? parsed : null }
+      } else if (field === 'event_date' || field === 'start_time' || field === 'end_time' || field === 'event_type' || field === 'notes') {
+        update = { [field]: trimmed || null }
+      } else {
+        return false
+      }
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: latestBooking.id, ...update }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to update booking field.')
+      setBookings((prev) => prev.map((b) => b.id === latestBooking.id ? { ...b, ...update } : b))
+      return true
+    } catch (err) {
+      console.error(err)
+      notify({ title: 'Field not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      return false
+    }
+  }
+
   const handlePostNote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!noteContent.trim()) return
@@ -3344,11 +3374,11 @@ export default function LeadDetailPage({
                     {/* Sub-tabs for Planning */}
                     <div className="flex gap-4 border-b border-[color:var(--portal-border)] text-xs overflow-x-auto pb-1 portal-scrollbar">
                       {(['details', 'vendors', 'fb', 'decor', 'timeline', 'files'] as const).map((tab) => {
-                        const labels = {
+                        const labels: Record<string, string> = {
                           details: 'Event Details',
                           vendors: 'Vendors',
                           fb: 'Food & Beverage',
-                          decor: 'Décor & Design',
+                          decor: 'Decor & Design',
                           timeline: 'Timeline',
                           files: 'Notes & Files',
                         }
@@ -3358,9 +3388,7 @@ export default function LeadDetailPage({
                             key={tab}
                             type="button"
                             onClick={() => setPlanningSubTab(tab)}
-                            className={`py-2 px-1 font-bold uppercase tracking-wider border-b-2 transition-colors shrink-0 cursor-pointer ${
-                              isCurrent ? 'border-[#caa24c] text-[#caa24c]' : 'border-transparent text-zinc-500 hover:text-white'
-                            }`}
+                            className={`py-2 px-1 font-bold uppercase tracking-wider border-b-2 transition-colors shrink-0 cursor-pointer ${isCurrent ? 'border-[#caa24c] text-[#caa24c]' : 'border-transparent text-zinc-500 hover:text-white'}`}
                           >
                             {labels[tab]}
                           </button>
@@ -3368,145 +3396,64 @@ export default function LeadDetailPage({
                       })}
                     </div>
 
-                    {/* Planning sub-tab contents */}
+                    {/* Details sub-tab */}
                     {planningSubTab === 'details' && (
                       <div className="space-y-6 luxor-soft-enter">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Event Information */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <div className="mb-2 border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Information</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
                             </div>
-                            <div className="space-y-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Date</span>
-                                <span className="font-bold text-white">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : lead.target_date ? formatDisplayDate(lead.target_date) : 'Date not set'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
-                                <span className="font-bold text-white">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Duration</span>
-                                <span className="font-bold text-white">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
-                                <span className="font-bold text-white">{lead.event_type || 'Event type not captured'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
-                                <span className="font-bold text-white">Luxor at Las Palmas Events</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
-                                <span className="font-bold text-white">{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.event_style || 'Not captured')}</span>
-                              </div>
+                            <div className="space-y-0.5">
+                              <DetailItem compact label="Event Date" value={latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : lead.target_date ? formatDisplayDate(lead.target_date) : 'Date not set'} editValue={latestBooking?.event_date || lead.target_date || ''} copyValue={latestBooking?.event_date || lead.target_date || ''} inputType="date" icon={<Calendar size={14} />} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('event_date', val) : (val) => handleLeadFieldUpdate('target_date', val)} />
+                              <DetailItem compact label="Start Time" value={latestBooking?.start_time ? formatTimeString(latestBooking.start_time) : summaryStartTime ? formatTimeString(summaryStartTime) : 'Not set'} editValue={latestBooking?.start_time || summaryStartTime || ''} copyValue={latestBooking?.start_time || summaryStartTime || ''} inputType="select" icon={<Clock size={14} />} options={EVENT_TIME_OPTIONS} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('start_time', val) : undefined} />
+                              <DetailItem compact label="End Time" value={latestBooking?.end_time ? formatTimeString(latestBooking.end_time) : summaryEndTime ? formatTimeString(summaryEndTime) : 'Not set'} editValue={latestBooking?.end_time || summaryEndTime || ''} copyValue={latestBooking?.end_time || summaryEndTime || ''} inputType="select" icon={<Clock size={14} />} options={EVENT_TIME_OPTIONS} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('end_time', val) : undefined} />
+                              <DetailItem compact label="Event Type" value={latestBooking?.event_type || lead.event_type || 'Not captured'} editValue={latestBooking?.event_type || lead.event_type || ''} copyValue={latestBooking?.event_type || lead.event_type || ''} inputType="select" icon={<Sparkles size={14} />} options={LUXOR_EVENT_TYPES.map((v) => ({ value: v, label: v }))} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('event_type', val) : (val) => handleLeadFieldUpdate('event_type', val)} />
+                              <DetailItem compact label="Location" value="Luxor at Las Palmas Events" copyValue="Luxor at Las Palmas Events" icon={<MapPin size={14} />} />
+                              <DetailItem compact label="Guest Count" value={latestBooking?.guest_count ? `${latestBooking.guest_count} Guests` : lead.guest_count ? `${lead.guest_count} Guests (Est.)` : 'Not captured'} editValue={latestBooking?.guest_count ? String(latestBooking.guest_count) : lead.guest_count ? String(lead.guest_count) : ''} copyValue={latestBooking?.guest_count ? String(latestBooking.guest_count) : lead.guest_count ? String(lead.guest_count) : ''} inputType="number" icon={<Users size={14} />} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('guest_count', val) : (val) => handleLeadFieldUpdate('guest_count', val)} />
+                              <DetailItem compact label="Theme / Style" value={String(lead.metadata?.event_style || 'Not captured')} editValue={String(lead.metadata?.event_style || '')} copyValue={String(lead.metadata?.event_style || '')} icon={<Star size={14} />} onCommit={(val) => handleMetadataUpdate({ event_style: val || null }).then((ok) => ok)} />
                             </div>
                           </section>
 
-                          {/* Client Preferences */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <div className="mb-2 border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Preferences</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
                             </div>
-                            <div className="space-y-3 text-xs">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Color Palette</span>
-                                <div className="flex gap-1.5">
-                                  <span className="h-4.5 w-4.5 rounded-full bg-black border border-zinc-800" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-[#caa24c]" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-[#f1d27a]" />
-                                  <span className="h-4.5 w-4.5 rounded-full bg-white border border-zinc-800" />
-                                </div>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Music Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.music_style || 'Not captured')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Lighting</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.lighting_preference || 'Not captured')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Special Requests</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.special_requests || lead.message || 'None captured')}</span>
-                              </div>
+                            <div className="space-y-0.5">
+                              <DetailItem compact label="Music Style" value={String(lead.metadata?.music_style || 'Not captured')} editValue={String(lead.metadata?.music_style || '')} copyValue={String(lead.metadata?.music_style || '')} icon={<PartyPopper size={14} />} onCommit={(val) => handleMetadataUpdate({ music_style: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Lighting" value={String(lead.metadata?.lighting_preference || 'Not captured')} editValue={String(lead.metadata?.lighting_preference || '')} copyValue={String(lead.metadata?.lighting_preference || '')} icon={<Sparkles size={14} />} onCommit={(val) => handleMetadataUpdate({ lighting_preference: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Special Requests" value={String(lead.metadata?.special_requests || lead.message || 'None captured')} editValue={String(lead.metadata?.special_requests || lead.message || '')} copyValue={String(lead.metadata?.special_requests || lead.message || '')} icon={<NotebookPen size={14} />} onCommit={(val) => handleMetadataUpdate({ special_requests: val || null }).then((ok) => ok)} />
                             </div>
                           </section>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Space & Layout */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <div className="mb-2 border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
                             </div>
-                            <div className="grid grid-cols-5 gap-4">
-                              <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
-                                <Sparkles size={20} />
-                                <span className="text-[8px] font-bold uppercase mt-1 text-center">Floor Plan Layout</span>
-                              </div>
-                              <div className="col-span-3 space-y-2 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Head Table</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.head_table || 'Not captured')}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Dance Floor</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.dance_floor || 'Not captured')}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Stage</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.stage_needed || 'Not captured')}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Other Areas</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.other_areas || 'Not captured')}</span>
-                                </div>
-                              </div>
+                            <div className="space-y-0.5">
+                              <DetailItem compact label="Head Table" value={String(lead.metadata?.head_table || 'Not captured')} editValue={String(lead.metadata?.head_table || '')} copyValue={String(lead.metadata?.head_table || '')} icon={<Users size={14} />} onCommit={(val) => handleMetadataUpdate({ head_table: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Dance Floor" value={String(lead.metadata?.dance_floor || 'Not captured')} editValue={String(lead.metadata?.dance_floor || '')} copyValue={String(lead.metadata?.dance_floor || '')} icon={<Heart size={14} />} onCommit={(val) => handleMetadataUpdate({ dance_floor: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Stage" value={String(lead.metadata?.stage_needed || 'Not captured')} editValue={String(lead.metadata?.stage_needed || '')} copyValue={String(lead.metadata?.stage_needed || '')} icon={<Sliders size={14} />} onCommit={(val) => handleMetadataUpdate({ stage_needed: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Other Areas" value={String(lead.metadata?.other_areas || 'Not captured')} editValue={String(lead.metadata?.other_areas || '')} copyValue={String(lead.metadata?.other_areas || '')} icon={<MapPin size={14} />} onCommit={(val) => handleMetadataUpdate({ other_areas: val || null }).then((ok) => ok)} />
                             </div>
                           </section>
 
-                          {/* Decor Overview */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+                            <div className="mb-2 border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Decor Overview</p>
-                              <span className="text-[10px] font-bold uppercase text-[#caa24c] cursor-pointer">Edit</span>
                             </div>
-                            <div className="space-y-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Selected Package</span>
-                                <span className="font-bold text-white">{lead.package_interest || latestBooking?.package_name || 'Not selected'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Décor Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.decor_style || 'Not captured')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Centerpieces</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.centerpieces || 'Not captured')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Linens</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.linens || 'Not captured')}</span>
-                              </div>
-                              <div className="flex justify-between items-start">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500 mt-0.5">Additional Notes</span>
-                                <span className="font-bold text-white text-right max-w-[60%]">{tourNotes || 'No planning notes captured yet.'}</span>
-                              </div>
+                            <div className="space-y-0.5">
+                              <DetailItem compact label="Selected Package" value={latestBooking?.package_name || lead.package_interest || 'Not selected'} editValue={latestBooking?.package_name || lead.package_interest || ''} copyValue={latestBooking?.package_name || lead.package_interest || ''} inputType="select" icon={<Briefcase size={14} />} options={LUXOR_PACKAGE_INTEREST_OPTIONS} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('notes', val) : (val) => handleLeadFieldUpdate('package_interest', val)} />
+                              <DetailItem compact label="Decor Style" value={String(lead.metadata?.decor_style || 'Not captured')} editValue={String(lead.metadata?.decor_style || '')} copyValue={String(lead.metadata?.decor_style || '')} icon={<Sparkles size={14} />} onCommit={(val) => handleMetadataUpdate({ decor_style: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Centerpieces" value={String(lead.metadata?.centerpieces || 'Not captured')} editValue={String(lead.metadata?.centerpieces || '')} copyValue={String(lead.metadata?.centerpieces || '')} icon={<Cake size={14} />} onCommit={(val) => handleMetadataUpdate({ centerpieces: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Linens" value={String(lead.metadata?.linens || 'Not captured')} editValue={String(lead.metadata?.linens || '')} copyValue={String(lead.metadata?.linens || '')} icon={<Star size={14} />} onCommit={(val) => handleMetadataUpdate({ linens: val || null }).then((ok) => ok)} />
+                              <DetailItem compact label="Additional Notes" value={latestBooking?.notes || tourNotes || 'No planning notes yet.'} editValue={latestBooking?.notes || tourNotes || ''} copyValue={latestBooking?.notes || tourNotes || ''} icon={<NotebookPen size={14} />} onCommit={latestBooking ? (val) => handleBookingFieldUpdate('notes', val) : (val) => handleMetadataUpdate({ tour_notes: val || null }).then((ok) => ok)} />
                             </div>
                           </section>
                         </div>
 
-                        {/* Planning Checklist Summary */}
                         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Planning Checklist Progress</p>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -3514,7 +3461,7 @@ export default function LeadDetailPage({
                               { label: 'Event Details', val: 'Completed', color: 'text-emerald-400' },
                               { label: 'Vendors', val: '0/5 Completed', color: 'text-zinc-500' },
                               { label: 'Food & Beverage', val: '0/4 Completed', color: 'text-zinc-500' },
-                              { label: 'Décor & Design', val: '0/4 Completed', color: 'text-zinc-500' },
+                              { label: 'Decor & Design', val: '0/4 Completed', color: 'text-zinc-500' },
                               { label: 'Timeline', val: '0/3 Completed', color: 'text-zinc-500' },
                             ].map((item, idx) => (
                               <div key={idx} className="p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 text-center space-y-1">
@@ -3531,12 +3478,10 @@ export default function LeadDetailPage({
                       <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-4 luxor-soft-enter">
                         <Sparkles size={24} className="mx-auto text-[#caa24c]" />
                         <p className="text-xs uppercase font-bold tracking-widest text-[color:var(--portal-text)]">
-                          {planningSubTab === 'fb' ? 'Food & Beverage Planning' : planningSubTab === 'decor' ? 'Décor & Design Planning' : planningSubTab === 'vendors' ? 'Vendor Planning' : planningSubTab === 'timeline' ? 'Event Timeline' : 'Event Files'}
+                          {planningSubTab === 'fb' ? 'Food & Beverage Planning' : planningSubTab === 'decor' ? 'Decor & Design Planning' : planningSubTab === 'vendors' ? 'Vendor Planning' : planningSubTab === 'timeline' ? 'Event Timeline' : 'Event Files'}
                         </p>
                         <p className="mx-auto max-w-md text-xs leading-relaxed">
-                          {planningSubTab === 'fb' || planningSubTab === 'decor'
-                            ? 'Track each decision as a task so it has an owner, due date, priority, and completion history.'
-                            : 'Open the dedicated workspace for this part of the event plan.'}
+                          {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Track each decision as a task so it has an owner, due date, priority, and completion history.' : 'Open the dedicated workspace for this part of the event plan.'}
                         </p>
                         <button
                           type="button"
@@ -3545,7 +3490,7 @@ export default function LeadDetailPage({
                             else if (planningSubTab === 'timeline') setActiveLeadTab('timeline')
                             else if (planningSubTab === 'files') setActiveLeadTab('documents')
                             else {
-                              setTaskTitle(planningSubTab === 'fb' ? 'Food & beverage decision' : 'Décor & design decision')
+                              setTaskTitle(planningSubTab === 'fb' ? 'Food & beverage decision' : 'Decor & design decision')
                               setTaskPriority('medium')
                               setShowTaskTools(true)
                               setActiveLeadTab('tasks')
@@ -3560,7 +3505,6 @@ export default function LeadDetailPage({
                   </>
                 )
               }
-              
               if (currentStage === 'proposal') {
                 return (
                   <>
