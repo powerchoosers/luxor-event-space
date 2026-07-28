@@ -562,7 +562,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 )}
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Template Type</label>
+                <div className="flex items-center">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Template Type</label>
+                </div>
                 <PortalSelect
                   value={selectedTemplateId}
                   options={templateOptions}
