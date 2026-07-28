@@ -34,6 +34,7 @@ import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { PortalCloseButton, PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
+import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
 
@@ -658,7 +659,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
 
   return (
-    <div className="portal-surface flex h-full w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm font-sans text-[color:var(--portal-text)]">
+    <div className="flex h-full w-full flex-col gap-4">
+      <EmailQueueHealthWidget />
+      <div className="portal-surface flex min-h-0 flex-1 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}
       <AnimatePresence initial={false}>
       {folderPaneOpen && !readerExpanded && <motion.div
@@ -1333,7 +1336,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         </AnimatePresence>
       </div>
     </div>
-  )
+  </div>
+)
 }
 
 function ThreadMessage({

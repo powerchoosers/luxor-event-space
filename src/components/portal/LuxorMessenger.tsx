@@ -9,6 +9,7 @@ import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { PortalContactAvatar, PortalCloseButton } from './PortalUI'
+import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
 
 type Conversation = {
@@ -261,7 +262,13 @@ export function LuxorMessenger() {
               <div className="flex min-w-0 items-center gap-3">
                 <button type="button" onClick={() => setShowThreadOnMobile(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
                 <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" />
-                <div className="min-w-0"><p className="truncate text-sm font-black text-[color:var(--portal-text)]">{selectedConversation.contactName}</p><button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button></div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-black text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
+                    <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} compact />
+                  </div>
+                  <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:border-emerald-500/35 hover:text-emerald-500"><Phone size={13}/> <span className="hidden sm:inline">Call</span></button>

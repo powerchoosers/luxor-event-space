@@ -217,6 +217,25 @@ function OperationsPageContent() {
     }
   }
 
+  const handleToggleBillStatus = async (bill: LuxorBill) => {
+    const nextStatus = bill.status === 'paid' ? 'unpaid' : 'paid'
+    setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, status: nextStatus } : b)))
+    try {
+      const res = await fetch('/api/operations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'bill', id: bill.id, status: nextStatus }),
+      })
+      if (!res.ok) throw new Error('Failed to update status')
+      const updated = await res.json()
+      setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, ...updated } : b)))
+    } catch (err) {
+      console.error(err)
+      setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, status: bill.status } : b)))
+      alert('Failed to update bill status.')
+    }
+  }
+
   const handleAddTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!taskTitle) return
@@ -509,13 +528,14 @@ function OperationsPageContent() {
                       <th className="px-8 py-5">Recurring Service</th>
                       <th className="px-6 py-5">Billing Frequency</th>
                       <th className="px-6 py-5">Provider / Account</th>
+                      <th className="px-6 py-5">Status</th>
                       <th className="px-8 py-5 text-right font-mono">Monthly Cost</th>
                     </tr>
                   </PortalStickyThead>
                   <tbody className="divide-y divide-zinc-900/30">
                     {bills.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
+                        <td colSpan={5} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
                       </tr>
                     ) : (
                       bills.map((bill, idx) => (
@@ -523,6 +543,21 @@ function OperationsPageContent() {
                           <td className="px-8 py-5 font-bold text-white">{bill.service}</td>
                           <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
                           <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
+                          <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBillStatus(bill)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold border transition-all cursor-pointer ${
+                                bill.status === 'paid'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+                              }`}
+                              title="Click to flip status"
+                            >
+                              {bill.status === 'paid' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                              <span>{bill.status === 'paid' ? 'Paid' : 'Mark Paid'}</span>
+                            </button>
+                          </td>
                           <td className="px-8 py-5 text-right font-mono font-bold text-zinc-300">
                             ${Number(bill.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>

@@ -28,6 +28,7 @@ import {
   TrendingUp,
   Workflow,
   Megaphone,
+  SlidersHorizontal,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -88,7 +89,7 @@ const navItems = [
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
-  { href: '/portal/operations', icon: <Settings size={18} />, label: 'Operations', isDropdown: true },
+  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', isDropdown: true },
   { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
@@ -403,10 +404,20 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                     <button
                       type="button"
                       onClick={() => {
-                        if (item.href === '/portal/operations') {
-                          setOperationsExpanded(!operationsExpanded)
-                        } else if (item.href === '/portal/marketing') {
-                          setMarketingExpanded(!marketingExpanded)
+                        if (sidebarCollapsed) {
+                          setSidebarCollapsed(false)
+                          window.localStorage.setItem('luxor-portal-sidebar', 'expanded')
+                          if (item.href === '/portal/operations') {
+                            setOperationsExpanded(true)
+                          } else if (item.href === '/portal/marketing') {
+                            setMarketingExpanded(true)
+                          }
+                        } else {
+                          if (item.href === '/portal/operations') {
+                            setOperationsExpanded(!operationsExpanded)
+                          } else if (item.href === '/portal/marketing') {
+                            setMarketingExpanded(!marketingExpanded)
+                          }
                         }
                       }}
                       title={sidebarCollapsed ? item.label : undefined}

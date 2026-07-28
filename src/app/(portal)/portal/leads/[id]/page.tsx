@@ -59,6 +59,7 @@ import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
 import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
+import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_PACKAGE_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
 type ZohoEmailMessage = {
@@ -2545,6 +2546,7 @@ export default function LeadDetailPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <PortalSmsConsentBadge phone={lead.phone} />
             {lead.email && (
               <button 
                 type="button"

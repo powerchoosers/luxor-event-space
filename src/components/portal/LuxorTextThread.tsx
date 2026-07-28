@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'
+import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
 
 export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?: string; phone?: string | null; contactName?: string | null }) {
   const { notify } = useToast()
@@ -13,6 +14,32 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [isOptedOut, setIsOptedOut] = useState(false)
+
+  useEffect(() => {
+    if (!phone) {
+      setIsOptedOut(false)
+      return
+    }
+    let isMounted = true
+    fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return
+        if (data?.status === 'opted_out') {
+          setIsOptedOut(true)
+        } else {
+          setIsOptedOut(false)
+        }
+      })
+      .catch(() => {
+        if (isMounted) setIsOptedOut(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [phone])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -26,7 +53,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
   }, [inquiryId, notify])
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 30_000); return () => window.clearInterval(timer) }, [load])
   async function send() {
-    if (!phone || !body.trim()) return
+    if (!phone || !body.trim() || isOptedOut) return
     setSending(true)
     try {
       const response = await fetch('/api/twilio/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: phone, body, inquiryId, contactName }) })
@@ -37,7 +64,18 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
   }
   return (
     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
-      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3"><div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Text conversation</p><p className="mt-1 text-[10px] text-zinc-600">{phone ? `${contactName || 'Client'} · ${formatPhoneDisplay(phone)}` : 'Inbound and outbound SMS conversations.'}</p></div><MessageSquare size={17} className="text-[#caa24c]" /></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Text conversation</p>
+            <PortalSmsConsentBadge phone={phone} compact />
+          </div>
+          <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
+            {phone ? `${contactName || 'Client'} · ${formatPhoneDisplay(phone)}` : 'Inbound and outbound SMS conversations.'}
+          </p>
+        </div>
+        <MessageSquare size={17} className="text-[#caa24c]" />
+      </div>
       <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-1 portal-scrollbar">
         {loading ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4 py-3" aria-label="Loading text conversation">
@@ -79,25 +117,37 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
         )}
       </div>
       <div className="mt-4">
+        {isOptedOut && (
+          <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-500 dark:text-red-400">
+            <p className="font-semibold">⚠️ Recipient Opted Out of Text Messages</p>
+            <p className="mt-0.5 text-[11px] opacity-90">This phone number sent a STOP keyword. Manual and automated SMS sending is disabled per carrier regulations until the client replies START.</p>
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            disabled={!phone || sending}
+            disabled={!phone || sending || isOptedOut}
             rows={3}
-            placeholder={phone ? `Message ${contactName || phone}` : 'This lead has no mobile number'}
+            placeholder={
+              isOptedOut
+                ? 'Texting disabled (Recipient opted out via STOP keyword)'
+                : phone
+                ? `Message ${contactName || phone}`
+                : 'This lead has no mobile number'
+            }
             className="portal-input-transparent min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)] disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => void send()}
-            disabled={!phone || !body.trim() || sending}
+            disabled={!phone || !body.trim() || sending || isOptedOut}
             className="flex w-12 items-center justify-center rounded-xl bg-[#caa24c] text-white disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 transition-colors hover:bg-[#dfbd68]"
           >
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
-        {body.trim() ? (
+        {body.trim() && !isOptedOut ? (
           <motion.p
             initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}

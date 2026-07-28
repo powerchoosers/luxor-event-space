@@ -29,6 +29,7 @@ import { LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, 
 import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
+import { BillsDueCard } from "@/components/portal/BillsDueCard";
 
 function formatActivityTime(date: Date, now: Date): string {
   if (isNaN(date.getTime())) return 'Recently';
@@ -627,99 +628,7 @@ export default async function PortalOverview() {
         </div>
 
         {/* Bills Due */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2.5">
-                <DollarSign className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">BILLS DUE</h3>
-              </div>
-              <Link href="/portal/invoices" className="text-xs font-bold text-[#caa24c] hover:text-[#b0883b] transition-colors">
-                View all →
-              </Link>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Overdue Section */}
-              {overdueBills.length > 0 && (
-                <div>
-                  <p className="text-[9px] font-black tracking-widest text-[#b93c3c] mb-2 uppercase">LATE / OVERDUE</p>
-                  <div className="space-y-2">
-                    {overdueBills.map(bill => (
-                      <div key={bill.id} className="flex items-center justify-between text-xs">
-                        <span className="text-red-400 font-semibold">{bill.service}</span>
-                        <span className="text-red-400 font-bold font-mono">${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Due Today */}
-              <div>
-                <p className="text-[9px] font-black tracking-widest text-[#b93c3c] mb-2 uppercase">DUE TODAY</p>
-                {dueToday.length > 0 ? (
-                  <div className="space-y-2">
-                    {dueToday.map(bill => (
-                      <div key={bill.id} className="flex items-center justify-between text-xs">
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 line-through' : 'text-[color:var(--portal-text)]'} font-medium`}>
-                          {bill.service} {bill.status === 'paid' && <span className="text-emerald-500 font-bold text-[8px] ml-1">(PAID)</span>}
-                        </span>
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 font-normal' : 'text-[color:var(--portal-text)] font-semibold'} font-mono`}>
-                          ${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-[color:var(--portal-muted)] italic">No bills due today</p>
-                )}
-              </div>
-
-              {/* Due This Week */}
-              <div>
-                <p className="text-[9px] font-black tracking-widest text-[#caa24c] mb-2 uppercase">DUE THIS WEEK</p>
-                {dueThisWeek.length > 0 ? (
-                  <div className="space-y-2">
-                    {dueThisWeek.map(bill => (
-                      <div key={bill.id} className="flex items-center justify-between text-xs">
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 line-through' : 'text-[color:var(--portal-text)]'} font-medium`}>
-                          {bill.service} {bill.status === 'paid' && <span className="text-emerald-500 font-bold text-[8px] ml-1">(PAID)</span>}
-                        </span>
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 font-normal' : 'text-[color:var(--portal-text)] font-semibold'} font-mono`}>
-                          ${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-[color:var(--portal-muted)] italic">No bills due this week</p>
-                )}
-              </div>
-
-              {/* Due Next Week */}
-              <div>
-                <p className="text-[9px] font-black tracking-widest text-emerald-600 dark:text-emerald-400 mb-2 uppercase">DUE NEXT WEEK</p>
-                {dueNextWeek.length > 0 ? (
-                  <div className="space-y-2">
-                    {dueNextWeek.map(bill => (
-                      <div key={bill.id} className="flex items-center justify-between text-xs">
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 line-through' : 'text-[color:var(--portal-text)]'} font-medium`}>
-                          {bill.service} {bill.status === 'paid' && <span className="text-emerald-500 font-bold text-[8px] ml-1">(PAID)</span>}
-                        </span>
-                        <span className={`${bill.status === 'paid' ? 'text-[color:var(--portal-muted)]/50 font-normal' : 'text-[color:var(--portal-text)] font-semibold'} font-mono`}>
-                          ${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-[color:var(--portal-muted)] italic">No bills due next week</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <BillsDueCard initialBills={bills} />
       </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
