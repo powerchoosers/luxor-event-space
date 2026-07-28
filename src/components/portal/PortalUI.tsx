@@ -740,7 +740,7 @@ export function PortalSelect({
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
-      {createPortal(
+      {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>
           {isOpen ? (
             <React.Fragment key="portal-select">
@@ -803,7 +803,7 @@ export function PortalSelect({
           ) : null}
         </AnimatePresence>,
         document.body
-      )}
+      ) : null}
     </div>
   )
 }
@@ -963,7 +963,7 @@ export function PortalDatePicker({
         <Calendar size={13} className="text-[#caa24c]/80" />
       </button>
       
-      {createPortal(
+      {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>
           {isOpen ? (
             <React.Fragment key="portal-date-picker">
@@ -1053,7 +1053,7 @@ export function PortalDatePicker({
           ) : null}
         </AnimatePresence>,
         document.body
-      )}
+      ) : null}
     </div>
   )
 }
