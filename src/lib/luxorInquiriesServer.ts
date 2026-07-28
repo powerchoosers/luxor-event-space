@@ -52,16 +52,22 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     throw new Error('Please shorten the event notes to 3,000 characters or fewer.')
   }
 
+  const smsScopes = [
+    ...(phone && input.smsOptIn ? ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice'] : []),
+    ...(phone && input.smsMarketingOptIn ? ['marketing'] : []),
+  ]
+
   const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
     ...(input.sessionId ? { publicSessionId: compactText(input.sessionId).slice(0, 120) } : {}),
     ...(input.attribution ? { attribution: input.attribution } : {}),
-    ...(phone && input.smsOptIn
+    ...(smsScopes.length
       ? {
           smsConsent: {
             status: 'opted_in',
             source: 'website_inquiry_form',
-            disclosureVersion: '2026-07-25',
+            disclosureVersion: '2026-07-27',
+            scopes: smsScopes,
             capturedAt: new Date().toISOString(),
           },
         }
@@ -149,18 +155,21 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     throw error
   }
 
-  if (created?.phone && row.metadata?.smsConsent) {
+  const smsConsent = row.metadata?.smsConsent as { scopes?: string[] } | undefined
+  if (created?.phone && smsConsent) {
     try {
       await recordLuxorSmsConsent(created.phone, 'START', 'website_inquiry_form', {
-        scopes: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing'],
+        scopes: smsConsent.scopes,
         proof: {
           inquiry_id: created.id,
           page_path: created.page_path,
-          disclosure_version: '2026-07-25',
+          disclosure_version: '2026-07-27',
         },
       })
-      const { queueInquiryTextJobs } = await import('./luxorTextCampaignsServer')
-      await queueInquiryTextJobs(created)
+      if (smsConsent.scopes?.includes('customer_care')) {
+        const { queueInquiryTextJobs } = await import('./luxorTextCampaignsServer')
+        await queueInquiryTextJobs(created)
+      }
     } catch (consentError) {
       console.error('Inquiry created but its SMS consent or confirmation jobs could not be recorded:', consentError)
     }

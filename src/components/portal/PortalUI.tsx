@@ -3,7 +3,8 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar, ChevronLeft, ChevronRight, X, Pencil, Loader2 } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 
 export function PortalPageFrame({
@@ -31,12 +32,36 @@ export function PortalPageHeader({
   description?: string
   actions?: React.ReactNode
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const canGoBack = pathname !== '/portal'
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+      return
+    }
+
+    router.push('/portal')
+  }
+
   return (
     <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className={description ? 'space-y-1.5' : ''}>
         <div className="flex items-center gap-3">
+          {canGoBack ? (
+            <button
+              type="button"
+              onClick={goBack}
+              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              aria-label="Go back"
+            >
+              <ArrowLeft size={14} />
+              <span>Back</span>
+            </button>
+          ) : null}
           {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
-          <h1 className="text-xl font-bold tracking-tight text-white/90 sm:text-2xl">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)] sm:text-2xl">{title}</h1>
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>

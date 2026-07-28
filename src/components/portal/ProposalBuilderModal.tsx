@@ -405,7 +405,7 @@ export function ProposalBuilderModal({
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider transition hover:border-[#caa24c]/45 disabled:opacity-40"><FileText size={15} /> Save proposal</button>
-            <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#b98a3e]/20 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={15} /> {submitting ? 'Saving…' : 'Save & email'}</button>
+            <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-lg shadow-[#b98a3e]/20 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={15} className="!text-white" /> {submitting ? 'Saving…' : 'Save & email'}</button>
           </div>
         </footer>
       </div>

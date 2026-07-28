@@ -256,7 +256,6 @@ export default function LeadDetailPage({
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
-  const [showCallMenu, setShowCallMenu] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
@@ -550,6 +549,10 @@ export default function LeadDetailPage({
   const visibleActivityEntries = useMemo(
     () => activityEntries.slice(0, visibleActivityCount),
     [activityEntries, visibleActivityCount],
+  )
+  const sharedAttachmentEmails = useMemo(
+    () => emailMessages.filter((email) => email.hasAttachment).slice(0, 4),
+    [emailMessages],
   )
   const hiddenActivityCount = Math.max(0, activityEntries.length - visibleActivityEntries.length)
 
@@ -2379,7 +2382,11 @@ export default function LeadDetailPage({
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
         </Link>
-        <PortalStatusBadge status={lead.status} />
+        {lead.status === 'tour_confirmed' ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
+            <Calendar size={12} /> Tour scheduled
+          </span>
+        ) : <PortalStatusBadge status={lead.status} />}
       </div>
 
       <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
@@ -2479,84 +2486,33 @@ export default function LeadDetailPage({
               <button 
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
-                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/2 cursor-pointer"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                aria-label="Email client"
+                title="Email client"
               >
-                <Mail size={13} /> Email Client
+                <Mail size={15} />
               </button>
             )}
             {lead.phone && (
-              <div className="relative inline-flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35 transition-colors">
-                <button
-                  type="button"
-                  onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] hover:bg-[#caa24c]/2"
-                >
-                  <Phone size={13} /> Call Client
-                </button>
-                <span className="h-4 w-px bg-[color:var(--portal-border)]" />
-                <button 
-                  type="button" 
-                  onClick={() => setShowCallMenu((current) => !current)}
-                  aria-expanded={showCallMenu}
-                  className="px-2 py-2 text-zinc-500 hover:text-white transition-colors cursor-pointer" 
-                  aria-label="More call options"
-                >
-                  <ChevronDown size={12} />
-                </button>
-                {showCallMenu ? (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowCallMenu(false)} />
-                    <div
-                      data-portal-dropdown="true"
-                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNoteType('call_log')
-                          setShowCallMenu(false)
-                          scrollToSection('lead-activity')
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                      >
-                        <FileText size={13} className="text-[#caa24c]" />
-                        <span>Log call notes</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCallMenu(false)
-                          setTextPopupOpen(true)
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                      >
-                        <MessageSquare size={13} className="text-[#caa24c]" />
-                        <span>Open Twilio texts</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(lead.phone || '')
-                          setShowCallMenu(false)
-                          notify({ title: 'Phone number copied', variant: 'success' })
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                      >
-                        <Copy size={13} className="text-[#caa24c]" />
-                        <span>Copy phone number</span>
-                      </button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                aria-label="Call client"
+                title="Call client"
+              >
+                <Phone size={15} />
+              </button>
             )}
             {lead.phone && (
               <button
                 type="button"
                 onClick={() => setTextPopupOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                aria-label="Text client"
+                title="Text client"
               >
-                <MessageSquare size={13} /> Text Client
+                <MessageSquare size={15} />
               </button>
             )}
             <div className="portal-gold-button relative inline-flex items-center rounded-lg bg-[#caa24c] hover:bg-[#dfbd68] shadow-lg shadow-[#caa24c]/20 transition-all active:scale-95">
@@ -3254,24 +3210,27 @@ export default function LeadDetailPage({
                       </section>
                     </div>
                     
-                    {/* Photos & Documents Shared */}
+                    {/* Files shared through email */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Photos & Documents Shared</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/main-hall-wedding-wide.png" alt="Main hall wedding layout" className="object-cover w-full h-full" />
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Shared files</p>
+                          <p className="mt-1 text-[10px] text-[color:var(--portal-faint)]">Attachments shared with this client through email appear here.</p>
                         </div>
-                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/main-hall-quinceanera-angle.png" alt="Main hall Quinceañera layout" className="object-cover w-full h-full" />
-                        </div>
-                        <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-zinc-850">
-                          <img src="/images/dining-hall/main-hall-table-candid.png" alt="Main hall candid table view" className="object-cover w-full h-full" />
-                        </div>
-                        <div className="aspect-[4/3] rounded-lg border border-dashed border-zinc-800 flex flex-col items-center justify-center text-zinc-600 hover:text-white cursor-pointer hover:border-zinc-500 transition-colors">
-                          <Plus size={16} />
-                          <span className="text-[9px] font-bold uppercase mt-1">Add Photos</span>
-                        </div>
+                        <Link href="/portal/marketing?tab=emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
                       </div>
+                      {sharedAttachmentEmails.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {sharedAttachmentEmails.map((email) => (
+                            <Link key={email.id} href={emailReaderUrl(email)} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
+                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || 'Email attachment'}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">Open email to view files</span></span>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 text-center"><FileText size={18} className="mx-auto text-[color:var(--portal-faint)]" /><p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No shared files yet</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Files from email and text conversations will be collected here as they are available.</p></div>
+                      )}
                     </section>
 
                     {/* Row 2: Chat Replay & Emails */}
@@ -3315,34 +3274,34 @@ export default function LeadDetailPage({
                       <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
                         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
                           <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Email History</h4>
-                          <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-300">Inbound / Outbound</span>
+                          <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-700 dark:text-blue-300">Inbound / Outbound</span>
                         </div>
                         <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar text-left">
                           {emailMessages.length === 0 ? (
-                            <p className="text-xs text-zinc-500 italic py-8 text-center">No emails logged for this address.</p>
+                            <p className="py-8 text-center text-xs italic text-[color:var(--portal-muted)]">No emails logged for this address.</p>
                           ) : (
                             emailMessages.map((email) => {
                               const isOutgoing = email.direction === 'outgoing'
                               return (
-                                <Link href={emailReaderUrl(email)} key={email.id} className="block p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 space-y-1 transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                                <Link href={emailReaderUrl(email)} key={email.id} className="block space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                                   <div className="flex justify-between items-start gap-2">
                                     <span className={`rounded border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-widest ${
                                       isOutgoing
-                                        ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
-                                        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                        ? 'border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                                        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                                     }`}>
                                       {isOutgoing ? 'Outbound' : 'Inbound'}
                                     </span>
-                                    <span className="text-[9px] font-mono text-zinc-500">
+                                    <span className="text-[9px] font-mono text-[color:var(--portal-muted)]">
                                       {formatTimelineDate(email.receivedAt || '')}
                                     </span>
                                   </div>
-                                  <p className="text-xs font-bold text-zinc-200">{decodeHtmlEntities(email.subject) || '(No Subject)'}</p>
-                                  <p className="text-[9px] text-zinc-500 truncate">
-                                    {isOutgoing ? `To: ${email.to}` : `From: ${email.from}`}
+                                  <p className="text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || '(No Subject)'}</p>
+                                  <p className="truncate text-[9px] text-[color:var(--portal-muted)]">
+                                    {isOutgoing ? `To: ${lead.full_name}` : `From: ${lead.full_name}`}
                                   </p>
                                   {email.summary && (
-                                    <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{decodeHtmlEntities(email.summary)}</p>
+                                    <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{decodeHtmlEntities(email.summary)}</p>
                                   )}
                                   <span className="inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
                                 </Link>
@@ -4719,17 +4678,19 @@ export default function LeadDetailPage({
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
                     </div>
                     <div className="space-y-4 text-left">
-                      {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => (
-                        <div key={entry.id} className="flex items-center gap-3">
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                      {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => {
+                        const isEmail = entry.kind === 'email'
+                        return <div key={entry.id} className="group relative flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-[color:var(--portal-soft)]">
+                          {isEmail ? <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" /> : <button type="button" onClick={() => setActiveLeadTab('activity')} aria-label="Open activity" className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />}
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
                             {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : <Check size={11} className="stroke-[3]" />}
                           </span>
-                          <div>
-                            <p className="text-xs font-bold text-white leading-tight">{entry.kind === 'email' ? decodeHtmlEntities(entry.email.subject) : describeActivityEntry(entry)}</p>
-                            <p className="text-[9px] text-zinc-500 mt-0.5">{formatTimelineDate(entry.createdAt)}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-bold leading-tight text-[color:var(--portal-text)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{entry.kind === 'email' ? decodeHtmlEntities(entry.email.subject) : describeActivityEntry(entry)}</p>
+                            <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">{formatTimelineDate(entry.createdAt)}</p>
                           </div>
                         </div>
-                      )) : (
+                      }) : (
                         <p className="text-xs text-zinc-500">No recent activity logged yet.</p>
                       )}
                     </div>

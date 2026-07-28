@@ -77,9 +77,14 @@ export async function POST(request: NextRequest) {
       console.warn('Public inquiry protection event could not be recorded:', protectionError)
     }
 
-    const duplicate = await findRecentDuplicateLuxorInquiry(payload)
-    if (duplicate) {
-      return NextResponse.json({ inquiry: duplicate, duplicate: true }, { status: 200 })
+    const selectedTourSlotId = typeof payload.metadata?.selectedTourSlotId === 'string'
+      ? payload.metadata.selectedTourSlotId
+      : null
+    if (!selectedTourSlotId) {
+      const duplicate = await findRecentDuplicateLuxorInquiry(payload)
+      if (duplicate) {
+        return NextResponse.json({ inquiry: duplicate, duplicate: true }, { status: 200 })
+      }
     }
 
     const inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined)

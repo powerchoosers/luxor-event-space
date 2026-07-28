@@ -54,6 +54,7 @@ export function LuxorInquiryForm({
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [smsOptIn, setSmsOptIn] = useState(false)
+  const [smsMarketingOptIn, setSmsMarketingOptIn] = useState(false)
   const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [packageInterest, setPackageInterest] = useState(initialPackageInterest)
   const [preferredTourSlotId, setPreferredTourSlotId] = useState('')
@@ -104,6 +105,12 @@ export function LuxorInquiryForm({
     setPreferredTourSlotId(slotId)
     setPreferredTourDate(selectedSlot?.date ?? '')
     setPreferredTourTime(selectedSlot?.time ?? '')
+  }
+
+  function handleTourDateChange(date: string) {
+    setPreferredTourDate(date)
+    setPreferredTourSlotId('')
+    setPreferredTourTime('')
   }
 
   function goToContactStep() {
@@ -159,6 +166,7 @@ export function LuxorInquiryForm({
       email: cleanEmail,
       phone: cleanPhone,
       smsOptIn: Boolean(cleanPhone && smsOptIn),
+      smsMarketingOptIn: Boolean(cleanPhone && smsMarketingOptIn),
       marketingOptIn,
       eventType,
       targetDate,
@@ -201,6 +209,8 @@ export function LuxorInquiryForm({
   }
 
   const reservedTour = Boolean(preferredTourSlotId)
+  const tourDates = Array.from(new Map(tourSlots.map((slot) => [slot.date, slot.dateLabel])).entries())
+  const selectedDateSlots = tourSlots.filter((slot) => slot.date === preferredTourDate)
 
   return (
     <form
@@ -255,12 +265,16 @@ export function LuxorInquiryForm({
               {showTourFields ? (
                 <div className="mt-5 rounded-lg border border-[#caa24c]/18 bg-white/[0.025] p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">Tour availability</p>
+                  <p className="mt-2 text-xs leading-5 text-[#d7c29a]/68">Tours are 30 minutes on Tuesdays and Wednesdays. One party per time; booking closes 24 hours before the tour.</p>
                   {tourSlotsLoading ? <p className="mt-3 text-sm text-[#d7c29a]/70">Loading current openings…</p> : null}
                   {tourSlotsError ? <p className="mt-3 text-sm text-red-200">{tourSlotsError}</p> : null}
                   {!tourSlotsLoading && tourSlots.length > 0 ? (
                     <div className="mt-3">
-                      <PortalSelect value={preferredTourSlotId} onChange={handleTourSlotChange} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose an available tour" options={tourSlots.map((slot) => ({ value: slot.id, label: `${slot.label} · ${slot.availableSpots} open` }))} />
-                      <p className="mt-2 text-xs leading-5 text-[#d7c29a]/62">Choosing a published time reserves it when you submit the next step.</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <PortalSelect value={preferredTourDate} onChange={handleTourDateChange} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a date" options={tourDates.map(([value, label]) => ({ value, label }))} />
+                        <PortalSelect value={preferredTourSlotId} onChange={handleTourSlotChange} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder={preferredTourDate ? 'Choose a time' : 'Choose a date first'} options={selectedDateSlots.map((slot) => ({ value: slot.id, label: slot.time }))} disabled={!preferredTourDate} />
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-[#d7c29a]/62">Complete the next step to reserve your selected time immediately.</p>
                     </div>
                   ) : !tourSlotsLoading ? (
                     <div className="mt-3">
@@ -294,7 +308,10 @@ export function LuxorInquiryForm({
               </div>
 
               {phone.trim() ? (
-                <SmsConsentRow checked={smsOptIn} onChange={setSmsOptIn} />
+                <>
+                  <SmsConsentRow checked={smsOptIn} onChange={setSmsOptIn} />
+                  <SmsMarketingConsentRow checked={smsMarketingOptIn} onChange={setSmsMarketingOptIn} />
+                </>
               ) : null}
 
               <ConsentRow checked={marketingOptIn} onChange={setMarketingOptIn}>
@@ -375,12 +392,26 @@ function SmsConsentRow({ checked, onChange }: { checked: boolean; onChange: (che
           className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]"
         />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
-          By checking this box, I agree to receive customer-care and occasional promotional text messages from Luxor Event Space about my inquiry, tour, booking, payment, event, or Luxor open-house invitation. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+          By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
         </span>
       </label>
       <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">
         Read the <a href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</a> and <a href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</a>.
       </p>
+    </div>
+  )
+}
+
+function SmsMarketingConsentRow({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="mt-3 rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
+        <span className="text-xs leading-5 text-[#d7c29a]/72">
+          I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+        </span>
+      </label>
+      <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">This optional marketing consent is separate from customer-care messages. Read the <a href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</a> and <a href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</a>.</p>
     </div>
   )
 }

@@ -16,12 +16,6 @@ export async function POST(request: NextRequest) {
   await recordTextCampaignReply(params.From, controlType === 'STOP')
   if (controlType === 'STOP' || controlType === 'START') {
     await recordLuxorSmsConsent(params.From, controlType, params.OptOutType ? 'twilio_advanced_opt_out' : 'inbound_keyword')
-    if (controlType === 'START' && !params.OptOutType) {
-      return new Response(
-        '<Response><Message>Luxor Event Space: You are subscribed to customer-care and occasional promotional texts. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help or STOP to opt out.</Message></Response>',
-        { headers: { 'Content-Type': 'text/xml; charset=utf-8' } },
-      )
-    }
   } else if (controlType === 'HELP') {
     // When Advanced Opt-Out reports HELP, Twilio has already sent its configured
     // response. Avoid a duplicate message; otherwise provide the documented help path.

@@ -4,15 +4,25 @@ import {
   createLuxorTourSlot,
   deleteLuxorTourSlot,
   listAvailableLuxorTourSlots,
+  listUpcomingLuxorTourSlots,
+  publishLuxorTourDays,
+  unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
 } from '@/lib/luxorTourSlotsServer'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime } from '@/lib/luxorTourSlots'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const manage = new URL(request.url).searchParams.get('manage') === '1'
+    if (manage) {
+      if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
+      const slots = await listUpcomingLuxorTourSlots()
+      return NextResponse.json({ slots })
+    }
     const slots = await listAvailableLuxorTourSlots()
     return NextResponse.json({ slots })
   } catch (error) {
@@ -26,17 +36,29 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>
+    if (Array.isArray(body.dates)) {
+      const dates = body.dates.map(String)
+      if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
+        return NextResponse.json({ error: 'Choose 1–62 Tuesdays or Wednesdays.' }, { status: 400 })
+      }
+      if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00'))) {
+        return NextResponse.json({ error: 'Published days must be at least 24 hours away.' }, { status: 400 })
+      }
+      const slots = await publishLuxorTourDays(dates)
+      return NextResponse.json({ slots, publishedDays: dates.length }, { status: 201 })
+    }
     const slotDate = String(body.slotDate || '')
     const startTime = String(body.startTime || '')
     const endTime = body.endTime ? String(body.endTime) : null
     const capacity = Number(body.capacity || 1)
 
-    if (!DATE_PATTERN.test(slotDate) || slotDate < new Date().toISOString().slice(0, 10)) {
-      return NextResponse.json({ error: 'Choose today or a future date.' }, { status: 400 })
+    if (!DATE_PATTERN.test(slotDate) || !isLuxorTourDay(slotDate) || !isLuxorTourSlotAtLeast24HoursAway(slotDate, startTime)) {
+      return NextResponse.json({ error: 'Choose a Tuesday or Wednesday at least 24 hours away.' }, { status: 400 })
     }
     if (!TIME_PATTERN.test(startTime) || (endTime && !TIME_PATTERN.test(endTime))) {
       return NextResponse.json({ error: 'Choose a valid start and end time.' }, { status: 400 })
     }
+    if (!isLuxorTourTime(startTime)) return NextResponse.json({ error: 'Choose one of Luxor’s tour times.' }, { status: 400 })
     if (endTime && endTime <= startTime) {
       return NextResponse.json({ error: 'The end time must be after the start time.' }, { status: 400 })
     }
@@ -65,6 +87,14 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>
+    if (Array.isArray(body.dates) && body.action === 'unpublish') {
+      const dates = body.dates.map(String)
+      if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
+        return NextResponse.json({ error: 'Choose 1–62 Tuesdays or Wednesdays.' }, { status: 400 })
+      }
+      const slots = await unpublishLuxorTourDays(dates)
+      return NextResponse.json({ slots, unpublishedDays: dates.length })
+    }
     const id = String(body.id || '')
     const status = String(body.status || '')
     if (!ID_PATTERN.test(id) || !['available', 'unavailable'].includes(status)) {

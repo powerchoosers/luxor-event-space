@@ -39,6 +39,7 @@ import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'
 import { useToast } from '@/components/portal/ToastProvider'
 import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
 import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSettings'
+import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -809,20 +810,7 @@ export default function SettingsPage() {
           {/* BUSINESS HOURS */}
           {activeTab === 'hours' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Venue Tour Availability Hours</h3>
-              <p className="text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">Informational only. These hours are not currently connected to the public tour-slot calendar.</p>
-              <div className="grid gap-3 font-mono text-xs lg:grid-cols-3">
-                {[
-                  { day: 'Monday - Thursday', hours: '9:00 AM - 5:00 PM' },
-                  { day: 'Friday', hours: '9:00 AM - 3:00 PM' },
-                  { day: 'Saturday - Sunday', hours: 'Events Only (Closed for Tours)' }
-                ].map((item, idx) => (
-                  <div key={idx} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                    <span className="block font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{item.day}</span>
-                    <span className="mt-2 block font-semibold text-[color:var(--portal-text)]">{item.hours}</span>
-                  </div>
-                ))}
-              </div>
+              <TourAvailabilityManager />
             </div>
           )}
 

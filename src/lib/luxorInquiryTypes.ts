@@ -51,6 +51,7 @@ export type LuxorInquiryInput = {
   rsvpStatus?: 'attending' | 'not_attending' | 'maybe'
   marketingOptIn?: boolean
   smsOptIn?: boolean
+  smsMarketingOptIn?: boolean
   website?: string
   formStartedAt?: number
   sessionId?: string
