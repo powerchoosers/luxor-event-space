@@ -50,6 +50,7 @@ export interface ContactRecord {
 interface ContactListsTabProps {
   inquiries: LuxorInquiry[]
   marketingLists?: MarketingList[]
+  loading?: boolean
   initialSourceFilter?: string
   onAddContact: (contact: Partial<LuxorInquiry>) => Promise<void>
   isAddModalOpen: boolean
@@ -67,6 +68,7 @@ function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
 export function ContactListsTab({
   inquiries,
   marketingLists = [],
+  loading = false,
   initialSourceFilter = '',
   onAddContact,
   isAddModalOpen,
@@ -455,7 +457,27 @@ export function ContactListsTab({
                 </tr>
               </PortalStickyThead>
               <tbody className="divide-y divide-[color:var(--portal-border)] text-xs">
-                {paginatedContacts.length > 0 ? (
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="flex items-center gap-4 px-6 py-3.5">
+                        <div className="h-9 w-9 rounded-full luxor-skeleton" />
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 w-32 rounded luxor-skeleton" />
+                          <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5"><div className="h-3.5 w-20 rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5"><div className="h-3.5 w-20 rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5"><div className="h-3.5 w-24 rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5"><div className="h-3.5 w-16 rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5 text-center"><div className="h-5 w-16 mx-auto rounded-full luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5 text-center"><div className="h-5 w-16 mx-auto rounded-full luxor-skeleton" /></td>
+                      <td className="px-4 py-3.5"><div className="h-5 w-14 rounded-full luxor-skeleton" /></td>
+                      <td className="px-6 py-3.5 text-right"><div className="h-7 w-7 ml-auto rounded luxor-skeleton" /></td>
+                    </tr>
+                  ))
+                ) : paginatedContacts.length > 0 ? (
                   paginatedContacts.map((contact) => {
                     return (
                       <tr key={contact.id} className="group transition-colors hover:bg-[#caa24c]/7">

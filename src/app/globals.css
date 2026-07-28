@@ -66,6 +66,24 @@ body[data-portal-theme='light'] {
   color-scheme: light;
 }
 
+/* Global golden checkbox styling with white checkmark */
+input[type='checkbox'] {
+  accent-color: #caa24c;
+}
+
+body[data-portal-theme='light'] input[type='checkbox'] {
+  accent-color: #caa24c;
+}
+
+/* Ensure all golden checkbox containers in light and dark mode render white checkmarks */
+.bg-\[\#caa24c\] svg,
+.bg-\[\#dfbd68\] svg,
+.bg-[#caa24c] svg,
+.bg-[#dfbd68] svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 body[data-portal-theme='light'] aside,
 body[data-portal-theme='light'] header,
 body[data-portal-theme='light'] .nodal-void-card,

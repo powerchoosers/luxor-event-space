@@ -7,6 +7,7 @@ import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 interface LeadSourcesTabProps {
   inquiries: LuxorInquiry[]
+  loading?: boolean
   onFilterSource: (source: string) => void
 }
 
@@ -19,7 +20,7 @@ type SourceRow = {
   latestAt: string
 }
 
-export function LeadSourcesTab({ inquiries, onFilterSource }: LeadSourcesTabProps) {
+export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: LeadSourcesTabProps) {
   const sourceRows = useMemo<SourceRow[]>(() => {
     const grouped = new Map<string, SourceRow>()
 
@@ -74,29 +75,37 @@ export function LeadSourcesTab({ inquiries, onFilterSource }: LeadSourcesTabProp
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        {stats.map((stat) => (
-          <div key={stat.label} className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 transition-all hover:border-zinc-800">
-            <div className="flex items-center justify-between text-zinc-500">
-              <span className="text-[9px] font-black uppercase tracking-wider">{stat.label}</span>
-              <TrendingUp size={14} className="text-[#caa24c]" />
-            </div>
-            <h3 className="mt-2.5 font-mono text-xl font-bold text-white">{stat.value}</h3>
-            <p className="mt-2.5 text-[8px] font-bold leading-4 text-zinc-600">{stat.detail}</p>
-          </div>
-        ))}
+        {loading
+          ? Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-3">
+                <div className="h-3 w-20 rounded luxor-skeleton" />
+                <div className="h-6 w-12 rounded luxor-skeleton" />
+                <div className="h-2.5 w-24 rounded luxor-skeleton" />
+              </div>
+            ))
+          : stats.map((stat) => (
+              <div key={stat.label} className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 transition-all hover:border-[#caa24c]/30">
+                <div className="flex items-center justify-between text-[color:var(--portal-muted)]">
+                  <span className="text-[9px] font-black uppercase tracking-wider">{stat.label}</span>
+                  <TrendingUp size={14} className="text-[#caa24c]" />
+                </div>
+                <h3 className="mt-2.5 font-mono text-xl font-bold text-[color:var(--portal-text)]">{stat.value}</h3>
+                <p className="mt-2.5 text-[8px] font-bold leading-4 text-[color:var(--portal-muted)]">{stat.detail}</p>
+              </div>
+            ))}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-h-0 lg:col-span-2">
           <PortalTableCard controls={(
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Lead Source Performance</h3>
-              <p className="mt-0.5 text-[9px] text-zinc-500">Counts are calculated from the current inquiry records; no ad spend or revenue is inferred.</p>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Lead Source Performance</h3>
+              <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">Counts are calculated from the current inquiry records; no ad spend or revenue is inferred.</p>
             </div>
           )}>
             <PortalStickyTable minWidth="760px">
               <PortalStickyThead>
-                <tr className="bg-zinc-950/80 text-[9px] font-black uppercase tracking-wider text-zinc-400">
+                <tr className="bg-[color:var(--portal-soft)] text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
                   <th className="px-6 py-4">Source</th>
                   <th className="px-4 py-4 text-right">Inquiries</th>
                   <th className="px-4 py-4 text-right">Tour Pipeline</th>
@@ -106,9 +115,21 @@ export function LeadSourcesTab({ inquiries, onFilterSource }: LeadSourcesTabProp
                   <th className="px-6 py-4 text-right">Open</th>
                 </tr>
               </PortalStickyThead>
-              <tbody className="divide-y divide-zinc-900/60 text-xs font-semibold">
-                {sourceRows.length === 0 ? (
-                  <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-zinc-600">No inquiry source data is available yet.</td></tr>
+              <tbody className="divide-y divide-[color:var(--portal-border)] text-xs font-semibold">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-6 py-4"><div className="h-4 w-32 rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-4 text-right"><div className="h-4 w-8 ml-auto rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-4 text-right"><div className="h-4 w-8 ml-auto rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-4 text-right"><div className="h-4 w-8 ml-auto rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-4 text-right"><div className="h-4 w-12 ml-auto rounded luxor-skeleton" /></td>
+                      <td className="px-4 py-4"><div className="h-4 w-24 rounded luxor-skeleton" /></td>
+                      <td className="px-6 py-4 text-right"><div className="h-4 w-4 ml-auto rounded luxor-skeleton" /></td>
+                    </tr>
+                  ))
+                ) : sourceRows.length === 0 ? (
+                  <tr><td colSpan={7} className="px-6 py-12 text-center text-xs text-[color:var(--portal-muted)]">No inquiry source data is available yet.</td></tr>
                 ) : null}
                 {sourceRows.map((row) => (
                   <tr key={row.source} onClick={() => onFilterSource(row.source)} className="group cursor-pointer border-b border-zinc-900/40 transition-colors hover:bg-zinc-900/10">

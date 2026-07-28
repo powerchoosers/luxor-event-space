@@ -591,7 +591,7 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' || activeTab === 'builder-automation' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
+    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
       {activeTab !== 'builder-automation' && (
         <PortalPageHeader
           icon={header.icon}
@@ -629,6 +629,7 @@ function MarketingPageContent() {
             {activeTab === 'sources' && (
               <LeadSourcesTab
                 inquiries={inquiries}
+                loading={loadingInquiries}
                 onFilterSource={handleFilterSource}
               />
             )}
@@ -665,6 +666,7 @@ function MarketingPageContent() {
               <ContactListsTab
                 inquiries={inquiries}
                 marketingLists={marketingLists}
+                loading={loadingInquiries || loadingLists}
                 initialSourceFilter={initialSourceFilter}
                 onAddContact={handleAddContact}
                 isAddModalOpen={isAddContactModalOpen}
@@ -675,6 +677,7 @@ function MarketingPageContent() {
             {activeTab === 'call-center' && (
               <CallCenterTab
                 inquiries={inquiries}
+                loading={loadingInquiries}
                 onUpdateInquiryStatus={handleUpdateInquiryStatus}
                 onAddNote={handleAddNote}
               />

@@ -8,9 +8,6 @@ import {
   Users,
   Clock,
   Check,
-  Calendar,
-  UserPlus,
-  Send,
   Loader2,
   CalendarCheck
 } from 'lucide-react'
@@ -22,6 +19,7 @@ import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 
 interface CallCenterTabProps {
   inquiries: LuxorInquiry[]
+  loading?: boolean
   onUpdateInquiryStatus: (id: string, status: LuxorInquiryStatus, updates?: Partial<LuxorInquiry>) => Promise<void>
   onAddNote: (id: string, noteText: string) => Promise<void>
 }
@@ -41,6 +39,7 @@ type Outcome =
 
 export function CallCenterTab({
   inquiries,
+  loading = false,
   onUpdateInquiryStatus,
   onAddNote
 }: CallCenterTabProps) {
@@ -183,15 +182,28 @@ export function CallCenterTab({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full min-h-0 flex-grow overflow-hidden">
-      {/* Left Column: Call Queue list */}
-      <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5 flex flex-col space-y-4 min-h-0">
-        <div>
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Call Queue</h3>
-          <p className="text-[10px] text-zinc-500 mt-0.5">{queueLeads.length} leads waiting for contact</p>
+      {/* Left Column: Call Queue list with independent scroll */}
+      <div className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 flex flex-col space-y-4 min-h-0 overflow-hidden shadow-sm">
+        <div className="shrink-0">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Call Queue</h3>
+          <p className="text-[10px] text-[color:var(--portal-muted)] mt-0.5">{loading ? 'Loading queue...' : `${queueLeads.length} leads waiting for contact`}</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto portal-scrollbar space-y-2.5 pr-1">
-          {queueLeads.length > 0 ? (
+        <div className="flex-1 overflow-y-auto portal-scrollbar space-y-2.5 pr-1 min-h-0">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1.5">
+                    <div className="h-3.5 w-32 rounded luxor-skeleton" />
+                    <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                  </div>
+                  <div className="h-4 w-14 rounded-full luxor-skeleton" />
+                </div>
+                <div className="h-3 w-36 rounded luxor-skeleton pt-1" />
+              </div>
+            ))
+          ) : queueLeads.length > 0 ? (
             queueLeads.map((lead) => {
               const active = selectedLead?.id === lead.id
               return (
@@ -200,23 +212,23 @@ export function CallCenterTab({
                   onClick={() => setSelectedLeadId(lead.id)}
                   className={`cursor-pointer rounded-xl border p-4 transition-all flex flex-col justify-between ${
                     active
-                      ? 'border-[#caa24c]/40 bg-[#caa24c]/5 shadow-[0_0_15px_rgba(202,162,76,0.06)]'
-                      : 'border-zinc-900 bg-zinc-950/40 hover:border-zinc-800'
+                      ? 'border-[#caa24c]/40 bg-[#caa24c]/10 shadow-[0_0_15px_rgba(202,162,76,0.08)]'
+                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/30 hover:bg-[#caa24c]/5'
                   }`}
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <h4 className="text-xs font-black text-white">{lead.full_name}</h4>
-                      <p className="text-[9px] uppercase tracking-widest text-[#caa24c] font-mono mt-1">
+                      <h4 className="text-xs font-black text-[color:var(--portal-text)]">{lead.full_name}</h4>
+                      <p className="text-[9px] uppercase tracking-widest text-[#caa24c] font-mono mt-1 font-bold">
                         {lead.event_type || 'Event'} Inquiry
                       </p>
                     </div>
-                    <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[8px] font-bold text-blue-400 font-mono">
-                      {lead.status}
+                    <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[8px] font-bold text-blue-500 font-mono capitalize">
+                      {lead.status.replace('_', ' ')}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mt-4 text-[9px] text-zinc-550 font-semibold font-mono border-t border-zinc-900/60 pt-3">
+                  <div className="flex items-center gap-3 mt-4 text-[9px] text-[color:var(--portal-muted)] font-semibold font-mono border-t border-[color:var(--portal-border)] pt-3">
                     <span className="flex items-center gap-1">
                       <Clock size={10} className="text-[#caa24c]" />
                       Waiting: {lead.waitStr}
@@ -227,29 +239,71 @@ export function CallCenterTab({
               )
             })
           ) : (
-            <div className="text-center py-12 text-xs text-zinc-650 font-medium">
+            <div className="text-center py-12 text-xs text-[color:var(--portal-muted)] font-medium">
               Call queue empty. All new inquiries contacted!
             </div>
           )}
         </div>
       </div>
 
-      {/* Right Column: Dossier, Call outcomes checkboxes, Follow-ups */}
-      <div className="md:col-span-2 flex flex-col min-h-0">
-        {selectedLead ? (
-          <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 flex flex-col justify-between space-y-6 flex-1 min-h-0 overflow-hidden">
+      {/* Right Column: Dossier, Call outcomes, Follow-ups with independent inner scroll & fixed footer */}
+      <div className="md:col-span-2 flex flex-col min-h-0 h-full overflow-hidden">
+        {loading ? (
+          <div className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 flex flex-col justify-between space-y-6 flex-1 min-h-0 overflow-hidden shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-[color:var(--portal-border)] pb-5 shrink-0">
+              <div className="space-y-2">
+                <div className="h-5 w-48 rounded luxor-skeleton" />
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-36 rounded luxor-skeleton" />
+                  <div className="h-3 w-28 rounded luxor-skeleton" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full luxor-skeleton" />
+                <div className="h-8 w-8 rounded-full luxor-skeleton" />
+                <div className="h-8 w-8 rounded-full luxor-skeleton" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1">
+              <div className="space-y-3">
+                <div className="h-3 w-28 rounded luxor-skeleton" />
+                <div className="grid grid-cols-2 gap-2.5">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-9 rounded-lg luxor-skeleton" />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="h-3 w-28 rounded luxor-skeleton" />
+                <div className="h-20 rounded-lg luxor-skeleton" />
+                <div className="h-9 rounded-lg luxor-skeleton" />
+                <div className="h-9 rounded-lg luxor-skeleton" />
+              </div>
+            </div>
+          </div>
+        ) : selectedLead ? (
+          <div className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 flex flex-col space-y-5 flex-1 min-h-0 overflow-hidden shadow-sm">
             {/* Dossier Header Info */}
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-zinc-900/60 pb-5">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-[color:var(--portal-border)] pb-5 shrink-0">
               <div>
-                <h2 className="text-base font-black text-white">{selectedLead.full_name}</h2>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-zinc-500 mt-1 font-semibold">
+                <h2 className="text-base font-black text-[color:var(--portal-text)]">{selectedLead.full_name}</h2>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-[color:var(--portal-muted)] mt-1 font-semibold">
                   <span className="font-mono">{selectedLead.email}</span>
-                  {selectedLead.phone && <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedLead.phone!, contactName: selectedLead.full_name, inquiryId: selectedLead.id })} className="font-mono transition-colors hover:text-emerald-400" title="Call from Luxor">{formatPhoneDisplay(selectedLead.phone)}</button>}
-                  <span>Source: <strong className="text-zinc-400">{selectedLead.source}</strong></span>
+                  {selectedLead.phone && (
+                    <button
+                      type="button"
+                      onClick={() => startLuxorBrowserCall({ phoneNumber: selectedLead.phone!, contactName: selectedLead.full_name, inquiryId: selectedLead.id })}
+                      className="font-mono transition-colors hover:text-[#caa24c] cursor-pointer"
+                      title="Call from Luxor"
+                    >
+                      {formatPhoneDisplay(selectedLead.phone)}
+                    </button>
+                  )}
+                  <span>Source: <strong className="text-[color:var(--portal-text)]">{selectedLead.source}</strong></span>
                 </div>
               </div>
 
-              {/* Action Circle Buttons */}
+              {/* Action Circle Buttons - Styled for both Light and Dark modes */}
               <div className="flex items-center gap-2">
                 {selectedLead.phone && (
                   <button
@@ -259,7 +313,7 @@ export function CallCenterTab({
                       contactName: selectedLead.full_name,
                       inquiryId: selectedLead.id,
                     })}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[#caa24c] hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 transition-all cursor-pointer"
                     title={`Call ${selectedLead.full_name}`}
                   >
                     <Phone size={14} />
@@ -267,8 +321,9 @@ export function CallCenterTab({
                 )}
                 {selectedLead.phone && (
                   <button
+                    type="button"
                     onClick={sendFollowUpText}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[#caa24c] hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 transition-all cursor-pointer"
                     title={`Text ${selectedLead.full_name}`}
                   >
                     <MessageSquare size={14} />
@@ -276,8 +331,9 @@ export function CallCenterTab({
                 )}
                 {selectedLead.email && (
                   <button
+                    type="button"
                     onClick={sendFollowUpEmail}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[#caa24c] hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 transition-all cursor-pointer"
                     title={`Email ${selectedLead.full_name}`}
                   >
                     <Mail size={14} />
@@ -286,8 +342,8 @@ export function CallCenterTab({
               </div>
             </div>
 
-            {/* Content: Outcome checklists */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto portal-scrollbar">
+            {/* Content: Outcome checklists - Independent scroll within container */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1">
               {/* Outcomes Box */}
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Call Outcome</h4>
@@ -299,14 +355,16 @@ export function CallCenterTab({
                         type="button"
                         key={out.value}
                         onClick={() => setActiveOutcome(out.value)}
-                        className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                        className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
                           checked
-                            ? 'border-[#caa24c]/40 bg-[#caa24c]/5 text-[#dfbd68] font-bold'
-                            : 'border-zinc-900 bg-zinc-950/40 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
+                            ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#caa24c] font-bold'
+                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]'
                         }`}
                       >
                         <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
-                          checked ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-800 bg-zinc-900'
+                          checked
+                            ? 'border-[#caa24c] bg-[#caa24c] text-white'
+                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-muted)]'
                         }`}>
                           {checked && <Check size={10} strokeWidth={3} />}
                         </div>
@@ -323,19 +381,19 @@ export function CallCenterTab({
                 
                 {/* Notes */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-550">Call Notes</label>
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Call Notes</label>
                   <textarea
                     rows={3}
                     value={callNotes}
                     onChange={(e) => setCallNotes(e.target.value)}
                     placeholder="Provide a short brief of client requirements..."
-                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#caa24c]/40"
+                    className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-bold text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/50 focus:ring-1 focus:ring-[#caa24c]/20"
                   />
                 </div>
 
                 {/* Follow up Date */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-550">Schedule Follow-up</label>
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Schedule Follow-up</label>
                   <PortalDatePicker
                     value={followUpDate}
                     onChange={setFollowUpDate}
@@ -344,7 +402,7 @@ export function CallCenterTab({
 
                 {/* Assign to Staff */}
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-550">Assign Planner</label>
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Assign Planner</label>
                   <PortalSelect
                     value={assignedStaff}
                     onChange={setAssignedStaff}
@@ -357,20 +415,22 @@ export function CallCenterTab({
               </div>
             </div>
 
-            {/* Bottom Actions Row */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-900/60 pt-5 mt-auto">
+            {/* Bottom Actions Row - Fixed in view at bottom of container */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[color:var(--portal-border)] pt-4 mt-auto shrink-0">
               {/* Follow-up Quick Action Links */}
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={sendFollowUpEmail}
-                  className="flex items-center gap-1.5 text-[9px] font-black uppercase text-[#caa24c] hover:text-[#dfbd68]"
+                  className="flex items-center gap-1.5 text-[9px] font-black uppercase text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
                 >
                   <Mail size={11} /> Send Email Follow-up
                 </button>
-                <span className="text-zinc-850">|</span>
+                <span className="text-[color:var(--portal-border)]">|</span>
                 <button
+                  type="button"
                   onClick={sendFollowUpText}
-                  className="flex items-center gap-1.5 text-[9px] font-black uppercase text-[#caa24c] hover:text-[#dfbd68]"
+                  className="flex items-center gap-1.5 text-[9px] font-black uppercase text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
                 >
                   <MessageSquare size={11} /> Send SMS Follow-up
                 </button>
@@ -378,9 +438,10 @@ export function CallCenterTab({
 
               {/* Save Outcome Button */}
               <button
+                type="button"
                 onClick={handleLogOutcome}
                 disabled={savingOutcome || !activeOutcome}
-                className="flex items-center gap-2 rounded-xl bg-[#caa24c] disabled:bg-zinc-800 disabled:text-zinc-600 disabled:opacity-50 px-5 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-white shadow-xl shadow-[#caa24c]/10 hover:bg-[#dfbd68] transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-2 rounded-xl bg-[#caa24c] disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-50 px-5 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-white shadow-xl shadow-[#caa24c]/10 hover:bg-[#dfbd68] transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 {savingOutcome ? (
                   <>
@@ -397,8 +458,8 @@ export function CallCenterTab({
             </div>
           </div>
         ) : (
-          <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-12 text-center text-xs text-zinc-650 flex-1 flex flex-col justify-center">
-            <Users size={32} className="mx-auto text-zinc-800 mb-3" />
+          <div className="portal-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-12 text-center text-xs text-[color:var(--portal-muted)] flex-1 flex flex-col justify-center items-center shadow-sm">
+            <Users size={32} className="mx-auto text-[color:var(--portal-muted)] mb-3 opacity-60" />
             No active lead selected. Click any lead in the left queue to open details.
           </div>
         )}

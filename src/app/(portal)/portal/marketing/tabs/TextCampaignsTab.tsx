@@ -362,7 +362,23 @@ export function TextCampaignsTab() {
           <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--portal-text)]"><CalendarClock size={17} className="text-[#caa24c]" /> Recent campaigns</h3>
           <div className="mt-4 space-y-3">
             {loading ? (
-              <div className="flex min-h-40 items-center justify-center text-[color:var(--portal-muted)]"><Loader2 size={20} className="animate-spin" /></div>
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-36 rounded luxor-skeleton" />
+                      <div className="h-2.5 w-24 rounded luxor-skeleton" />
+                    </div>
+                    <div className="h-5 w-16 rounded-full luxor-skeleton" />
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    <div className="h-3 rounded luxor-skeleton" />
+                    <div className="h-3 rounded luxor-skeleton" />
+                    <div className="h-3 rounded luxor-skeleton" />
+                    <div className="h-3 rounded luxor-skeleton" />
+                  </div>
+                </div>
+              ))
             ) : dashboard.campaigns.length ? dashboard.campaigns.slice(0, 12).map((campaign) => (
               <article key={campaign.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                 <div className="flex items-start justify-between gap-3">

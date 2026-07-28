@@ -134,7 +134,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   const usesInternalTableScroll =
     pathname === '/portal/leads' ||
     pathname === '/portal/messages' ||
-    (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation'].includes(searchParams?.get('tab') || ''))
+    (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
