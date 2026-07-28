@@ -66,22 +66,60 @@ body[data-portal-theme='light'] {
   color-scheme: light;
 }
 
-/* Global golden checkbox styling with white checkmark */
+/* Universal golden checkbox styling with white checkmark for all native & custom checkboxes */
 input[type='checkbox'] {
-  accent-color: #caa24c;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 0.25rem;
+  border: 1.5px solid var(--portal-border);
+  background-color: var(--portal-bg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+  vertical-align: middle;
+  position: relative;
+  flex-shrink: 0;
 }
 
 body[data-portal-theme='light'] input[type='checkbox'] {
-  accent-color: #caa24c;
+  border-color: rgba(124, 91, 36, 0.3);
+  background-color: #ffffff;
+}
+
+input[type='checkbox']:checked,
+body[data-portal-theme='light'] input[type='checkbox']:checked {
+  background-color: #caa24c !important;
+  border-color: #caa24c !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+input[type='checkbox']:hover:not(:checked) {
+  border-color: #caa24c;
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 2px solid rgba(202, 162, 76, 0.5);
+  outline-offset: 1px;
 }
 
 /* Ensure all golden checkbox containers in light and dark mode render white checkmarks */
 .bg-\[\#caa24c\] svg,
 .bg-\[\#dfbd68\] svg,
 .bg-[#caa24c] svg,
-.bg-[#dfbd68] svg {
+.bg-[#dfbd68] svg,
+body[data-portal-theme='light'] .bg-\[\#caa24c\] svg,
+body[data-portal-theme='light'] .bg-\[\#dfbd68\] svg,
+body[data-portal-theme='light'] .bg-[#caa24c] svg,
+body[data-portal-theme='light'] .bg-[#dfbd68] svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
+  fill: none !important;
 }
 
 body[data-portal-theme='light'] aside,

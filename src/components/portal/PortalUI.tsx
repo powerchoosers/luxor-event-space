@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -103,6 +103,52 @@ export function PortalButton({
     >
       {children}
     </button>
+  )
+}
+
+export function PortalCheckbox({
+  checked,
+  onChange,
+  label,
+  sublabel,
+  disabled = false,
+  className = '',
+  id,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label?: React.ReactNode
+  sublabel?: React.ReactNode
+  disabled?: boolean
+  className?: string
+  id?: string
+}) {
+  return (
+    <label className={`inline-flex items-center gap-2.5 cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
+      <input
+        type="checkbox"
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <div
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
+          checked
+            ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-sm'
+            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] hover:border-[#caa24c]/40'
+        }`}
+      >
+        {checked && <Check size={11} strokeWidth={3.5} className="!text-white !stroke-white text-white stroke-white" style={{ color: '#ffffff', stroke: '#ffffff' }} />}
+      </div>
+      {(label || sublabel) && (
+        <div className="flex flex-col">
+          {label && <span className="text-xs font-semibold text-[color:var(--portal-text)]">{label}</span>}
+          {sublabel && <span className="text-[10px] text-[color:var(--portal-muted)]">{sublabel}</span>}
+        </div>
+      )}
+    </label>
   )
 }
 
