@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import {
   createMarketingCampaign,
+  getMarketingListById,
   listMarketingCampaigns,
   parseMarketingRecipients,
   sendMarketingCampaignNow,
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const recipients = Array.isArray(body.recipients)
+    let recipients = Array.isArray(body.recipients)
       ? body.recipients
           .map((recipient: { email?: unknown; name?: unknown }) => ({
             email: String(recipient.email || '').trim().toLowerCase(),
@@ -39,14 +40,24 @@ export async function POST(request: NextRequest) {
           .filter((recipient: { email: string }) => recipient.email)
       : parseMarketingRecipients(String(body.recipientsText || ''))
 
+    const marketingListId = typeof body.marketingListId === 'string' ? body.marketingListId.trim() : ''
+    const selectedList = marketingListId ? await getMarketingListById(marketingListId) : null
+    if (marketingListId && !selectedList) {
+      return NextResponse.json({ error: 'The selected marketing list no longer exists.' }, { status: 400 })
+    }
+    if (selectedList) {
+      recipients = selectedList.members.map((member) => ({ email: member.email, name: member.full_name }))
+    }
+
     let detail = await createMarketingCampaign({
       name: String(body.name || body.subject || 'Untitled Campaign'),
       subject: String(body.subject || ''),
       htmlBody: String(body.htmlBody || ''),
       recipients,
       scheduledFor: typeof body.scheduledFor === 'string' && body.scheduledFor ? body.scheduledFor : null,
-      audienceLabel: typeof body.audienceLabel === 'string' ? body.audienceLabel : null,
+      audienceLabel: selectedList?.name || (typeof body.audienceLabel === 'string' ? body.audienceLabel : null),
       createdBy: session.email,
+      metadata: selectedList ? { marketing_list_id: selectedList.id } : {},
     })
 
     if (body.sendNow === true && detail?.campaign?.id) {

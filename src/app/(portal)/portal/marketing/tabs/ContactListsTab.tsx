@@ -9,7 +9,9 @@ import {
   Download,
   MoreVertical,
   ListPlus,
-  ListMinus
+  ListMinus,
+  ArrowLeft,
+  ChevronRight,
 } from 'lucide-react'
 import {
   PortalTableCard,
@@ -33,7 +35,7 @@ import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from '@/components/portal/ToastProvider'
 
-import { MarketingList, MarketingListMember } from '../page'
+import { MarketingList } from '../page'
 
 export interface ContactRecord {
   id: string
@@ -61,7 +63,7 @@ interface ContactListsTabProps {
   onAddModalOpenChange: (isOpen: boolean) => void
 }
 
-type CategoryView = 'all' | 'subscribers' | 'leads' | 'clients' | 'archived'
+type CategoryView = 'lists' | 'all' | 'subscribers' | 'leads' | 'clients' | 'archived'
 
 function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
   return inquiry.campaign_key === 'grand_opening_2026_07_25'
@@ -82,7 +84,12 @@ export function ContactListsTab({
   const { notify } = useToast()
   
   // States
-  const [view, setView] = useState<CategoryView>('all')
+  const [view, setView] = useState<CategoryView>('lists')
+  const [selectedListId, setSelectedListId] = useState<string | null>(null)
+  const [isCreateListOpen, setIsCreateListOpen] = useState(false)
+  const [newListName, setNewListName] = useState('')
+  const [newListDescription, setNewListDescription] = useState('')
+  const [creatingList, setCreatingList] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sourceFilter, setSourceFilter] = useState(initialSourceFilter)
   const [formFilter, setFormFilter] = useState('all')
@@ -119,6 +126,26 @@ export function ContactListsTab({
       }
     }
   }, [onAddModalOpenChange])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !marketingLists.length) return
+    const requestedListId = new URLSearchParams(window.location.search).get('list')
+    if (requestedListId && marketingLists.some((list) => list.id === requestedListId)) {
+      setView('lists')
+      setSelectedListId(requestedListId)
+    }
+  }, [marketingLists])
+
+  const openMarketingList = useCallback((listId: string | null) => {
+    setView('lists')
+    setSelectedListId(listId)
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (listId) params.set('list', listId)
+    else params.delete('list')
+    const query = params.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
+  }, [])
 
   const subscriberEmails = useMemo(
     () => new Set(
@@ -185,7 +212,7 @@ export function ContactListsTab({
           email: m.email,
           phone: phoneVal,
           event_type: eventVal,
-          source: m.source || 'Website',
+          source: typeof m.metadata?.contact_source === 'string' ? m.metadata.contact_source : m.source || 'Website',
           submittedForm: list.name || 'Newsletter Signup',
           dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Date not recorded',
           emailStatus: 'Subscribed',
@@ -256,12 +283,22 @@ export function ContactListsTab({
   }, [allContacts])
 
   const categoryTabs: { id: CategoryView; label: string; count: number }[] = [
+    { id: 'lists', label: 'Saved Lists', count: marketingLists.length },
     { id: 'all', label: 'All Contacts', count: allContacts.length },
     { id: 'subscribers', label: 'Subscribers', count: allContacts.filter((contact) => contact.emailStatus === 'Subscribed').length },
     { id: 'leads', label: 'Leads', count: allContacts.filter((contact) => !contact.tags.includes('Client') && !contact.tags.includes('Archived')).length },
     { id: 'clients', label: 'Clients', count: allContacts.filter((contact) => contact.tags.includes('Client')).length },
     { id: 'archived', label: 'Archived', count: allContacts.filter((contact) => contact.tags.includes('Archived')).length },
   ]
+
+  const selectedList = useMemo(
+    () => marketingLists.find((list) => list.id === selectedListId) ?? null,
+    [marketingLists, selectedListId],
+  )
+  const selectedListEmails = useMemo(
+    () => new Set((selectedList?.members || []).map((member) => member.email.trim().toLowerCase())),
+    [selectedList],
+  )
 
   // Filter contacts
   const filteredContacts = useMemo(() => {
@@ -275,8 +312,11 @@ export function ContactListsTab({
         if (!matchesName && !matchesEmail && !matchesPhone) return false
       }
 
-      // 2. View Category Tab
-      if (view === 'subscribers') {
+      // 2. View Category Tab or exact saved-list membership
+      if (view === 'lists') {
+        if (!selectedList || !selectedListEmails.has(c.email.trim().toLowerCase())) return false
+        return true
+      } else if (view === 'subscribers') {
         if (c.emailStatus !== 'Subscribed') return false
       } else if (view === 'leads') {
         if (c.tags.includes('Client') || c.tags.includes('Archived')) return false
@@ -313,7 +353,7 @@ export function ContactListsTab({
 
       return true
     })
-  }, [allContacts, searchQuery, view, sourceFilter, formFilter, tagFilter, emailStatusFilter, smsStatusFilter])
+  }, [allContacts, searchQuery, view, selectedList, selectedListEmails, sourceFilter, formFilter, tagFilter, emailStatusFilter, smsStatusFilter])
 
   // Pagination
   const totalCount = filteredContacts.length
@@ -340,7 +380,21 @@ export function ContactListsTab({
         method: bulkListMode === 'add' ? 'POST' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bulkListMode === 'add'
-          ? { listName, recipients: contacts.map((contact) => ({ email: contact.email, name: contact.full_name })) }
+          ? {
+              listName,
+              recipients: contacts.map((contact) => ({
+                email: contact.email,
+                name: contact.full_name,
+                source: contact.source,
+                metadata: {
+                  phone: contact.phone,
+                  event_type: contact.event_type,
+                  submitted_form: contact.submittedForm,
+                  tags: contact.tags,
+                  avatar_url: contact.avatar_url || null,
+                },
+              })),
+            }
           : { listName, emails: contacts.map((contact) => contact.email) }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; added?: number; removed?: number; skippedSuppressed?: number }
@@ -422,17 +476,127 @@ export function ContactListsTab({
     }
   }
 
+  async function handleCreateList(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newListName.trim()) return
+    setCreatingList(true)
+    try {
+      const response = await fetch('/api/marketing/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listName: newListName, description: newListDescription, recipients: [] }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; list?: MarketingList }
+      if (!response.ok || !payload.list) throw new Error(payload.error || 'Unable to create the list.')
+      await onChanged?.()
+      openMarketingList(payload.list.id)
+      setNewListName('')
+      setNewListDescription('')
+      setIsCreateListOpen(false)
+      notify({ title: 'List created', description: `${payload.list.name} is ready for contacts.`, variant: 'success' })
+    } catch (error) {
+      notify({ title: 'List creation failed', description: error instanceof Error ? error.message : 'Unable to create the list.', variant: 'error' })
+    } finally {
+      setCreatingList(false)
+    }
+  }
+
+  const handleCategoryChange = (nextView: CategoryView) => {
+    setView(nextView)
+    if (nextView !== 'lists') {
+      setSelectedListId(null)
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        params.delete('list')
+        const query = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
+      }
+    }
+    bulkSelection.clear()
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex shrink-0 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
         <PortalAnimatedTabs
           tabs={categoryTabs}
           activeTab={view}
-          onTabChange={setView}
+          onTabChange={handleCategoryChange}
           ariaLabel="Contact categories"
         />
       </div>
 
+      {view === 'lists' && !selectedList ? (
+        <PortalTableCard
+          controls={
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Marketing lists</h3>
+                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Open a list to see the exact contacts campaigns will use.</p>
+              </div>
+              <PortalButton variant="primary" onClick={() => setIsCreateListOpen(true)}>
+                <Plus size={13} /> Create list
+              </PortalButton>
+            </div>
+          }
+        >
+          <PortalStickyTable minWidth="760px">
+            <PortalStickyThead>
+              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+                <th className="px-6 py-3.5">List</th>
+                <th className="px-4 py-3.5">Contacts</th>
+                <th className="px-4 py-3.5">Type</th>
+                <th className="px-4 py-3.5">Description</th>
+                <th className="px-4 py-3.5">Updated</th>
+                <th className="px-6 py-3.5 text-right"><span className="sr-only">Open</span></th>
+              </tr>
+            </PortalStickyThead>
+            <tbody className="divide-y divide-[color:var(--portal-border)] text-xs">
+              {marketingLists.map((list) => (
+                <tr key={list.id} className="group transition-colors hover:bg-[#caa24c]/7">
+                  <td className="px-6 py-4">
+                    <button
+                      type="button"
+                      onClick={() => openMarketingList(list.id)}
+                      className="text-left text-sm font-semibold text-[color:var(--portal-text)] hover:text-[#9a741f] dark:hover:text-[#f1d27a]"
+                    >
+                      {list.name}
+                    </button>
+                  </td>
+                  <td className="px-4 py-4 font-mono text-[color:var(--portal-text)]">{list.memberCount.toLocaleString()}</td>
+                  <td className="px-4 py-4">
+                    <span className="rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-bold text-[color:var(--portal-muted)]">
+                      {list.isBuiltIn ? 'Built-in' : 'Custom'}
+                    </span>
+                  </td>
+                  <td className="max-w-sm px-4 py-4 text-[color:var(--portal-muted)]">{list.description || 'No description'}</td>
+                  <td className="px-4 py-4 font-mono text-[10px] text-[color:var(--portal-muted)]">{new Date(list.updatedAt).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button type="button" onClick={() => openMarketingList(list.id)} aria-label={`Open ${list.name}`} className="rounded-md p-2 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]">
+                      <ChevronRight size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </PortalStickyTable>
+        </PortalTableCard>
+      ) : (
+      <>
+      {selectedList ? (
+        <div className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
+          <button type="button" onClick={() => { openMarketingList(null); bulkSelection.clear() }} aria-label="Back to saved lists" className="rounded-md p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+            <ArrowLeft size={15} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-sm font-bold text-[color:var(--portal-text)]">{selectedList.name}</h3>
+              {selectedList.isBuiltIn ? <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Built-in</span> : null}
+            </div>
+            <p className="mt-0.5 truncate text-[11px] text-[color:var(--portal-muted)]">{selectedList.description || `${selectedList.memberCount} saved contacts`}</p>
+          </div>
+        </div>
+      ) : null}
       <PortalTableCard
             controls={
               <div className="space-y-3">
@@ -646,6 +810,8 @@ export function ContactListsTab({
               </tbody>
             </PortalStickyTable>
           </PortalTableCard>
+      </>
+      )}
 
       <PortalBulkActionDeck
         selectedCount={bulkSelectedCount}
@@ -676,6 +842,42 @@ export function ContactListsTab({
         onConfirm={(listName) => void runMarketingListAction(listName)}
         onClose={() => setBulkListMode(null)}
       />
+
+      <PortalModal
+        isOpen={isCreateListOpen}
+        onClose={() => setIsCreateListOpen(false)}
+        title="Create marketing list"
+        description="Create the list now, then add contacts from All Contacts or another saved list."
+      >
+        <form onSubmit={handleCreateList} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">List name</label>
+            <input
+              value={newListName}
+              onChange={(event) => setNewListName(event.target.value)}
+              maxLength={120}
+              required
+              placeholder="Preferred clients"
+              className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3 py-2.5 text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/40"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Description <span className="normal-case tracking-normal">(optional)</span></label>
+            <input
+              value={newListDescription}
+              onChange={(event) => setNewListDescription(event.target.value)}
+              placeholder="Who belongs in this list"
+              className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/40"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <PortalButton type="button" onClick={() => setIsCreateListOpen(false)}>Cancel</PortalButton>
+            <PortalButton type="submit" variant="primary" disabled={creatingList || !newListName.trim()}>
+              {creatingList ? 'Creating…' : 'Create list'}
+            </PortalButton>
+          </div>
+        </form>
+      </PortalModal>
 
       {/* Add Contact Modal */}
       <PortalModal

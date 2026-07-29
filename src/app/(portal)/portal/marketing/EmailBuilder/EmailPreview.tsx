@@ -34,7 +34,10 @@ interface EmailPreviewProps {
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 
 type MarketingList = {
+  id: string
   name: string
+  description: string | null
+  isBuiltIn: boolean
   memberCount: number
   members: { email: string; full_name: string | null }[]
 }
@@ -49,6 +52,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const [sendSubject, setSendSubject] = useState(subject)
   const [campaignName, setCampaignName] = useState(subject)
   const [audienceLabel, setAudienceLabel] = useState(initialAudienceLabel)
+  const [selectedMarketingListId, setSelectedMarketingListId] = useState<string | null>(null)
   const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
   const [newListName, setNewListName] = useState('')
   const [creatingList, setCreatingList] = useState(false)
@@ -63,13 +67,17 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const isScheduled = Boolean(scheduledFor)
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const wasOpenRef = useRef(false)
   const [iframeHeight, setIframeHeight] = useState(800)
   const [iframeLoading, setIframeLoading] = useState(true)
 
   useEffect(() => {
-    if (!isOpen) return
-    setAudienceLabel(initialAudienceLabel)
-    setSelectedEmails(initialSelectedEmails)
+    if (isOpen && !wasOpenRef.current) {
+      setAudienceLabel(initialAudienceLabel)
+      setSelectedMarketingListId(null)
+      setSelectedEmails(initialSelectedEmails)
+    }
+    wasOpenRef.current = isOpen
   }, [initialAudienceLabel, initialSelectedEmails, isOpen])
 
   const updateIframeHeight = () => {
@@ -115,6 +123,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
     const matchingList = marketingLists.find((list) => list.name.toLowerCase() === initialAudienceLabel.toLowerCase())
     if (matchingList) {
       setAudienceLabel(matchingList.name)
+      setSelectedMarketingListId(matchingList.id)
       setSelectedEmails(matchingList.members.map((member) => member.email))
     }
   }, [initialAudienceLabel, isOpen, marketingLists])
@@ -126,13 +135,28 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const handleAudienceChange = (value: string) => {
     if (value === '__create_new__') {
       setAudienceLabel(value)
+      setSelectedMarketingListId(null)
       return
     }
-    setAudienceLabel(value)
-    onAudienceLabelChange?.(value)
-    if (value === 'Manual list') return
-    const list = marketingLists.find((item) => item.name === value)
-    if (list) setSelectedEmails(list.members.map((member) => member.email))
+    if (value === '__manual__') {
+      setAudienceLabel('Manual list')
+      setSelectedMarketingListId(null)
+      onAudienceLabelChange?.('Manual list')
+      return
+    }
+    const list = marketingLists.find((item) => item.id === value)
+    if (!list) return
+    setAudienceLabel(list.name)
+    setSelectedMarketingListId(list.id)
+    onAudienceLabelChange?.(list.name)
+    setSelectedEmails(list.members.map((member) => member.email))
+  }
+
+  const switchToManualAudience = () => {
+    if (!selectedMarketingListId) return
+    setSelectedMarketingListId(null)
+    setAudienceLabel('Manual list')
+    onAudienceLabelChange?.('Manual list')
   }
 
   const handleCreateList = async () => {
@@ -147,17 +171,26 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
       const response = await fetch('/api/marketing/lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listName: name, recipients: selectedEmails.map((email) => ({ email })) }),
+        body: JSON.stringify({
+          listName: name,
+          recipients: selectedEmails.map((email) => {
+            const contact = allContacts.find((item) => item.email?.trim().toLowerCase() === email.trim().toLowerCase())
+            return {
+              email,
+              name: contact?.full_name || null,
+              source: contact?.source || 'Manual',
+              metadata: contact ? { phone: contact.phone, event_type: contact.event_type } : {},
+            }
+          }),
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to create marketing list.')
-      const newList: MarketingList = {
-        name,
-        memberCount: selectedEmails.length,
-        members: selectedEmails.map((email) => ({ email, full_name: null })),
-      }
+      const newList = data.list as MarketingList | null
+      if (!newList?.id) throw new Error('The list was saved but could not be reloaded.')
       setMarketingLists((current) => [...current.filter((list) => list.name !== name), newList])
       setAudienceLabel(name)
+      setSelectedMarketingListId(newList.id)
       onAudienceLabelChange?.(name)
       setNewListName('')
       setSendStatus('idle')
@@ -194,6 +227,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
 
   // Add a specific contact
   const handleAddContact = (contact: LuxorInquiry) => {
+    switchToManualAudience()
     if (contact.email) {
       const email = contact.email.trim()
       if (!selectedEmails.includes(email)) {
@@ -205,12 +239,14 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
 
   // Remove email tag
   const handleRemoveEmail = (email: string) => {
+    switchToManualAudience()
     setSelectedEmails(prev => prev.filter(e => e !== email))
   }
 
   // Toggle selection from directory
   const handleToggleEmail = (email: string) => {
     if (!email) return
+    switchToManualAudience()
     setSelectedEmails(prev =>
       prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
     )
@@ -222,6 +258,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
       e.preventDefault()
       const val = typedInput.trim()
       if (val) {
+        switchToManualAudience()
         if (val.includes('@') && !selectedEmails.includes(val)) {
           setSelectedEmails(prev => [...prev, val])
         }
@@ -232,6 +269,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
 
   // Bulk actions
   const handleSelectAll = () => {
+    switchToManualAudience()
     const filteredEmails = filteredContacts
       .map((c) => c.email)
       .filter((e): e is string => !!e)
@@ -245,6 +283,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   }
 
   const handleClearAll = () => {
+    switchToManualAudience()
     if (!searchQuery.trim()) {
       setSelectedEmails([])
     } else {
@@ -285,6 +324,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
           htmlBody: html,
           recipientsText: emails.join(','),
           audienceLabel,
+          marketingListId: selectedMarketingListId,
           scheduledFor: isScheduled ? new Date(scheduledFor).toISOString() : null,
           sendNow: !isScheduled,
         }),
@@ -635,13 +675,13 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                     <div className="space-y-1.5">
                       <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Audience Label</label>
                       <PortalSelect
-                        value={audienceLabel}
+                        value={audienceLabel === '__create_new__' ? '__create_new__' : selectedMarketingListId || '__manual__'}
                         onChange={handleAudienceChange}
                         className="w-full"
                         placeholder="Choose a marketing list"
                         options={[
-                          { value: 'Manual list', label: 'Manual selection' },
-                          ...marketingLists.map((list) => ({ value: list.name, label: `${list.name} (${list.memberCount})` })),
+                          { value: '__manual__', label: 'Manual selection' },
+                          ...marketingLists.map((list) => ({ value: list.id, label: `${list.name} (${list.memberCount})` })),
                           { value: '__create_new__', label: '+ Create new list' },
                         ]}
                       />

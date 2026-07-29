@@ -106,12 +106,18 @@ export interface MarketingListMember {
   created_at?: string
   email: string
   full_name: string | null
-  source: string | null
+  source: string
+  list_id: string
   metadata?: Record<string, unknown>
 }
 
 export interface MarketingList {
+  id: string
   name: string
+  description: string | null
+  isBuiltIn: boolean
+  createdAt: string
+  updatedAt: string
   memberCount: number
   members: MarketingListMember[]
 }

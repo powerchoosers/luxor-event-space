@@ -374,7 +374,15 @@ export default function LeadsPage() {
         method: bulkListMode === 'add' ? 'POST' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bulkListMode === 'add'
-          ? { listName, recipients: selected.map((lead) => ({ email: lead.email, name: lead.full_name })) }
+          ? {
+              listName,
+              recipients: selected.map((lead) => ({
+                email: lead.email,
+                name: lead.full_name,
+                source: lead.source,
+                metadata: { phone: lead.phone, event_type: lead.event_type },
+              })),
+            }
           : { listName, emails: selected.map((lead) => lead.email) }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; added?: number; removed?: number; skippedSuppressed?: number }
