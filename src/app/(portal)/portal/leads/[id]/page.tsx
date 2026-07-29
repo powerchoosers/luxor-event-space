@@ -49,7 +49,7 @@ import {
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
@@ -275,6 +275,8 @@ export default function LeadDetailPage({
   const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
   const [planningColors, setPlanningColors] = useState<string[]>([])
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
+  const [activitySearch, setActivitySearch] = useState('')
+  const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
@@ -560,14 +562,32 @@ export default function LeadDetailPage({
 
   const activityEntries = useMemo(() => {
     return leadDerivedData.allActivityEntries.filter((entry) => {
-      if (activeFeedTab === 'notes') return entry.kind === 'note' && entry.note.note_type === 'note'
+      if (activeFeedTab === 'notes' && !(entry.kind === 'note' && entry.note.note_type === 'note')) return false
       if (activeFeedTab === 'comms') {
-        return entry.kind === 'email' || entry.kind === 'call' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+        const isCommunication = entry.kind === 'email' || entry.kind === 'call' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+        if (!isCommunication) return false
       }
-      if (activeFeedTab === 'system') return entry.kind === 'note' && entry.note.note_type === 'status_change'
+      if (activeFeedTab === 'system' && !(entry.kind === 'note' && entry.note.note_type === 'status_change')) return false
+
+      if (activityWindow !== 'all') {
+        const days = activityWindow === '30d' ? 30 : activityWindow === '90d' ? 90 : 365
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+        if (new Date(entry.createdAt).getTime() < cutoff) return false
+      }
+
+      const query = activitySearch.trim().toLowerCase()
+      if (query) {
+        const searchable = entry.kind === 'email'
+          ? `${entry.email.subject} ${entry.email.from} ${entry.email.to} ${entry.email.summary}`
+          : entry.kind === 'call'
+            ? `${entry.call.caller_number} ${entry.call.callee_number} ${entry.call.direction} ${entry.call.status}`
+            : `${entry.note.content} ${entry.note.note_type}`
+        if (!searchable.toLowerCase().includes(query)) return false
+      }
+
       return true
     })
-  }, [activeFeedTab, leadDerivedData.allActivityEntries])
+  }, [activeFeedTab, activitySearch, activityWindow, leadDerivedData.allActivityEntries])
   const visibleActivityEntries = useMemo(
     () => activityEntries.slice(0, visibleActivityCount),
     [activityEntries, visibleActivityCount],
@@ -739,7 +759,7 @@ export default function LeadDetailPage({
 
   useEffect(() => {
     setVisibleActivityCount(ACTIVITY_BATCH_SIZE)
-  }, [activeFeedTab, id])
+  }, [activeFeedTab, activitySearch, activityWindow, id])
 
   useEffect(() => {
     const email = lead?.email
@@ -2275,6 +2295,18 @@ export default function LeadDetailPage({
         : activeFeedTab === 'system'
           ? 'Status changes will appear here automatically when the lead moves.'
           : 'Use the note box above to add the first update or wait for email history to sync.'
+  const activityFilterChips = [
+    ...(activeFeedTab !== 'all' ? [{
+      id: 'type',
+      label: `Type: ${activeFeedTab === 'notes' ? 'notes' : activeFeedTab === 'comms' ? 'calls & email' : 'status changes'}`,
+      onRemove: () => setActiveFeedTab('all'),
+    }] : []),
+    ...(activityWindow !== 'all' ? [{
+      id: 'period',
+      label: `Period: ${activityWindow === '30d' ? '30 days' : activityWindow === '90d' ? '90 days' : '1 year'}`,
+      onRemove: () => setActivityWindow('all'),
+    }] : []),
+  ]
 
   const tabItems: Array<{ id: LeadDetailTab; label: string; count?: number }> = [
     { id: 'overview', label: 'Overview' },
@@ -4919,6 +4951,45 @@ export default function LeadDetailPage({
                   )}
                 </section>
               ) : null}
+
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10">
+                <PortalFilterBar
+                  searchValue={activitySearch}
+                  onSearchChange={setActivitySearch}
+                  searchPlaceholder="Search this contact’s history"
+                  resultLabel={`${activityEntries.length.toLocaleString()} ${activityEntries.length === 1 ? 'entry' : 'entries'}`}
+                  activeFilters={activityFilterChips}
+                  onClearFilters={() => {
+                    setActiveFeedTab('all')
+                    setActivityWindow('all')
+                  }}
+                >
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <PortalSelect
+                      value={activeFeedTab}
+                      onChange={(value) => setActiveFeedTab(value as typeof activeFeedTab)}
+                      className="w-full"
+                      options={[
+                        { value: 'all', label: 'All activity types' },
+                        { value: 'comms', label: 'Calls & email' },
+                        { value: 'notes', label: 'Notes' },
+                        { value: 'system', label: 'Status changes' },
+                      ]}
+                    />
+                    <PortalSelect
+                      value={activityWindow}
+                      onChange={(value) => setActivityWindow(value as typeof activityWindow)}
+                      className="w-full"
+                      options={[
+                        { value: 'all', label: 'Any time' },
+                        { value: '30d', label: 'Past 30 days' },
+                        { value: '90d', label: 'Past 90 days' },
+                        { value: 'year', label: 'Past year' },
+                      ]}
+                    />
+                  </div>
+                </PortalFilterBar>
+              </section>
 
               {activityEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">

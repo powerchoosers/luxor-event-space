@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Users,
-  Search,
   Plus,
   Mail,
   Download,
@@ -22,7 +21,8 @@ import {
   PortalAnimatedTabs,
   PortalButton,
   PortalContactAvatar,
-  PortalPagination
+  PortalPagination,
+  PortalFilterBar,
 } from '@/components/portal/PortalUI'
 import {
   PortalBulkActionDeck,
@@ -315,7 +315,6 @@ export function ContactListsTab({
       // 2. View Category Tab or exact saved-list membership
       if (view === 'lists') {
         if (!selectedList || !selectedListEmails.has(c.email.trim().toLowerCase())) return false
-        return true
       } else if (view === 'subscribers') {
         if (c.emailStatus !== 'Subscribed') return false
       } else if (view === 'leads') {
@@ -364,6 +363,17 @@ export function ContactListsTab({
   const matchingContactIds = useMemo(() => filteredContacts.map((contact) => contact.id), [filteredContacts])
   const bulkSelectedCount = bulkSelection.selectedCount(matchingContactIds.length)
   const marketingListNames = useMemo(() => marketingLists.map((list) => list.name).sort(), [marketingLists])
+  const activeContactFilters = [
+    ...(tagFilter !== 'all' ? [{ id: 'segment', label: `Segment: ${tagFilter}`, onRemove: () => setTagFilter('all') }] : []),
+    ...(sourceFilter && sourceFilter !== 'all' ? [{ id: 'source', label: `Source: ${sourceFilter}`, onRemove: () => setSourceFilter('') }] : []),
+    ...(formFilter !== 'all' ? [{
+      id: 'form',
+      label: `Form: ${formMenuCounts.find((form) => form.filterVal === formFilter)?.label || formFilter}`,
+      onRemove: () => setFormFilter('all'),
+    }] : []),
+    ...(emailStatusFilter !== 'all' ? [{ id: 'email', label: `Email: ${emailStatusFilter}`, onRemove: () => setEmailStatusFilter('all') }] : []),
+    ...(smsStatusFilter !== 'all' ? [{ id: 'sms', label: `SMS: ${smsStatusFilter}`, onRemove: () => setSmsStatusFilter('all') }] : []),
+  ]
 
   const selectedContacts = useCallback(() => {
     const ids = bulkSelection.resolveIds(matchingContactIds)
@@ -599,24 +609,21 @@ export function ContactListsTab({
       ) : null}
       <PortalTableCard
             controls={
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="relative min-w-0 flex-1 md:max-w-md">
-                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name, email, or phone..."
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] py-2.5 pl-10 pr-4 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/40"
-                    />
-                  </div>
-                  <span className="hidden shrink-0 font-mono text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] sm:block">
-                    {totalCount.toLocaleString()} contacts found
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
+              <PortalFilterBar
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+                searchPlaceholder="Search name, email, or phone"
+                resultLabel={`${totalCount.toLocaleString()} ${totalCount === 1 ? 'contact' : 'contacts'}`}
+                activeFilters={activeContactFilters}
+                onClearFilters={() => {
+                  setTagFilter('all')
+                  setSourceFilter('')
+                  setFormFilter('all')
+                  setEmailStatusFilter('all')
+                  setSmsStatusFilter('all')
+                }}
+              >
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <PortalSelect
                     value={tagFilter}
                     onChange={setTagFilter}
@@ -659,7 +666,7 @@ export function ContactListsTab({
                     options={[{ value: 'all', label: 'SMS: All' }, { value: 'Not tracked', label: 'SMS: Not tracked' }]}
                   />
                 </div>
-              </div>
+              </PortalFilterBar>
             }
             footer={
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-[10px] uppercase font-bold text-zinc-550 tracking-widest select-none">

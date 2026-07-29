@@ -1,12 +1,9 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
 import {
   Users,
-  Search,
   Plus,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -43,7 +40,8 @@ import {
   PortalButton,
   PortalContactAvatar,
   PortalPagination,
-  PortalTableSkeleton
+  PortalTableSkeleton,
+  PortalFilterBar,
 } from '@/components/portal/PortalUI'
 import {
   PortalBulkActionDeck,
@@ -106,8 +104,10 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearchTerm = useDeferredValue(searchTerm)
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [eventTypeFilter, setEventTypeFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [contactFilter, setContactFilter] = useState<'all' | 'email' | 'phone' | 'complete' | 'missing'>('all')
   const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
-  const [sortDropdownOpen, setSortDropdownOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState<number>(1)
 
   // New Lead Modal State
@@ -298,9 +298,18 @@ export default function LeadsPage() {
         statusFilter === 'all' ||
         (statusFilter === 'grand_opening' ? isGrandOpeningRsvp(lead) : getPipelineStage(lead) === statusFilter)
 
-      return matchesSearch && matchesStatus
+      const matchesEventType = eventTypeFilter === 'all' || lead.event_type === eventTypeFilter
+      const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter
+      const matchesContact =
+        contactFilter === 'all' ||
+        (contactFilter === 'email' && Boolean(lead.email)) ||
+        (contactFilter === 'phone' && Boolean(lead.phone)) ||
+        (contactFilter === 'complete' && Boolean(lead.email && lead.phone)) ||
+        (contactFilter === 'missing' && !lead.email && !lead.phone)
+
+      return matchesSearch && matchesStatus && matchesEventType && matchesSource && matchesContact
     })
-  }, [leads, deferredSearchTerm, statusFilter])
+  }, [contactFilter, deferredSearchTerm, eventTypeFilter, leads, sourceFilter, statusFilter])
 
   const sortedLeads = useMemo(() => {
     return [...filteredLeads].sort((a, b) => {
@@ -413,6 +422,33 @@ export default function LeadsPage() {
 
   const grandOpeningCount = useMemo(() => leads.filter(isGrandOpeningRsvp).length, [leads])
   const missingContact = useMemo(() => leads.filter((l) => !l.email && !l.phone).length, [leads])
+  const eventTypeOptions = useMemo(() => [
+    { value: 'all', label: 'All event types' },
+    ...Array.from(new Set(leads.map((lead) => lead.event_type).filter((value): value is string => Boolean(value))))
+      .sort()
+      .map((value) => ({ value, label: value })),
+  ], [leads])
+  const sourceOptions = useMemo(() => [
+    { value: 'all', label: 'All lead sources' },
+    ...Array.from(new Set(leads.map((lead) => lead.source).filter((value): value is string => Boolean(value))))
+      .sort()
+      .map((value) => ({ value, label: value.replaceAll('_', ' ') })),
+  ], [leads])
+  const activeLeadFilters = [
+    ...(statusFilter !== 'all' ? [{
+      id: 'stage',
+      label: statusFilter === 'grand_opening' ? 'Grand Opening RSVP' : `Step: ${PIPELINE_STAGE_OPTIONS.find((option) => option.value === statusFilter)?.label || statusFilter}`,
+      onRemove: () => setStatusFilter('all'),
+    }] : []),
+    ...(eventTypeFilter !== 'all' ? [{ id: 'event', label: `Event: ${eventTypeFilter}`, onRemove: () => setEventTypeFilter('all') }] : []),
+    ...(sourceFilter !== 'all' ? [{ id: 'source', label: `Source: ${sourceOptions.find((option) => option.value === sourceFilter)?.label || sourceFilter}`, onRemove: () => setSourceFilter('all') }] : []),
+    ...(contactFilter !== 'all' ? [{
+      id: 'contact',
+      label: `Contact: ${contactFilter === 'complete' ? 'email + phone' : contactFilter === 'missing' ? 'missing details' : `has ${contactFilter}`}`,
+      onRemove: () => setContactFilter('all'),
+    }] : []),
+  ]
+
   return (
     <PortalPageFrame className="flex-1 min-h-0 overflow-hidden">
       <PortalPageHeader
@@ -441,7 +477,11 @@ export default function LeadsPage() {
                     type="button"
                     onClick={() => {
                       setViewMode('board')
+                      setSearchTerm('')
                       setStatusFilter('all')
+                      setEventTypeFilter('all')
+                      setSourceFilter('all')
+                      setContactFilter('all')
                       localStorage.setItem('luxor_leads_view_mode', 'board')
                     }}
                     className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
@@ -454,17 +494,6 @@ export default function LeadsPage() {
                   </button>
                 </div>
 
-                {viewMode === 'list' && (
-                  <PortalSelect
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    options={[
-                      { value: 'all', label: 'All Steps' },
-                      { value: 'grand_opening', label: 'Grand Opening RSVP' },
-                      ...PIPELINE_STAGE_OPTIONS
-                    ]}
-                  />
-                )}
               </>
             )}
             <PortalButton variant="primary" onClick={() => setIsModalOpen(true)}>
@@ -503,88 +532,56 @@ export default function LeadsPage() {
           viewMode === 'list' ? (
         <PortalTableCard
           controls={
-            <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-              <div className="relative w-full md:w-96">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search leads by name, email, or phone..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-zinc-350 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-medium placeholder:text-zinc-700"
+            <PortalFilterBar
+              searchValue={searchTerm}
+              onSearchChange={setSearchTerm}
+              searchPlaceholder="Search name, email, or phone"
+              resultLabel={`${totalCount.toLocaleString()} ${totalCount === 1 ? 'lead' : 'leads'}`}
+              activeFilters={activeLeadFilters}
+              onClearFilters={() => {
+                setStatusFilter('all')
+                setEventTypeFilter('all')
+                setSourceFilter('all')
+                setContactFilter('all')
+              }}
+            >
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <PortalSelect
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  className="w-full"
+                  options={[
+                    { value: 'all', label: 'All pipeline steps' },
+                    { value: 'grand_opening', label: 'Grand Opening RSVP' },
+                    ...PIPELINE_STAGE_OPTIONS,
+                  ]}
+                />
+                <PortalSelect value={eventTypeFilter} onChange={setEventTypeFilter} className="w-full" options={eventTypeOptions} />
+                <PortalSelect value={sourceFilter} onChange={setSourceFilter} className="w-full capitalize" options={sourceOptions} />
+                <PortalSelect
+                  value={contactFilter}
+                  onChange={(value) => setContactFilter(value as typeof contactFilter)}
+                  className="w-full"
+                  options={[
+                    { value: 'all', label: 'Any contact details' },
+                    { value: 'complete', label: 'Email + phone' },
+                    { value: 'email', label: 'Has email' },
+                    { value: 'phone', label: 'Has phone' },
+                    { value: 'missing', label: 'Missing contact details' },
+                  ]}
+                />
+                <PortalSelect
+                  value={sortBy}
+                  onChange={(value) => setSortBy(value as typeof sortBy)}
+                  className="w-full"
+                  options={[
+                    { value: 'active', label: 'Sort: Recently active' },
+                    { value: 'name', label: 'Sort: Name' },
+                    { value: 'guests', label: 'Sort: Guest count' },
+                  ]}
                 />
               </div>
-              <div className="flex items-center gap-4 text-xs font-bold text-zinc-500 uppercase tracking-widest relative">
-                <span className="text-zinc-650">Sort by:</span>
-                <button
-                  type="button"
-                  onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-                  className="flex items-center gap-1.5 text-zinc-355 hover:text-white transition-colors select-none cursor-pointer"
-                >
-                  <span>{sortBy === 'name' ? 'Name' : sortBy === 'guests' ? 'Guest Count' : 'Recently Active'}</span>
-                  <ChevronDown size={12} className={`text-zinc-550 transition-transform duration-150 ${sortDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                <AnimatePresence>
-                  {sortDropdownOpen && (
-                    <>
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-20 cursor-default"
-                        onClick={() => setSortDropdownOpen(false)}
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.985 }}
-                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                        className="absolute right-0 top-6 z-30 mt-1 w-44 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 origin-top-right flex flex-col gap-0.5"
-                        style={{
-                          backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                          backdropFilter: 'blur(24px)',
-                          WebkitBackdropFilter: 'blur(24px)'
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => { setSortBy('active'); setSortDropdownOpen(false) }}
-                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
-                            sortBy === 'active' || (!sortBy)
-                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
-                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
-                          }`}
-                        >
-                          Recently Active
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setSortBy('name'); setSortDropdownOpen(false) }}
-                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
-                            sortBy === 'name'
-                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
-                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
-                          }`}
-                        >
-                          Name
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setSortBy('guests'); setSortDropdownOpen(false) }}
-                          className={`w-full text-left text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded transition-colors cursor-pointer ${
-                            sortBy === 'guests'
-                              ? 'bg-[#caa24c]/12 text-[#f1d27a] font-black'
-                              : 'text-zinc-550 hover:text-white hover:bg-zinc-900/50'
-                          }`}
-                        >
-                          Guest Count
-                        </button>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
+            </PortalFilterBar>
           }
           footer={
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-[10px] uppercase font-bold text-zinc-550 tracking-widest select-none">
