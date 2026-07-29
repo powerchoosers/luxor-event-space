@@ -10,6 +10,7 @@ type QueueStatusData = {
   sent: number
   failed: number
   total: number
+  failureWindowHours: number
   lastActivityAt: string | null
   provider: string
 }
@@ -91,7 +92,7 @@ export function EmailQueueHealthWidget() {
             </div>
             {Boolean(data?.failed) && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-500">
-                <span>Failed:</span>
+                <span>Failed ({data?.failureWindowHours ?? 24}h):</span>
                 <span className="font-bold">{data?.failed}</span>
               </div>
             )}
