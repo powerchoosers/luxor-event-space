@@ -34,7 +34,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, Suspense } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
@@ -84,7 +84,7 @@ const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
   { href: '/portal/calls', icon: <Phone size={18} />, label: 'Calls & Voicemail' },
-  { href: '/portal/marketing?tab=emails', icon: <Mail size={18} />, label: 'Emails' },
+  { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
   { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events' },
@@ -141,6 +141,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     const applySidebarLayout = () => {
@@ -499,23 +500,32 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
             <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} />
             <div className="relative">
-              {accountMenuOpen ? (
-                <div className={`absolute bottom-full z-20 mb-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-2xl ${sidebarCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}>
-                  <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
-                    <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
-                    <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{userProfile.email}</p>
-                  </div>
-                  <form action="/api/auth/logout" method="post" className="mt-1">
-                    <button
-                      type="submit"
-                      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:text-red-400"
-                    >
-                      <LogOut size={17} className="transition-transform group-hover:translate-x-0.5" />
-                      Log Out
-                    </button>
-                  </form>
-                </div>
-              ) : null}
+              <AnimatePresence initial={false}>
+                {accountMenuOpen ? (
+                  <motion.div
+                    key="account-menu"
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    className={`absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-2xl ${sidebarCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
+                  >
+                    <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
+                      <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{userProfile.email}</p>
+                    </div>
+                    <form action="/api/auth/logout" method="post" className="mt-1">
+                      <button
+                        type="submit"
+                        className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:text-red-400"
+                      >
+                        <LogOut size={17} className="transition-transform group-hover:translate-x-0.5" />
+                        Log Out
+                      </button>
+                    </form>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
               <button
                 type="button"
                 onClick={() => {

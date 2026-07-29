@@ -77,7 +77,7 @@ type ZohoEmailMessage = {
 
 function emailReaderUrl(email: ZohoEmailMessage) {
   const folderQuery = email.folderId ? `&folderId=${encodeURIComponent(email.folderId)}` : ''
-  return `/portal/marketing?tab=emails&messageId=${encodeURIComponent(email.id)}${folderQuery}`
+  return `/portal/emails?messageId=${encodeURIComponent(email.id)}${folderQuery}`
 }
 
 type ActivityEntry =
@@ -3315,7 +3315,7 @@ export default function LeadDetailPage({
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Shared files</p>
                           <p className="mt-1 text-[10px] text-[color:var(--portal-faint)]">Attachments shared with this client through email appear here.</p>
                         </div>
-                        <Link href="/portal/marketing?tab=emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
+                        <Link href="/portal/emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
                       </div>
                       {sharedAttachmentEmails.length ? (
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

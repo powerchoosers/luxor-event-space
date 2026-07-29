@@ -234,8 +234,8 @@ export function usePortalNotifications() {
                 timestamp,
                 isRead,
                 targetUrl: zohoMessageId
-                  ? `/portal/marketing?tab=emails&messageId=${encodeURIComponent(zohoMessageId)}${folderQuery}`
-                  : '/portal/marketing?tab=emails',
+                  ? `/portal/emails?messageId=${encodeURIComponent(zohoMessageId)}${folderQuery}`
+                  : '/portal/emails',
                 metadata: { sender: msg.sender, fromAddress: msg.fromAddress || msg.from, folderId },
               })
             })

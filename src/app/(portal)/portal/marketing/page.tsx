@@ -31,7 +31,6 @@ import dynamic from 'next/dynamic'
 
 // Tab Component Imports (Lazy Loaded)
 const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false })
-const AllEmailsTab = dynamic(() => import('./tabs/AllEmailsTab').then(m => m.AllEmailsTab), { ssr: false })
 const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false })
 const EmailCampaignsTab = dynamic(() => import('./tabs/EmailCampaignsTab').then(m => m.EmailCampaignsTab), { ssr: false })
 const TextCampaignsTab = dynamic(() => import('./tabs/TextCampaignsTab').then(m => m.TextCampaignsTab), { ssr: false })
@@ -45,7 +44,6 @@ import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 
 export type MarketingTab =
   | 'overview'
-  | 'emails'
   | 'sources'
   | 'email-campaigns'
   | 'text-campaigns'
@@ -56,7 +54,6 @@ export type MarketingTab =
 
 const MARKETING_TABS = [
   { id: 'overview', label: 'Marketing Overview', icon: <BarChart3 size={15} /> },
-  { id: 'emails', label: 'All Emails', icon: <Mail size={15} /> },
   { id: 'sources', label: 'Lead Sources', icon: <TrendingUp size={15} /> },
   { id: 'email-campaigns', label: 'Email Campaigns', icon: <Megaphone size={15} /> },
   { id: 'text-campaigns', label: 'Text Campaigns', icon: <MessageSquare size={15} /> },
@@ -531,11 +528,6 @@ function MarketingPageContent() {
   // Derive page headers
   const getHeaderInfo = () => {
     switch (activeTab) {
-      case 'emails':
-        return {
-          title: 'Emails',
-          icon: <Mail size={18} />
-        }
       case 'sources':
         return {
           title: 'Lead Sources',
@@ -583,16 +575,7 @@ function MarketingPageContent() {
   const header = getHeaderInfo()
 
   let headerActions: React.ReactNode
-  if (activeTab === 'emails') {
-    headerActions = (
-      <PortalButton
-        variant="primary"
-        onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
-      >
-        <Plus size={13} /> Compose Email
-      </PortalButton>
-    )
-  } else if (activeTab === 'email-campaigns') {
+  if (activeTab === 'email-campaigns') {
     headerActions = (
       <>
         <PortalButton onClick={() => loadCampaigns()} disabled={loadingCampaigns}>
@@ -624,7 +607,7 @@ function MarketingPageContent() {
   }
 
   return (
-    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
+    <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
@@ -652,10 +635,6 @@ function MarketingPageContent() {
                 onTabChange={handleTabChange}
                 onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
               />
-            )}
-
-            {activeTab === 'emails' && (
-              <AllEmailsTab inquiries={inquiries} initialMessageId={searchParams.get('messageId') || undefined} />
             )}
 
             {activeTab === 'sources' && (
