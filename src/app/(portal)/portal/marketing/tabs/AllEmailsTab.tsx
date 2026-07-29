@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Loader2,
-  BrainCircuit,
+  FilePenLine,
   X,
   PanelLeftClose,
   PanelLeftOpen,
@@ -1225,7 +1225,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                             disabled={draftingReply || loadingThread}
                             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] hover:bg-[#caa24c]/20 disabled:opacity-50 dark:text-[#f1d27a]"
                           >
-                            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
                             Draft with Elena
                           </button>
                         </div>

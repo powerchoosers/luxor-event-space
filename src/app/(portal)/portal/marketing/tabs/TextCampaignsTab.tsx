@@ -9,7 +9,7 @@ import {
   MessageSquare,
   RefreshCw,
   Send,
-  Sparkles,
+  FilePenLine,
   Trash2,
   Users,
   X,
@@ -366,11 +366,11 @@ export function TextCampaignsTab() {
             </label>
 
             <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.06] p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-[color:var(--portal-text)]"><Sparkles size={14} className="text-[#caa24c]" /> Draft with Elena</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[color:var(--portal-text)]"><FilePenLine size={14} className="text-[#caa24c]" /> Draft with Elena</div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input className={FIELD_CLASS} value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Remind upcoming tour guests to confirm their time" />
                 <PortalButton onClick={() => void askElena()} disabled={generating}>
-                  {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Draft
+                  {generating ? <Loader2 size={14} className="animate-spin" /> : <FilePenLine size={14} />} Draft
                 </PortalButton>
               </div>
             </div>

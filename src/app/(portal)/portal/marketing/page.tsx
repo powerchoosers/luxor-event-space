@@ -21,12 +21,12 @@ import {
   PortalModal,
   PortalStatusBadge,
   PortalButton,
-  PortalCloseButton
+  PortalCloseButton,
+  PortalAnimatedTabs,
+  PortalTabTransition
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import { motion, AnimatePresence } from 'framer-motion'
-
 import dynamic from 'next/dynamic'
 
 // Tab Component Imports (Lazy Loaded)
@@ -42,6 +42,33 @@ const MarketingCalendarTab = dynamic(() => import('./tabs/MarketingCalendarTab')
 
 import type { EmailTemplate } from './emailTemplates'
 import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+
+export type MarketingTab =
+  | 'overview'
+  | 'emails'
+  | 'sources'
+  | 'email-campaigns'
+  | 'text-campaigns'
+  | 'builder-automation'
+  | 'contact-lists'
+  | 'call-center'
+  | 'calendar'
+
+const MARKETING_TABS = [
+  { id: 'overview', label: 'Marketing Overview', icon: <BarChart3 size={15} /> },
+  { id: 'emails', label: 'All Emails', icon: <Mail size={15} /> },
+  { id: 'sources', label: 'Lead Sources', icon: <TrendingUp size={15} /> },
+  { id: 'email-campaigns', label: 'Email Campaigns', icon: <Megaphone size={15} /> },
+  { id: 'text-campaigns', label: 'Text Campaigns', icon: <MessageSquare size={15} /> },
+  { id: 'builder-automation', label: 'Email Builder', icon: <LayoutTemplate size={15} /> },
+  { id: 'contact-lists', label: 'Contact Lists', icon: <Users size={15} /> },
+  { id: 'call-center', label: 'Call Center', icon: <Phone size={15} /> },
+  { id: 'calendar', label: 'Marketing Calendar', icon: <Calendar size={15} /> },
+] as const satisfies readonly { id: MarketingTab; label: string; icon: React.ReactNode }[]
+
+function isMarketingTab(tab: string | null): tab is MarketingTab {
+  return MARKETING_TABS.some((item) => item.id === tab)
+}
 
 export type Campaign = {
   id: string
@@ -162,7 +189,7 @@ function MarketingPageContent() {
 
   // Tab & Filter States derived from URL
   const tabParam = searchParams.get('tab')
-  const activeTab = tabParam || 'overview'
+  const activeTab: MarketingTab = isMarketingTab(tabParam) ? tabParam : 'overview'
   const initialSourceFilter = searchParams.get('source') || ''
 
   // Campaign & Inquiries lists database states
@@ -493,7 +520,7 @@ function MarketingPageContent() {
   }
 
   // Router Helpers
-  const handleTabChange = (tab: string) => {
+  const handleTabChange = (tab: MarketingTab) => {
     router.push(`/portal/marketing?tab=${tab}`)
   }
 
@@ -598,24 +625,23 @@ function MarketingPageContent() {
 
   return (
     <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'emails' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
-      {activeTab !== 'builder-automation' && (
-        <PortalPageHeader
-          icon={header.icon}
-          title={header.title}
-          actions={headerActions}
-        />
-      )}
+      <PortalPageHeader
+        icon={header.icon}
+        title={header.title}
+        actions={headerActions}
+      />
 
-      <div className="flex-grow flex flex-col min-h-0 overflow-hidden mt-1">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="h-full flex flex-col min-h-0 overflow-hidden"
-          >
+      <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
+        <PortalAnimatedTabs
+          tabs={MARKETING_TABS}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          ariaLabel="Marketing sections"
+        />
+      </div>
+
+      <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
+        <PortalTabTransition activeKey={activeTab} className="flex h-full min-h-0 flex-col overflow-hidden">
             {activeTab === 'overview' && (
               <MarketingOverviewTab
                 inquiries={inquiries}
@@ -697,8 +723,7 @@ function MarketingPageContent() {
                 loading={loadingCampaigns}
               />
             )}
-          </motion.div>
-        </AnimatePresence>
+        </PortalTabTransition>
       </div>
 
       <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />

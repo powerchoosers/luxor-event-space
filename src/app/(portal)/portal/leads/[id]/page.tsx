@@ -1460,19 +1460,20 @@ export default function LeadDetailPage({
     try {
       setSendingContractBookingId(booking.id)
       setUpdatingStatus(true)
-      const res = await fetch('/api/signatures', {
+      const invoice = invoices.find((item) => item.id === booking.invoice_id) || invoices[0]
+      if (!invoice) throw new Error('Build the proposal before sending the agreement package.')
+      const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id }),
+        body: JSON.stringify({ mode: 'proposal_contract' }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'The contract package could not be sent.')
-      await createFlowNote('Luxor agreement and Guest Guide sent to the client through the secure signature portal.', 'status_change')
+      if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
       await fetchAllData(false)
-      notify({ title: 'Contract package sent', description: 'The client received the Guest Guide and secure signing link.', variant: 'success' })
+      notify({ title: 'Proposal and agreement sent', description: 'The client received the proposal PDF, Guest Guide, and secure contract link. Payment follows after signature.', variant: 'success' })
     } catch (err) {
       console.error(err)
-      notify({ title: 'Contract not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Proposal and agreement not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingContractBookingId(null)
       setUpdatingStatus(false)
@@ -3707,19 +3708,21 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !proposalSentAt ? 'Send the proposal and payment request' : proposalPaidTotal <= 0 ? 'Watch for the client view and payment' : !latestBooking ? 'Create the booking record' : 'Continue to the contract'}
+                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : latestBooking.contract_status !== 'signed' ? (proposalSentAt ? 'Await the client signature' : 'Send proposal and agreement') : proposalPaidTotal <= 0 ? 'Contract signed — payment link sent' : 'Payment received'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Sending automatically moves this lead into Proposal.' : proposalPaidTotal <= 0 ? 'Opened and payment status update here automatically.' : !latestBooking ? 'Payment is recorded. Create the booking to unlock Contract.' : 'The booking exists, so contract preparation is unlocked.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : latestBooking.contract_status !== 'signed' ? 'The client reviews the proposal and signs before any Stripe link is released.' : proposalPaidTotal <= 0 ? 'Stripe is emailed automatically after signature. Payment status updates here.' : 'The signed agreement and payment are both recorded.'}
                             </p>
                           </div>
                         </div>
                         {!proposalInvoice ? (
                           <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
-                        ) : !proposalSentAt || proposalPaidTotal <= 0 ? (
-                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={!lead.email || proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Payment Request' : 'Send Proposal'}</button>
+                        ) : !latestBooking ? (
+                          <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
+                        ) : latestBooking.contract_status !== 'signed' ? (
+                          <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Proposal + Agreement'}</button>
                         ) : (
-                          <button type="button" onClick={latestBooking ? () => setSelectedStageOverride('contract') : openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{latestBooking ? 'Open Contract Stage' : 'Create Booking'}</button>
+                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                         )}
                       </div>
                     </section>
@@ -4050,7 +4053,7 @@ export default function LeadDetailPage({
                                   <button
                                     type="button"
                                     disabled={updatingStatus}
-                                    onClick={() => handleContractRequestAction(latestBooking, 'resend')}
+                                    onClick={() => handleSendContractPackage(latestBooking)}
                                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                                   >
                                     <RefreshCw size={11} className={contractActionKey === `resend-${latestBooking.id}` ? 'animate-spin' : ''} /> Resend
@@ -4170,14 +4173,12 @@ export default function LeadDetailPage({
                               {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Security deposit collected' : 'Collect security deposit'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Deposit is secured. Track event rental balance.' : 'Draft invoice or send payment request link to collect deposit.'}
+                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Deposit is secured. Track event rental balance.' : 'The Stripe link was emailed after signature. Resend it here if the client needs it again.'}
                             </p>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
-                            Draft Invoice
-                          </button>
+                          {latestInvoice && proposalBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Resend Payment Link</button> : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
                               Mark Deposit Paid
@@ -4218,7 +4219,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Draft Invoice</button>
+                          {latestInvoice && proposalBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Resend Payment Link</button> : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Deposit Paid</button>
                           ) : null}
@@ -5003,7 +5004,7 @@ export default function LeadDetailPage({
                       const call = entry.call
                       const otherNumber = call.direction === 'inbound' ? call.caller_number : call.callee_number
                       return (
-                        <div key={entry.id} className="portal-render-surface relative group">
+                        <div key={entry.id} className="relative group">
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Luxor Browser Phone</span>
@@ -5028,7 +5029,7 @@ export default function LeadDetailPage({
                       const emailSummary = compactActivityText(email.summary)
 
                       return (
-                        <Link href={emailReaderUrl(email)} key={entry.id} className="portal-render-surface relative block rounded-lg group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                        <Link href={emailReaderUrl(email)} key={entry.id} className="relative block rounded-lg group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -5076,7 +5077,7 @@ export default function LeadDetailPage({
                     }
 
                     return (
-                      <div key={note.id} className="portal-render-surface relative group">
+                      <div key={note.id} className="relative group">
                         <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
@@ -5463,7 +5464,7 @@ export default function LeadDetailPage({
                         <>
                           <button
                             type="button"
-                            onClick={() => handleContractRequestAction(booking, 'resend')}
+                            onClick={() => handleSendContractPackage(booking)}
                             disabled={updatingStatus}
                             className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                           >
@@ -5762,8 +5763,8 @@ export default function LeadDetailPage({
           <form onSubmit={handleSendInvoice} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
             <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Send Payment Request</h3>
-                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">The client receives the full proposal PDF and a Stripe link for only the amount selected here.</p>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Send Signed-Contract Payment Request</h3>
+                <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Available only after the agreement is signed. The client receives a secure Stripe link for the amount selected here.</p>
               </div>
               <PortalCloseButton onClick={() => setPaymentRequestInvoice(null)} aria-label="Close payment request window" />
             </div>
@@ -5792,7 +5793,7 @@ export default function LeadDetailPage({
                 </div>
               ) : null}
               <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#caa24c] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">
-                {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email PDF + Payment Link'}
+                {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email Secure Payment Link'}
               </button>
             </div>
           </form>

@@ -10,6 +10,8 @@ import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsSe
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
+import { getInvoice } from './luxorInvoicesServer'
+import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 
 const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
 
@@ -277,11 +279,33 @@ export async function signLuxorSignatureRequest(input: {
   })
   await recordLuxorSignatureEvent({ signatureRequestId: signature.id, eventType: 'completed' })
 
-  const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p><p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
+  let paymentRequest: Awaited<ReturnType<typeof createLuxorPostContractCheckout>> = null
+  try {
+    const [booking, inquiry] = await Promise.all([
+      getLuxorBooking(signature.booking_id),
+      signature.inquiry_id ? getLuxorInquiry(signature.inquiry_id) : Promise.resolve(null),
+    ])
+    const invoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+    if (booking && inquiry && invoice) {
+      paymentRequest = await createLuxorPostContractCheckout({
+        booking,
+        inquiry,
+        invoice,
+        origin: process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com',
+      })
+    }
+  } catch (paymentError) {
+    console.error('Contract was signed, but the post-sign Stripe request could not be created:', paymentError)
+  }
+
+  const paymentSection = paymentRequest
+    ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: ${paymentRequest.paymentLabel}</p><p style="margin:0 0 18px;font-family:Georgia,serif;font-size:27px">$${paymentRequest.paymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><a href="${paymentRequest.checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Pay securely with Stripe</a></div>`
+    : '<p style="color:#756755">Luxor will follow up separately with the secure payment link.</p>'
+  const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
   await Promise.allSettled([
     sendLuxorZohoEmail({
       to: signature.client_email,
-      subject: 'Your Luxor Event Space agreement is complete',
+      subject: paymentRequest ? 'Agreement complete — secure your Luxor date' : 'Your Luxor Event Space agreement is complete',
       content: completionHtml,
       from: 'booking@luxoratlaspalmas.com',
       fromName: 'Luxor Event Space',

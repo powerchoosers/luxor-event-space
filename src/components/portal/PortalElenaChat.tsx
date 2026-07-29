@@ -11,7 +11,13 @@ import {
   Trash2,
   Edit2,
   Check,
-  BrainCircuit,
+  Radar,
+  UserRoundCheck,
+  ReceiptText,
+  FileSignature,
+  CalendarClock,
+  MessageCircleMore,
+  ListTodo,
   Loader2,
   Mic,
   MicOff,
@@ -84,6 +90,15 @@ type TourInviteCardPayload = {
   clientFacingNotes: string
 }
 
+type SmartSuggestion = {
+  id: string
+  kind: 'lead' | 'money' | 'contract' | 'event' | 'message' | 'task'
+  label: string
+  detail: string
+  prompt: string
+  urgency: 'urgent' | 'attention' | 'plan'
+}
+
 interface ChatSession {
   id: string
   title: string
@@ -97,47 +112,67 @@ interface PortalElenaChatProps {
   activePath: string
 }
 
-function getSuggestionsForPath(path: string) {
+function getSuggestionsForPath(path: string): SmartSuggestion[] {
+  const makeSuggestion = (id: string, label: string, detail: string, prompt: string, kind: SmartSuggestion['kind']): SmartSuggestion => ({
+    id,
+    label,
+    detail,
+    prompt,
+    kind,
+    urgency: 'attention',
+  })
   if (path.startsWith('/portal/leads')) {
     return [
-      'List details of the last 3 inquiries',
-      'Show recent follow-up notes',
-      'Check active leads pipeline stage'
+      makeSuggestion('leads-recent', 'Recent inquiries', 'Review the newest leads and their details.', 'List details of the last 3 inquiries.', 'lead'),
+      makeSuggestion('leads-follow-up', 'Lead follow-up', 'Find the leads waiting for a next step.', 'Show recent follow-up notes and which leads need movement.', 'lead'),
+      makeSuggestion('leads-pipeline', 'Pipeline health', 'See where active leads are getting stuck.', 'Check active leads by pipeline stage.', 'lead'),
     ]
   }
   if (path.startsWith('/portal/calendar') || path.startsWith('/portal/events')) {
     return [
-      'Show upcoming bookings for this month',
-      'Are there any tours scheduled this week?',
-      'Show completed events this year'
+      makeSuggestion('events-upcoming', 'Upcoming bookings', 'Review the next events on the calendar.', 'Show upcoming bookings for this month.', 'event'),
+      makeSuggestion('events-tours', 'Tours this week', 'Check what needs preparation for scheduled tours.', 'Are there any tours scheduled this week?', 'event'),
+      makeSuggestion('events-completed', 'Completed events', 'Look back at this year’s completed events.', 'Show completed events this year.', 'event'),
     ]
   }
   if (path.startsWith('/portal/finances') || path.startsWith('/portal/invoices')) {
     return [
-      'What is our total revenue from invoices?',
-      'Find all unpaid or overdue bills',
-      'List recent bookings and expenses'
+      makeSuggestion('finances-revenue', 'Invoice revenue', 'Get the current revenue picture.', 'What is our total revenue from invoices?', 'money'),
+      makeSuggestion('finances-owed', 'Payments due', 'Focus on unpaid and overdue balances.', 'Find all unpaid or overdue invoices.', 'money'),
+      makeSuggestion('finances-bookings', 'Bookings and expenses', 'Review recent financial movement.', 'List recent bookings and expenses.', 'money'),
     ]
   }
   if (path.startsWith('/portal/marketing')) {
     return [
-      'List our marketing campaigns',
-      'Show open rates of email campaigns',
-      'Check marketing list subscriber count'
+      makeSuggestion('marketing-campaigns', 'Campaigns', 'Review what is currently running.', 'List our marketing campaigns.', 'task'),
+      makeSuggestion('marketing-opens', 'Email performance', 'See which messages are getting attention.', 'Show open rates of email campaigns.', 'task'),
+      makeSuggestion('marketing-subscribers', 'Audience growth', 'Check the size of the marketing list.', 'Check marketing list subscriber count.', 'task'),
     ]
   }
   if (path.startsWith('/portal/operations')) {
     return [
-      'Show inventory items that are Low or Out of Stock',
-      'Check active cleaning logs',
-      'List pending operations tasks'
+      makeSuggestion('operations-stock', 'Inventory attention', 'Find what needs restocking.', 'Show inventory items that are Low or Out of Stock.', 'task'),
+      makeSuggestion('operations-cleaning', 'Cleaning checks', 'Review active cleaning logs.', 'Check active cleaning logs.', 'task'),
+      makeSuggestion('operations-tasks', 'Operations tasks', 'Prioritize open operational work.', 'List pending operations tasks.', 'task'),
     ]
   }
   return [
-    'Show upcoming bookings',
-    'Check active venue inquiries',
-    'List tasks due this week'
+    makeSuggestion('default-bookings', 'Upcoming bookings', 'Review the calendar ahead.', 'Show upcoming bookings.', 'event'),
+    makeSuggestion('default-inquiries', 'Active inquiries', 'See which leads need attention.', 'Check active venue inquiries.', 'lead'),
+    makeSuggestion('default-tasks', 'Tasks this week', 'Prioritize what is due next.', 'List tasks due this week.', 'task'),
   ]
+}
+
+function SuggestionIcon({ kind, className }: { kind: SmartSuggestion['kind']; className?: string }) {
+  const Icon = {
+    lead: UserRoundCheck,
+    money: ReceiptText,
+    contract: FileSignature,
+    event: CalendarClock,
+    message: MessageCircleMore,
+    task: ListTodo,
+  }[kind]
+  return <Icon size={14} className={className} />
 }
 
 function getQueryIndicatorText(sql: string) {
@@ -168,8 +203,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
 
-  const [smartSuggestions, setSmartSuggestions] = useState<string[]>([])
+  const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const suggestionCycleRef = useRef(0)
   const sessionRequestRef = useRef(0)
   const messageRequestRef = useRef(0)
 
@@ -261,12 +297,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   useEffect(() => {
+    if (isOpen) scrollToBottom()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages])
+
+  useEffect(() => {
     if (isOpen) {
-      scrollToBottom()
-      loadSmartSuggestions()
+      suggestionCycleRef.current = 0
+      loadSmartSuggestions(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isOpen])
+  }, [isOpen, activePath])
 
   useEffect(() => {
     if (isOpen) {
@@ -278,13 +319,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  const loadSmartSuggestions = async () => {
+  const loadSmartSuggestions = async (advanceCycle = true) => {
+    if (advanceCycle) suggestionCycleRef.current += 1
     setIsLoadingSuggestions(true)
-    setSmartSuggestions([])
     try {
-      const res = await fetch(`/api/portal/elena-chat/suggestions?activePath=${encodeURIComponent(activePath)}`)
+      const res = await fetch(`/api/portal/elena-chat/suggestions?activePath=${encodeURIComponent(activePath)}&cycle=${suggestionCycleRef.current}`)
       if (res.ok) {
-        const data = (await res.json()) as { suggestions?: string[] }
+        const data = (await res.json()) as { suggestions?: SmartSuggestion[] }
         if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
           setSmartSuggestions(data.suggestions)
         }
@@ -795,7 +836,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   </div>
 
                   <div className="max-w-xs space-y-1">
-                    <h3 className="font-serif text-lg font-medium text-zinc-300">Elena AI Concierge</h3>
+                    <h3 className="font-serif text-lg font-medium text-zinc-300">Elena Concierge</h3>
                     <p className="text-xs text-zinc-500 leading-relaxed">
                       Connected to your live Luxor database & CRM intelligence.
                     </p>
@@ -803,7 +844,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
                   <div className="w-full space-y-2 pt-1">
                     <div className="flex items-center justify-between px-1">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Smart Suggestions</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Current priorities</p>
                       <div className="flex items-center gap-2">
                         {isLoadingSuggestions ? (
                           <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
@@ -812,12 +853,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         ) : (
                           <button
                             type="button"
-                            onClick={loadSmartSuggestions}
+                            onClick={() => loadSmartSuggestions(true)}
                             className="flex items-center gap-1 text-[9px] text-zinc-500 hover:text-[#caa24c] transition-colors cursor-pointer"
-                            title="Refresh and cycle new AI suggestions"
+                            title="Show the next set of live priorities"
                           >
                             <RefreshCw size={10} />
-                            <span>Cycle Prompts</span>
+                            <span>Next priorities</span>
                           </button>
                         )}
                       </div>
@@ -839,7 +880,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
                               >
                                 <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
-                                <BrainCircuit size={13} className="shrink-0 text-zinc-700/50" />
+                                <Radar size={13} className="shrink-0 text-zinc-700/50" />
                               </div>
                             ))}
                           </motion.div>
@@ -854,7 +895,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             <AnimatePresence mode="popLayout">
                               {(smartSuggestions.length > 0 ? smartSuggestions : pathSuggestions).map((suggestion, idx) => (
                                 <motion.button
-                                  key={suggestion}
+                                  key={suggestion.id}
                                   initial={{ opacity: 0, y: 12, scale: 0.97 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, scale: 0.95 }}
@@ -864,11 +905,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                     ease: [0.23, 1, 0.32, 1] 
                                   }}
                                   type="button"
-                                  onClick={() => handleSend(suggestion)}
+                                  onClick={() => handleSend(suggestion.prompt)}
                                   className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
                                 >
-                                  <span className="line-clamp-2 leading-snug">{suggestion}</span>
-                                  <BrainCircuit size={13} className="shrink-0 text-zinc-600 group-hover:text-[#caa24c] transition-colors ml-2" />
+                                  <span className="min-w-0">
+                                    <span className="block text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#e3bc65]">{suggestion.label}</span>
+                                    <span className="mt-0.5 block line-clamp-2 leading-snug">{suggestion.detail}</span>
+                                  </span>
+                                  <SuggestionIcon kind={suggestion.kind} className="ml-3 shrink-0 text-zinc-600 transition-colors group-hover:text-[#caa24c]" />
                                 </motion.button>
                               ))}
                             </AnimatePresence>

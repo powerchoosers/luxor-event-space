@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const invoice = await getInvoiceByPublicToken(token)
   if (!invoice?.stripe_checkout_url || invoice.status === 'cancelled') {
     return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
+  }
+
+  const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
+  const booking = bookings.find((item) => item.invoice_id === invoice.id) || bookings[0]
+  if (!booking || booking.contract_status !== 'signed') {
+    return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
   }
 
   let checkoutUrl: URL

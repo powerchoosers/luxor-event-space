@@ -68,6 +68,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Booking record not found' }, { status: 404 })
       }
 
+      if (body.sendEmail) {
+        if (!existingBooking.invoice_id) {
+          return NextResponse.json({ error: 'Build and link the proposal before sending the agreement package.' }, { status: 409 })
+        }
+        const sendRes = await fetch(`${request.nextUrl.origin}/api/invoices/${existingBooking.invoice_id}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: request.headers.get('cookie') || '' },
+          body: JSON.stringify({ mode: 'proposal_contract' }),
+        })
+        const sendData = await sendRes.json().catch(() => ({}))
+        if (!sendRes.ok) return NextResponse.json({ error: sendData.error || 'Failed to deliver the proposal and agreement.' }, { status: sendRes.status })
+        return NextResponse.json({ success: true, signatureRequestId: sendData.signature?.id, signingUrl: sendData.signingUrl, sentEmail: true })
+      }
+
       const activeSigs = await listLuxorSignatureRequests(10)
       const existingSig = activeSigs.find((s) => s.booking_id === targetBookingId && s.status !== 'void')
 
@@ -124,7 +138,7 @@ export async function POST(request: NextRequest) {
 
       const PUBLIC_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
       const publicToken = invoice.public_token || invoice.id
-      const checkoutUrl = invoice.stripe_checkout_url || `${PUBLIC_BASE.replace(/\/$/, '')}/proposal/${publicToken}`
+      let checkoutUrl = invoice.stripe_checkout_url || `${PUBLIC_BASE.replace(/\/$/, '')}/proposal/${publicToken}`
 
       // Trigger standard send if email requested
       if (body.sendEmail) {
@@ -135,6 +149,7 @@ export async function POST(request: NextRequest) {
             Cookie: request.headers.get('cookie') || '',
           },
           body: JSON.stringify({
+            mode: 'payment',
             paymentAmount: invoice.total,
             paymentLabel: 'Invoice Payment',
           }),
@@ -144,6 +159,8 @@ export async function POST(request: NextRequest) {
           const sendErr = await sendRes.json()
           return NextResponse.json({ error: sendErr.error || 'Failed to deliver invoice email' }, { status: 500 })
         }
+        const sendData = await sendRes.json().catch(() => ({}))
+        checkoutUrl = sendData.checkoutUrl || checkoutUrl
       }
 
       return NextResponse.json({

@@ -18,7 +18,7 @@ const cormorant = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: 'Your Event Proposal | Luxor Event Space',
-  description: 'Securely review your Luxor Event Space proposal and payment request.',
+  description: 'Securely review your Luxor Event Space proposal. Payment is requested only after the event agreement is signed.',
   robots: { index: false, follow: false },
 }
 

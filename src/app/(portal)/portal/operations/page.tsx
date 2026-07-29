@@ -1209,7 +1209,8 @@ function OperationsPageContent() {
                 { value: 'Rentals & Decor', label: 'Rentals & Decor' },
                 { value: 'Valet Service', label: 'Valet Service' },
                 { value: 'Bartenders', label: 'Bartenders' },
-                { value: 'Photographers', label: 'Photographers' }
+                { value: 'Photographers', label: 'Photographers' },
+                { value: 'Makeup Artist', label: 'Makeup Artist' }
               ]}
             />
           </div>
@@ -1506,7 +1507,8 @@ function OperationsPageContent() {
                       { value: 'Rentals & Decor', label: 'Rentals & Decor' },
                       { value: 'Valet Service', label: 'Valet Service' },
                       { value: 'Bartenders', label: 'Bartenders' },
-                      { value: 'Photographers', label: 'Photographers' }
+                      { value: 'Photographers', label: 'Photographers' },
+                      { value: 'Makeup Artist', label: 'Makeup Artist' }
                     ]}
                   />
                 </div>

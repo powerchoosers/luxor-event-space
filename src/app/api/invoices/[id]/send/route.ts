@@ -6,12 +6,13 @@ import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
-import { buildLuxorPaymentRequestEmail } from '@/lib/luxorProposalEmailServer'
-import { saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
-import { createNote } from '@/lib/luxorNotesServer'
-import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
-import { buildFinalPaymentReminderEmail, buildProposalReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
+import { buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { downloadLuxorPrivatePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
+import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
+import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { buildContractReminderEmail, buildFinalPaymentReminderEmail, buildProposalReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
+import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let invoiceId = 'unknown'
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
-    const body = await request.json().catch(() => ({})) as { paymentAmount?: number; paymentLabel?: string }
+    const body = await request.json().catch(() => ({})) as { mode?: 'proposal_contract' | 'payment'; paymentAmount?: number; paymentLabel?: string }
     const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
     const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
@@ -42,6 +43,104 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const paymentLabel = String(body.paymentLabel || (paymentAmount === balanceDue ? 'Remaining balance' : 'Installment payment')).trim().slice(0, 80)
     const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
     const booking = bookings.find((item) => item.invoice_id === invoice.id) || bookings[0] || null
+
+    if (body.mode === 'proposal_contract') {
+      if (!booking) {
+        return NextResponse.json({ error: 'Create the booking record first so the agreement uses the confirmed event fields, pricing, and notes.' }, { status: 409 })
+      }
+      if (booking.contract_status === 'signed') {
+        return NextResponse.json({ error: 'The agreement is already signed. Send the Stripe payment request from the Deposit stage.' }, { status: 409 })
+      }
+
+      if (invoice.stripe_checkout_session_id) {
+        const secretKey = process.env.STRIPE_SECRET_KEY
+        if (!secretKey) {
+          return NextResponse.json({ error: 'Stripe must be connected so the old pre-contract payment link can be disabled before this package is sent.' }, { status: 503 })
+        }
+        const stripe = new Stripe(secretKey)
+        const oldCheckout = await stripe.checkout.sessions.retrieve(invoice.stripe_checkout_session_id)
+        if (oldCheckout.status === 'open') await stripe.checkout.sessions.expire(oldCheckout.id)
+        await updateInvoice(invoice.id, {
+          stripe_checkout_session_id: null,
+          stripe_checkout_url: null,
+          stripe_checkout_opened_at: null,
+          payment_requested_at: null,
+          payment_requested_amount: null,
+          payment_requested_label: null,
+        })
+      }
+
+      const origin = new URL(request.url).origin
+      const now = new Date().toISOString()
+      const publicToken = invoice.public_token || crypto.randomUUID()
+      const signature = await getActiveLuxorSignatureRequestByBooking(booking.id) || await createLuxorSignatureRequest(booking)
+      const signingUrl = `${origin}/secure-portal/sign/${signature.token}`
+      const [pdf, notes, guide] = await Promise.all([
+        buildLuxorInvoicePdf(invoice, inquiry),
+        listNotesByInquiry(inquiry.id).catch(() => []),
+        downloadLuxorPrivatePdf(signature.guest_guide_path || ''),
+      ])
+      await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
+      const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl, notes })
+      const job = await createLuxorEmailJob({
+        inquiryId: inquiry.id,
+        bookingId: booking.id,
+        signatureRequestId: signature.id,
+        jobType: 'contract_signature',
+        recipientEmail: inquiry.email,
+        subject: email.subject,
+        body: `Your Luxor proposal and agreement are ready to review and sign: ${signingUrl}`,
+        scheduledFor: now,
+        metadata: { manual: true, requestedBy: session.email, includes_proposal: true, includes_guest_guide: true, flow_stage: 'proposal_contract' },
+      })
+      try {
+        await sendLuxorZohoEmail({
+          to: inquiry.email,
+          subject: email.subject,
+          content: email.html,
+          from: 'booking@luxoratlaspalmas.com',
+          fromName: 'Luxor Event Space',
+          attachments: [
+            { filename: `Luxor-Proposal-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' },
+            { filename: 'Luxor-Guest-Guide.pdf', content: guide, contentType: 'application/pdf' },
+          ],
+        })
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
+      } catch (sendError) {
+        await updateLuxorEmailJob(job.id, { status: 'failed', last_error: sendError instanceof Error ? sendError.message : 'Email send failed.' })
+        throw sendError
+      }
+
+      const updated = await updateInvoice(invoice.id, {
+        public_token: publicToken,
+        status: 'sent',
+        proposal_sent_at: now,
+        stripe_checkout_session_id: null,
+        stripe_checkout_url: null,
+        stripe_checkout_opened_at: null,
+        payment_requested_at: null,
+        payment_requested_amount: null,
+        payment_requested_label: null,
+      })
+      const updatedInquiry = await updateLuxorInquiry(inquiry.id, {
+        status: 'booked',
+        pipeline_stage: 'contract',
+        metadata: { ...inquiry.metadata, proposal_sent_at: now, latest_proposal_invoice_id: invoice.id, latest_signature_request_id: signature.id },
+      }) ?? inquiry
+      await createNote(inquiry.id, 'Proposal and agreement sent together. Payment will be requested automatically after signature.', 'status_change', session.email)
+      await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder', 'contract_view_reminder', 'contract_signature_reminder'])
+      const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
+      const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })
+      await Promise.all([
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id) }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id) }),
+      ])
+      return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, signature, signingUrl, mode: 'proposal_contract' })
+    }
+
+    if (!booking || booking.contract_status !== 'signed') {
+      return NextResponse.json({ error: 'The client must sign the agreement before a Stripe payment link can be created or sent.' }, { status: 409 })
+    }
 
     const secretKey = process.env.STRIPE_SECRET_KEY
     if (!secretKey) {

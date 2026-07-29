@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,12 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const invoice = await getInvoiceByPublicToken(token)
   if (!invoice || invoice.status === 'cancelled') notFound()
 
-  const payments = await listPaidPaymentsByInvoice(invoice.id)
+  const [payments, bookings] = await Promise.all([
+    listPaidPaymentsByInvoice(invoice.id),
+    invoice.inquiry_id ? listLuxorBookingsByInquiry(invoice.inquiry_id) : Promise.resolve([]),
+  ])
+  const booking = bookings.find((item) => item.invoice_id === invoice.id) || bookings[0]
+  const contractSigned = booking?.contract_status === 'signed'
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   const requestedAmount = Math.min(Number(invoice.payment_requested_amount || balanceDue), balanceDue)
@@ -48,7 +54,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#caa24c]">Event proposal</p>
               <h1 className="mt-3 font-serif text-3xl font-semibold text-white sm:text-4xl">Prepared for {invoice.client_name}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">Review the included services and payment request below. Contact Luxor before paying if anything needs to change.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">Review the included services below. Your agreement must be signed before Luxor requests payment.</p>
             </div>
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300">
               <ShieldCheck size={14} /> Secure proposal
@@ -97,8 +103,10 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               </div>
               {balanceDue <= 0 ? (
                 <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-6 text-xs font-black uppercase tracking-wider text-emerald-300"><Check size={16} /> Paid in full</span>
-              ) : invoice.stripe_checkout_url ? (
+              ) : contractSigned && invoice.stripe_checkout_url ? (
                 <a href={`/api/public/proposals/${encodeURIComponent(token)}/checkout`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
+              ) : !contractSigned ? (
+                <p className="max-w-xs text-xs leading-5 text-zinc-300">Payment unlocks after the event agreement is signed. Use the secure agreement link in your Luxor email to review and sign first.</p>
               ) : (
                 <p className="max-w-xs text-xs leading-5 text-zinc-400">Contact Luxor for a refreshed secure payment link.</p>
               )}
@@ -106,7 +114,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
           </section>
 
           <footer className="mt-8 text-center text-[11px] leading-5 text-zinc-500">
-            Payments are processed securely by Stripe. Questions? Email booking@luxoratlaspalmas.com.
+            Agreements are completed before payment. Approved payments are processed securely by Stripe. Questions? Email booking@luxoratlaspalmas.com.
           </footer>
         </div>
       </div>

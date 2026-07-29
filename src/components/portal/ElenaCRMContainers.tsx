@@ -256,7 +256,7 @@ export function ElenaContractCard({
       }
       setSent(true)
       if (onSuccess) {
-        onSuccess(`Sent event contract signature request to **${payload.clientEmail}**! 📄✍️`)
+        onSuccess(`Sent the proposal and agreement package to **${payload.clientEmail}**. Payment will follow after signature. 📄✍️`)
       }
     } catch (err) {
       console.error(err)
@@ -341,7 +341,7 @@ export function ElenaContractCard({
               className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              <span>Send Contract Email</span>
+              <span>Send Proposal + Agreement</span>
             </button>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-400">
@@ -403,7 +403,7 @@ export function ElenaInvoiceCard({
 
       setSent(true)
       if (onSuccess) {
-        onSuccess(`Sent proposal/invoice with payment link to **${payload.clientName}**! 💳✨`)
+        onSuccess(`Sent the post-signature payment link to **${payload.clientName}**. 💳`)
       }
     } catch (err) {
       console.error(err)
@@ -428,7 +428,7 @@ export function ElenaInvoiceCard({
             <Receipt size={14} />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-zinc-200">Luxor Invoice & Payment</h4>
+            <h4 className="text-xs font-semibold text-zinc-200">Signed-Contract Payment</h4>
             <p className="text-[10px] text-zinc-400">Client: <strong className="text-zinc-200">{payload.clientName}</strong></p>
           </div>
         </div>

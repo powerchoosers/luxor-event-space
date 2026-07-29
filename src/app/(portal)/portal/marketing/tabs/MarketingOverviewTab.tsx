@@ -15,7 +15,7 @@ import {
 import { PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import type { Campaign, MarketingActivityEvent, MarketingList } from '../page'
+import type { Campaign, MarketingActivityEvent, MarketingList, MarketingTab } from '../page'
 
 interface MarketingOverviewTabProps {
   inquiries: LuxorInquiry[]
@@ -23,7 +23,7 @@ interface MarketingOverviewTabProps {
   activityEvents: MarketingActivityEvent[]
   marketingLists?: MarketingList[]
   loading: boolean
-  onTabChange: (tab: string) => void
+  onTabChange: (tab: MarketingTab) => void
   onAddContactClick: () => void
 }
 
@@ -113,10 +113,10 @@ export function MarketingOverviewTab({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2">
-          <div className="flex items-start justify-between gap-4 border-b border-zinc-900 pb-4">
+          <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Audience by List</h3>
-              <p className="mt-1 text-[10px] text-zinc-500">Current marketing-list membership, grouped by saved source.</p>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Audience by List</h3>
+              <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Current marketing-list membership, grouped by saved source.</p>
             </div>
             <span className="font-mono text-xs font-bold text-[#caa24c]">{loading ? '…' : totalSubscribers.toLocaleString()} total</span>
           </div>
@@ -126,12 +126,12 @@ export function MarketingOverviewTab({
               {audienceRows.map((list) => {
                 const share = totalSubscribers ? Math.min(100, (list.memberCount / totalSubscribers) * 100) : 0
                 return (
-                  <div key={list.name} className="rounded-xl border border-zinc-900/70 bg-zinc-950/30 p-4">
+                  <div key={list.name} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-xs font-bold text-white">{list.name}</p>
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{list.name}</p>
                       <span className="font-mono text-xs font-black text-[#caa24c]">{list.memberCount.toLocaleString()}</span>
                     </div>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-900">
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
                       <div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${share}%` }} />
                     </div>
                   </div>
@@ -144,19 +144,19 @@ export function MarketingOverviewTab({
         </section>
 
         <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Recent Subscribers</h3>
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Recent Subscribers</h3>
             <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#dfbd68]">View all</button>
           </div>
           {recentSubscribers.length ? (
-            <div className="mt-3 divide-y divide-zinc-900/60">
+            <div className="mt-3 divide-y divide-[color:var(--portal-border)]">
               {recentSubscribers.map((subscriber) => (
                 <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-white">{subscriber.full_name || subscriber.email}</p>
-                    <p className="mt-0.5 truncate text-[10px] text-zinc-500">{subscriber.listName}</p>
+                    <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p>
                   </div>
-                  <span className="shrink-0 font-mono text-[9px] text-zinc-600">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span>
                 </div>
               ))}
             </div>
@@ -167,34 +167,34 @@ export function MarketingOverviewTab({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-          <div className="flex items-start justify-between gap-3 border-b border-zinc-900 pb-4">
+        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+          <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
             <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Grand Opening RSVP Activity</h3>
-              <p className="mt-1 text-[9px] text-zinc-500">RSVP submissions received from the website.</p>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Grand Opening RSVP Activity</h3>
+              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">RSVP submissions received from the website.</p>
             </div>
             <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View RSVPs</button>
           </div>
 
           {grandOpeningRsvps.length ? (
             <>
-              <div className="grid grid-cols-3 gap-2 border-b border-zinc-900 py-4 text-center font-mono">
+              <div className="grid grid-cols-3 gap-2 border-b border-[color:var(--portal-border)] py-4 text-center font-mono">
                 <MetricBlock label="RSVPs" value={grandOpeningRsvps.length.toLocaleString()} />
                 <MetricBlock label="Attending" value={attendingRsvps.toLocaleString()} />
                 <MetricBlock label="Guests Listed" value={recordedGuests.toLocaleString()} />
               </div>
-              <div className="mt-2 divide-y divide-zinc-900/60">
+              <div className="mt-2 divide-y divide-[color:var(--portal-border)]">
                 {grandOpeningRsvps.slice(0, 4).map((rsvp) => (
                   <div key={rsvp.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-white">{rsvp.full_name}</p>
-                      <p className="mt-0.5 text-[9px] text-zinc-500">
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{rsvp.full_name}</p>
+                      <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">
                         {rsvp.rsvp_status ? formatStatus(rsvp.rsvp_status) : 'RSVP status not recorded'}
                         {' · '}
                         {rsvp.attendee_count == null ? 'Guest count not provided' : `${rsvp.attendee_count} guest${rsvp.attendee_count === 1 ? '' : 's'}`}
                       </p>
                     </div>
-                    <span className="shrink-0 font-mono text-[9px] text-zinc-600">{formatDate(rsvp.created_at)}</span>
+                    <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatDate(rsvp.created_at)}</span>
                   </div>
                 ))}
               </div>
@@ -204,24 +204,24 @@ export function MarketingOverviewTab({
           )}
         </section>
 
-        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Highest Engagement</h3>
+        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Highest Engagement</h3>
             <button type="button" onClick={() => onTabChange('email-campaigns')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View campaigns</button>
           </div>
 
           {topCampaign ? (
             <div className="pt-4">
               <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-[#caa24c]"><Mail size={18} /></div>
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c]"><Mail size={18} /></div>
                 <div className="min-w-0">
                   <PortalStatusBadge status={topCampaign.status} />
-                  <h4 className="mt-2 truncate text-xs font-bold text-white">{decodeHtmlEntities(topCampaign.name)}</h4>
-                  <p className="mt-0.5 truncate text-[9px] text-zinc-550">{decodeHtmlEntities(topCampaign.subject)}</p>
-                  <p className="mt-1 font-mono text-[9px] text-zinc-600">{formatCampaignDate(topCampaign)}</p>
+                  <h4 className="mt-2 truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(topCampaign.name)}</h4>
+                  <p className="mt-0.5 truncate text-[9px] text-[color:var(--portal-muted)]">{decodeHtmlEntities(topCampaign.subject)}</p>
+                  <p className="mt-1 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatCampaignDate(topCampaign)}</p>
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-4 gap-2 border-t border-zinc-900 pt-4 text-center font-mono">
+              <div className="mt-4 grid grid-cols-4 gap-2 border-t border-[color:var(--portal-border)] pt-4 text-center font-mono">
                 <MetricBlock label="Sent" value={topCampaign.sent_count.toLocaleString()} />
                 <MetricBlock label="Open" value={`${topCampaign.open_rate}%`} />
                 <MetricBlock label="Click" value={`${topCampaign.click_rate}%`} />
@@ -233,23 +233,23 @@ export function MarketingOverviewTab({
           )}
         </section>
 
-        <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Recent Email Activity</h3>
-            <span className="font-mono text-[9px] text-zinc-600">{activityEvents.length} tracked</span>
+        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Recent Email Activity</h3>
+            <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">{activityEvents.length} tracked</span>
           </div>
           {activityEvents.length ? (
-            <div className="mt-2 divide-y divide-zinc-900/60">
+            <div className="mt-2 divide-y divide-[color:var(--portal-border)]">
               {activityEvents.slice(0, 5).map((event) => (
                 <div key={event.id} className="flex items-start justify-between gap-3 py-2.5">
                   <div className="flex min-w-0 items-start gap-2.5">
                     <span className="mt-0.5 text-[#caa24c]">{event.event_type === 'click' ? <MousePointerClick size={13} /> : <MailOpen size={13} />}</span>
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-white">{event.recipient_name || event.recipient_email || 'Recipient name unavailable'}</p>
-                      <p className="mt-0.5 truncate text-[9px] text-zinc-500">{formatStatus(event.event_type)} · {decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</p>
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{event.recipient_name || event.recipient_email || 'Recipient name unavailable'}</p>
+                      <p className="mt-0.5 truncate text-[9px] text-[color:var(--portal-muted)]">{formatStatus(event.event_type)} · {decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</p>
                     </div>
                   </div>
-                  <span className="shrink-0 font-mono text-[9px] text-zinc-600">{formatDate(event.created_at)}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatDate(event.created_at)}</span>
                 </div>
               ))}
             </div>
@@ -259,25 +259,25 @@ export function MarketingOverviewTab({
         </section>
       </div>
 
-      <section className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+      <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Scheduled Sends</h3>
-            <p className="mt-1 text-[9px] text-zinc-500">Campaigns with queued recipients or a scheduled or sending status.</p>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Scheduled Sends</h3>
+            <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Campaigns with queued recipients or a scheduled or sending status.</p>
           </div>
           <button type="button" onClick={() => onTabChange('calendar')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open calendar</button>
         </div>
         {scheduledCampaigns.length ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {scheduledCampaigns.slice(0, 4).map((campaign) => (
-              <div key={campaign.id} className="rounded-xl border border-zinc-900 bg-zinc-950/30 p-4">
+              <div key={campaign.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                 <div className="flex items-start justify-between gap-2">
                   <CalendarClock size={15} className="shrink-0 text-[#caa24c]" />
                   <PortalStatusBadge status={campaign.status} />
                 </div>
-                <p className="mt-3 truncate text-xs font-bold text-white">{decodeHtmlEntities(campaign.name)}</p>
-                <p className="mt-1 font-mono text-[9px] text-zinc-500">{campaign.scheduled_for ? formatDateTime(campaign.scheduled_for) : 'Send date not set'}</p>
-                <p className="mt-2 text-[9px] text-zinc-600">{campaign.queued_count.toLocaleString()} queued recipient{campaign.queued_count === 1 ? '' : 's'}</p>
+                <p className="mt-3 truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(campaign.name)}</p>
+                <p className="mt-1 font-mono text-[9px] text-[color:var(--portal-muted)]">{campaign.scheduled_for ? formatDateTime(campaign.scheduled_for) : 'Send date not set'}</p>
+                <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">{campaign.queued_count.toLocaleString()} queued recipient{campaign.queued_count === 1 ? '' : 's'}</p>
               </div>
             ))}
           </div>
@@ -286,8 +286,8 @@ export function MarketingOverviewTab({
         )}
       </section>
 
-      <div className="rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
-        <h4 className="mb-3.5 px-1 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-650">Quick Actions</h4>
+      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+        <h4 className="mb-3.5 px-1 text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Quick Actions</h4>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <ActionButton onClick={onAddContactClick} icon={<Plus size={14} className="text-[#caa24c]" />} label="Add Contact" />
           <ActionButton onClick={() => onTabChange('builder-automation')} icon={<Mail size={14} className="text-[#caa24c]" />} label="Build Email" />
@@ -320,9 +320,9 @@ function StatsCard({ label, value, icon, detail }: { label: string; value: strin
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-r border-zinc-900 last:border-r-0">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-550">{label}</p>
-      <p className="mt-1.5 text-xs font-bold text-white">{value}</p>
+    <div className="border-r border-[color:var(--portal-border)] last:border-r-0">
+      <p className="text-[8px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-1.5 text-xs font-bold text-[color:var(--portal-text)]">{value}</p>
     </div>
   )
 }
@@ -342,7 +342,7 @@ function DataEmptyState({ loading, message }: { loading: boolean; message: strin
 
 function ActionButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-900 bg-zinc-900/40 px-3 py-2.5 text-center text-xs font-bold text-zinc-350 transition-all hover:border-zinc-800 hover:bg-zinc-900/80 hover:text-white active:scale-95">
+    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-center text-xs font-bold text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:bg-[#caa24c]/8 hover:text-[#a8792f] active:scale-95">
       {icon}
       <span>{label}</span>
     </button>
