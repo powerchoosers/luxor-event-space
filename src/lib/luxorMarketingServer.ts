@@ -33,6 +33,125 @@ const INTERNAL_EMAIL_ADDRESSES = [
 export type MarketingRecipientInput = {
   email: string
   name?: string | null
+  eventType?: string | null
+}
+
+type MarketingMergeContext = {
+  clientName: string
+  eventType: string
+}
+
+type MarketingInquiryContext = {
+  email: string | null
+  full_name: string | null
+  event_type: string | null
+}
+
+const MERGE_TAG_RE = /\{\{\s*([a-z][a-z0-9_.-]*)\s*\}\}|\[\[\s*([a-z][a-z0-9_.-]*)\s*\]\]|%%\s*([a-z][a-z0-9_.-]*)\s*%%/gi
+const BARE_MERGE_TAG_RE = /\b(client_name|clientName|first_name|firstName|recipient_name|recipientName|event_type|eventType)\b/g
+const UNRESOLVED_MERGE_TAG_RE = /\{\{\s*[a-z][a-z0-9_.-]*\s*\}\}|\[\[\s*[a-z][a-z0-9_.-]*\s*\]\]|%%\s*[a-z][a-z0-9_.-]*\s*%%|\b(?:client_name|event_type|first_name|recipient_name)\b/i
+
+function escapeMarketingMergeValue(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeMergeKey(value: string) {
+  return value.replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[.-]/g, '_').toLowerCase()
+}
+
+function mergeValue(key: string, context: MarketingMergeContext) {
+  switch (normalizeMergeKey(key)) {
+    case 'client_name':
+    case 'first_name':
+    case 'recipient_name':
+      return context.clientName
+    case 'event_type':
+      return context.eventType
+    default:
+      return null
+  }
+}
+
+export function renderMarketingMergeFields(
+  value: string,
+  recipient: Pick<MarketingRecipientInput, 'name' | 'eventType'>,
+  options: { html?: boolean } = {},
+) {
+  const context: MarketingMergeContext = {
+    clientName: recipient.name?.trim() || 'there',
+    eventType: recipient.eventType?.trim() || 'celebration',
+  }
+  const encode = options.html ? escapeMarketingMergeValue : (replacement: string) => replacement
+
+  return value
+    .replace(MERGE_TAG_RE, (match, curlyKey: string | undefined, bracketKey: string | undefined, percentKey: string | undefined) => {
+      const replacement = mergeValue(curlyKey || bracketKey || percentKey || '', context)
+      return replacement === null ? match : encode(replacement)
+    })
+    .replace(BARE_MERGE_TAG_RE, (key) => encode(mergeValue(key, context) || key))
+}
+
+function assertNoUnresolvedMarketingMergeFields(subject: string, htmlBody: string) {
+  if (!UNRESOLVED_MERGE_TAG_RE.test(`${subject}\n${htmlBody}`)) return
+  throw new Error('This campaign contains an unsupported personalization field. Replace it or use client_name and event_type before sending.')
+}
+
+function chunks<T>(values: T[], size: number) {
+  const result: T[][] = []
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size))
+  return result
+}
+
+async function enrichMarketingRecipients(recipients: MarketingRecipientInput[]) {
+  const unique = Array.from(new Map(
+    recipients.map((recipient) => [recipient.email.trim().toLowerCase(), {
+      email: recipient.email.trim().toLowerCase(),
+      name: recipient.name?.trim() || null,
+      eventType: recipient.eventType?.trim() || null,
+    }]),
+  ).values()).filter((recipient) => EMAIL_RE.test(recipient.email))
+  const listContext = new Map<string, { name: string | null; eventType: string | null }>()
+  const inquiryContext = new Map<string, { name: string | null; eventType: string | null }>()
+
+  for (const batch of chunks(unique.map((recipient) => recipient.email), 100)) {
+    const emailFilter = batch.map((email) => encodeURIComponent(email)).join(',')
+    const [members, inquiries] = await Promise.all([
+      supabaseRest<MarketingListMember[]>(
+        `luxor_marketing_list?select=email,full_name,metadata,created_at&id=not.is.null&email=in.(${emailFilter})&order=created_at.desc`,
+      ),
+      supabaseRest<MarketingInquiryContext[]>(
+        `luxor_inquiries?select=email,full_name,event_type&email=in.(${emailFilter})&order=created_at.desc`,
+      ),
+    ])
+
+    members.forEach((member) => {
+      const email = member.email.trim().toLowerCase()
+      if (listContext.has(email)) return
+      listContext.set(email, {
+        name: member.full_name?.trim() || null,
+        eventType: typeof member.metadata?.event_type === 'string' ? member.metadata.event_type.trim() || null : null,
+      })
+    })
+    inquiries.forEach((inquiry) => {
+      const email = inquiry.email?.trim().toLowerCase()
+      if (!email || inquiryContext.has(email)) return
+      inquiryContext.set(email, {
+        name: inquiry.full_name?.trim() || null,
+        eventType: inquiry.event_type?.trim() || null,
+      })
+    })
+  }
+
+  return unique.map((recipient) => ({
+    ...recipient,
+    name: recipient.name || listContext.get(recipient.email)?.name || inquiryContext.get(recipient.email)?.name || null,
+    eventType: recipient.eventType || listContext.get(recipient.email)?.eventType || inquiryContext.get(recipient.email)?.eventType || null,
+  }))
 }
 
 export type MarketingCampaignSummary = LuxorMarketingCampaign & {
@@ -450,8 +569,9 @@ export async function createMarketingCampaign(data: {
   if (!data.htmlBody.trim()) throw new Error('Please add email content.')
   if (!data.recipients.length) throw new Error('Please add at least one valid recipient.')
 
+  const enrichedRecipients = await enrichMarketingRecipients(data.recipients)
   const sendableRecipients: MarketingRecipientInput[] = []
-  for (const recipient of data.recipients) {
+  for (const recipient of enrichedRecipients) {
     if (data.ignoreSuppressions || !await isMarketingSuppressed(recipient.email)) {
       sendableRecipients.push(recipient)
     }
@@ -465,13 +585,22 @@ export async function createMarketingCampaign(data: {
   const sendTime = new Date(scheduledFor)
   if (Number.isNaN(sendTime.getTime())) throw new Error('Please choose a valid send time.')
 
+  const preparedRecipients = sendableRecipients.map((recipient) => {
+    const subject = renderMarketingMergeFields(data.subject.trim(), recipient)
+    const htmlBody = renderMarketingMergeFields(data.htmlBody, recipient, { html: true })
+    assertNoUnresolvedMarketingMergeFields(subject, htmlBody)
+    return { recipient, subject, htmlBody }
+  })
+  const campaignSubject = renderMarketingMergeFields(data.subject.trim(), {})
+  const campaignHtmlBody = renderMarketingMergeFields(data.htmlBody, {}, { html: true })
+
   const [campaign] = await supabaseRest<LuxorMarketingCampaign[]>('luxor_marketing_campaigns?select=*', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       name: data.name.trim(),
-      subject: data.subject.trim(),
-      html_body: data.htmlBody,
+      subject: campaignSubject,
+      html_body: campaignHtmlBody,
       status: sendTime.getTime() > Date.now() ? 'scheduled' : 'scheduled',
       audience_label: data.audienceLabel || 'Manual list',
       scheduled_for: sendTime.toISOString(),
@@ -489,7 +618,8 @@ export async function createMarketingCampaign(data: {
 
   if (!campaign) throw new Error('Campaign could not be created.')
 
-  for (const recipient of sendableRecipients) {
+  for (const prepared of preparedRecipients) {
+    const { recipient } = prepared
     const trackingToken = createTrackingToken()
     const [createdRecipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
       method: 'POST',
@@ -509,8 +639,8 @@ export async function createMarketingCampaign(data: {
     const job = await createLuxorEmailJob({
       jobType: 'marketing_campaign',
       recipientEmail: recipient.email,
-      subject: campaign.subject,
-      body: instrumentMarketingHtml(data.htmlBody, trackingToken),
+      subject: prepared.subject,
+      body: instrumentMarketingHtml(prepared.htmlBody, trackingToken),
       scheduledFor: sendTime.toISOString(),
       metadata: {
         campaign_id: campaign.id,
@@ -518,6 +648,10 @@ export async function createMarketingCampaign(data: {
         tracking_token: trackingToken,
         sender_from: data.senderFrom || null,
         sender_name: data.senderName || null,
+        personalization: {
+          client_name: recipient.name || 'there',
+          event_type: recipient.eventType || 'celebration',
+        },
       },
     })
 

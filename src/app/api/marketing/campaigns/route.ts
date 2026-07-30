@@ -33,9 +33,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     let recipients = Array.isArray(body.recipients)
       ? body.recipients
-          .map((recipient: { email?: unknown; name?: unknown }) => ({
+          .map((recipient: { email?: unknown; name?: unknown; eventType?: unknown }) => ({
             email: String(recipient.email || '').trim().toLowerCase(),
             name: typeof recipient.name === 'string' ? recipient.name.trim() : null,
+            eventType: typeof recipient.eventType === 'string' ? recipient.eventType.trim() : null,
           }))
           .filter((recipient: { email: string }) => recipient.email)
       : parseMarketingRecipients(String(body.recipientsText || ''))
@@ -46,7 +47,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'The selected marketing list no longer exists.' }, { status: 400 })
     }
     if (selectedList) {
-      recipients = selectedList.members.map((member) => ({ email: member.email, name: member.full_name }))
+      recipients = selectedList.members.map((member) => ({
+        email: member.email,
+        name: member.full_name,
+        eventType: typeof member.metadata?.event_type === 'string' ? member.metadata.event_type : null,
+      }))
     }
 
     let detail = await createMarketingCampaign({

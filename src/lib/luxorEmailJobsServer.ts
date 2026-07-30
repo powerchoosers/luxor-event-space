@@ -492,6 +492,7 @@ export async function processLuxorEmailJobs(
       if (markSending) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
+      assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
       await sendLuxorZohoEmail({
         to: job.recipient_email,
         subject: job.subject,
@@ -612,4 +613,10 @@ export async function getLuxorEmailCampaignReport(campaignId: string) {
     console.error('Failed to get email campaign report:', err)
     return null
   }
+}
+const UNRESOLVED_EMAIL_PLACEHOLDER_RE = /\{\{\s*[a-z][a-z0-9_.-]*\s*\}\}|\[\[\s*[a-z][a-z0-9_.-]*\s*\]\]|%%\s*[a-z][a-z0-9_.-]*\s*%%|\b(?:client_name|event_type|first_name|recipient_name)\b/i
+
+function assertEmailHasNoUnresolvedPlaceholders(subject: string, body: string) {
+  if (!UNRESOLVED_EMAIL_PLACEHOLDER_RE.test(`${subject}\n${body}`)) return
+  throw new Error('Email blocked before delivery because unresolved personalization fields remain.')
 }

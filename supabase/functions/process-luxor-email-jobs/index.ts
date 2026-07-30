@@ -55,6 +55,13 @@ Deno.serve(async (request) => {
 
     for (const job of jobs || []) {
       try {
+        if (hasUnresolvedPlaceholders(job.subject, job.body)) {
+          const message = "Email blocked before delivery because unresolved personalization fields remain."
+          await updateJob(job.id, { status: "failed", last_error: message })
+          if (job.job_type === "marketing_campaign") await updateMarketingResult(job, "failed", message)
+          results.push({ id: job.id, status: "failed" })
+          continue
+        }
         await sendZohoEmail(job)
         const sentAt = new Date().toISOString()
         await updateJob(job.id, { status: "sent", sent_at: sentAt, last_error: null })
@@ -86,6 +93,10 @@ function isAuthorizedCronRequest(request: Request) {
   const suppliedSecret = request.headers.get("x-cron-secret") || ""
   const expectedSecret = Deno.env.get("LUXOR_EMAIL_CRON_SECRET") || ""
   return Boolean(expectedSecret) && suppliedSecret === expectedSecret
+}
+
+function hasUnresolvedPlaceholders(subject: string, body: string) {
+  return /\{\{\s*[a-z][a-z0-9_.-]*\s*\}\}|\[\[\s*[a-z][a-z0-9_.-]*\s*\]\]|%%\s*[a-z][a-z0-9_.-]*\s*%%|\b(?:client_name|event_type|first_name|recipient_name)\b/i.test(`${subject}\n${body}`)
 }
 
 async function sendZohoEmail(job: EmailJob) {
