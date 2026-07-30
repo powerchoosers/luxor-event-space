@@ -150,8 +150,6 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             mode: 'payment',
-            paymentAmount: invoice.total,
-            paymentLabel: 'Invoice Payment',
           }),
         })
 

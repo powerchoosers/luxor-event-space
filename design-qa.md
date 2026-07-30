@@ -1,53 +1,42 @@
-# Proposal Builder Design QA
+**Source visual truth**
 
-- Source visual truth: `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-fe31aa54-6568-468b-80ef-9172a19a7c3d.png`
-- Supporting pricing source: `C:/Users/Lap3p/Downloads/Packages.xlsx`
-- Intended implementation route: `/portal/leads/[id]`, Tour stage, Proposal Builder modal
-- Intended viewport: 1024 × 768 (iPad landscape), with portrait and desktop responsive checks planned
-- Intended state: Mid package selected, editable internal pricing visible, client-safe preview visible
-- Themes: light and dark
-- Implementation screenshot: unavailable
+- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-e2c9780a-c85b-4e02-9c46-489b09477cb0.png` (1536 × 1024)
+- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-c320af96-76c5-4d10-ba88-5cba70979c2e.png` (1200 × 800)
+- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-a8b98167-e092-4765-b8d2-2bfcc8614adb.png` (1200 × 800)
 
-## Full-view comparison evidence
+**Implementation target**
 
-Blocked. The in-app browser runtime could not start because its local kernel was interpreted as an ES module by the machine-level `C:/Users/Lap3p/package.json`. The failure occurred before a browser tab could be connected, so a browser-rendered screenshot of the authenticated proposal modal could not be captured.
+- Lead detail Planning stage → Space & Layout → Open layout builder
+- Intended local URL: `http://127.0.0.1:3000/portal/leads/[lead-id]?stage=planning`
+- Intended desktop viewport: 1536 × 1024 at device scale 1
+- Intended states: light theme focus modal, selected table inspector, template-loaded canvas, dark theme, narrow viewport
 
-The generated client PDF was rendered and visually inspected at `C:/Users/Lap3p/.codex/visualizations/2026/07/19/019f7bdf-263c-7711-85c9-398d20c9c92f/proposal-sample.png`. It correctly shows service names and quantities, one final total, the San Antonio venue address, and no per-item prices. This is supporting document evidence, not a substitute for the required browser comparison.
+**Full-view comparison evidence**
 
-## Focused region comparison evidence
+- Blocked. The bundled in-app browser control runtime is not callable in this task session. The repository already has a development server on port 3000, but HTTP availability is not a substitute for a browser-rendered screenshot.
 
-Not available because the browser-rendered implementation screenshot could not be captured. Source-code checks confirm the three intended regions—proposal details, package/service editor, and client preview—but code inspection is not treated as visual evidence.
+**Focused-region comparison evidence**
 
-## Findings
+- Blocked for the same reason. The toolbox, canvas objects, and inspector could not be captured in-browser.
 
-- [P2] Browser-rendered tablet and theme validation is missing.
-  - Location: Proposal Builder modal at `/portal/leads/[id]`.
-  - Evidence: the source reference is available, but no authenticated implementation screenshot could be captured.
-  - Impact: iPad portrait/landscape overflow, modal density, and light/dark contrast cannot receive a final visual sign-off.
-  - Fix: capture the Mid-package state at 1024 × 768 and 768 × 1024 in both themes once the in-app browser runtime is available; compare the source and implementation in one combined review input.
+**Findings**
 
-## Required fidelity surfaces
+- [P1] Browser-rendered visual QA is missing.
+  Location: Event Layout Designer focus modal.
+  Evidence: all three source renderings were opened and inspected, but no implementation screenshot could be captured with the required in-app Browser.
+  Impact: typography, responsive behavior, theme contrast, and exact region proportions have not been visually proven.
+  Fix: with Lewis's approval, use standalone Playwright as the documented fallback, capture matching states, inspect the console, and compare the source and implementation images together.
 
-- Fonts and typography: implemented with the existing portal type system and compact uppercase labels; browser validation blocked.
-- Spacing and layout rhythm: three-column landscape grid and stacked portrait flow implemented; browser validation blocked.
-- Colors and tokens: surfaces, borders, text, and muted text use `--portal-*` theme variables; browser validation blocked.
-- Image quality and asset fidelity: the reference does not require a new image asset; existing Lucide icons are used instead of handcrafted artwork.
-- Copy and content: package names, internal pricing labels, client privacy explanation, and email actions are implemented with real Luxor data.
+**Checks completed**
 
-## Primary interactions checked
+- `npm run typecheck` passed.
+- Targeted ESLint passed for the new designer and lead detail page.
+- The editable layout is saved through the authenticated lead metadata update path.
 
-- Package preset selection and exact workbook totals checked in code.
-- Add/remove service behavior checked in code.
-- Custom line-item creation checked in code.
-- Internal-only price editing and client-safe preview checked in code.
-- Proposal save and continue-to-email handoff checked in code.
-- Signed Stripe webhook endpoint verified locally with a harmless test event.
-- Console errors: not checked because browser startup was blocked.
+**Comparison history**
 
-## Comparison history
+- Initial pass: blocked before an implementation screenshot could be captured; no visual iteration has been claimed.
 
-- Pass 1: blocked before capture. No visual fixes were made from a browser comparison because the implementation view was unavailable.
+**Final result**
 
-## Final result
-
-blocked
+final result: blocked

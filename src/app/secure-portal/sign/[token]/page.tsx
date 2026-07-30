@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  CreditCard,
   FileText,
   LoaderCircle,
   LockKeyhole,
@@ -32,6 +33,9 @@ const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
 type SignatureMode = 'type' | 'draw'
 type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
   signature_placement?: LuxorContractSignaturePlacement
+  payment_url?: string
+  payment_amount?: number
+  payment_label?: string
 }
 
 function createTypedSignature(name: string) {
@@ -364,6 +368,7 @@ export default function SignaturePage() {
                 <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">You’re all set.</h2>
                 <p className="mt-4 text-sm leading-6 text-[#6f665b]">
                   Your signature and Luxor’s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
+                  {signature.payment_url ? ' Your secure payment is ready below.' : ''}
                 </p>
                 <div className="mt-7 rounded-xl border border-[#ded5c8] bg-[#faf7f2] p-4">
                   <div className="flex items-start gap-3">
@@ -376,6 +381,11 @@ export default function SignaturePage() {
                 </div>
               </div>
               <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
+                {signature.payment_url ? (
+                  <a href={signature.payment_url} className="mb-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c89d4b] px-4 text-sm font-semibold text-[#20170d] transition hover:bg-[#d7ae60]">
+                    <CreditCard size={16} /> Pay {signature.payment_label || 'securely'}{Number(signature.payment_amount || 0) > 0 ? ` · $${Number(signature.payment_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
+                  </a>
+                ) : null}
                 <a href={pdfUrl} download className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f]">
                   <Download size={16} /> Download executed agreement
                 </a>

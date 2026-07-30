@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   }
 
   const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-  const booking = bookings.find((item) => item.invoice_id === invoice.id) || bookings[0]
+  const booking = bookings.find((item) => item.invoice_id === invoice.id)
   if (!booking || booking.contract_status !== 'signed') {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
   }

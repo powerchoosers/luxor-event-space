@@ -437,6 +437,30 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     box-shadow: 0 0 0 3px rgba(202, 162, 76, 0.1);
   }
 
+  .layout-action {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-[9px] font-black uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-35;
+    border-color: var(--portal-border);
+    color: var(--portal-muted);
+    background: var(--portal-card);
+  }
+
+  .layout-action:hover:not(:disabled), .layout-icon:hover {
+    border-color: color-mix(in srgb, #caa24c 50%, transparent);
+    color: #b9872f;
+  }
+
+  .layout-icon {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors disabled:opacity-35;
+    border-color: var(--portal-border);
+    color: var(--portal-muted);
+    background: var(--portal-card);
+  }
+
+  .layout-kicker {
+    @apply text-[9px] font-black uppercase tracking-[0.2em];
+    color: var(--portal-muted);
+  }
+
   .layout-builder-preview {
     position: relative;
     display: grid;

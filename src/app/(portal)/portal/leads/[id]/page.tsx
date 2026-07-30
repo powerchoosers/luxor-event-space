@@ -59,6 +59,7 @@ import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
 import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
+import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_PACKAGE_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 
@@ -274,6 +275,7 @@ export default function LeadDetailPage({
   const [savingPlanningSection, setSavingPlanningSection] = useState(false)
   const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
   const [planningColors, setPlanningColors] = useState<string[]>([])
+  const [layoutDesignerOpen, setLayoutDesignerOpen] = useState(false)
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [activitySearch, setActivitySearch] = useState('')
   const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
@@ -3584,7 +3586,10 @@ export default function LeadDetailPage({
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
-                              <button type="button" onClick={() => beginPlanningEdit('layout')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
+                              <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => beginPlanningEdit('layout')} className="text-[10px] font-bold uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Edit details</button>
+                                <button type="button" onClick={() => setLayoutDesignerOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68]">Open layout builder</button>
+                              </div>
                             </div>
                             <div className="grid grid-cols-5 gap-4">
                               <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
@@ -5902,6 +5907,24 @@ export default function LeadDetailPage({
         submitting={submittingInvoice}
         onSubmit={(action) => void handleCreateInvoice(action)}
       />
+
+      {layoutDesignerOpen ? <EventLayoutDesigner
+        open={layoutDesignerOpen}
+        onClose={() => setLayoutDesignerOpen(false)}
+        initialLayout={(lead.metadata?.event_layout as EventLayoutDocument | undefined) || null}
+        leadName={lead.full_name}
+        eventType={lead.event_type}
+        eventDate={latestBooking?.event_date || lead.target_date}
+        guestCount={latestBooking?.guest_count || lead.guest_count}
+        onSave={async (layout) => {
+          const saved = await handleMetadataUpdate({
+            event_layout: layout,
+            floor_plan_layout: layout.name,
+          })
+          if (saved) notify({ title: 'Layout saved', description: 'The editable floor plan is saved with this lead.', variant: 'success' })
+          return saved
+        }}
+      /> : null}
 
       {/* Legacy invoice builder retained as a fallback while the new proposal builder is validated. */}
       <PortalModal isOpen={false} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">

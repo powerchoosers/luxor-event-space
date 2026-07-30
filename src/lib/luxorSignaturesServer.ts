@@ -2,7 +2,7 @@ import 'server-only'
 
 import { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
-import { cancelQueuedLuxorEmailJobs, createPublicToken } from './luxorEmailJobsServer'
+import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createPublicToken, updateLuxorEmailJob } from './luxorEmailJobsServer'
 import { getLuxorBooking, updateLuxorBooking } from './luxorBookingsServer'
 import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuidePdf, parseClientName } from './luxorContractPdfServer'
 import { getLuxorContractSignaturePlacement, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
@@ -12,6 +12,7 @@ import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { getInvoice } from './luxorInvoicesServer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
+import { createNote } from './luxorNotesServer'
 
 const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
 
@@ -40,6 +41,25 @@ function defaultContractBody(booking: LuxorBooking) {
     serviceSummary,
     'By signing, the client confirms the reservation details and agrees to continue with Luxor Event Space booking requirements. Final legal language should be reviewed by the business owner.',
   ].filter(Boolean).join('\n\n')
+}
+
+export function getLuxorBookingContractFingerprint(booking: LuxorBooking) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    clientName: booking.client_name,
+    email: booking.email,
+    eventType: booking.event_type,
+    eventDate: booking.event_date,
+    startTime: booking.start_time,
+    endTime: booking.end_time,
+    guestCount: booking.guest_count,
+    packageName: booking.package_name,
+    contractTotal: Number(booking.contract_total || 0),
+    depositRequired: Number(booking.deposit_required || 0),
+    finalPaymentDueDate: booking.final_payment_due_date,
+    notes: booking.notes,
+    proposalLineItems: booking.metadata?.proposalLineItems || [],
+    proposalTaxRate: booking.metadata?.proposalTaxRate || 0,
+  })).digest('hex')
 }
 
 export async function createLuxorSignatureRequest(booking: LuxorBooking) {
@@ -82,6 +102,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
         eventDate: booking.event_date,
         guestCount: booking.guest_count,
         contractTotal: booking.contract_total,
+        bookingFingerprint: getLuxorBookingContractFingerprint(booking),
       },
     }),
   })
@@ -302,15 +323,38 @@ export async function signLuxorSignatureRequest(input: {
     ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: ${paymentRequest.paymentLabel}</p><p style="margin:0 0 18px;font-family:Georgia,serif;font-size:27px">$${paymentRequest.paymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><a href="${paymentRequest.checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Pay securely with Stripe</a></div>`
     : '<p style="color:#756755">Luxor will follow up separately with the secure payment link.</p>'
   const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
-  await Promise.allSettled([
-    sendLuxorZohoEmail({
+  const clientJob = await createLuxorEmailJob({
+    inquiryId: signature.inquiry_id,
+    bookingId: signature.booking_id,
+    signatureRequestId: signature.id,
+    jobType: 'contract_signature',
+    recipientEmail: signature.client_email,
+    subject: paymentRequest ? 'Agreement complete — secure your Luxor date' : 'Your Luxor Event Space agreement is complete',
+    body: paymentRequest
+      ? `Your agreement is complete. Pay your ${paymentRequest.paymentLabel.toLowerCase()} securely: ${paymentRequest.checkoutUrl}`
+      : 'Your agreement is complete. Your executed copy is attached.',
+    scheduledFor: ownerSignedAt,
+    metadata: { automated: true, flow_stage: 'contract_completed', includes_executed_contract: true, includes_payment_link: Boolean(paymentRequest) },
+  })
+  try {
+    await sendLuxorZohoEmail({
       to: signature.client_email,
       subject: paymentRequest ? 'Agreement complete — secure your Luxor date' : 'Your Luxor Event Space agreement is complete',
       content: completionHtml,
       from: 'booking@luxoratlaspalmas.com',
       fromName: 'Luxor Event Space',
       attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executed.customer.bytes, contentType: 'application/pdf' }],
-    }),
+    })
+    await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
+  } catch (sendError) {
+    const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
+    await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
+    if (signature.inquiry_id) {
+      await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
+    }
+    console.error('Agreement completed, but the client completion and payment email failed:', message)
+  }
+  await Promise.allSettled([
     sendLuxorZohoEmail({
       to: ownerEmail,
       subject: `Executed Luxor agreement - ${input.signedName}`,

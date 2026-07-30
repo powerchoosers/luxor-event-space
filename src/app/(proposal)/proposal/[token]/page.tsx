@@ -25,7 +25,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     listPaidPaymentsByInvoice(invoice.id),
     invoice.inquiry_id ? listLuxorBookingsByInquiry(invoice.inquiry_id) : Promise.resolve([]),
   ])
-  const booking = bookings.find((item) => item.invoice_id === invoice.id) || bookings[0]
+  const booking = bookings.find((item) => item.invoice_id === invoice.id)
   const contractSigned = booking?.contract_status === 'signed'
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
@@ -97,8 +97,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
           <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{invoice.payment_requested_label || 'Payment due now'}</p>
-                <p className="mt-2 font-mono text-3xl font-black text-[#f1d27a]">{money(requestedAmount)}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{contractSigned ? (invoice.payment_requested_label || 'Payment due now') : 'Payment after agreement'}</p>
+                <p className="mt-2 font-mono text-3xl font-black text-[#f1d27a]">{contractSigned ? money(requestedAmount) : 'Not requested'}</p>
                 {paidTotal > 0 ? <p className="mt-2 text-xs text-emerald-300">{money(paidTotal)} already received</p> : null}
               </div>
               {balanceDue <= 0 ? (

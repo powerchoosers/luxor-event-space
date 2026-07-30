@@ -38,6 +38,21 @@ export function buildProposalReminderEmail(input: { inquiry: LuxorInquiry; invoi
   }
 }
 
+export function buildPaymentReminderEmail(input: { inquiry: LuxorInquiry; reviewUrl: string; paymentAmount: number; paymentLabel: string }) {
+  return {
+    subject: `Reminder: your Luxor ${input.paymentLabel.toLowerCase()} is ready`,
+    body: brandedEmail({
+      eyebrow: 'Agreement signed · payment pending',
+      title: 'Your secure payment is ready',
+      greeting: `Hi ${firstName(input.inquiry.full_name)},`,
+      copy: `Your Luxor agreement is complete. The next step is your ${input.paymentLabel.toLowerCase()}, which can be paid securely from your event page.`,
+      detail: `${input.paymentLabel}: ${money(input.paymentAmount)}`,
+      buttonLabel: 'Pay securely with Stripe',
+      buttonUrl: input.reviewUrl,
+    }),
+  }
+}
+
 export function buildContractReminderEmail(input: { signature: LuxorSignatureRequest; kind: 'view' | 'sign' }) {
   const viewReminder = input.kind === 'view'
   return {
