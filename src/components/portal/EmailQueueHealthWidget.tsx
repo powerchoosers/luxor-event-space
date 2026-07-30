@@ -9,10 +9,18 @@ type QueueStatusData = {
   sending: number
   sent: number
   failed: number
+  dueQueued: number
   total: number
   failureWindowHours: number
   lastActivityAt: string | null
   provider: string
+  worker: {
+    lastAuthorizedAt: string | null
+    lastProcessedAt: string | null
+    status: 'healthy' | 'idle' | 'error' | 'unknown'
+    stalled: boolean
+    error: string | null
+  }
 }
 
 export function EmailQueueHealthWidget() {
@@ -54,6 +62,13 @@ export function EmailQueueHealthWidget() {
   }
 
   const isHealthy = data?.status !== 'warning'
+  const warningMessage = data?.worker.stalled
+    ? `Delivery worker has stopped responding while ${data.dueQueued} due email${data.dueQueued === 1 ? ' is' : 's are'} waiting.`
+    : data?.worker.status === 'error'
+      ? data.worker.error || 'The delivery worker reported an error.'
+      : data?.failed
+        ? `${data.failed} recent email${data.failed === 1 ? ' needs' : 's need'} attention.`
+        : null
 
   return (
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
@@ -69,9 +84,9 @@ export function EmailQueueHealthWidget() {
               <span className="text-[10px] font-normal text-[color:var(--portal-muted)]">({data?.provider || 'Zoho Mail'})</span>
             </h4>
             <p className="text-[10px] text-[color:var(--portal-muted)]">
-              {data?.lastActivityAt
-                ? `Last processed ${new Date(data.lastActivityAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-                : 'Background job dispatch active'}
+              {data?.worker.lastAuthorizedAt
+                ? `Worker checked in ${new Date(data.worker.lastAuthorizedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                : 'Waiting for the first worker check-in'}
             </p>
           </div>
         </div>
@@ -109,6 +124,12 @@ export function EmailQueueHealthWidget() {
           </button>
         </div>
       </div>
+      {warningMessage && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[11px] leading-5 text-red-600 dark:text-red-400" role="alert">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span><strong>Delivery needs attention.</strong> {warningMessage}</span>
+        </div>
+      )}
     </div>
   )
 }

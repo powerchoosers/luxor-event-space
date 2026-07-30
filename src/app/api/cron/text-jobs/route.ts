@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isWithinSmsSendWindow, processDueTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -13,7 +14,18 @@ export async function POST(request: NextRequest) {
   if (!suppliedSecret || !acceptedSecrets.includes(suppliedSecret)) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
+  if (request.nextUrl.searchParams.get('health') === '1') {
+    await safelyRecordLuxorWorkerHealth('text_jobs', {
+      status: 'healthy',
+      metadata: { check: 'authentication' },
+    })
+    return NextResponse.json({ success: true, authenticated: true, processed: 0 })
+  }
   if (!isWithinSmsSendWindow()) {
+    await safelyRecordLuxorWorkerHealth('text_jobs', {
+      status: 'idle',
+      metadata: { reason: 'outside_send_window' },
+    })
     return NextResponse.json({
       success: true,
       processed: 0,
@@ -24,6 +36,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await processDueTextJobs()
+    await safelyRecordLuxorWorkerHealth('text_jobs', {
+      status: 'healthy',
+      processed: result.results.length,
+    })
     return NextResponse.json({
       success: true,
       processed: result.results.length,
@@ -32,6 +48,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Text processing failed.'
     console.error('Luxor scheduled text worker failed:', message)
+    await safelyRecordLuxorWorkerHealth('text_jobs', { status: 'error', error: message })
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
