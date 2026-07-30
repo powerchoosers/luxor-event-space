@@ -6,6 +6,7 @@ import {
   PanelTop, Plus, RectangleHorizontal, Redo2, RotateCcw, Save, Sofa, Trash2,
   Undo2, Users, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
+import { EventLayout3D } from './EventLayout3D'
 
 export type LayoutItemKind = 'round-table' | 'rectangle-table' | 'cocktail-table' | 'chair' | 'sofa' | 'stage' | 'dj-booth' | 'dance-floor' | 'bar' | 'backdrop' | 'vip-area' | 'florals'
 
@@ -95,6 +96,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const [history, setHistory] = useState<LayoutItem[][]>([])
   const [future, setFuture] = useState<LayoutItem[][]>([])
   const [zoom, setZoom] = useState(100)
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(initialLayout?.updatedAt || null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -219,10 +221,10 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
 
         <main className="flex min-h-0 flex-col overflow-hidden bg-[color:var(--portal-soft)]">
           <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-2">
-            <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1"><span className="rounded-md bg-[#b9872f] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white">2D layout</span><span className="px-4 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-faint)]" title="A realistic 3D renderer is a later phase">3D preview</span></div>
-            <div className="flex items-center gap-1"><button type="button" onClick={() => setZoom((value) => Math.max(70, value - 10))} className="layout-icon" aria-label="Zoom out"><ZoomOut size={15}/></button><span className="w-12 text-center text-[10px] font-bold">{zoom}%</span><button type="button" onClick={() => setZoom((value) => Math.min(130, value + 10))} className="layout-icon" aria-label="Zoom in"><ZoomIn size={15}/></button></div>
+            <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1"><button type="button" onClick={() => setViewMode('2d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '2d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>2D layout</button><button type="button" onClick={() => setViewMode('3d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '3d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>3D preview</button></div>
+            {viewMode === '2d' ? <div className="flex items-center gap-1"><button type="button" onClick={() => setZoom((value) => Math.max(70, value - 10))} className="layout-icon" aria-label="Zoom out"><ZoomOut size={15}/></button><span className="w-12 text-center text-[10px] font-bold">{zoom}%</span><button type="button" onClick={() => setZoom((value) => Math.min(130, value + 10))} className="layout-icon" aria-label="Zoom in"><ZoomIn size={15}/></button></div> : <p className="hidden text-[9px] font-bold text-[color:var(--portal-muted)] sm:block">Interactive room preview</p>}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+          {viewMode === '3d' ? <div className="min-h-0 flex-1"><EventLayout3D items={items} selectedId={selectedId} onSelect={setSelectedId}/></div> : <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
             <div className="mx-auto flex min-h-full max-w-[900px] items-center justify-center">
               <div className="relative aspect-[4/3] w-full origin-center border-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)] shadow-xl transition-transform" style={{ transform: `scale(${zoom / 100})`, backgroundImage: 'linear-gradient(var(--portal-border) 1px, transparent 1px), linear-gradient(90deg, var(--portal-border) 1px, transparent 1px)', backgroundSize: '24px 24px' }} ref={canvasRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null) }}>
                 <div className="pointer-events-none absolute inset-x-[36%] top-[-2px] h-3 border-x-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)]"/><div className="pointer-events-none absolute inset-x-[41%] bottom-[-2px] h-3 border-x-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)]"/>
@@ -230,7 +232,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
                 {!items.length && <div className="absolute inset-0 flex flex-col items-center justify-center text-center"><Ban size={28} className="text-[color:var(--portal-faint)]"/><p className="mt-3 text-sm font-bold">The floor plan is empty</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Add items from the toolbox or choose a quick template.</p></div>}
               </div>
             </div>
-          </div>
+          </div>}
           <div className="flex gap-2 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 lg:hidden">{CATALOG.map((item) => { const Icon = item.icon; return <button key={item.kind} type="button" onClick={() => addItem(item.kind)} className="flex shrink-0 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[9px] font-bold"><Icon size={14}/>{item.label}</button> })}</div>
         </main>
 

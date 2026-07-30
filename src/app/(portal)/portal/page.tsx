@@ -644,7 +644,7 @@ export default async function PortalOverview() {
             {recentActivities.length > 0 ? (
               <div className="space-y-1">
                 {recentActivities.map((act, idx) => {
-                  const IconComp = act.icon;
+                  const IconComp = act.icon as React.ComponentType<{ size?: number; strokeWidth?: number }>;
                   const isLast = idx === recentActivities.length - 1;
                   return (
                     <Link
