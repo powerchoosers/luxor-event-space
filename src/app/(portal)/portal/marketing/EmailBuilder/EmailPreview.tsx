@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check } from 'lucide-react'
+import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check, Link2 } from 'lucide-react'
 import type { EmailBlock } from '../emailTemplates'
 import { renderEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
@@ -28,10 +28,12 @@ interface EmailPreviewProps {
   initialSelectedEmails?: string[]
   onAudienceLabelChange?: (value: string) => void
   onSelectedEmailsChange?: (emails: string[]) => void
+  onBlocksChange?: (blocks: EmailBlock[]) => void
   onClose: () => void
 }
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
+type EditableEmailLink = { blockId: string; field: 'ctaUrl' | 'url'; label: string; url: string }
 
 type MarketingList = {
   id: string
@@ -42,7 +44,7 @@ type MarketingList = {
   members: { email: string; full_name: string | null }[]
 }
 
-export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onClose }: EmailPreviewProps) {
+export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onBlocksChange, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [selectedEmails, setSelectedEmails] = useState<string[]>(initialSelectedEmails)
   const [typedInput, setTypedInput] = useState('')
@@ -65,6 +67,16 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const html = stripTrackingPixels(renderEmailToHtml(subject, blocks))
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
   const isScheduled = Boolean(scheduledFor)
+  const editableLinks = blocks.reduce<EditableEmailLink[]>((links, block) => {
+    if (block.type === 'hero' && block.ctaVisible) links.push({ blockId: block.id, field: 'ctaUrl', label: block.ctaLabel || 'Hero button', url: block.ctaUrl })
+    if (block.type === 'image_text') links.push({ blockId: block.id, field: 'ctaUrl', label: block.ctaLabel || 'Section button', url: block.ctaUrl })
+    if (block.type === 'button') links.push({ blockId: block.id, field: 'url', label: block.label || 'Button', url: block.url })
+    return links
+  }, [])
+
+  const updateLink = (blockId: string, field: 'ctaUrl' | 'url', value: string) => {
+    onBlocksChange?.(blocks.map((block) => block.id === blockId ? { ...block, [field]: value } as EmailBlock : block))
+  }
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const wasOpenRef = useRef(false)
@@ -478,6 +490,30 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                 </div>
 
                 <div className="space-y-4">
+                  <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <Link2 size={16} className="mt-0.5 shrink-0 text-[#caa24c]" />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-[color:var(--portal-text)]">Check button destinations</h4>
+                        <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">These are the pages people will open. Review every link before sending.</p>
+                        <div className="mt-4 space-y-3">
+                          {editableLinks.length ? editableLinks.map((link) => (
+                            <label key={`${link.blockId}-${link.field}`} className="block space-y-1.5">
+                              <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{link.label}</span>
+                              <input
+                                type="url"
+                                value={link.url}
+                                onChange={(event) => updateLink(link.blockId, link.field, event.target.value)}
+                                className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/60"
+                                placeholder="https://luxoratlaspalmas.com/tour"
+                              />
+                            </label>
+                          )) : <p className="text-xs text-[color:var(--portal-muted)]">This email has no buttons.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
                     <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Campaign Name</label>
                     <input

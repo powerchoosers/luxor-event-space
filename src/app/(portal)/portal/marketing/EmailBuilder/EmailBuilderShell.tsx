@@ -634,6 +634,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         initialSelectedEmails={recipientEmails}
         onAudienceLabelChange={setAudienceLabel}
         onSelectedEmailsChange={setRecipientEmails}
+        onBlocksChange={setBlocks}
         onClose={() => setShowPreview(false)}
       />
       <AnimatePresence>

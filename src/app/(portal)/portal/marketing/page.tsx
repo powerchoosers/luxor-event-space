@@ -87,6 +87,7 @@ export type Campaign = {
   unsubscribe_count: number
   open_rate: number
   click_rate: number
+  html_body?: string
 }
 
 type CampaignRecipient = {
@@ -715,6 +716,7 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
 
   const { campaign, recipients, events } = detail
   const engaged = recipients.filter((recipient) => recipient.open_count > 0 || recipient.click_count > 0).length
+  const campaignLinks = extractAnchorLinks(campaign.html_body || '')
 
   return (
     <PortalModal isOpen={!!detail} onClose={onClose} maxWidth="max-w-5xl font-sans">
@@ -735,6 +737,29 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
           <ReportMetric label="Unsubscribes" value={campaign.unsubscribe_count.toLocaleString()} />
           <ReportMetric label="Open Rate" value={`${campaign.open_rate}%`} />
           <ReportMetric label="Click Rate" value={`${campaign.click_rate}%`} />
+        </div>
+
+        <div className="mb-6 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Links in this email</h4>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                {campaign.queued_count > 0
+                  ? 'This campaign still has queued recipients. Cancel it before changing and rescheduling the email.'
+                  : 'Delivered emails cannot be rewritten, but these destinations remain visible for review.'}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {campaignLinks.length ? campaignLinks.map((link, index) => (
+              <div key={`${link.url}-${index}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5">
+                <p className="text-xs font-semibold text-[color:var(--portal-text)]">{link.label || `Link ${index + 1}`}</p>
+                <a href={link.url} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-[10px] text-[#b8924a] underline underline-offset-2">
+                  {link.url}
+                </a>
+              </div>
+            )) : <p className="text-xs text-[color:var(--portal-muted)]">No clickable links were found.</p>}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -827,4 +852,18 @@ function shortenUrl(url: string) {
   } catch {
     return url.length > 42 ? `${url.slice(0, 39)}...` : url
   }
+}
+
+function extractAnchorLinks(html: string) {
+  const links: { label: string; url: string }[] = []
+  const seen = new Set<string>()
+  const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  for (const match of html.matchAll(anchorPattern)) {
+    const url = decodeHtmlEntities(match[1] || '').trim()
+    if (!url || url.startsWith('#') || url.startsWith('mailto:') || url.startsWith('tel:') || seen.has(url)) continue
+    seen.add(url)
+    const label = decodeHtmlEntities((match[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+    links.push({ label, url })
+  }
+  return links
 }
