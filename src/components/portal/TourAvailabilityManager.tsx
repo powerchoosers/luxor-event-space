@@ -24,7 +24,7 @@ type TourAvailabilityManagerProps = {
 
 export function TourAvailabilityManager({
   title = 'Tour booking days',
-  description = 'Select several Tuesdays or Wednesdays, then open or close them together. Each open day publishes eleven 30-minute times; every time accepts one client and closes 24 hours before it starts.',
+  description = 'Select several weekdays, then open or close them together. Each open day publishes eleven 30-minute times; every time accepts one client and closes 24 hours before it starts.',
   publishLabel = 'Open selected days',
   onUpdated,
 }: TourAvailabilityManagerProps = {}) {
@@ -125,7 +125,7 @@ export function TourAvailabilityManager({
         </div>
         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-right">
           <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-faint)]">Weekly hours</p>
-          <p className="mt-1 text-xs font-semibold text-[color:var(--portal-text)]">Tue & Wed · 11 AM–2 PM / 5–7:30 PM</p>
+          <p className="mt-1 text-xs font-semibold text-[color:var(--portal-text)]">Mon–Fri · 11 AM–2 PM / 5–7:30 PM</p>
         </div>
       </div>
 
@@ -162,7 +162,7 @@ export function TourAvailabilityManager({
             })}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
-            <PortalButton type="button" size="sm" onClick={selectMonth}>Select all Tue/Wed</PortalButton>
+            <PortalButton type="button" size="sm" onClick={selectMonth}>Select all weekdays</PortalButton>
             <button type="button" onClick={() => setSelectedDates([])} className="text-[10px] font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Clear selection</button>
             <span className="ml-auto text-[10px] text-[color:var(--portal-muted)]"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" /> Open</span>
           </div>

@@ -265,7 +265,7 @@ export function LuxorInquiryForm({
               {showTourFields ? (
                 <div className="mt-5 rounded-lg border border-[#caa24c]/18 bg-white/[0.025] p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">Tour availability</p>
-                  <p className="mt-2 text-xs leading-5 text-[#d7c29a]/68">Tours are 30 minutes on Tuesdays and Wednesdays. One party per time; booking closes 24 hours before the tour.</p>
+                  <p className="mt-2 text-xs leading-5 text-[#d7c29a]/68">Tours are 30 minutes Monday through Friday. One party per time; booking closes 24 hours before the tour.</p>
                   {tourSlotsLoading ? <p className="mt-3 text-sm text-[#d7c29a]/70">Loading current openings…</p> : null}
                   {tourSlotsError ? <p className="mt-3 text-sm text-red-200">{tourSlotsError}</p> : null}
                   {!tourSlotsLoading && tourSlots.length > 0 ? (

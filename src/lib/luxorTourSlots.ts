@@ -42,7 +42,7 @@ export const LUXOR_TOUR_TIMES = [
 export function isLuxorTourDay(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
   const day = new Date(`${date}T12:00:00Z`).getUTCDay()
-  return day === 2 || day === 3
+  return day >= 1 && day <= 5
 }
 
 export function isLuxorTourTime(time: string) {

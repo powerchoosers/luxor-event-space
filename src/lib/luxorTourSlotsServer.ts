@@ -90,7 +90,7 @@ export async function createLuxorTourSlot(input: {
   title?: string | null
   notes?: string | null
 }) {
-  if (!isLuxorTourDay(input.slotDate)) throw new Error('Tours are available on Tuesdays and Wednesdays only.')
+  if (!isLuxorTourDay(input.slotDate)) throw new Error('Tours are available Monday through Friday.')
   if (!isLuxorTourTime(input.startTime)) throw new Error('Choose one of Luxor’s published tour times.')
   const [created] = await supabaseRest<LuxorTourSlot[]>('luxor_tour_slots?select=' + TOUR_SLOT_SELECT, {
     method: 'POST',
@@ -112,7 +112,7 @@ export async function createLuxorTourSlot(input: {
 
 export async function publishLuxorTourDays(dates: string[]) {
   const cleanDates = [...new Set(dates)].filter(isLuxorTourDay).sort()
-  if (cleanDates.length !== dates.length) throw new Error('Choose future Tuesdays or Wednesdays only.')
+  if (cleanDates.length !== dates.length) throw new Error('Choose future weekdays only.')
 
   const rows = cleanDates.flatMap((slotDate) => LUXOR_TOUR_TIMES.map((time) => ({
     slot_date: slotDate,
@@ -146,7 +146,7 @@ export async function publishLuxorTourDays(dates: string[]) {
 
 export async function unpublishLuxorTourDays(dates: string[]) {
   const cleanDates = [...new Set(dates)].filter(isLuxorTourDay).sort()
-  if (cleanDates.length !== dates.length) throw new Error('Choose Tuesdays or Wednesdays only.')
+  if (cleanDates.length !== dates.length) throw new Error('Choose weekdays only.')
 
   await Promise.all(cleanDates.map((slotDate) => supabaseRest<LuxorTourSlot[]>(
     `luxor_tour_slots?slot_date=eq.${slotDate}&status=eq.available&booked_count=eq.0`,

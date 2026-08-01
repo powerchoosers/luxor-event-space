@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     if (Array.isArray(body.dates)) {
       const dates = body.dates.map(String)
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
-        return NextResponse.json({ error: 'Choose 1–62 Tuesdays or Wednesdays.' }, { status: 400 })
+        return NextResponse.json({ error: 'Choose 1–62 weekdays.' }, { status: 400 })
       }
       if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00'))) {
         return NextResponse.json({ error: 'Published days must be at least 24 hours away.' }, { status: 400 })
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const capacity = Number(body.capacity || 1)
 
     if (!DATE_PATTERN.test(slotDate) || !isLuxorTourDay(slotDate) || !isLuxorTourSlotAtLeast24HoursAway(slotDate, startTime)) {
-      return NextResponse.json({ error: 'Choose a Tuesday or Wednesday at least 24 hours away.' }, { status: 400 })
+      return NextResponse.json({ error: 'Choose a weekday at least 24 hours away.' }, { status: 400 })
     }
     if (!TIME_PATTERN.test(startTime) || (endTime && !TIME_PATTERN.test(endTime))) {
       return NextResponse.json({ error: 'Choose a valid start and end time.' }, { status: 400 })
@@ -90,7 +90,7 @@ export async function PATCH(request: Request) {
     if (Array.isArray(body.dates) && body.action === 'unpublish') {
       const dates = body.dates.map(String)
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
-        return NextResponse.json({ error: 'Choose 1–62 Tuesdays or Wednesdays.' }, { status: 400 })
+        return NextResponse.json({ error: 'Choose 1–62 weekdays.' }, { status: 400 })
       }
       const slots = await unpublishLuxorTourDays(dates)
       return NextResponse.json({ slots, unpublishedDays: dates.length })
