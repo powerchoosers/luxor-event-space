@@ -4,6 +4,8 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
 import { getLuxorUserProfile, LuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway } from '@/lib/luxorTourSlots'
+import { listUpcomingLuxorTourSlots, publishLuxorTourDays, unpublishLuxorTourDays } from '@/lib/luxorTourSlotsServer'
 
 type ToolCall = {
   id: string
@@ -57,6 +59,69 @@ type ChatMessage = {
     meetingType: string
     durationMinutes: number
     clientFacingNotes: string
+  }
+}
+
+type TourDaysAction = 'open' | 'close'
+
+const TOUR_DAYS_CONFIRMATION_PREFIX = 'TOUR_DAYS:'
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+function todayInLuxorTimeZone() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function isValidIsoDate(value: string) {
+  if (!ISO_DATE_PATTERN.test(value)) return false
+  const parsed = new Date(`${value}T12:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+function parseTourDaysConfirmation(query: string) {
+  const payload = JSON.parse(query.slice(TOUR_DAYS_CONFIRMATION_PREFIX.length)) as {
+    action?: unknown
+    dates?: unknown
+  }
+  const action = payload.action === 'open' || payload.action === 'close' ? payload.action : null
+  const dates = Array.isArray(payload.dates)
+    ? [...new Set(payload.dates.map(String))].sort()
+    : []
+
+  if (!action) throw new Error('Choose whether to open or close the tour days.')
+  if (!dates.length || dates.length > 62) throw new Error('Choose 1–62 tour weekdays.')
+  if (dates.some((date) => !isValidIsoDate(date) || !isLuxorTourDay(date))) {
+    throw new Error('Tour booking days must be valid Monday-through-Friday dates.')
+  }
+  if (dates.some((date) => date < todayInLuxorTimeZone())) throw new Error('Tour booking days must be today or later.')
+  if (action === 'open' && dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00'))) {
+    throw new Error('New tour days must be at least 24 hours away.')
+  }
+
+  return { action, dates } satisfies { action: TourDaysAction; dates: string[] }
+}
+
+async function runConfirmedTourDaysAction(query: string) {
+  const { action, dates } = parseTourDaysConfirmation(query)
+  const before = await listUpcomingLuxorTourSlots()
+  const protectedBookings = before.filter((slot) => dates.includes(slot.slot_date) && slot.booked_count > 0).length
+
+  if (action === 'open') await publishLuxorTourDays(dates)
+  else await unpublishLuxorTourDays(dates)
+
+  return {
+    success: true,
+    action,
+    dates,
+    daysChanged: dates.length,
+    tourTimesPerOpenedDay: action === 'open' ? 11 : undefined,
+    protectedBookingsKept: protectedBookings,
   }
 }
 
@@ -246,6 +311,13 @@ Use the live CRM context supplied by the portal when it already contains the exa
     - scheduled_for, sent_at (timestamptz)
     - recipient_count, sent_count, delivered_count, failed_count, reply_count, opt_out_count (integer)
 
+20. public.luxor_tour_slots
+    - id (uuid)
+    - slot_date (date), start_time, end_time (time)
+    - status (text: 'available', 'held', 'booked', 'unavailable')
+    - capacity, booked_count (integer)
+    - title, notes (text)
+
 ### GUIDELINES:
 - Use pre-fetched live CRM context first. Execute a read-only SQL query with the "execute_database_sql" tool when the requested fact is not already present or needs a more detailed breakdown.
 - Grand Opening RSVP data is internal CRM data that you CAN access. Never say you cannot access the Grand Opening guest list.
@@ -268,6 +340,8 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - When the owner asks you to create a task, reminder, or follow-up note, call "prepare_task_card".
 - When the owner asks you to take them to, open, pull up, or show a specific lead or client, first resolve that person exactly. For duplicate first names, never choose one arbitrarily: prefer the active dossier only when the owner says "this lead" or gives matching context; otherwise query Luxor inquiries and use email, event type, target date, phone, or prior conversation context to identify one person. If more than one candidate still fits, ask the owner a short disambiguation question using useful human details such as name, email, event type, or date. Never show, ask for, or explain database IDs to the owner. Once the record is uniquely resolved, call "navigate_to_lead" so the portal opens that dossier and Elena shows a read-only contact card.
 - When the owner asks you to schedule a tour or send a tour invite, first resolve one exact lead. Then call "prepare_tour_invite_card". Include any date, time, meeting type, duration, and client-safe notes that are known from the active dossier, prior conversation, or query results. The card gives the owner the final review and Send Invite button. Never claim an invite was sent until that button succeeds. If the client's email, date, or time is missing, say precisely what is missing; the compact card will make the missing fields visible.
+- When the owner asks to open, add, publish, close, remove, or unpublish tour booking days, resolve every requested day to an exact YYYY-MM-DD date using the supplied current date. Check current tour availability when useful, then call "request_tour_days_confirmation". Never use request_action_confirmation or raw SQL for tour-day changes. Explain that opening a day creates eleven 30-minute times and closing a day preserves existing bookings.
+- When the owner asks for the next tour, upcoming tours, or who is touring next, use the pre-fetched upcoming-tour context first. If more detail is needed, query public.luxor_inquiries using preferred_tour_date and preferred_tour_time, and public.luxor_tour_slots using slot_date, start_time, and booked_count. Do not confuse venue event bookings in public.luxor_bookings with tour appointments.
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
@@ -340,6 +414,33 @@ const TOOLS_DEFINITION = [
           }
         },
         required: ['query', 'summary']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_tour_days_confirmation',
+      description: 'Prepare a Confirm/Cancel action for opening or closing exact Luxor tour-booking weekdays. Existing booked tour times are always preserved when days are closed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['open', 'close'],
+            description: 'Open publishes all eleven standard tour times on each day. Close hides unbooked times and preserves booked times.'
+          },
+          dates: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exact Monday-through-Friday dates in YYYY-MM-DD format.'
+          },
+          summary: {
+            type: 'string',
+            description: 'A concise confirmation summary listing the human-readable dates and what will happen.'
+          }
+        },
+        required: ['action', 'dates', 'summary']
       }
     }
   },
@@ -591,7 +692,10 @@ export async function POST(request: Request) {
     if (confirmQuery && confirmSummary) {
       let queryResult: unknown
       try {
-        if (confirmQuery.startsWith('SEND_TEXT:')) {
+        if (confirmQuery.startsWith(TOUR_DAYS_CONFIRMATION_PREFIX)) {
+          queryResult = await runConfirmedTourDaysAction(confirmQuery)
+          executedQueries.push({ query: 'Update confirmed tour booking days', result: queryResult })
+        } else if (confirmQuery.startsWith('SEND_TEXT:')) {
           const payload = JSON.parse(confirmQuery.slice('SEND_TEXT:'.length)) as {
             inquiryId?: string
             phone?: string
@@ -626,7 +730,7 @@ export async function POST(request: Request) {
         ...messages.slice(-15),
         {
           role: 'system',
-          content: `[CONFIRMATION_RESULT] The user clicked 'Confirm' to execute the action: "${confirmSummary}". The SQL query "${confirmQuery}" has been successfully executed with database response: ${JSON.stringify(queryResult)}. Report this result back to the user in your warm best-friend executive style (mentioning that the action was successfully executed).`
+          content: `[CONFIRMATION_RESULT] The user clicked 'Confirm' for this action: "${confirmSummary}". The server-authorized action completed with this response: ${JSON.stringify(queryResult)}. Report the actual result clearly. Do not describe a dedicated tour-day or text action as a SQL query.`
         }
       ]
 
@@ -688,12 +792,21 @@ export async function POST(request: Request) {
     }
 
 async function buildDeepPageContext(activePath: string): Promise<string> {
-  const contextParts: string[] = [`CURRENT SCREEN ROUTE: "${activePath}"`]
+  const contextParts: string[] = [
+    `CURRENT DATE AT LUXOR (America/Chicago): ${todayInLuxorTimeZone()}`,
+    `CURRENT SCREEN ROUTE: "${activePath}"`,
+  ]
 
   try {
     contextParts.push(await buildGrandOpeningContext())
   } catch (err) {
     console.warn('[Elena Chat] Pre-fetch Grand Opening context error:', err)
+  }
+
+  try {
+    contextParts.push(await buildTourOperationsContext())
+  } catch (err) {
+    console.warn('[Elena Chat] Pre-fetch tour operations context error:', err)
   }
 
   const leadMatch = activePath.match(/\/portal\/leads\/([a-f0-9-]{36})/)
@@ -768,6 +881,43 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
   contextParts.push(`BEHAVIOR RULE: The user is currently on the screen described above. If the user asks about 'this lead', 'them', 'draft an email', 'what is their total?', or actions on this page, answer instantly using the pre-fetched screen context above. If the user asks an unrelated question (e.g. general strategy, venue rules, different topics), answer directly without being restricted by the screen context.`)
 
   return contextParts.join('\n\n')
+}
+
+async function buildTourOperationsContext(): Promise<string> {
+  type UpcomingTourInquiry = {
+    full_name: string
+    event_type: string | null
+    preferred_tour_date: string
+    preferred_tour_time: string | null
+    status: string
+    tour_attendance_status: string | null
+  }
+
+  const today = todayInLuxorTimeZone()
+  const [tourInquiries, slots] = await Promise.all([
+    supabaseRest<UpcomingTourInquiry[]>(
+      `luxor_inquiries?select=full_name,event_type,preferred_tour_date,preferred_tour_time,status,tour_attendance_status&preferred_tour_date=gte.${today}&preferred_tour_date=not.is.null&status=neq.closed_lost&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=12`,
+    ),
+    listUpcomingLuxorTourSlots(),
+  ])
+  const upcomingTours = tourInquiries.filter((tour) => !['cancelled', 'no_show', 'attended'].includes(tour.tour_attendance_status || ''))
+  const publishedDays = new Map<string, { open: number; booked: number }>()
+  slots.forEach((slot) => {
+    const day = publishedDays.get(slot.slot_date) || { open: 0, booked: 0 }
+    if (slot.status === 'available' && slot.booked_count < slot.capacity) day.open += 1
+    if (slot.status === 'booked' || slot.booked_count > 0) day.booked += 1
+    publishedDays.set(slot.slot_date, day)
+  })
+
+  const nextPublishedDays = [...publishedDays.entries()]
+    .filter(([, counts]) => counts.open > 0 || counts.booked > 0)
+    .slice(0, 14)
+    .map(([date, counts]) => `${date}: ${counts.open} open, ${counts.booked} booked`)
+
+  return `TOUR OPERATIONS (PRE-FETCHED LIVE CONTEXT; today is ${today}):
+- Upcoming client tour appointments: ${upcomingTours.length ? upcomingTours.map((tour) => `${tour.preferred_tour_date} ${tour.preferred_tour_time || 'time not recorded'} — ${tour.full_name} (${tour.event_type || 'event type not recorded'}, ${tour.status})`).join('; ') : 'None found.'}
+- Next published tour days: ${nextPublishedDays.join('; ') || 'None currently open.'}
+Interpretation rule: these are tour appointments and tour-booking availability, not venue event bookings.`
 }
 
 async function buildGrandOpeningContext(): Promise<string> {
@@ -952,6 +1102,40 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               confirmationInterrupted = true
             } catch (err) {
               console.error('Failed to parse confirmation args:', err)
+            }
+          }
+          else if (toolCall.function?.name === 'request_tour_days_confirmation') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const query = `${TOUR_DAYS_CONFIRMATION_PREFIX}${JSON.stringify({
+                action: args.action,
+                dates: args.dates,
+              })}`
+              const validated = parseTourDaysConfirmation(query)
+              const dateSummary = validated.dates.map((date) => new Intl.DateTimeFormat('en-US', {
+                timeZone: 'UTC',
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              }).format(new Date(`${date}T12:00:00Z`))).join(', ')
+
+              confirmationPayload = {
+                query,
+                summary: typeof args.summary === 'string' && args.summary.trim()
+                  ? args.summary.trim()
+                  : `${validated.action === 'open' ? 'Open' : 'Close'} tour booking days: ${dateSummary}. ${validated.action === 'open' ? 'Each day creates eleven 30-minute times.' : 'Existing booked tours will remain reserved.'}`,
+              }
+              confirmationInterrupted = true
+            } catch (err) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'request_tour_days_confirmation',
+                content: JSON.stringify({ error: err instanceof Error ? err.message : 'Invalid tour-day request.' }),
+              })
             }
           }
           // B. Normal database query
