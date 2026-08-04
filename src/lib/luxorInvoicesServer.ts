@@ -242,15 +242,20 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   masterInvoice: LuxorInvoice
   bookingId: string
   dueDate: string | null
+  depositPaid?: number
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'final_balance')
-  const { depositAmount, refundableSecurityDeposit, finalBalance } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
-  const remainingEventBalance = Math.max(0, roundMoney(finalBalance - refundableSecurityDeposit))
+  const { depositAmount: defaultDepositAmount, refundableSecurityDeposit } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  // Older proposals may not have the security line yet.  The final invoice is
+  // the safe place to collect it whenever the event was not paid in full.
+  const securityDepositAmount = refundableSecurityDeposit || LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT
+  const eventTotal = Math.max(0, roundMoney(Number(input.masterInvoice.total || 0) - refundableSecurityDeposit))
+  const depositAmount = Math.min(eventTotal, Math.max(0, roundMoney(input.depositPaid ?? defaultDepositAmount)))
+  const remainingEventBalance = Math.max(0, roundMoney(eventTotal - depositAmount))
+  const finalBalance = roundMoney(remainingEventBalance + securityDepositAmount)
   const lineItems: LuxorInvoiceLineItem[] = [
-    { description: 'Remaining Event Balance After 30% Deposit', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance' },
-    ...(refundableSecurityDeposit > 0
-      ? [{ description: 'Refundable Security Deposit', quantity: 1, unitPrice: refundableSecurityDeposit, total: refundableSecurityDeposit, category: 'Security Deposit' }]
-      : []),
+    { description: 'Remaining Event Balance After Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance' },
+    { description: 'Refundable Security Deposit', quantity: 1, unitPrice: securityDepositAmount, total: securityDepositAmount, category: 'Security Deposit' },
   ]
   if (existing) {
     if (existing.status === 'paid') return existing
@@ -260,7 +265,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
       tax_rate: 0,
       total: finalBalance,
       due_date: input.dueDate,
-      notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} non-refundable booking deposit. Due 60 days before the event.`,
+      notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} booking payment. Includes the refundable security deposit and is due 60 days before the event.`,
     }) || existing
   }
   return createInvoice({
@@ -276,7 +281,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
     tax_rate: 0,
     total: finalBalance,
     due_date: input.dueDate,
-    notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} non-refundable booking deposit. Due 60 days before the event.`,
+    notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} booking payment. Includes the refundable security deposit and is due 60 days before the event.`,
   })
 }
 
@@ -306,26 +311,24 @@ export function calculateLuxorDepositAmounts(params: {
     }
   }
 
-  // solidify_date mode: initial security deposit + 50% rental deposit
+  // The 50% option is still a booking payment. The refundable security deposit
+  // stays on the final invoice so it can be refunded cleanly after the event.
   const rentalItemsSubtotal = params.lineItems
     .filter((item) => /venue|hall|rental|space|hire/i.test(item.description) || item.category === 'Hall Hire')
     .reduce((sum, item) => sum + (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0), 0)
   
   const rentalBase = rentalItemsSubtotal > 0 ? rentalItemsSubtotal : subtotal
   const rentalDepositPortion = Math.round(rentalBase * 0.5 * (1 + taxRate) * 100) / 100
-  const securityDepositPortion = Math.round((params.initialSecurityDeposit || 500) * 100) / 100
-
-  const depositAmount = Math.min(total, rentalDepositPortion + securityDepositPortion)
+  const depositAmount = Math.min(total, rentalDepositPortion)
   const remainingBalance = Math.max(0, Math.round((total - depositAmount) * 100) / 100)
 
   return {
     depositType: 'solidify_date' as const,
     depositAmount,
     rentalDepositPortion,
-    securityDepositPortion,
     remainingBalance,
     total,
-    description: 'Initial solidify-the-date deposit (Security Deposit + 50% Rental Deposit)',
+    description: '50% booking deposit (refundable security deposit due with final payment)',
   }
 }
 

@@ -6,6 +6,7 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,9 +26,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
     }
 
-    const refundAmount = body.refundAmount && Number.isFinite(body.refundAmount) && body.refundAmount > 0
-      ? Math.round(body.refundAmount * 100) / 100
-      : 750
+    const finalInvoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
+    const securityDepositLine = finalInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))
+    const refundAmount = Math.round(Number(securityDepositLine?.total || 0) * 100) / 100
+    if (refundAmount <= 0) {
+      return NextResponse.json({ error: 'No refundable security-deposit line item was found on this booking’s final invoice.' }, { status: 409 })
+    }
 
     const secretKey = process.env.STRIPE_SECRET_KEY
     if (!secretKey) {
@@ -38,11 +42,11 @@ export async function POST(request: NextRequest) {
       `luxor_payments?booking_id=eq.${encodeURIComponent(booking.id)}&status=eq.paid&order=created_at.desc`,
     ).catch(() => [])
 
-    const invoicePayments = booking.invoice_id
-      ? await supabaseRest<LuxorPayment[]>(`luxor_payments?invoice_id=eq.${encodeURIComponent(booking.invoice_id)}&status=eq.paid&order=created_at.desc`).catch(() => [])
+    const invoicePayments = finalInvoice
+      ? await supabaseRest<LuxorPayment[]>(`luxor_payments?invoice_id=eq.${encodeURIComponent(finalInvoice.id)}&status=eq.paid&order=created_at.desc`).catch(() => [])
       : []
 
-    const allPayments = [...payments, ...invoicePayments]
+    const allPayments = [...invoicePayments, ...payments]
     const stripePayment = allPayments.find(
       (p) => p.processor === 'stripe' || p.payment_method === 'stripe_checkout' || Boolean(p.processor_reference),
     )
@@ -83,26 +87,7 @@ export async function POST(request: NextRequest) {
         },
       })
     } else {
-      // Fallback: charge refund or customer refund if payment_intent is missing
-      const recentCharges = await stripe.charges.list({ limit: 10 })
-      const matchingCharge = recentCharges.data.find(
-        (c) => c.customer === booking.email || c.billing_details?.email === booking.email,
-      )
-      if (!matchingCharge) {
-        return NextResponse.json(
-          { error: 'No matching Stripe payment found for this booking. Confirm the client paid via Stripe before issuing a refund.' },
-          { status: 404 },
-        )
-      }
-      refund = await stripe.refunds.create({
-        charge: matchingCharge.id,
-        amount: Math.round(refundAmount * 100),
-        reason: 'requested_by_customer',
-        metadata: {
-          booking_id: booking.id,
-          security_deposit_refund: 'true',
-        },
-      })
+      return NextResponse.json({ error: 'The final invoice payment cannot be matched to Stripe, so no refund was issued.' }, { status: 409 })
     }
 
     const now = new Date().toISOString()
@@ -112,7 +97,7 @@ export async function POST(request: NextRequest) {
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
         booking_id: booking.id,
-        invoice_id: booking.invoice_id || null,
+        invoice_id: finalInvoice?.id || null,
         inquiry_id: booking.inquiry_id || null,
         amount: -refundAmount,
         status: 'refunded',
@@ -125,6 +110,7 @@ export async function POST(request: NextRequest) {
           refund_id: refund.id,
           payment_intent: paymentIntentId,
           refunded_by: session.email,
+          payment_kind: 'security_deposit_refund',
         },
       }),
     })

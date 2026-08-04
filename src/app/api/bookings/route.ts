@@ -3,7 +3,7 @@ import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLux
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from '@/lib/luxorInvoicesServer'
+import { ensureRefundableSecurityDepositLineItem, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -51,11 +51,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let contractTotal = Number(body.contract_total || 0)
+    let eventTotalForDeposit = contractTotal
+    if (body.invoice_id) {
+      const proposal = await getInvoice(body.invoice_id)
+      if (proposal && proposal.status !== 'paid') {
+        const lineItems = ensureRefundableSecurityDepositLineItem(proposal.line_items)
+        const subtotal = Math.round(lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0) * 100) / 100
+        const total = Math.round(subtotal * (1 + Math.max(0, Number(proposal.tax_rate || 0)) + 0) * 100) / 100
+        const updatedProposal = await updateInvoice(proposal.id, { line_items: lineItems, subtotal, total })
+        if (updatedProposal) {
+          contractTotal = Number(updatedProposal.total || 0)
+          const securityDeposit = lineItems.find((item) => item.category === 'Security Deposit')
+          eventTotalForDeposit = Math.max(0, contractTotal - Number(securityDeposit?.total || 0))
+        }
+      }
+    }
+
     const normalizedBody = {
       ...body,
+      contract_total: contractTotal,
       final_payment_due_date: body.final_payment_due_date || luxorFinalPaymentDueDate(body.event_date),
-      deposit_required: body.metadata?.deposit_type === 'non_refundable_booking' && Number(body.contract_total || 0) > 0
-        ? Math.round(Number(body.contract_total) * 0.3 * 100) / 100
+      deposit_required: body.metadata?.deposit_type === 'non_refundable_booking' && eventTotalForDeposit > 0
+        ? Math.round(eventTotalForDeposit * 0.3 * 100) / 100
         : body.deposit_required,
     }
     let booking = await createLuxorBooking(normalizedBody)
@@ -67,10 +85,11 @@ export async function POST(request: NextRequest) {
         const fullyPaid = Number(booking.contract_total || 0) > 0 && paidTotal + 0.005 >= Number(booking.contract_total)
         const latestPaidAt = paidPayments.find((payment) => payment.paid_at)?.paid_at || new Date().toISOString()
         booking = await updateLuxorBooking(booking.id, {
-          security_deposit_status: 'collected',
+          security_deposit_status: fullyPaid ? 'collected' : booking.security_deposit_status,
           metadata: {
             ...booking.metadata,
             deposit_paid_before_booking: true,
+            deposit_paid_at: latestPaidAt,
             ...(fullyPaid ? { final_payment_paid_at: latestPaidAt, final_payment_paid_before_booking: true } : {}),
           },
         }) || booking
@@ -171,10 +190,11 @@ export async function PATCH(request: NextRequest) {
 
 function pipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<typeof getLuxorBooking>>>) {
   const metadata = booking.metadata || {}
-  if (metadata.closeout_completed_at || booking.status === 'completed') return 'closing'
+  if (metadata.lead_completed_at || booking.status === 'completed') return 'complete'
+  if (metadata.closeout_completed_at) return 'closing'
   if (metadata.event_completed_at) return 'closing'
   if (booking.contract_status !== 'signed') return 'contract'
-  if (booking.security_deposit_status !== 'collected') return 'deposit'
+  if (!metadata.deposit_paid_at && !metadata.deposit_paid_before_booking && booking.security_deposit_status !== 'collected') return 'deposit'
   if (!metadata.planning_completed_at) return 'planning'
   if (!(metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at)) return 'final_payment'
   return 'event'

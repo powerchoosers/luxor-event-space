@@ -99,6 +99,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             masterInvoice,
             bookingId: booking.id,
             dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
+            depositPaid: Number(booking.deposit_required || 0),
           })
         : null
       const updatedBooking = await updateLuxorBooking(booking.id, {

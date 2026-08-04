@@ -1405,7 +1405,7 @@ export default function LeadDetailPage({
           contract_status: status,
           contract_sent_at: status === 'sent' ? now : booking.contract_sent_at,
           contract_signed_at: status === 'signed' ? now : booking.contract_signed_at,
-          status: status === 'signed' && booking.security_deposit_status === 'collected' ? 'confirmed' : booking.status,
+          status: status === 'signed' && (Boolean(booking.metadata?.deposit_paid_at) || booking.security_deposit_status === 'collected') ? 'confirmed' : booking.status,
           metadata: {
             ...booking.metadata,
             manual_contract_tracking: true,
@@ -1522,14 +1522,14 @@ export default function LeadDetailPage({
       const res = await fetch('/api/payments/refund-security-deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: latestBooking.id, refundAmount: 750 }),
+        body: JSON.stringify({ bookingId: latestBooking.id, refundAmount: refundableSecurityDepositAmount }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to refund security deposit via Stripe.')
       setConfirmRefundModalOpen(false)
       notify({
         title: 'Security Deposit Refunded',
-        description: `$750.00 security deposit refunded to ${lead?.full_name} via Stripe.`,
+        description: `${formatMoney(refundableSecurityDepositAmount)} security deposit refunded to ${lead?.full_name} via Stripe.`,
         variant: 'success',
       })
       await fetchAllData(false)
@@ -1765,9 +1765,10 @@ export default function LeadDetailPage({
           body: JSON.stringify({
             id: booking.id,
             status: paymentKind === 'deposit' ? 'tentative' : booking.status,
-            security_deposit_status: paymentKind === 'deposit' ? 'collected' : booking.security_deposit_status,
+            security_deposit_status: booking.security_deposit_status,
             metadata: {
               ...booking.metadata,
+              ...(paymentKind === 'deposit' ? { deposit_paid_at: now } : {}),
               [`${paymentKind}_payment_recorded_manually_at`]: now,
             },
           }),
@@ -1813,9 +1814,10 @@ export default function LeadDetailPage({
         body: JSON.stringify({
           id: booking.id,
           status: nextStatus,
-          security_deposit_status: paymentKind === 'deposit' ? 'collected' : booking.security_deposit_status,
+          security_deposit_status: booking.security_deposit_status,
           metadata: {
             ...booking.metadata,
+            ...(paymentKind === 'deposit' ? { deposit_paid_at: new Date().toISOString() } : {}),
             [`${paymentKind}_payment_recorded_manually_at`]: new Date().toISOString(),
           },
         }),
@@ -1957,7 +1959,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleBookingMilestone = async (booking: LuxorBooking, milestone: 'planning' | 'event' | 'closing') => {
+  const handleBookingMilestone = async (booking: LuxorBooking, milestone: 'planning' | 'event' | 'closing' | 'complete') => {
     if (milestone === 'planning' && (!booking.event_date || !booking.start_time || !booking.end_time || !booking.final_payment_due_date)) {
       notify({
         title: 'Planning is not ready yet',
@@ -1970,16 +1972,19 @@ export default function LeadDetailPage({
       setUpdatingStatus(true)
       const now = new Date().toISOString()
       const isClosing = milestone === 'closing'
+      const isComplete = milestone === 'complete'
       const isPlanning = milestone === 'planning'
       const res = await fetch('/api/bookings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: booking.id,
-          status: isClosing ? 'completed' : isPlanning ? 'confirmed' : booking.status,
+          status: isComplete ? 'completed' : isPlanning ? 'confirmed' : booking.status,
           metadata: {
             ...booking.metadata,
-            ...(isClosing
+            ...(isComplete
+              ? { lead_completed_at: now }
+              : isClosing
               ? { closeout_completed_at: now }
               : isPlanning
                 ? { planning_completed_at: now }
@@ -1991,15 +1996,17 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error(payload.error || 'Failed to update the booking milestone.')
 
       await createFlowNote(
-        isClosing
-          ? 'Event closeout completed and lead marked complete.'
+        isComplete
+          ? 'Booking marked complete after event closeout.'
+          : isClosing
+          ? 'Event closeout completed. The booking is ready for final completion.'
           : isPlanning
             ? 'Planning details confirmed. Final payment is now ready.'
             : 'Event marked complete. Closeout is now ready.',
         'status_change',
       )
       await fetchAllData(false)
-      notify({ title: isClosing ? 'Lead completed' : isPlanning ? 'Planning confirmed' : 'Event completed', variant: 'success' })
+      notify({ title: isComplete ? 'Lead completed' : isClosing ? 'Closeout completed' : isPlanning ? 'Planning confirmed' : 'Event completed', variant: 'success' })
     } catch (err) {
       console.error(err)
       notify({ title: 'Milestone not updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
@@ -2093,6 +2100,8 @@ export default function LeadDetailPage({
   const proposalInvoice = sortedInvoices.find((invoice) => invoice.id === latestBooking?.invoice_id)
     || sortedInvoices.find((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
     || latestInvoice
+  const finalBalanceInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
+  const refundableSecurityDepositAmount = Number(finalBalanceInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || 0)
   const proposalPaidTotal = latestBooking
     ? sortedPayments.filter((payment) => payment.booking_id === latestBooking.id && payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     : 0
@@ -4546,6 +4555,24 @@ export default function LeadDetailPage({
                 )
               }
 
+              if (currentStage === 'complete') {
+                return (
+                  <section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-6 luxor-soft-enter">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                      <CheckCircle className="mt-0.5 text-emerald-600 dark:text-emerald-400" size={20} />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-300">Booking complete</p>
+                        <h4 className="mt-1 text-base font-black text-[color:var(--portal-text)]">{latestBooking?.status === 'completed' ? 'The event and closeout are both recorded.' : 'Closeout is finished and ready for final completion.'}</h4>
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">The refundable security-deposit decision remains in the closeout history for your records.</p>
+                      </div>
+                      </div>
+                      {latestBooking?.status !== 'completed' ? <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'complete')} disabled={!latestBooking || updatingStatus} className="min-h-11 rounded-xl bg-emerald-600 px-5 text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40">Mark Booking Complete</button> : null}
+                    </div>
+                  </section>
+                )
+              }
+
               if (currentStage === 'closing') {
                 return (
                   <>
@@ -4559,10 +4586,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {latestBooking?.status === 'completed' ? 'Event completed & closed' : 'Complete post-event wrap-up & release deposit'}
+                              {latestBooking?.status === 'completed' ? 'Booking completed' : 'Finish the post-event closeout'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              Log thank-you follow-ups, request client reviews, and clear final damage inspection.
+                              Review the event, refund the security deposit when appropriate, then finish closeout. Completion is the separate final step.
                             </p>
                           </div>
                         </div>
@@ -4573,15 +4600,15 @@ export default function LeadDetailPage({
                               onClick={() => setConfirmRefundModalOpen(true)}
                               className="min-h-11 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center gap-2"
                             >
-                              <RotateCcw size={14} /> Refund $750 Security Deposit (Stripe)
+                              <RotateCcw size={14} /> Refund {formatMoney(refundableSecurityDepositAmount)} Security Deposit (Stripe)
                             </button>
                           ) : latestBooking?.security_deposit_status === 'refunded' ? (
                             <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle size={14} /> Deposit Refunded ($750)
+                              <CheckCircle size={14} /> Deposit Refunded ({formatMoney(refundableSecurityDepositAmount)})
                             </span>
                           ) : null}
                           <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer">
-                            Complete Lead
+                            Finish Closeout
                           </button>
                         </div>
                       </div>
@@ -4880,9 +4907,9 @@ export default function LeadDetailPage({
                 nextStepButton = 'Close Out Event'
                 nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'event') : openBookingModal
               } else if (currentStage === 'closing') {
-                nextStepTitle = 'Complete Lead'
-                nextStepDetail = 'Mark the booking complete when all wrap-up work is done'
-                nextStepButton = 'Complete Lead'
+                nextStepTitle = 'Finish closeout'
+                nextStepDetail = 'Confirm the event inspection and security-deposit decision, then move the booking to its separate completion step'
+                nextStepButton = 'Finish Closeout'
                 nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'closing') : openBookingModal
               }
 
@@ -5990,9 +6017,9 @@ export default function LeadDetailPage({
               <RotateCcw size={20} />
             </div>
             <div>
-              <h3 className="text-sm font-black text-[color:var(--portal-text)]">Refund $750 Security Deposit via Stripe?</h3>
+              <h3 className="text-sm font-black text-[color:var(--portal-text)]">Refund {formatMoney(refundableSecurityDepositAmount)} Security Deposit via Stripe?</h3>
               <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
-                This will process an immediate <span className="font-bold text-emerald-600 dark:text-emerald-400">$750.00 refund</span> back to <span className="font-semibold text-[color:var(--portal-text)]">{lead?.full_name}&apos;s Stripe account</span>.
+                This will process an immediate <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(refundableSecurityDepositAmount)} refund</span> back to <span className="font-semibold text-[color:var(--portal-text)]">{lead?.full_name}&apos;s original Stripe payment method</span>.
               </p>
             </div>
           </div>
@@ -6011,7 +6038,7 @@ export default function LeadDetailPage({
               disabled={refundingDeposit}
               className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 transition-colors disabled:opacity-40 cursor-pointer"
             >
-              {refundingDeposit ? 'Processing Refund...' : 'Confirm $750 Stripe Refund'}
+              {refundingDeposit ? 'Processing Refund...' : `Confirm ${formatMoney(refundableSecurityDepositAmount)} Stripe Refund`}
             </button>
           </div>
         </div>
@@ -6324,13 +6351,13 @@ export default function LeadDetailPage({
                   }}
                   className="w-full"
                   options={[
-                    { value: 'solidify_date', label: 'Solidify Date: Security Deposit + 50% Rental Deposit (moves to Planning Meeting)' },
+                    { value: 'solidify_date', label: '50% Booking Deposit (refundable security deposit due with final payment)' },
                     { value: 'non_refundable_booking', label: 'Non-Refundable Booking Deposit (balance due 60 days before event)' },
                   ]}
                 />
                 <p className="text-[10px] leading-4 text-zinc-500">
                   {bookingDepositType === 'solidify_date'
-                    ? 'Initial date lock deposit combines security deposit & 50% venue rental. Remaining details finalized in Planning Meeting.'
+                    ? 'Collect 50% now. The refundable security deposit is added as its own line item on the final invoice, due 60 days before the event.'
                     : 'Locks date with fixed non-refundable deposit. Full balance + $750 security deposit due 60 days prior to event.'}
                 </p>
               </div>
@@ -7535,10 +7562,12 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
-  const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || isLegacyComplete
-  const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || Boolean(bookingMetadata.final_payment_paid_at) || isLegacyComplete
-  const eventCompleted = Boolean(bookingMetadata.event_completed_at) || isLegacyComplete
-  const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || isLegacyComplete
+  const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking) || latestBooking?.security_deposit_status === 'collected'
+  const leadCompleted = Boolean(bookingMetadata.lead_completed_at) || isLegacyComplete
+  const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || leadCompleted
+  const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || Boolean(bookingMetadata.final_payment_paid_at) || leadCompleted
+  const eventCompleted = Boolean(bookingMetadata.event_completed_at) || leadCompleted
+  const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || leadCompleted
 
   return [
     {
@@ -7563,13 +7592,13 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     },
     {
       id: 'deposit',
-      isCompleted: latestBooking?.security_deposit_status === 'collected',
-      isActive: latestBooking?.contract_status === 'signed' && latestBooking?.security_deposit_status !== 'collected',
+      isCompleted: bookingPaymentCollected,
+      isActive: latestBooking?.contract_status === 'signed' && !bookingPaymentCollected,
     },
     {
       id: 'planning',
       isCompleted: planningCompleted,
-      isActive: latestBooking?.security_deposit_status === 'collected' && !planningCompleted,
+      isActive: bookingPaymentCollected && !planningCompleted,
     },
     {
       id: 'final_payment',
@@ -7588,8 +7617,8 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     },
     {
       id: 'complete',
-      isCompleted: closeoutCompleted,
-      isActive: false,
+      isCompleted: leadCompleted,
+      isActive: closeoutCompleted && !leadCompleted,
     },
   ]
 }

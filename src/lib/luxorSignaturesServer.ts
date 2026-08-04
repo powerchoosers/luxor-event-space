@@ -249,6 +249,7 @@ export async function signLuxorSignatureRequest(input: {
           masterInvoice,
           bookingId: booking.id,
           dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
+          depositPaid: Number(booking.deposit_required || 0),
         }) : null
         reconciledBooking = await updateLuxorBooking(booking.id, {
           status: 'confirmed',
