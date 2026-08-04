@@ -38,6 +38,7 @@ import {
   Eye,
   MousePointerClick,
   RefreshCw,
+  RotateCcw,
   Sliders,
   CreditCard,
   Flame,
@@ -47,7 +48,7 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorDepositType, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -248,6 +249,10 @@ export default function LeadDetailPage({
   const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
+  const [bookingDepositType, setBookingDepositType] = useState<LuxorDepositType>('solidify_date')
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
+  const [refundingDeposit, setRefundingDeposit] = useState(false)
+  const [confirmRefundModalOpen, setConfirmRefundModalOpen] = useState(false)
   const [submittingBooking, setSubmittingBooking] = useState(false)
 
   // Tour scheduling + Zoho invite state
@@ -1482,6 +1487,64 @@ export default function LeadDetailPage({
     }
   }
 
+  const handleSendDateLockInvoice = async (booking: LuxorBooking) => {
+    try {
+      setSendingContractBookingId(booking.id)
+      setUpdatingStatus(true)
+      const invoice = invoices.find((item) => item.id === booking.invoice_id) || invoices[0]
+      if (!invoice) throw new Error('Create or draft the invoice record first.')
+      const res = await fetch(`/api/invoices/${invoice.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'date_lock_deposit' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Date reservation deposit invoice could not be sent.')
+      await fetchAllData(false)
+      notify({
+        title: 'Date-Lock Invoice Sent',
+        description: `Emailed date reservation deposit request to ${lead?.email}. The event date is now locked for planning.`,
+        variant: 'success',
+      })
+    } catch (err) {
+      console.error(err)
+      notify({ title: 'Date-lock invoice not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSendingContractBookingId(null)
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleRefundSecurityDeposit = async () => {
+    if (!latestBooking) return
+    try {
+      setRefundingDeposit(true)
+      const res = await fetch('/api/payments/refund-security-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: latestBooking.id, refundAmount: 750 }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to refund security deposit via Stripe.')
+      setConfirmRefundModalOpen(false)
+      notify({
+        title: 'Security Deposit Refunded',
+        description: `$750.00 security deposit refunded to ${lead?.full_name} via Stripe.`,
+        variant: 'success',
+      })
+      await fetchAllData(false)
+    } catch (err) {
+      console.error(err)
+      notify({
+        title: 'Refund Failed',
+        description: err instanceof Error ? err.message : 'Could not process Stripe refund.',
+        variant: 'error',
+      })
+    } finally {
+      setRefundingDeposit(false)
+    }
+  }
+
   const beginPlanningEdit = (section: Exclude<PlanningEditSection, null>) => {
     if (!lead) return
     const metadata = lead.metadata || {}
@@ -1785,15 +1848,45 @@ export default function LeadDetailPage({
     setBookingContractTotal(suggestedContractTotal > 0 ? String(suggestedContractTotal) : '')
     setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.25)) : '')
     if (targetDate) {
-      const dueDate = new Date(`${targetDate}T12:00:00`)
-      dueDate.setDate(dueDate.getDate() - 14)
+      const dueDate = new Date(`${targetDate}T12:00:00-05:00`)
+      dueDate.setDate(dueDate.getDate() - 60)
       setBookingFinalPaymentDueDate(dueDate.toISOString().slice(0, 10))
     } else {
       setBookingFinalPaymentDueDate('')
     }
     setBookingNotes(lead?.message || '')
     setBookingStatus('tentative')
+    setBookingDepositType('solidify_date')
     setIsBookingModalOpen(true)
+  }
+
+  const handleSendAiInvoiceReminder = async (invoice: LuxorInvoice) => {
+    if (!lead?.email) return
+    try {
+      setSendingReminderId(invoice.id)
+      const res = await fetch(`/api/invoices/${invoice.id}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'unpaid_invoice' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to send AI invoice reminder.')
+      notify({
+        title: 'AI Invoice Reminder Sent',
+        description: `Delivered to ${lead.email} (${data.aiGenerated ? 'AI personalized copy' : 'Luxor branded copy'}).`,
+        variant: 'success',
+      })
+      await fetchAllData(false)
+    } catch (err) {
+      console.error(err)
+      notify({
+        title: 'Reminder failed',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'error',
+      })
+    } finally {
+      setSendingReminderId(null)
+    }
   }
 
   const handleCreateBooking = async (e: React.FormEvent) => {
@@ -3725,7 +3818,14 @@ export default function LeadDetailPage({
                         ) : !latestBooking ? (
                           <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
                         ) : latestBooking.contract_status !== 'signed' ? (
-                          <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Proposal + Agreement'}</button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={() => handleSendDateLockInvoice(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all disabled:opacity-40 cursor-pointer">
+                              Send Date-Lock Invoice (Book Date)
+                            </button>
+                            <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
+                              {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
+                            </button>
+                          </div>
                         ) : (
                           <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                         )}
@@ -4463,9 +4563,24 @@ export default function LeadDetailPage({
                             </p>
                           </div>
                         </div>
-                        <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer">
-                          Complete Lead
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {latestBooking?.security_deposit_status === 'collected' ? (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmRefundModalOpen(true)}
+                              className="min-h-11 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center gap-2"
+                            >
+                              <RotateCcw size={14} /> Refund $750 Security Deposit (Stripe)
+                            </button>
+                          ) : latestBooking?.security_deposit_status === 'refunded' ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                              <CheckCircle size={14} /> Deposit Refunded ($750)
+                            </span>
+                          ) : null}
+                          <button type="button" onClick={() => latestBooking && handleBookingMilestone(latestBooking, 'closing')} disabled={!latestBooking || updatingStatus} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer">
+                            Complete Lead
+                          </button>
+                        </div>
                       </div>
                     </section>
 
@@ -5557,6 +5672,9 @@ export default function LeadDetailPage({
                       <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
                         <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
                       </button>
+                      <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
+                        <Sparkles size={12} /> {sendingReminderId === inv.id ? 'Sending AI Email...' : 'Send AI Reminder'}
+                      </button>
                       <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0 || inv.status === 'paid'} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
                         <Trash2 size={12} /> Delete
                       </button>
@@ -5862,6 +5980,40 @@ export default function LeadDetailPage({
         ) : null}
       </PortalModal>
 
+      <PortalModal isOpen={confirmRefundModalOpen} onClose={() => !refundingDeposit && setConfirmRefundModalOpen(false)} maxWidth="max-w-md">
+        <div className="bg-[color:var(--portal-card)] p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <RotateCcw size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-[color:var(--portal-text)]">Refund $750 Security Deposit via Stripe?</h3>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
+                This will process an immediate <span className="font-bold text-emerald-600 dark:text-emerald-400">$750.00 refund</span> back to <span className="font-semibold text-[color:var(--portal-text)]">{lead?.full_name}&apos;s Stripe account</span>.
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setConfirmRefundModalOpen(false)}
+              disabled={refundingDeposit}
+              className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-bold uppercase text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-card)] disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRefundSecurityDeposit}
+              disabled={refundingDeposit}
+              className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              {refundingDeposit ? 'Processing Refund...' : 'Confirm $750 Stripe Refund'}
+            </button>
+          </div>
+        </div>
+      </PortalModal>
+
       <PortalModal isOpen={Boolean(pdfPreviewInvoice)} onClose={() => setPdfPreviewInvoice(null)} maxWidth="max-w-6xl">
         {pdfPreviewInvoice ? (
           <div className="flex h-[min(82vh,860px)] min-h-[520px] flex-col overflow-hidden bg-[color:var(--portal-bg)]">
@@ -6149,6 +6301,35 @@ export default function LeadDetailPage({
                   placeholder="Select final payment due date"
                 />
                 <p className="text-[10px] leading-4 text-zinc-600">This controls the balance status and final-payment reminder.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Deposit Structure</label>
+                <PortalSelect
+                  value={bookingDepositType}
+                  onChange={(val) => {
+                    const mode = val as LuxorDepositType
+                    setBookingDepositType(mode)
+                    const total = Number(bookingContractTotal) || 0
+                    if (total > 0) {
+                      if (mode === 'solidify_date') {
+                        setBookingDepositRequired(String(Math.round(total * 0.5 + 500)))
+                      } else {
+                        setBookingDepositRequired(String(Math.round(total * 0.25)))
+                      }
+                    }
+                  }}
+                  className="w-full"
+                  options={[
+                    { value: 'solidify_date', label: 'Solidify Date: Security Deposit + 50% Rental Deposit (moves to Planning Meeting)' },
+                    { value: 'non_refundable_booking', label: 'Non-Refundable Booking Deposit (balance due 60 days before event)' },
+                  ]}
+                />
+                <p className="text-[10px] leading-4 text-zinc-500">
+                  {bookingDepositType === 'solidify_date'
+                    ? 'Initial date lock deposit combines security deposit & 50% venue rental. Remaining details finalized in Planning Meeting.'
+                    : 'Locks date with fixed non-refundable deposit. Full balance + $750 security deposit due 60 days prior to event.'}
+                </p>
               </div>
 
               <div className="space-y-1.5">

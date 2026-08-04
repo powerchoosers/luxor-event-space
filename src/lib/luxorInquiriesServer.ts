@@ -180,38 +180,25 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       const token = created.tour_response_token || createPublicToken()
       await updateLuxorInquiry(created.id, { tour_response_token: token })
 
-      const confirmation = buildTourEmail('tour_confirmation', created, token)
+      const { buildTourRequestReceivedEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
+      const requestEmailHtml = buildTourRequestReceivedEmailHtml(created, token)
       const job = await createLuxorEmailJob({
         inquiryId: created.id,
         jobType: 'tour_confirmation',
         recipientEmail: created.email,
-        subject: confirmation.subject,
-        body: confirmation.body,
+        subject: 'Your Luxor tour request is received',
+        body: requestEmailHtml,
       })
 
-      // Process tour confirmation email immediately for faster feedback
+      // Process tour request received email immediately for instant feedback
       try {
-        const { listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
         const jobs = await listQueuedLuxorEmailJobsByIds([job.id])
         await processLuxorEmailJobs(jobs)
       } catch (procErr) {
-        console.error('Failed to immediately process tour confirmation email:', procErr)
-      }
-
-      const reminderAt = getTourReminderTime(created.preferred_tour_date)
-      if (reminderAt) {
-        const reminder = buildTourEmail('tour_reminder', created, token)
-        await createLuxorEmailJob({
-          inquiryId: created.id,
-          jobType: 'tour_reminder',
-          recipientEmail: created.email,
-          subject: reminder.subject,
-          body: reminder.body,
-          scheduledFor: reminderAt,
-        })
+        console.error('Failed to immediately process tour request email:', procErr)
       }
     } catch (emailError) {
-      console.error('Luxor tour email queue failed:', emailError)
+      console.error('Luxor tour request email queue failed:', emailError)
     }
   } else if (created?.email && created.source !== 'grand_opening_rsvp') {
     try {

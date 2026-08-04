@@ -6,7 +6,8 @@ import {
   Search,
   ExternalLink,
   ArrowRightLeft,
-  Trash2
+  Trash2,
+  Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
 import { LuxorInvoice, LuxorInvoiceStatus } from '@/lib/luxorInquiryTypes'
@@ -47,6 +48,27 @@ export default function InvoicesPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<EditableInvoiceStatus>('sent')
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
+
+  const handleSendAiReminder = async (invoiceId: string) => {
+    try {
+      setSendingReminderId(invoiceId)
+      const res = await fetch(`/api/invoices/${invoiceId}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'unpaid_invoice' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to send AI reminder.')
+      alert(`AI Invoice Reminder sent successfully!\nSubject: ${data.subject}`)
+      await fetchInvoices()
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to send AI reminder.')
+    } finally {
+      setSendingReminderId(null)
+    }
+  }
 
   const fetchInvoices = async () => {
     try {
@@ -268,18 +290,30 @@ export default function InvoicesPage() {
                     <PortalStatusBadge status={inv.status} />
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <PortalSelect
-                      value={inv.status}
-                      onChange={(value) => handleUpdateStatus(inv.id, value)}
-                      className="ml-auto w-40"
-                      options={[
-                        { value: 'draft', label: 'Draft' },
-                        { value: 'sent', label: 'Sent' },
-                        { value: 'paid', label: 'Paid' },
-                        { value: 'overdue', label: 'Overdue' },
-                        { value: 'cancelled', label: 'Cancelled' },
-                      ]}
-                    />
+                    <div className="flex items-center justify-end gap-2">
+                      {inv.status !== 'paid' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSendAiReminder(inv.id)}
+                          disabled={sendingReminderId === inv.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Sparkles size={11} /> {sendingReminderId === inv.id ? 'Sending...' : 'AI Remind'}
+                        </button>
+                      ) : null}
+                      <PortalSelect
+                        value={inv.status}
+                        onChange={(value) => handleUpdateStatus(inv.id, value)}
+                        className="w-36"
+                        options={[
+                          { value: 'draft', label: 'Draft' },
+                          { value: 'sent', label: 'Sent' },
+                          { value: 'paid', label: 'Paid' },
+                          { value: 'overdue', label: 'Overdue' },
+                          { value: 'cancelled', label: 'Cancelled' },
+                        ]}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))

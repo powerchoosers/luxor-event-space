@@ -3,9 +3,10 @@ import 'server-only'
 import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
 
 import crypto from 'crypto'
-import { LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorSignatureRequest } from './luxorInquiryTypes'
+import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPayment, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
+import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -104,6 +105,127 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       ...plainTextEmailFooter(),
     ].filter(Boolean).join('\n\n'),
   }
+}
+
+export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: string) {
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const websiteUrl = absoluteUrl('/')
+  const pricingUrl = absoluteUrl('/pricing')
+  const spacesUrl = absoluteUrl('/spaces')
+
+  const dateLine = inquiry.preferred_tour_date || 'Requested date pending'
+  const timeLine = inquiry.preferred_tour_time || 'Requested time pending'
+  const eventLine = inquiry.event_type || 'Private Event'
+  const guestsLine = inquiry.guest_count ? String(inquiry.guest_count) : 'N/A'
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <title>Tour Request Received - Luxor</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body, table, td, p, a, h1 { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    @media (prefers-color-scheme: dark) {
+      body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+      .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,0.22) !important; }
+      .luxor-header { background-color: #080605 !important; }
+      .luxor-hero { background-color: #120d0a !important; }
+      .luxor-title { color: #f7efe3 !important; }
+      .luxor-gold { color: #caa24c !important; }
+      .luxor-muted { color: #d7c29a !important; }
+    }
+    [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+    [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+    [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+    [data-ogsc] .luxor-gold { color: #caa24c !important; }
+  </style>
+</head>
+<body class="luxor-bg" style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;color:#f7efe3;color-scheme:light dark;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
+    <tr>
+      <td align="center" style="padding:28px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+          <tr>
+            <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="luxor-header" style="padding:28px 48px 20px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p style="margin:6px 0 0;font-size:8px;letter-spacing:0.42em;color:rgba(202,162,76,0.62);text-transform:uppercase;">At Las Palmas Events</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="luxor-hero" style="padding:50px 48px 30px;text-align:center;background-color:#120d0a;background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);">
+              <p class="luxor-gold" style="margin:0 0 14px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Tour Request Received</p>
+              <h1 class="luxor-title" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:600;line-height:1.1;color:#f7efe3;">Thanks For Your Request</h1>
+              <p class="luxor-muted" style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
+                Hi ${escapeHtml(firstName)}, thank you for requesting a private tour of Luxor Event Space. We have received your request and our team is currently reviewing your preferred date and time.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:2px;background:linear-gradient(90deg,transparent,#caa24c,transparent);font-size:1px;line-height:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:32px 48px;">
+              <table role="presentation" width="100%" cellpadding="10" cellspacing="0" border="0" style="background-color:#0b0a08;border:1px solid rgba(202,162,76,0.14);border-radius:4px;font-size:13px;">
+                <tr>
+                  <td width="35%" class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Requested Date</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${escapeHtml(dateLine)}</td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Requested Time</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${escapeHtml(timeLine)}</td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Event Type</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${escapeHtml(eventLine)}</td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;">Estimated Guests</td>
+                  <td class="luxor-muted" style="color:#d7c29a;">${escapeHtml(guestsLine)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 48px 24px;">
+              <div style="padding:20px;background-color:#0d0b09;border-left:3px solid #caa24c;border-radius:0 4px 4px 0;">
+                <p class="luxor-gold" style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#caa24c;">Next Steps</p>
+                <p class="luxor-muted" style="margin:0;font-size:13px;line-height:1.75;color:rgba(215,194,154,0.85);">
+                  We will send you an official confirmation email with calendar details once your request is accepted. If we need to adjust the timing, an event coordinator will call or email you to find a perfect time.
+                </p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:10px 48px 34px;">
+              <a href="${spacesUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Explore Our Spaces</a>
+              <a href="${pricingUrl}" target="_blank" style="display:inline-block;background-color:#0f0c09;color:#f7efe3;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(202,162,76,0.28);margin:0 6px 12px;">View Pricing</a>
+            </td>
+          </tr>
+          <tr>
+            <td class="luxor-header" style="background-color:#080605;padding:34px 48px 36px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p class="luxor-muted" style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
+                803 Castroville Rd #402, San Antonio, TX 78237<br />
+                Private venue tours by appointment.<br />
+                <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
+                <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
+              </p>
+              ${socialEmailIconsHtml()}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 export function buildGrandOpeningRsvpEmail(inquiry: LuxorInquiry) {
@@ -518,9 +640,137 @@ export async function processLuxorEmailJobs(
   return results
 }
 
+export async function queueUpcoming60DayInvoiceReminders() {
+  try {
+    const activeBookings = await supabaseRest<Array<{
+      id: string
+      inquiry_id: string | null
+      invoice_id: string | null
+      client_name: string
+      email: string | null
+      event_date: string | null
+      status: string
+      contract_status?: string | null
+      final_payment_due_date?: string | null
+    }>>('luxor_bookings?select=id,inquiry_id,invoice_id,client_name,email,event_date,status,contract_status,final_payment_due_date&status=in.(tentative,confirmed)')
+
+    if (!Array.isArray(activeBookings) || !activeBookings.length) return
+
+    const nowMs = Date.now()
+
+    for (const booking of activeBookings) {
+      if (!booking.event_date || !booking.inquiry_id || !booking.email) continue
+      const eventTime = new Date(`${booking.event_date}T12:00:00-05:00`).getTime()
+      const daysUntilEvent = Math.round((eventTime - nowMs) / (24 * 60 * 60_000))
+
+      let milestone: string | null = null
+      if (daysUntilEvent <= 60 && daysUntilEvent > 45) milestone = '60_days'
+      else if (daysUntilEvent <= 30 && daysUntilEvent > 20) milestone = '30_days'
+      else if (daysUntilEvent <= 14 && daysUntilEvent > 7) milestone = '14_days'
+      else if (daysUntilEvent <= 7 && daysUntilEvent >= 0) milestone = '7_days'
+
+      if (!milestone) continue
+
+      const invoiceId = booking.invoice_id
+      if (!invoiceId) continue
+
+      const [invoice] = await supabaseRest<Array<{
+        id: string
+        total: number
+        public_token?: string | null
+        stripe_checkout_url?: string | null
+        due_date?: string | null
+        line_items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>
+      }>>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(invoiceId)}&limit=1`)
+      if (!invoice) continue
+
+      const paidPayments = await supabaseRest<LuxorPayment[]>(`luxor_payments?select=amount&invoice_id=eq.${encodeURIComponent(invoice.id)}&status=eq.paid`).catch(() => [])
+      const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+      const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
+      if (balanceDue <= 0) continue
+
+      const [inquiry] = await supabaseRest<LuxorInquiry[]>(`luxor_inquiries?select=*&id=eq.${encodeURIComponent(booking.inquiry_id)}&limit=1`)
+      if (!inquiry) continue
+
+      const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+      const reviewUrl = invoice.stripe_checkout_url || `${origin}/proposal/${invoice.public_token || inquiry.id}`
+
+      const email = await buildAiTailoredInvoiceReminderEmail({
+        inquiry,
+        invoice: {
+          id: invoice.id,
+          created_at: '',
+          updated_at: '',
+          inquiry_id: inquiry.id,
+          client_name: inquiry.full_name,
+          event_type: inquiry.event_type,
+          description: null,
+          line_items: invoice.line_items || [],
+          subtotal: Number(invoice.total),
+          tax_rate: 0,
+          total: Number(invoice.total),
+          status: 'sent',
+          due_date: invoice.due_date || null,
+          paid_at: null,
+          notes: null,
+        },
+        booking: {
+          id: booking.id,
+          created_at: '',
+          updated_at: '',
+          inquiry_id: booking.inquiry_id,
+          invoice_id: booking.invoice_id,
+          client_name: booking.client_name,
+          email: booking.email,
+          phone: null,
+          event_type: null,
+          event_date: booking.event_date,
+          start_time: null,
+          end_time: null,
+          guest_count: null,
+          package_name: null,
+          status: (booking.status as LuxorBooking['status']) || 'tentative',
+          booked_at: null,
+          contract_total: Number(invoice.total),
+          deposit_required: 0,
+          final_payment_due_date: booking.final_payment_due_date || null,
+          notes: null,
+          metadata: {},
+        },
+        reviewUrl,
+        balanceDue,
+        dueDate: booking.final_payment_due_date || invoice.due_date,
+        kind: 'sixty_day_deadline',
+      })
+
+      const automationKey = `sixty_day_payment_reminder:${booking.id}:${milestone}`
+      await createUniqueLuxorEmailJob({
+        inquiryId: inquiry.id,
+        bookingId: booking.id,
+        jobType: 'sixty_day_payment_reminder',
+        recipientEmail: inquiry.email || booking.email || '',
+        subject: email.subject,
+        body: email.body,
+        scheduledFor: new Date().toISOString(),
+        automationKey,
+        metadata: {
+          milestone,
+          days_until_event: daysUntilEvent,
+          balance_due: balanceDue,
+          invoice_id: invoice.id,
+          ai_generated: email.aiGenerated,
+        },
+      })
+    }
+  } catch (error) {
+    console.error('queueUpcoming60DayInvoiceReminders error:', error instanceof Error ? error.message : error)
+  }
+}
+
 // Supabase Cron runs this worker every minute. Keeping the default at one job
 // makes a due-time collision harmless: one scheduled minute equals one send.
 export async function processDueLuxorEmailJobs(limit = 1) {
+  await queueUpcoming60DayInvoiceReminders().catch((err) => console.warn('60-day invoice scan skipped:', err))
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
     return processLuxorEmailJobs(jobs, { markSending: false })

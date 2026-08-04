@@ -288,6 +288,8 @@ export type LuxorBookingExpense = {
   metadata: Record<string, unknown>
 }
 
+export type LuxorDepositType = 'solidify_date' | 'non_refundable_booking'
+
 export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
 export type LuxorEmailJobKind =
   | 'tour_confirmation'
@@ -298,12 +300,15 @@ export type LuxorEmailJobKind =
   | 'contract_signature'
   | 'contract_view_reminder'
   | 'contract_signature_reminder'
+  | 'unpaid_invoice_reminder'
+  | 'sixty_day_payment_reminder'
   | 'final_payment_reminder'
   | 'event_details_reminder'
   | 'event_day_reminder'
   | 'post_event_follow_up'
   | 'marketing_campaign'
   | 'grand_opening_rsvp_confirmation'
+
 
 export type LuxorEmailJob = {
   id: string

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { LuxorBooking, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, LuxorSignatureRequest } from './luxorInquiryTypes'
+import type { LuxorBooking, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, LuxorNote, LuxorSignatureRequest } from './luxorInquiryTypes'
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -113,6 +113,118 @@ export function buildEventEmail(input: { inquiry: LuxorInquiry; booking: LuxorBo
   }
 }
 
+export async function generateAiInvoiceReminderCopy(input: {
+  inquiry: LuxorInquiry
+  invoice: LuxorInvoice
+  booking?: LuxorBooking | null
+  balanceDue: number
+  daysUntil60Days?: number | null
+  notes?: LuxorNote[]
+  kind?: 'unpaid_invoice' | 'sixty_day_deadline' | 'final_payment'
+}): Promise<{ copy: string; aiGenerated: boolean }> {
+  const fallback = input.kind === 'sixty_day_deadline'
+    ? `As your event date approaches, we wanted to remind you that your remaining balance and refundable security deposit are due 60 days before your celebration. Please review your invoice and submit payment to ensure everything remains seamlessly reserved.`
+    : `We are reaching out to provide a quick update regarding your invoice for ${input.inquiry.event_type || 'your upcoming event'}. Please review the payment details below and let us know if you have any questions.`
+
+  const apiKey = process.env.OPEN_ROUTER_API_KEY
+  if (!apiKey) return { copy: fallback, aiGenerated: false }
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://luxoratlaspalmas.com',
+        'X-Title': 'Luxor Invoice Reminder Email Writer',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, upcoming 60-day balance deadline, deposit mode, and recent notes. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              clientName: input.inquiry.full_name,
+              eventType: input.inquiry.event_type,
+              eventDate: input.booking?.event_date || input.inquiry.target_date,
+              guestCount: input.booking?.guest_count || input.inquiry.guest_count,
+              packageName: input.booking?.package_name || input.inquiry.package_interest,
+              balanceDue: input.balanceDue,
+              invoiceTotal: input.invoice.total,
+              daysUntil60Days: input.daysUntil60Days,
+              reminderKind: input.kind || 'unpaid_invoice',
+              inquiryMessage: input.inquiry.message,
+              recentNotes: (input.notes || []).slice(-5).map((n) => n.content),
+            }),
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(12_000),
+    })
+
+    if (!response.ok) return { copy: fallback, aiGenerated: false }
+    const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> }
+    const copy = payload.choices?.[0]?.message?.content?.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim()
+    return copy ? { copy: copy.slice(0, 480), aiGenerated: true } : { copy: fallback, aiGenerated: false }
+  } catch (error) {
+    console.warn('AI invoice reminder copy fell back to template:', error instanceof Error ? error.message : error)
+    return { copy: fallback, aiGenerated: false }
+  }
+}
+
+export async function buildAiTailoredInvoiceReminderEmail(input: {
+  inquiry: LuxorInquiry
+  invoice: LuxorInvoice
+  booking?: LuxorBooking | null
+  reviewUrl: string
+  balanceDue: number
+  dueDate?: string | null
+  notes?: LuxorNote[]
+  kind?: 'unpaid_invoice' | 'sixty_day_deadline' | 'final_payment'
+}) {
+  const { copy, aiGenerated } = await generateAiInvoiceReminderCopy(input)
+  const is60Day = input.kind === 'sixty_day_deadline'
+  const eventDate = input.booking?.event_date || input.inquiry.target_date
+
+  const eyebrow = is60Day ? '60-Day Deadline Reminder' : 'Invoice Payment Reminder'
+  const title = is60Day ? 'Your 60-day balance deadline is approaching' : 'Reminder: payment pending'
+  const subject = is60Day
+    ? `Upcoming: 60-day balance payment for your Luxor event (${money(input.balanceDue)})`
+    : `Payment reminder: ${money(input.balanceDue)} remaining for your Luxor event`
+
+  const hasSecurityDeposit = input.invoice.line_items.some((item) => /security deposit/i.test(item.description))
+
+  const detailText = [
+    `Balance due: ${money(input.balanceDue)}`,
+    input.dueDate ? `Due date: ${input.dueDate}` : null,
+    eventDate ? `Event date: ${eventDate}` : null,
+    hasSecurityDeposit ? `Includes $750 refundable security deposit` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return {
+    subject,
+    aiGenerated,
+    body: brandedEmail({
+      eyebrow,
+      title,
+      greeting: `Hi ${firstName(input.inquiry.full_name)},`,
+      copy,
+      detail: detailText,
+      buttonLabel: 'Review & Pay Balance Securely',
+      buttonUrl: input.reviewUrl,
+    }),
+  }
+}
+
 export function lifecycleAutomationKey(kind: LuxorEmailJobKind, recordId: string) {
   return `${kind}:${recordId}`
 }
+

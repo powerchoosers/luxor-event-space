@@ -11,6 +11,7 @@ export async function createLuxorPostContractCheckout(input: {
   origin: string
   paymentAmount?: number
   paymentLabel?: string
+  allowPreContract?: boolean
 }) {
   const { invoice, inquiry, booking } = input
   const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
@@ -18,7 +19,7 @@ export async function createLuxorPostContractCheckout(input: {
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   if (balanceDue <= 0) return null
 
-  if (booking.contract_status !== 'signed') {
+  if (!input.allowPreContract && booking.contract_status !== 'signed') {
     throw new Error('The agreement must be signed before Stripe checkout can be created.')
   }
 

@@ -238,10 +238,10 @@ export function LuxorInquiryForm({
           {submitted ? (
             <motion.div key="submitted" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={FORM_TRANSITION} className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.06] p-6" role="status">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c] text-[#050505]"><Check className="h-6 w-6" /></div>
-              <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour time is reserved.' : 'We received your event details.'}</h3>
+              <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour request is received.' : 'We received your event details.'}</h3>
               <p className="mt-3 text-sm leading-6 text-[#d7c29a]/78">
                 {reservedTour
-                  ? 'A confirmation is on its way. A Luxor coordinator will review the details and contact you if anything needs clarification.'
+                  ? 'Thanks for your request! We have received your requested date and time. Our team will send an official confirmation email once accepted, or contact you if we need to adjust timing.'
                   : 'A Luxor coordinator will review your request and contact you within one business day with availability and next steps.'}
               </p>
             </motion.div>

@@ -153,3 +153,84 @@ export async function deleteInvoice(id: string) {
 export async function listAllBills() {
   return supabaseRest<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc')
 }
+
+export const LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT = 750
+
+export function calculateLuxorDepositAmounts(params: {
+  lineItems: LuxorInvoiceLineItem[]
+  taxRate?: number
+  depositType?: 'solidify_date' | 'non_refundable_booking'
+  customBookingDeposit?: number
+  initialSecurityDeposit?: number
+}) {
+  const taxRate = Math.max(0, params.taxRate || 0)
+  const depositType = params.depositType || 'solidify_date'
+  const subtotal = params.lineItems.reduce((sum, item) => sum + (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0), 0)
+  const total = Math.round(subtotal * (1 + taxRate) * 100) / 100
+
+  if (depositType === 'non_refundable_booking') {
+    const depositAmount = params.customBookingDeposit && params.customBookingDeposit > 0
+      ? Math.round(params.customBookingDeposit * 100) / 100
+      : Math.round(total * 0.25 * 100) / 100
+    const remainingBalance = Math.max(0, Math.round((total - depositAmount) * 100) / 100)
+    return {
+      depositType: 'non_refundable_booking' as const,
+      depositAmount: Math.min(depositAmount, total),
+      remainingBalance,
+      total,
+      description: 'Non-refundable booking deposit (balance due 60 days before event)',
+    }
+  }
+
+  // solidify_date mode: initial security deposit + 50% rental deposit
+  const rentalItemsSubtotal = params.lineItems
+    .filter((item) => /venue|hall|rental|space|hire/i.test(item.description) || item.category === 'Hall Hire')
+    .reduce((sum, item) => sum + (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0), 0)
+  
+  const rentalBase = rentalItemsSubtotal > 0 ? rentalItemsSubtotal : subtotal
+  const rentalDepositPortion = Math.round(rentalBase * 0.5 * (1 + taxRate) * 100) / 100
+  const securityDepositPortion = Math.round((params.initialSecurityDeposit || 500) * 100) / 100
+
+  const depositAmount = Math.min(total, rentalDepositPortion + securityDepositPortion)
+  const remainingBalance = Math.max(0, Math.round((total - depositAmount) * 100) / 100)
+
+  return {
+    depositType: 'solidify_date' as const,
+    depositAmount,
+    rentalDepositPortion,
+    securityDepositPortion,
+    remainingBalance,
+    total,
+    description: 'Initial solidify-the-date deposit (Security Deposit + 50% Rental Deposit)',
+  }
+}
+
+export function ensureRefundableSecurityDepositLineItem(lineItems: LuxorInvoiceLineItem[], securityDepositAmount = LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT): LuxorInvoiceLineItem[] {
+  const existingIndex = lineItems.findIndex(
+    (item) => /refundable security deposit/i.test(item.description) || item.category === 'Security Deposit',
+  )
+
+  const itemsCopy = [...lineItems]
+
+  if (existingIndex >= 0) {
+    itemsCopy[existingIndex] = {
+      ...itemsCopy[existingIndex],
+      quantity: 1,
+      unitPrice: securityDepositAmount,
+      total: securityDepositAmount,
+      description: 'Refundable Security Deposit (Due 60 Days Prior to Event)',
+      category: 'Security Deposit',
+    }
+  } else {
+    itemsCopy.push({
+      description: 'Refundable Security Deposit (Due 60 Days Prior to Event)',
+      quantity: 1,
+      unitPrice: securityDepositAmount,
+      total: securityDepositAmount,
+      category: 'Security Deposit',
+    })
+  }
+
+  return itemsCopy
+}
+

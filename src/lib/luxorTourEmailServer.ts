@@ -122,11 +122,11 @@ async function generateTourCopy(context: TourEmailContext): Promise<TourCopy> {
 function fallbackCopy(context: TourEmailContext): TourCopy {
   const eventLine = context.inquiry.event_type || 'event'
   return {
-    subject: `Your Luxor tour is scheduled for ${context.tourDateLabel}`,
+    subject: `You are confirmed for your Luxor tour on ${context.tourDateLabel}`,
     greeting: `Hi ${firstNameOf(context.inquiry.full_name)},`,
-    introduction: `Your ${context.meetingType.toLowerCase()} at Luxor Event Space is scheduled for ${context.tourDateLabel} at ${context.tourTimeLabel}. We are looking forward to learning more about your ${eventLine}.`,
+    introduction: `You are confirmed for your ${context.meetingType.toLowerCase()} at Luxor Event Space on ${context.tourDateLabel} at ${context.tourTimeLabel}. We are looking forward to showing you around and discussing your ${eventLine} plans.`,
     preparation: context.clientFacingNotes || `We will tailor the walkthrough around your plans${context.inquiry.guest_count ? ` for approximately ${context.inquiry.guest_count} guests` : ''}, including layout ideas and the next steps that matter most to you.`,
-    closing: 'If you need to make a change, reply to this email and our team will help.',
+    closing: 'If you need to reschedule your tour, please click the button below.',
   }
 }
 
@@ -166,11 +166,11 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="luxor-card" style="max-width:600px;width:100%;background-color:#0a0807;border:1px solid rgba(202,162,76,.28);">
       <tr><td style="height:3px;background:#caa24c"></td></tr>
       <tr><td><img src="${escapeHtml(heroUrl)}" width="600" alt="${escapeHtml(context.inquiry.event_type || 'Celebration')} inspiration at Luxor Event Space" style="display:block;width:100%;height:260px;object-fit:cover;border:0;" /></td></tr>
-      <tr><td style="padding:34px 42px 12px;"><p class="luxor-gold" style="margin:0 0 12px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;">Your Private Tour</p><h1 class="luxor-title" style="margin:0;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.2;color:#f7efe3;">A closer look at your celebration</h1></td></tr>
+      <tr><td style="padding:34px 42px 12px;"><p class="luxor-gold" style="margin:0 0 12px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;">Tour Confirmed</p><h1 class="luxor-title" style="margin:0;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.2;color:#f7efe3;">You are confirmed for your tour</h1></td></tr>
       <tr><td class="luxor-muted" style="padding:12px 42px;color:#d7c29a;font-size:15px;line-height:1.75;"><p style="margin:0 0 12px;color:#d7c29a;">${escapeHtml(copy.greeting)}</p><p style="margin:0;color:#d7c29a;">${escapeHtml(copy.introduction)}</p></td></tr>
       <tr><td style="padding:8px 42px 20px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="luxor-box" style="border:1px solid rgba(202,162,76,.2);background-color:#0f0c09;">${detailRows.map(([label, value]) => `<tr><td style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#8d7d64;font-size:10px;text-transform:uppercase;letter-spacing:.16em;width:28%;">${escapeHtml(label)}</td><td class="luxor-title" style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#f7efe3;font-size:13px;">${escapeHtml(value)}</td></tr>`).join('')}</table></td></tr>
       <tr><td class="luxor-muted" style="padding:0 42px 24px;color:#d7c29a;font-size:14px;line-height:1.75;"><p style="margin:0 0 12px;color:#d7c29a;">${escapeHtml(copy.preparation)}</p><p style="margin:0;color:#d7c29a;">${escapeHtml(copy.closing)}</p></td></tr>
-      ${context.responseUrl ? `<tr><td align="center" style="padding:0 42px 34px;"><a href="${escapeHtml(context.responseUrl)}" style="display:inline-block;background:#caa24c;color:#050505;text-decoration:none;padding:14px 24px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;">Confirm or reschedule</a></td></tr>` : ''}
+      ${context.responseUrl ? `<tr><td align="center" style="padding:0 42px 34px;"><p class="luxor-muted" style="margin:0 0 10px;font-size:12px;color:#d7c29a;">Need to reschedule?</p><a href="${escapeHtml(context.responseUrl)}" style="display:inline-block;background:#caa24c;color:#050505;text-decoration:none;padding:14px 28px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;border-radius:3px;">Click Here To Reschedule</a></td></tr>` : ''}
       <tr><td align="center" style="padding:28px 42px;border-top:1px solid rgba(202,162,76,.16);color:#8d7d64;font-size:11px;line-height:1.7;"><strong class="luxor-gold" style="font-family:Georgia,serif;color:#caa24c;font-size:22px;letter-spacing:.12em;">LUXOR</strong><br/>803 Castroville Rd #402, San Antonio, TX 78237<br/><a href="mailto:booking@luxoratlaspalmas.com" style="color:#8d7d64;text-decoration:none;">booking@luxoratlaspalmas.com</a></td></tr>
     </table>
   </td></tr></table></body></html>`
