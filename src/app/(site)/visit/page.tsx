@@ -65,7 +65,7 @@ export default function VisitPage() {
             </div>
           </div>
 
-          <div>
+          <div id="tour-availability" className="scroll-mt-28">
             <LuxorInquiryForm source="visit_page" showTourFields title="Check availability and choose a tour time" submitLabel="Reserve or request tour" />
           </div>
         </div>

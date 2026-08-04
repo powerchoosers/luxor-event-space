@@ -175,7 +175,7 @@ export default function Home() {
               Weddings, quinceañeras, showers, and private events in an elegant dark-and-gold venue made for photos, dinner, and dancing.
             </p>
             <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-              <PrimaryButton href="/visit">Check tour times</PrimaryButton>
+              <PrimaryButton href="/tour#tour-availability">Check tour times</PrimaryButton>
               <a
                 href="#events"
                 className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/35 bg-black/35 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f7efe3] backdrop-blur-sm transition hover:border-[#f1d27a]/60 sm:text-sm"
@@ -337,7 +337,7 @@ export default function Home() {
             <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">The room matters. How people feel inside it matters more.</h2>
             <p className="mt-6 text-base leading-7 text-[#d7c29a]/76">Luxor owner Arianna Patterson built the venue around the real rhythm of a celebration: families arriving, formal moments landing, dinner feeling connected, and the dance floor coming alive.</p>
             <p className="mt-4 text-base leading-7 text-[#d7c29a]/70">That is why the first conversation is practical. Bring the guest count, the date, and the moments you care about. The team will help you see what works in the actual room.</p>
-            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Owner story" className="mt-7 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#f1d27a]">Meet us for a walkthrough <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Owner story" className="mt-7 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#f1d27a]">Meet us for a walkthrough <ArrowRight className="h-4 w-4" /></Link>
           </Reveal>
         </div>
       </section>

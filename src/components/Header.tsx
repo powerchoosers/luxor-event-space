@@ -105,7 +105,7 @@ export const Header = () => {
             whileTap={{ scale: 0.95 }}
           >
             <Link
-              href="/visit"
+              href="/tour#tour-availability"
               data-conversion="tour_cta_click"
               data-conversion-label="Header"
               className="hidden rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#050505] shadow-[0_18px_36px_-24px_rgba(202,162,76,0.8)] transition-all duration-300 hover:bg-[#dfbd68] sm:inline-flex sm:items-center sm:gap-2"
@@ -176,7 +176,7 @@ export const Header = () => {
                 transition={{ delay: 0.3 }}
               >
                 <Link
-                  href="/visit"
+                  href="/tour#tour-availability"
                   data-conversion="tour_cta_click"
                   data-conversion-label="Mobile menu"
                   onClick={() => setMobileMenuOpen(false)}

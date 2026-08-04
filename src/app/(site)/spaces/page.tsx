@@ -34,7 +34,7 @@ export default function SpacesPage() {
               Photos help, but the important part is the flow: where guests enter, where dinner happens, where photos land, and where the party opens up.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Spaces hero" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+              <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Spaces hero" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
                 Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/gallery" className="inline-flex items-center justify-center rounded-md border border-[#caa24c]/32 bg-black/35 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#f7efe3]">
@@ -129,7 +129,7 @@ export default function SpacesPage() {
                 </div>
               ))}
             </div>
-            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Spaces details" className="mt-8 inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+            <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Spaces details" className="mt-8 inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
               Schedule a walkthrough <ArrowRight className="h-4 w-4" />
             </Link>
           </Reveal>

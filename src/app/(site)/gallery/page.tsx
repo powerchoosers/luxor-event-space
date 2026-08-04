@@ -211,7 +211,7 @@ export default function GalleryPage() {
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
             <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">See the room before you visit.</h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Browse real event moments and room setups, then walk through the scale, lighting, and guest flow in person.</p>
-            <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link>
           </div>
           <div className="grid grid-cols-5 gap-3 sm:gap-4">
             <div className="relative col-span-3 aspect-[3/4] overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Wedding reception setup in the Luxor main hall" fill priority sizes="(min-width:1024px) 35vw,60vw" className="object-cover" /></div>
@@ -293,7 +293,7 @@ export default function GalleryPage() {
               <p className="max-w-xl text-sm leading-6 text-[#d7c29a]/70 sm:text-base">
                 The next step is seeing how your guest count, tables, photos, and dance floor would fit inside the room.
               </p>
-              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+              <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
                 Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
