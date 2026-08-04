@@ -3,7 +3,7 @@ import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLux
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
+import { listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -51,7 +51,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let booking = await createLuxorBooking(body)
+    const normalizedBody = {
+      ...body,
+      final_payment_due_date: body.final_payment_due_date || luxorFinalPaymentDueDate(body.event_date),
+      deposit_required: body.metadata?.deposit_type === 'non_refundable_booking' && Number(body.contract_total || 0) > 0
+        ? Math.round(Number(body.contract_total) * 0.3 * 100) / 100
+        : body.deposit_required,
+    }
+    let booking = await createLuxorBooking(normalizedBody)
     if (booking.invoice_id && Number(booking.deposit_required || 0) > 0) {
       const bookingInvoiceId = booking.invoice_id
       const paidPayments = await listPaidPaymentsByInvoice(bookingInvoiceId)

@@ -10,7 +10,7 @@ import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsSe
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
-import { getInvoice } from './luxorInvoicesServer'
+import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 import { createNote } from './luxorNotesServer'
 
@@ -239,12 +239,37 @@ export async function signLuxorSignatureRequest(input: {
         getLuxorBooking(signature.booking_id),
         getLuxorInquiry(signature.inquiry_id),
       ])
+      const depositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
+      const depositPayments = depositInvoice ? await listPaidPaymentsByInvoice(depositInvoice.id) : []
+      const depositPaid = Boolean(depositInvoice) && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
+      let reconciledBooking = booking
+      if (booking && depositPaid) {
+        const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+        const finalInvoice = masterInvoice ? await ensureLuxorFinalBalanceInvoice({
+          masterInvoice,
+          bookingId: booking.id,
+          dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
+        }) : null
+        reconciledBooking = await updateLuxorBooking(booking.id, {
+          status: 'confirmed',
+          booked_at: booking.booked_at || signedAt,
+          metadata: {
+            ...booking.metadata,
+            reservation_confirmed_at: booking.metadata?.reservation_confirmed_at || signedAt,
+            reservation_state: 'confirmed',
+            ...(finalInvoice ? { final_balance_invoice_id: finalInvoice.id } : {}),
+          },
+        }) || booking
+      }
       if (inquiry && inquiry.status !== 'closed_lost') {
         await updateLuxorInquiry(inquiry.id, {
           status: 'booked',
-          pipeline_stage: booking?.security_deposit_status === 'collected' ? 'planning' : 'deposit',
+          pipeline_stage: depositPaid ? 'planning' : 'deposit',
           metadata: { ...inquiry.metadata, contract_signed_at: signedAt },
         })
+      }
+      if (depositPaid && reconciledBooking) {
+        await createNote(signature.inquiry_id, 'Agreement signed and 30% deposit confirmed. The event date is officially reserved and the booking moved to Planning.', 'status_change', 'Booking Automation').catch(() => null)
       }
       await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder', 'contract_signature_reminder'])
     }
@@ -306,13 +331,18 @@ export async function signLuxorSignatureRequest(input: {
       getLuxorBooking(signature.booking_id),
       signature.inquiry_id ? getLuxorInquiry(signature.inquiry_id) : Promise.resolve(null),
     ])
-    const invoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
-    if (booking && inquiry && invoice) {
+    const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+    const depositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
+    const paymentInvoice = depositInvoice || masterInvoice
+    if (booking && inquiry && paymentInvoice) {
       paymentRequest = await createLuxorPostContractCheckout({
         booking,
         inquiry,
-        invoice,
+        invoice: paymentInvoice,
         origin: process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com',
+        paymentAmount: paymentInvoice.invoice_kind === 'deposit' ? Number(paymentInvoice.total) : undefined,
+        paymentLabel: paymentInvoice.invoice_kind === 'deposit' ? '30% non-refundable booking deposit' : undefined,
+        masterInvoiceId: masterInvoice?.id,
       })
     }
   } catch (paymentError) {

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment } from './luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment } from './luxorInquiryTypes'
 
 type SupabaseError = {
   message?: string
@@ -54,6 +54,13 @@ export async function listInvoicesByInquiry(inquiryId: string) {
   )
 }
 
+export async function getInvoiceByBookingAndKind(bookingId: string, invoiceKind: Exclude<LuxorInvoiceKind, 'event'>) {
+  const invoices = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&invoice_kind=eq.${invoiceKind}&order=created_at.desc&limit=1`,
+  )
+  return invoices[0] ?? null
+}
+
 export async function getInvoice(id: string) {
   const [invoice] = await supabaseRest<LuxorInvoice[]>(
     `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
@@ -85,6 +92,10 @@ export async function createInvoice(data: {
   due_date?: string | null
   inquiry_id?: string | null
   notes?: string | null
+  booking_id?: string | null
+  parent_invoice_id?: string | null
+  invoice_kind?: LuxorInvoiceKind
+  status?: LuxorInvoiceStatus
 }) {
   const [created] = await supabaseRest<LuxorInvoice[]>('luxor_invoices?select=*', {
     method: 'POST',
@@ -100,7 +111,10 @@ export async function createInvoice(data: {
       due_date: data.due_date || null,
       inquiry_id: data.inquiry_id || null,
       notes: data.notes || null,
-      status: 'draft',
+      booking_id: data.booking_id || null,
+      parent_invoice_id: data.parent_invoice_id || null,
+      invoice_kind: data.invoice_kind || 'event',
+      status: data.status || 'draft',
     }),
   })
 
@@ -127,6 +141,7 @@ export async function updateInvoice(
     | 'stripe_checkout_session_id'
     | 'stripe_checkout_url'
     | 'stripe_checkout_opened_at'
+    | 'stripe_invoice_id'
   >>
 ) {
   const [updated] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}`, {
@@ -155,6 +170,115 @@ export async function listAllBills() {
 }
 
 export const LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT = 750
+export const LUXOR_NON_REFUNDABLE_DEPOSIT_RATE = 0.3
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function securityDepositGross(invoice: LuxorInvoice) {
+  const securitySubtotal = invoice.line_items
+    .filter((item) => /refundable security deposit/i.test(item.description) || item.category === 'Security Deposit')
+    .reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1) * Math.max(0, Number(item.unitPrice) || 0), 0)
+  return roundMoney(securitySubtotal * (1 + Math.max(0, Number(invoice.tax_rate) || 0)))
+}
+
+export function calculateLuxorThirtyPercentDeposit(invoice: LuxorInvoice) {
+  const refundableSecurityDeposit = Math.min(Number(invoice.total || 0), securityDepositGross(invoice))
+  const nonSecurityTotal = Math.max(0, roundMoney(Number(invoice.total || 0) - refundableSecurityDeposit))
+  const depositAmount = Math.min(nonSecurityTotal, roundMoney(nonSecurityTotal * LUXOR_NON_REFUNDABLE_DEPOSIT_RATE))
+  return {
+    depositAmount,
+    refundableSecurityDeposit,
+    finalBalance: Math.max(0, roundMoney(Number(invoice.total || 0) - depositAmount)),
+  }
+}
+
+export function luxorFinalPaymentDueDate(eventDate: string | null | undefined) {
+  if (!eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return null
+  const date = new Date(`${eventDate}T12:00:00-06:00`)
+  if (Number.isNaN(date.getTime())) return null
+  date.setDate(date.getDate() - 60)
+  return date.toISOString().slice(0, 10)
+}
+
+export async function ensureLuxorDepositInvoice(input: {
+  masterInvoice: LuxorInvoice
+  bookingId: string
+  dueDate?: string | null
+}) {
+  const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
+  const { depositAmount } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  if (depositAmount < 0.5) throw new Error('The event total is too low to create a 30% deposit invoice.')
+  if (existing) {
+    if (existing.status === 'paid') return existing
+    return await updateInvoice(existing.id, {
+      line_items: [{ description: '30% Non-Refundable Booking Deposit', quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
+      subtotal: depositAmount,
+      tax_rate: 0,
+      total: depositAmount,
+      due_date: input.dueDate || new Date().toISOString().slice(0, 10),
+      notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
+    }) || existing
+  }
+  return createInvoice({
+    inquiry_id: input.masterInvoice.inquiry_id,
+    booking_id: input.bookingId,
+    parent_invoice_id: input.masterInvoice.id,
+    invoice_kind: 'deposit',
+    client_name: input.masterInvoice.client_name,
+    event_type: input.masterInvoice.event_type,
+    description: '30% non-refundable booking deposit',
+    line_items: [{ description: '30% Non-Refundable Booking Deposit', quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
+    subtotal: depositAmount,
+    tax_rate: 0,
+    total: depositAmount,
+    due_date: input.dueDate || new Date().toISOString().slice(0, 10),
+    notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
+  })
+}
+
+export async function ensureLuxorFinalBalanceInvoice(input: {
+  masterInvoice: LuxorInvoice
+  bookingId: string
+  dueDate: string | null
+}) {
+  const existing = await getInvoiceByBookingAndKind(input.bookingId, 'final_balance')
+  const { depositAmount, refundableSecurityDeposit, finalBalance } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  const remainingEventBalance = Math.max(0, roundMoney(finalBalance - refundableSecurityDeposit))
+  const lineItems: LuxorInvoiceLineItem[] = [
+    { description: 'Remaining Event Balance After 30% Deposit', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance' },
+    ...(refundableSecurityDeposit > 0
+      ? [{ description: 'Refundable Security Deposit', quantity: 1, unitPrice: refundableSecurityDeposit, total: refundableSecurityDeposit, category: 'Security Deposit' }]
+      : []),
+  ]
+  if (existing) {
+    if (existing.status === 'paid') return existing
+    return await updateInvoice(existing.id, {
+      line_items: lineItems,
+      subtotal: finalBalance,
+      tax_rate: 0,
+      total: finalBalance,
+      due_date: input.dueDate,
+      notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} non-refundable booking deposit. Due 60 days before the event.`,
+    }) || existing
+  }
+  return createInvoice({
+    inquiry_id: input.masterInvoice.inquiry_id,
+    booking_id: input.bookingId,
+    parent_invoice_id: input.masterInvoice.id,
+    invoice_kind: 'final_balance',
+    client_name: input.masterInvoice.client_name,
+    event_type: input.masterInvoice.event_type,
+    description: 'Final event balance due 60 days before the event',
+    line_items: lineItems,
+    subtotal: finalBalance,
+    tax_rate: 0,
+    total: finalBalance,
+    due_date: input.dueDate,
+    notes: `Final payment after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} non-refundable booking deposit. Due 60 days before the event.`,
+  })
+}
 
 export function calculateLuxorDepositAmounts(params: {
   lineItems: LuxorInvoiceLineItem[]
@@ -171,7 +295,7 @@ export function calculateLuxorDepositAmounts(params: {
   if (depositType === 'non_refundable_booking') {
     const depositAmount = params.customBookingDeposit && params.customBookingDeposit > 0
       ? Math.round(params.customBookingDeposit * 100) / 100
-      : Math.round(total * 0.25 * 100) / 100
+      : Math.round(total * LUXOR_NON_REFUNDABLE_DEPOSIT_RATE * 100) / 100
     const remainingBalance = Math.max(0, Math.round((total - depositAmount) * 100) / 100)
     return {
       depositType: 'non_refundable_booking' as const,
@@ -233,4 +357,3 @@ export function ensureRefundableSecurityDepositLineItem(lineItems: LuxorInvoiceL
 
   return itemsCopy
 }
-

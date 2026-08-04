@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { calculateLuxorThirtyPercentDeposit, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorDateLockDepositEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
-import { downloadLuxorPrivatePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
+import { downloadLuxorPrivatePdf, saveLuxorInvoicePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildContractReminderEmail, buildFinalPaymentReminderEmail, buildPaymentReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
@@ -36,58 +36,74 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
     const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-    let booking = bookings.find((item) => item.invoice_id === invoice.id) || null
+    let booking = invoice.booking_id
+      ? await getLuxorBooking(invoice.booking_id)
+      : bookings.find((item) => item.invoice_id === invoice.id) || null
 
     if (body.mode === 'date_lock_deposit') {
       if (!booking) {
         return NextResponse.json({ error: 'Create the booking record first so the date reservation is linked to the event.' }, { status: 409 })
       }
       if (balanceDue <= 0) return NextResponse.json({ error: 'This invoice is already fully paid.' }, { status: 400 })
+      if (!booking.event_date) return NextResponse.json({ error: 'Add the event date before sending the booking package.' }, { status: 409 })
+      if (Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) {
+        return NextResponse.json({ error: 'The booking total and event invoice total must match before the booking package is sent.' }, { status: 409 })
+      }
+      if (String(booking.email || '').trim().toLowerCase() !== inquiry.email.trim().toLowerCase()) {
+        return NextResponse.json({ error: 'The lead email and booking email do not match. Update them before sending.' }, { status: 409 })
+      }
 
-      const depositAmount = body.paymentAmount && Number.isFinite(body.paymentAmount)
-        ? Math.round(Number(body.paymentAmount) * 100) / 100
-        : Number(booking.deposit_required || 0) > 0
-          ? Number(booking.deposit_required)
-          : Math.min(balanceDue, 500)
-
-      const paymentLabel = body.paymentLabel ? String(body.paymentLabel).trim() : 'Date reservation deposit'
+      const { depositAmount } = calculateLuxorThirtyPercentDeposit(invoice)
+      const finalPaymentDueDate = luxorFinalPaymentDueDate(booking.event_date)
+      const paymentLabel = '30% non-refundable booking deposit'
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
+      booking = await updateLuxorBooking(booking.id, {
+        deposit_required: depositAmount,
+        final_payment_due_date: finalPaymentDueDate,
+        status: booking.status === 'draft' ? 'tentative' : booking.status,
+        metadata: {
+          ...booking.metadata,
+          deposit_type: 'non_refundable_booking',
+          deposit_rate: 0.3,
+          proposalLineItems: invoice.line_items,
+          proposalTaxRate: invoice.tax_rate,
+          proposalInvoiceId: invoice.id,
+        },
+      }) || booking
+
+      const now = new Date().toISOString()
+      const currentFingerprint = getLuxorBookingContractFingerprint(booking)
+      const activeSignature = await getActiveLuxorSignatureRequestByBooking(booking.id)
+      let signature = activeSignature
+      if (activeSignature && activeSignature.metadata?.bookingFingerprint !== currentFingerprint) {
+        await updateLuxorSignatureRequest(activeSignature.id, {
+          status: 'void',
+          metadata: { ...activeSignature.metadata, replacedAt: now, replacedBy: session.email, replacementReason: 'booking_fields_changed' },
+        })
+        await recordLuxorSignatureEvent({ signatureRequestId: activeSignature.id, eventType: 'voided', metadata: { replacementReason: 'booking_fields_changed', replacedBy: session.email } })
+        signature = null
+      }
+      signature ||= await createLuxorSignatureRequest(booking)
+      const signingUrl = `${origin}/secure-portal/sign/${signature.token}`
+      const depositInvoice = await ensureLuxorDepositInvoice({ masterInvoice: invoice, bookingId: booking.id })
+
       const checkout = await createLuxorPostContractCheckout({
-        invoice,
+        invoice: depositInvoice,
         inquiry,
         booking,
         origin,
         paymentAmount: depositAmount,
         paymentLabel,
         allowPreContract: true,
+        masterInvoiceId: invoice.id,
       })
 
       if (!checkout) return NextResponse.json({ error: 'No deposit payment due.' }, { status: 400 })
 
-      const now = new Date().toISOString()
-      const publicToken = invoice.public_token || crypto.randomUUID()
-      const reviewUrl = checkout.checkoutUrl
-
-      const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
-      const email = await buildLuxorDateLockDepositEmail({
-        invoice,
-        inquiry,
-        booking,
-        reviewUrl,
-        depositAmount,
-        notes,
-      })
-
-      await sendLuxorZohoEmail({
-        to: inquiry.email,
-        subject: email.subject,
-        content: email.html,
-        from: 'booking@luxoratlaspalmas.com',
-        fromName: 'Luxor Event Space',
-      })
-
-      const updated = await updateInvoice(invoice.id, {
+      const publicToken = depositInvoice.public_token || crypto.randomUUID()
+      const depositReviewUrl = `${origin}/proposal/${publicToken}`
+      const updatedDepositInvoice = await updateInvoice(depositInvoice.id, {
         public_token: publicToken,
         status: 'sent',
         proposal_sent_at: now,
@@ -96,21 +112,92 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_requested_label: paymentLabel,
         stripe_checkout_session_id: checkout.checkoutId,
         stripe_checkout_url: checkout.checkoutUrl,
+      }) || depositInvoice
+
+      const [depositPdf, contractPdf, guide] = await Promise.all([
+        buildLuxorInvoicePdf(updatedDepositInvoice, inquiry),
+        downloadLuxorPrivatePdf(signature.contract_document_path || ''),
+        downloadLuxorPrivatePdf(signature.guest_guide_path || ''),
+      ])
+      await saveLuxorInvoicePdf({ invoice: updatedDepositInvoice, inquiryId: inquiry.id, pdf: depositPdf, createdBy: session.email })
+
+      const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
+      const email = await buildLuxorDateLockDepositEmail({
+        invoice: updatedDepositInvoice,
+        inquiry,
+        booking,
+        reviewUrl: depositReviewUrl,
+        signingUrl,
+        depositAmount,
+        finalPaymentDueDate,
+        notes,
       })
+
+      const job = await createLuxorEmailJob({
+        inquiryId: inquiry.id,
+        bookingId: booking.id,
+        signatureRequestId: signature.id,
+        jobType: 'booking_package',
+        recipientEmail: inquiry.email,
+        subject: email.subject,
+        body: `Your booking package is ready. Pay the 30% deposit: ${checkout.checkoutUrl} Sign the agreement: ${signingUrl}`,
+        scheduledFor: now,
+        metadata: { manual: true, requestedBy: session.email, deposit_invoice_id: updatedDepositInvoice.id, master_invoice_id: invoice.id, includes_deposit_invoice: true, includes_contract: true, includes_guest_guide: true },
+      })
+      try {
+        await sendLuxorZohoEmail({
+          to: inquiry.email,
+          subject: email.subject,
+          content: email.html,
+          from: 'booking@luxoratlaspalmas.com',
+          fromName: 'Luxor Event Space',
+          attachments: [
+            { filename: `Luxor-30-Percent-Deposit-Invoice-${updatedDepositInvoice.id.slice(0, 8)}.pdf`, content: depositPdf, contentType: 'application/pdf' },
+            { filename: 'Luxor-Event-Agreement.pdf', content: contractPdf, contentType: 'application/pdf' },
+            { filename: 'Luxor-Guest-Guide.pdf', content: guide, contentType: 'application/pdf' },
+          ],
+        })
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
+      } catch (sendError) {
+        await updateLuxorEmailJob(job.id, { status: 'failed', last_error: sendError instanceof Error ? sendError.message : 'Email send failed.' })
+        throw sendError
+      }
+
+      const updated = await updateInvoice(invoice.id, { status: 'sent', proposal_sent_at: now })
+      booking = await updateLuxorBooking(booking.id, {
+        metadata: {
+          ...booking.metadata,
+          booking_package_sent_at: now,
+          deposit_invoice_id: updatedDepositInvoice.id,
+          latest_signature_request_id: signature.id,
+          reservation_state: 'awaiting_deposit_and_signature',
+        },
+      }) || booking
 
       const updatedInquiry = await updateLuxorInquiry(inquiry.id, {
         status: 'booked',
-        pipeline_stage: 'deposit',
+        pipeline_stage: 'contract',
         metadata: {
           ...inquiry.metadata,
-          date_lock_deposit_sent_at: now,
+          booking_package_sent_at: now,
           latest_proposal_invoice_id: invoice.id,
+          latest_deposit_invoice_id: updatedDepositInvoice.id,
+          latest_signature_request_id: signature.id,
         },
       }) ?? inquiry
 
-      await createNote(inquiry.id, `Date-lock deposit invoice of $${depositAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} sent to ${inquiry.email}. Event date locked for planning.`, 'status_change', session.email)
+      await createNote(inquiry.id, `Booking package sent to ${inquiry.email}: 30% non-refundable deposit invoice, Stripe payment link, agreement, and Guest Guide. The date remains pending until both payment and signature are complete.`, 'status_change', session.email)
+      await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder', 'contract_view_reminder', 'contract_signature_reminder'])
+      const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
+      const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })
+      const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: depositReviewUrl, paymentAmount: depositAmount, paymentLabel })
+      await Promise.all([
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id) }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id) }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'proposal_payment_reminder', recipientEmail: inquiry.email, subject: paymentReminder.subject, body: paymentReminder.body, scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('proposal_payment_reminder', checkout.checkoutId), metadata: { invoice_id: updatedDepositInvoice.id, checkout_session_id: checkout.checkoutId, flow_stage: 'booking_package_deposit' } }),
+      ])
 
-      return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
+      return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
     }
 
     if (body.mode === 'proposal_contract') {

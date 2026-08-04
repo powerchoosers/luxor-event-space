@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
-import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +25,11 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     listPaidPaymentsByInvoice(invoice.id),
     invoice.inquiry_id ? listLuxorBookingsByInquiry(invoice.inquiry_id) : Promise.resolve([]),
   ])
-  const booking = bookings.find((item) => item.invoice_id === invoice.id)
+  const booking = invoice.booking_id
+    ? await getLuxorBooking(invoice.booking_id)
+    : bookings.find((item) => item.invoice_id === invoice.id)
   const contractSigned = booking?.contract_status === 'signed'
+  const paymentAvailable = invoice.invoice_kind === 'deposit' || contractSigned
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   const requestedAmount = Math.min(Number(invoice.payment_requested_amount || balanceDue), balanceDue)
@@ -97,15 +100,15 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
           <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{contractSigned ? (invoice.payment_requested_label || 'Payment due now') : 'Payment after agreement'}</p>
-                <p className="mt-2 font-mono text-3xl font-black text-[#f1d27a]">{contractSigned ? money(requestedAmount) : 'Not requested'}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{paymentAvailable ? (invoice.payment_requested_label || 'Payment due now') : 'Payment after agreement'}</p>
+                <p className="mt-2 font-mono text-3xl font-black text-[#f1d27a]">{paymentAvailable ? money(requestedAmount) : 'Not requested'}</p>
                 {paidTotal > 0 ? <p className="mt-2 text-xs text-emerald-300">{money(paidTotal)} already received</p> : null}
               </div>
               {balanceDue <= 0 ? (
                 <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-6 text-xs font-black uppercase tracking-wider text-emerald-300"><Check size={16} /> Paid in full</span>
-              ) : contractSigned && invoice.stripe_checkout_url ? (
+              ) : paymentAvailable ? (
                 <a href={`/api/public/proposals/${encodeURIComponent(token)}/checkout`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
-              ) : !contractSigned ? (
+              ) : !paymentAvailable ? (
                 <p className="max-w-xs text-xs leading-5 text-zinc-300">Payment unlocks after the event agreement is signed. Use the secure agreement link in your Luxor email to review and sign first.</p>
               ) : (
                 <p className="max-w-xs text-xs leading-5 text-zinc-400">Contact Luxor for a refreshed secure payment link.</p>

@@ -1,25 +1,46 @@
 import { NextResponse } from 'next/server'
 import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
-import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const invoice = await getInvoiceByPublicToken(token)
-  if (!invoice?.stripe_checkout_url || invoice.status === 'cancelled') {
+  if (!invoice || invoice.status === 'cancelled') {
     return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
   }
 
   const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-  const booking = bookings.find((item) => item.invoice_id === invoice.id)
-  if (!booking || booking.contract_status !== 'signed') {
+  const booking = invoice.booking_id
+    ? await getLuxorBooking(invoice.booking_id)
+    : bookings.find((item) => item.invoice_id === invoice.id)
+  const allowPreContract = invoice.invoice_kind === 'deposit'
+  if (!booking || (!allowPreContract && booking.contract_status !== 'signed')) {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
   }
 
+  const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+  if (!inquiry) return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
+
+  const origin = new URL(_request.url).origin
+  const checkout = await createLuxorPostContractCheckout({
+    invoice,
+    inquiry,
+    booking,
+    origin,
+    paymentAmount: invoice.invoice_kind === 'deposit' ? Number(invoice.payment_requested_amount || invoice.total) : undefined,
+    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? '30% non-refundable booking deposit' : 'Final event balance'),
+    allowPreContract,
+    masterInvoiceId: invoice.parent_invoice_id || booking.invoice_id || undefined,
+  })
+  if (!checkout) return NextResponse.redirect(new URL('/payment/success', _request.url))
+
   let checkoutUrl: URL
   try {
-    checkoutUrl = new URL(invoice.stripe_checkout_url)
+    checkoutUrl = new URL(checkout.checkoutUrl)
   } catch {
     return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
   }

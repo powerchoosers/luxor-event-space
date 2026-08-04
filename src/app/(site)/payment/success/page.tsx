@@ -20,7 +20,7 @@ export default function PaymentSuccessPage() {
           Your payment is confirmed.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-[#c9c0b7] sm:text-base">
-          Thank you for choosing Luxor Event Space. Your payment was submitted securely, and our team will follow up with the next step for your event.
+          Thank you for choosing Luxor Event Space. Your payment was submitted securely and a paid invoice is being sent to your email.
         </p>
 
         <div className="mx-auto mt-9 flex max-w-lg items-start gap-4 border-y border-white/10 py-5 text-left">
@@ -28,9 +28,9 @@ export default function PaymentSuccessPage() {
             <Mail className="h-4 w-4" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-[#f7efe3]">What happens next?</p>
+            <p className="text-sm font-semibold text-[#f7efe3]">One final check</p>
             <p className="mt-1 text-xs leading-5 text-[#9f9891] sm:text-sm">
-              Keep an eye on your inbox. The Luxor team will contact you if anything else is needed.
+              Your date is officially reserved when both the 30% deposit and agreement are complete. If you have not signed yet, use the agreement link in your booking-package email.
             </p>
           </div>
         </div>

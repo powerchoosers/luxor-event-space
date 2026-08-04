@@ -12,6 +12,7 @@ export async function createLuxorPostContractCheckout(input: {
   paymentAmount?: number
   paymentLabel?: string
   allowPreContract?: boolean
+  masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
   const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
@@ -23,7 +24,9 @@ export async function createLuxorPostContractCheckout(input: {
     throw new Error('The agreement must be signed before Stripe checkout can be created.')
   }
 
-  const requestedDeposit = Math.max(0, Number(booking.deposit_required || 0) - paidTotal)
+  const requestedDeposit = invoice.invoice_kind === 'final_balance'
+    ? 0
+    : Math.max(0, Number(booking.deposit_required || 0) - paidTotal)
   const requestedAmount = Number(input.paymentAmount)
   const paymentAmount = Number.isFinite(requestedAmount)
     ? Math.round(requestedAmount * 100) / 100
@@ -77,15 +80,28 @@ export async function createLuxorPostContractCheckout(input: {
     }],
     metadata: {
       invoice_id: invoice.id,
+      master_invoice_id: input.masterInvoiceId || invoice.parent_invoice_id || invoice.id,
       inquiry_id: inquiry.id,
       booking_id: booking.id,
+      invoice_kind: invoice.invoice_kind || 'event',
       payment_label: paymentLabel,
-      contract_signed: 'true',
+      contract_signed: booking.contract_status === 'signed' ? 'true' : 'false',
+    },
+    invoice_creation: {
+      enabled: true,
+      invoice_data: {
+        description: `${paymentLabel} for ${booking.event_type || 'event'}${booking.event_date ? ` on ${booking.event_date}` : ''}`,
+        metadata: {
+          luxor_invoice_id: invoice.id,
+          luxor_booking_id: booking.id,
+          luxor_invoice_kind: invoice.invoice_kind || 'event',
+        },
+      },
     },
     success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/payment/cancelled`,
   }, {
-    idempotencyKey: `signed-contract-${booking.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}-${previousSessionMarker}`,
+    idempotencyKey: `luxor-${invoice.invoice_kind || 'event'}-${booking.id}-${invoice.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}-${previousSessionMarker}`,
   })
   if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
 

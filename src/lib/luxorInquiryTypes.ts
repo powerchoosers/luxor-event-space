@@ -124,6 +124,7 @@ export function parseGuestCount(value: unknown) {
 
 // --- Invoice Types ---
 export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
+export type LuxorInvoiceKind = 'event' | 'deposit' | 'final_balance'
 
 export type LuxorInvoiceLineItem = {
   catalogId?: string
@@ -151,6 +152,9 @@ export type LuxorInvoice = {
   due_date: string | null
   paid_at: string | null
   notes: string | null
+  booking_id?: string | null
+  parent_invoice_id?: string | null
+  invoice_kind?: LuxorInvoiceKind
   public_token?: string | null
   proposal_sent_at?: string | null
   proposal_viewed_at?: string | null
@@ -160,6 +164,7 @@ export type LuxorInvoice = {
   stripe_checkout_session_id?: string | null
   stripe_checkout_url?: string | null
   stripe_checkout_opened_at?: string | null
+  stripe_invoice_id?: string | null
 }
 
 export type LuxorDocumentType = 'proposal' | 'invoice' | 'contract' | 'guest_guide' | 'executed_contract' | 'contract_audit'
@@ -300,8 +305,11 @@ export type LuxorEmailJobKind =
   | 'contract_signature'
   | 'contract_view_reminder'
   | 'contract_signature_reminder'
+  | 'booking_package'
+  | 'deposit_payment_confirmation'
   | 'unpaid_invoice_reminder'
   | 'sixty_day_payment_reminder'
+  | 'final_payment_request'
   | 'final_payment_reminder'
   | 'event_details_reminder'
   | 'event_day_reminder'

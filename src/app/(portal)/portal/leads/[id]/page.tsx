@@ -249,7 +249,7 @@ export default function LeadDetailPage({
   const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
-  const [bookingDepositType, setBookingDepositType] = useState<LuxorDepositType>('solidify_date')
+  const [bookingDepositType, setBookingDepositType] = useState<LuxorDepositType>('non_refundable_booking')
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [refundingDeposit, setRefundingDeposit] = useState(false)
   const [confirmRefundModalOpen, setConfirmRefundModalOpen] = useState(false)
@@ -1459,7 +1459,7 @@ export default function LeadDetailPage({
   const getSuggestedInvoiceDeposit = (invoice: LuxorInvoice) => {
     const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
     const balance = getInvoiceBalance(invoice)
-    const amount = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(invoice.total) * 0.25 * 100) / 100
+    const amount = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(invoice.total) * 0.3 * 100) / 100
     return Math.min(amount, balance)
   }
 
@@ -1477,7 +1477,7 @@ export default function LeadDetailPage({
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
       await fetchAllData(false)
-      notify({ title: 'Proposal and agreement sent', description: 'The client received the proposal PDF, Guest Guide, and secure contract link. Payment follows after signature.', variant: 'success' })
+      notify({ title: 'Proposal and agreement sent', description: 'The client received the proposal PDF, Guest Guide, and secure contract link.', variant: 'success' })
     } catch (err) {
       console.error(err)
       notify({ title: 'Proposal and agreement not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
@@ -1502,8 +1502,8 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error(data.error || 'Date reservation deposit invoice could not be sent.')
       await fetchAllData(false)
       notify({
-        title: 'Date-Lock Invoice Sent',
-        description: `Emailed date reservation deposit request to ${lead?.email}. The event date is now locked for planning.`,
+        title: 'Booking Package Sent',
+        description: `Sent the 30% deposit invoice, Stripe link, agreement, and Guest Guide to ${lead?.email}. The date confirms after payment and signature.`,
         variant: 'success',
       })
     } catch (err) {
@@ -1659,7 +1659,7 @@ export default function LeadDetailPage({
       : paymentRequestKind === 'deposit'
         ? Math.min(suggestedDeposit, balance)
         : Number(customPaymentAmount)
-    const paymentLabel = paymentRequestKind === 'deposit' ? '25% event deposit' : paymentRequestKind === 'balance' ? 'Full remaining event balance' : 'Custom event payment installment'
+    const paymentLabel = paymentRequestKind === 'deposit' ? '30% non-refundable booking deposit' : paymentRequestKind === 'balance' ? 'Full remaining event balance' : 'Custom event payment installment'
     try {
       setSendingInvoiceId(invoiceId)
       const response = await fetch(`/api/invoices/${invoiceId}/send`, {
@@ -1846,7 +1846,7 @@ export default function LeadDetailPage({
     setBookingEndTime('')
     setBookingPackageName(lead?.package_interest || '')
     setBookingContractTotal(suggestedContractTotal > 0 ? String(suggestedContractTotal) : '')
-    setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.25)) : '')
+    setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.3)) : '')
     if (targetDate) {
       const dueDate = new Date(`${targetDate}T12:00:00-05:00`)
       dueDate.setDate(dueDate.getDate() - 60)
@@ -1856,7 +1856,7 @@ export default function LeadDetailPage({
     }
     setBookingNotes(lead?.message || '')
     setBookingStatus('tentative')
-    setBookingDepositType('solidify_date')
+    setBookingDepositType('non_refundable_booking')
     setIsBookingModalOpen(true)
   }
 
@@ -1896,7 +1896,7 @@ export default function LeadDetailPage({
     const parsedContractTotal = Number.parseFloat(bookingContractTotal)
     const contractTotal = Number.isFinite(parsedContractTotal) ? parsedContractTotal : 0
     const parsedDeposit = Number.parseFloat(bookingDepositRequired)
-    const depositRequired = Number.isFinite(parsedDeposit) ? parsedDeposit : Math.round(contractTotal * 0.25)
+    const depositRequired = Number.isFinite(parsedDeposit) ? parsedDeposit : Math.round(contractTotal * 0.3)
 
     try {
       setSubmittingBooking(true)
@@ -1924,6 +1924,8 @@ export default function LeadDetailPage({
           metadata: {
             proposalLineItems: invoiceItems,
             proposalTaxRate: Math.max(0, Number(invoiceTaxRate) || 0) / 100,
+            deposit_type: bookingDepositType,
+            deposit_rate: bookingDepositType === 'non_refundable_booking' ? 0.3 : null,
           },
         }),
       })
@@ -2088,12 +2090,13 @@ export default function LeadDetailPage({
   const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
   const depositBalance = Math.max(0, bookingDepositAmount - depositPaidTotal)
   const remainingBalance = Math.max(0, bookingContractAmount - paidTotal)
-  const proposalInvoice = sortedInvoices.find((invoice) => invoice.status === 'sent' || invoice.status === 'paid') || latestInvoice
-  const proposalPayments = proposalInvoice
-    ? sortedPayments.filter((payment) => payment.invoice_id === proposalInvoice.id && payment.status === 'paid')
-    : []
-  const proposalPaidTotal = proposalPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-  const proposalBalance = Math.max(0, Math.round((Number(proposalInvoice?.total || 0) - proposalPaidTotal) * 100) / 100)
+  const proposalInvoice = sortedInvoices.find((invoice) => invoice.id === latestBooking?.invoice_id)
+    || sortedInvoices.find((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
+    || latestInvoice
+  const proposalPaidTotal = latestBooking
+    ? sortedPayments.filter((payment) => payment.booking_id === latestBooking.id && payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    : 0
+  const proposalBalance = Math.max(0, Math.round((Number(proposalInvoice?.total || latestBooking?.contract_total || 0) - proposalPaidTotal) * 100) / 100)
   const proposalAmount = proposalInvoice?.total || latestBooking?.contract_total || 0
   const proposalSentAt = proposalInvoice?.proposal_sent_at || (
     proposalInvoice && (proposalInvoice.status === 'sent' || proposalInvoice.status === 'paid')
@@ -3806,10 +3809,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : latestBooking.contract_status !== 'signed' ? (proposalSentAt ? 'Await the client signature' : 'Send proposal and agreement') : proposalPaidTotal <= 0 ? 'Contract signed — payment link sent' : 'Payment received'}
+                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the 30% booking package' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : latestBooking.contract_status !== 'signed' ? 'The client reviews the proposal and signs before any Stripe link is released.' : proposalPaidTotal <= 0 ? 'Stripe is emailed automatically after signature. Payment status updates here.' : 'The signed agreement and payment are both recorded.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the deposit invoice, Stripe link, agreement, and Guest Guide together.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the 30% deposit.' : 'The signed agreement and paid deposit are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -3820,7 +3823,7 @@ export default function LeadDetailPage({
                         ) : latestBooking.contract_status !== 'signed' ? (
                           <div className="flex flex-wrap items-center gap-2">
                             <button type="button" onClick={() => handleSendDateLockInvoice(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all disabled:opacity-40 cursor-pointer">
-                              Send Date-Lock Invoice (Book Date)
+                              Send 30% Booking Package
                             </button>
                             <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
                               {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
@@ -5903,7 +5906,7 @@ export default function LeadDetailPage({
                   value={paymentRequestKind}
                   onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
                   options={[
-                    { value: 'deposit', label: `25% event deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
+                    { value: 'deposit', label: `30% non-refundable deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
                     { value: 'balance', label: `Pay invoice in full — ${formatMoney(getInvoiceBalance(paymentRequestInvoice))}` },
                     { value: 'custom', label: 'Custom installment — choose an amount' },
                   ]}
@@ -6315,7 +6318,7 @@ export default function LeadDetailPage({
                       if (mode === 'solidify_date') {
                         setBookingDepositRequired(String(Math.round(total * 0.5 + 500)))
                       } else {
-                        setBookingDepositRequired(String(Math.round(total * 0.25)))
+                        setBookingDepositRequired(String(Math.round(total * 0.3)))
                       }
                     }
                   }}
@@ -6369,7 +6372,7 @@ export default function LeadDetailPage({
                     placeholder="625"
                     className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
                   />
-                  <p className="text-[10px] leading-4 text-zinc-600">If left blank, this defaults to 25% of the contract total.</p>
+                  <p className="text-[10px] leading-4 text-zinc-600">If left blank, this defaults to a 30% non-refundable booking deposit.</p>
                 </div>
               </div>
 
@@ -6385,7 +6388,7 @@ export default function LeadDetailPage({
 
               <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-[11px] leading-5 text-zinc-500">
                 <p className="font-semibold text-zinc-300">What happens next</p>
-                <p className="mt-1">We save the booking, move the lead to booked, and keep the contract button ready in the booking section.</p>
+                <p className="mt-1">We save the booking and prepare the 30% deposit, agreement, and Guest Guide package. The date becomes official after both payment and signature.</p>
               </div>
 
               <button

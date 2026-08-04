@@ -171,6 +171,44 @@ export async function saveLuxorProposalPdf(input: {
   return document
 }
 
+export async function saveLuxorInvoicePdf(input: {
+  invoice: LuxorInvoice
+  inquiryId: string | null
+  pdf: Uint8Array
+  createdBy: string
+}) {
+  const { invoice, inquiryId, pdf, createdBy } = input
+  const documentType: LuxorDocumentType = 'invoice'
+  const fileName = `Luxor-Invoice-${invoice.id.slice(0, 8)}.pdf`
+  const storagePath = `invoices/${safeFilePart(invoice.id)}/${fileName}`
+  await saveLuxorPrivatePdf(storagePath, pdf)
+
+  const documentInput = {
+    inquiry_id: inquiryId,
+    invoice_id: invoice.id,
+    document_type: documentType,
+    title: `Invoice for ${invoice.client_name}`,
+    file_name: fileName,
+    storage_path: storagePath,
+    content_type: 'application/pdf',
+    size_bytes: pdf.byteLength,
+    created_by: createdBy,
+    updated_at: new Date().toISOString(),
+  }
+  const existing = await getLuxorDocumentByInvoice(invoice.id, documentType)
+  const path = existing
+    ? `luxor_documents?select=*&id=eq.${encodeURIComponent(existing.id)}`
+    : 'luxor_documents?select=*'
+  const documents = await supabaseRest<LuxorDocument[]>(path, {
+    method: existing ? 'PATCH' : 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(documentInput),
+  })
+  const document = documents[0]
+  if (!document) throw new Error('The invoice PDF was uploaded but its document record could not be saved.')
+  return document
+}
+
 export async function downloadLuxorDocument(document: LuxorDocument) {
   const { url, serviceRoleKey } = getSupabaseConfig()
   const response = await fetch(`${url}/storage/v1/object/${DOCUMENT_BUCKET}/${document.storage_path}`, {

@@ -7,6 +7,7 @@ import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPaym
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
+import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from './luxorInvoicesServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -642,17 +643,7 @@ export async function processLuxorEmailJobs(
 
 export async function queueUpcoming60DayInvoiceReminders() {
   try {
-    const activeBookings = await supabaseRest<Array<{
-      id: string
-      inquiry_id: string | null
-      invoice_id: string | null
-      client_name: string
-      email: string | null
-      event_date: string | null
-      status: string
-      contract_status?: string | null
-      final_payment_due_date?: string | null
-    }>>('luxor_bookings?select=id,inquiry_id,invoice_id,client_name,email,event_date,status,contract_status,final_payment_due_date&status=in.(tentative,confirmed)')
+    const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)')
 
     if (!Array.isArray(activeBookings) || !activeBookings.length) return
 
@@ -664,27 +655,22 @@ export async function queueUpcoming60DayInvoiceReminders() {
       const daysUntilEvent = Math.round((eventTime - nowMs) / (24 * 60 * 60_000))
 
       let milestone: string | null = null
-      if (daysUntilEvent <= 60 && daysUntilEvent > 45) milestone = '60_days'
+      if (daysUntilEvent <= 67 && daysUntilEvent > 60) milestone = 'invoice_issued'
+      else if (daysUntilEvent <= 60 && daysUntilEvent > 45) milestone = '60_days'
       else if (daysUntilEvent <= 30 && daysUntilEvent > 20) milestone = '30_days'
       else if (daysUntilEvent <= 14 && daysUntilEvent > 7) milestone = '14_days'
       else if (daysUntilEvent <= 7 && daysUntilEvent >= 0) milestone = '7_days'
 
       if (!milestone) continue
+      if (booking.contract_status !== 'signed' || !booking.metadata?.deposit_paid_at) continue
 
-      const invoiceId = booking.invoice_id
-      if (!invoiceId) continue
+      const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+      if (!masterInvoice) continue
+      const dueDate = booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date)
+      let invoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
+      invoice ||= await ensureLuxorFinalBalanceInvoice({ masterInvoice, bookingId: booking.id, dueDate })
 
-      const [invoice] = await supabaseRest<Array<{
-        id: string
-        total: number
-        public_token?: string | null
-        stripe_checkout_url?: string | null
-        due_date?: string | null
-        line_items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>
-      }>>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(invoiceId)}&limit=1`)
-      if (!invoice) continue
-
-      const paidPayments = await supabaseRest<LuxorPayment[]>(`luxor_payments?select=amount&invoice_id=eq.${encodeURIComponent(invoice.id)}&status=eq.paid`).catch(() => [])
+      const paidPayments = await listPaidPaymentsByInvoice(invoice.id).catch(() => [])
       const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
       const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
       if (balanceDue <= 0) continue
@@ -693,61 +679,32 @@ export async function queueUpcoming60DayInvoiceReminders() {
       if (!inquiry) continue
 
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-      const reviewUrl = invoice.stripe_checkout_url || `${origin}/proposal/${invoice.public_token || inquiry.id}`
+      invoice = await updateInvoice(invoice.id, {
+        status: 'sent',
+        proposal_sent_at: invoice.proposal_sent_at || new Date().toISOString(),
+        due_date: dueDate,
+        payment_requested_at: new Date().toISOString(),
+        payment_requested_amount: balanceDue,
+        payment_requested_label: 'Final event balance',
+      }) || invoice
+      const reviewUrl = `${origin}/proposal/${invoice.public_token || invoice.id}`
 
       const email = await buildAiTailoredInvoiceReminderEmail({
         inquiry,
-        invoice: {
-          id: invoice.id,
-          created_at: '',
-          updated_at: '',
-          inquiry_id: inquiry.id,
-          client_name: inquiry.full_name,
-          event_type: inquiry.event_type,
-          description: null,
-          line_items: invoice.line_items || [],
-          subtotal: Number(invoice.total),
-          tax_rate: 0,
-          total: Number(invoice.total),
-          status: 'sent',
-          due_date: invoice.due_date || null,
-          paid_at: null,
-          notes: null,
-        },
-        booking: {
-          id: booking.id,
-          created_at: '',
-          updated_at: '',
-          inquiry_id: booking.inquiry_id,
-          invoice_id: booking.invoice_id,
-          client_name: booking.client_name,
-          email: booking.email,
-          phone: null,
-          event_type: null,
-          event_date: booking.event_date,
-          start_time: null,
-          end_time: null,
-          guest_count: null,
-          package_name: null,
-          status: (booking.status as LuxorBooking['status']) || 'tentative',
-          booked_at: null,
-          contract_total: Number(invoice.total),
-          deposit_required: 0,
-          final_payment_due_date: booking.final_payment_due_date || null,
-          notes: null,
-          metadata: {},
-        },
+        invoice,
+        booking,
         reviewUrl,
         balanceDue,
-        dueDate: booking.final_payment_due_date || invoice.due_date,
+        dueDate: dueDate || invoice.due_date,
         kind: 'sixty_day_deadline',
       })
 
-      const automationKey = `sixty_day_payment_reminder:${booking.id}:${milestone}`
+      const jobType: LuxorEmailJobKind = milestone === 'invoice_issued' ? 'final_payment_request' : 'sixty_day_payment_reminder'
+      const automationKey = `${jobType}:${booking.id}:${milestone}`
       await createUniqueLuxorEmailJob({
         inquiryId: inquiry.id,
         bookingId: booking.id,
-        jobType: 'sixty_day_payment_reminder',
+        jobType,
         recipientEmail: inquiry.email || booking.email || '',
         subject: email.subject,
         body: email.body,
