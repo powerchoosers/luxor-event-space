@@ -14,6 +14,7 @@ import { buildContractReminderEmail, buildFinalPaymentReminderEmail, buildPaymen
 import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let invoiceId = 'unknown'
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const now = new Date().toISOString()
       const currentFingerprint = getLuxorBookingContractFingerprint(booking)
       const activeSignature = await getActiveLuxorSignatureRequestByBooking(booking.id)
-      let signature = activeSignature
+      let signature: LuxorSignatureRequest | null = activeSignature
       if (activeSignature && activeSignature.metadata?.bookingFingerprint !== currentFingerprint) {
         await updateLuxorSignatureRequest(activeSignature.id, {
           status: 'void',
