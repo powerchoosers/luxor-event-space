@@ -1060,16 +1060,10 @@ async function fetchLuxorZohoThread(threadId: string, limit: number): Promise<Lu
     }
   }).filter((message) => message.id)
 
-  const detailed: LuxorZohoMessage[] = []
-  for (let index = 0; index < summaries.length; index += ZOHO_READ_CONCURRENCY) {
-    const batch = summaries.slice(index, index + ZOHO_READ_CONCURRENCY)
-    const batchDetails = await Promise.all(batch.map(async (message) => {
-      const detail = await getLuxorZohoMessageDetail(message.id, message.folderId)
-      return detail ? { ...message, ...detail, direction: message.direction } : message
-    }))
-    detailed.push(...batchDetails)
-  }
-  return detailed.sort((a, b) => new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime())
+  // Keep thread loading to one Zoho request. Fetching every message body here
+  // amplified a single click into dozens of API calls and triggered mailbox
+  // throttling. The selected message body is fetched separately on demand.
+  return summaries.sort((a, b) => new Date(a.receivedAt || 0).getTime() - new Date(b.receivedAt || 0).getTime())
 }
 
 export async function replyLuxorZohoEmail(input: {

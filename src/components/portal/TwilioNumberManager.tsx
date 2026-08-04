@@ -70,7 +70,7 @@ export function TwilioNumberManager() {
 
   async function saveRouting() {
     setSavingRouting(true)
-    const ringToNumber = toUsE164(routing.ring_to_number) || null
+    const ringToNumber = toUsE164(routing.ring_to_number || '') || null
     try {
       const response = await fetch('/api/twilio/phone-settings', {
         method: 'POST',

@@ -880,7 +880,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const fetchAllData = async (showPageLoader = true) => {
+  const fetchAllData = async (showPageLoader = true, refreshEmailHistory = showPageLoader) => {
     try {
       if (showPageLoader) setLoading(true)
       setError(null)
@@ -897,7 +897,7 @@ export default function LeadDetailPage({
         setInvoiceTaxRate(String(leadData.metadata.proposalTaxRate * 100))
       }
 
-      void fetchClientEmailThread(leadData.email || '')
+      if (refreshEmailHistory) void fetchClientEmailThread(leadData.email || '')
 
       const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
@@ -962,7 +962,7 @@ export default function LeadDetailPage({
   useEffect(() => {
     if (!id) return
     const intervalId = window.setInterval(() => {
-      void fetchAllData(false)
+      if (document.visibilityState === 'visible') void fetchAllData(false, false)
     }, 5_000)
     return () => window.clearInterval(intervalId)
   }, [id])

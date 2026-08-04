@@ -137,11 +137,6 @@ export default function CommunicationsPage() {
   useEffect(() => {
     const email = selectedInquiry?.email || ''
     fetchClientEmailThread(email)
-
-    if (!email) return
-
-    const interval = setInterval(() => fetchClientEmailThread(email), 60000)
-    return () => clearInterval(interval)
   }, [selectedInquiry?.email])
 
   useEffect(() => {

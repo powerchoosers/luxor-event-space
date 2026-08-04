@@ -186,7 +186,8 @@ async function requestMailbox(force = false) {
   if (mailboxCache && !force) return mailboxCache
   if (mailboxRequest && !force) return mailboxRequest
 
-  const request = fetch('/api/email/inbox?limit=250&folder=all', { cache: 'no-store' })
+  const liveQuery = force ? '&live=1' : ''
+  const request = fetch(`/api/email/inbox?limit=250&folder=all${liveQuery}`, { cache: 'no-store' })
     .then(async (response) => {
       const data = (await response.json().catch(() => ({}))) as {
         messages?: EmailMessageItem[]
@@ -375,7 +376,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
-    if (!threadId || messageDetail?.direction === 'campaign') {
+    if (!replyOpen || !threadId || messageDetail?.direction === 'campaign') {
       setThread(null)
       setThreadError(null)
       return
@@ -432,7 +433,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       current = false
       controller.abort()
     }
-  }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
+  }, [messageDetail?.threadId, messageDetail?.direction, replyOpen, threadRetryKey])
 
   const draftWithElena = async () => {
     if (!thread?.threadId) return
@@ -652,10 +653,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     setReplyStatus(null)
   }
 
-  const prefetchMessage = (message: EmailMessageItem) => {
-    void requestMessageDetail(message.id, message.folderId).catch(() => undefined)
-  }
-
   const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
 
   return (
@@ -850,8 +847,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 <div
                   key={messageKey(msg)}
                   onClick={() => selectMessage(msg)}
-                  onMouseEnter={() => prefetchMessage(msg)}
-                  onFocus={() => prefetchMessage(msg)}
                   onKeyDown={(event) => {
                     if (event.target !== event.currentTarget) return
                     if (event.key === 'Enter' || event.key === ' ') {

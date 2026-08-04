@@ -3,6 +3,104 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { listLuxorZohoInbox, listLuxorZohoMessagesForAddress, listLuxorZohoSentMessages } from '@/lib/zohoMailServer'
 import { listMarketingCampaigns, type MarketingCampaignSummary } from '@/lib/luxorMarketingServer'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { supabaseRest } from '@/lib/supabaseRestServer'
+
+type StoredEmailEvent = {
+  id: string
+  message_id: string | null
+  sender_email: string | null
+  sender_name: string | null
+  recipient_email: string | null
+  subject: string
+  received_at: string
+}
+
+type StoredEmailJob = {
+  id: string
+  recipient_email: string
+  subject: string
+  body: string
+  status: string
+  sent_at: string | null
+  scheduled_for: string
+}
+
+function plainTextSummary(value: string) {
+  return decodeHtmlEntities(value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280)
+}
+
+type MailboxMessageItem = {
+  id: string
+  threadId?: string
+  subject: string
+  from: string
+  to: string
+  receivedAt: string | null
+  summary: string
+  hasAttachment: boolean
+  direction: 'incoming' | 'outgoing' | 'campaign'
+  folder: 'inbox' | 'sent' | 'campaigns'
+  isRead?: boolean
+  storedLocally?: boolean
+  content?: string
+  htmlContent?: string
+  engagement?: { openCount: number; clickCount: number }
+  category?: string
+}
+
+async function listStoredMailboxMessages(limit: number, email?: string): Promise<MailboxMessageItem[]> {
+  const normalizedEmail = email?.trim().toLowerCase() || ''
+  const eventFilter = normalizedEmail
+    ? `&or=(sender_email.eq.${encodeURIComponent(normalizedEmail)},recipient_email.eq.${encodeURIComponent(normalizedEmail)})`
+    : ''
+  const jobFilter = normalizedEmail
+    ? `&recipient_email=eq.${encodeURIComponent(normalizedEmail)}`
+    : ''
+
+  const [events, jobs] = await Promise.all([
+    supabaseRest<StoredEmailEvent[]>(
+      `luxor_email_events?select=id,message_id,sender_email,sender_name,recipient_email,subject,received_at${eventFilter}&order=received_at.desc&limit=${limit}`,
+    ),
+    supabaseRest<StoredEmailJob[]>(
+      `luxor_email_jobs?select=id,recipient_email,subject,body,status,sent_at,scheduled_for${jobFilter}&status=in.(sent,sending)&order=sent_at.desc.nullslast&limit=${limit}`,
+    ),
+  ])
+
+  return [
+    ...events.map((event) => ({
+      id: event.message_id || `event-${event.id}`,
+      threadId: undefined,
+      subject: decodeHtmlEntities(event.subject) || '(No subject)',
+      from: event.sender_name
+        ? `${event.sender_name}${event.sender_email ? ` <${event.sender_email}>` : ''}`
+        : event.sender_email || 'Unknown sender',
+      to: event.recipient_email || '',
+      receivedAt: event.received_at,
+      summary: 'Open this message to retrieve its body from Zoho.',
+      hasAttachment: false,
+      direction: 'incoming' as const,
+      folder: 'inbox' as const,
+      isRead: false,
+      storedLocally: true,
+    })),
+    ...jobs.map((job) => ({
+      id: `job-${job.id}`,
+      threadId: undefined,
+      subject: decodeHtmlEntities(job.subject) || '(No subject)',
+      from: 'booking@luxoratlaspalmas.com',
+      to: job.recipient_email,
+      receivedAt: job.sent_at || job.scheduled_for,
+      summary: plainTextSummary(job.body),
+      content: job.body,
+      htmlContent: /<\/?[a-z][\s\S]*>/i.test(job.body) ? job.body : undefined,
+      hasAttachment: false,
+      direction: 'outgoing' as const,
+      folder: 'sent' as const,
+      isRead: true,
+      storedLocally: true,
+    })),
+  ].sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()).slice(0, limit)
+}
 
 export async function GET(request: NextRequest) {
   const startedAt = Date.now()
@@ -17,18 +115,31 @@ export async function GET(request: NextRequest) {
     const limit = Number.parseInt(searchParams.get('limit') || '1000', 10)
     const email = searchParams.get('email') || ''
     const folder = (searchParams.get('folder') || 'all').toLowerCase()
+    const live = searchParams.get('live') === '1'
     const source = searchParams.get('source') || 'email-client'
     const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 1000, 1), 1000)
 
     console.log(JSON.stringify({
       level: 'info',
-      message: 'Zoho mailbox request started',
+      message: live ? 'Zoho mailbox request started' : 'Stored mailbox request started',
       route: '/api/email/inbox',
       requestId,
       source,
+      provider: live ? 'zoho' : 'supabase',
       folder,
       addressLookup: Boolean(email),
     }))
+
+    if (email && !live) {
+      const messages = await listStoredMailboxMessages(safeLimit, email)
+      return NextResponse.json({
+        mailbox: session.mailboxAddress || session.email,
+        email,
+        folder,
+        source: 'supabase',
+        messages,
+      })
+    }
 
     if (email) {
       const messages = await listLuxorZohoMessagesForAddress(email, safeLimit)
@@ -37,6 +148,33 @@ export async function GET(request: NextRequest) {
         email,
         folder,
         messages,
+      })
+    }
+
+    if (!live) {
+      const messages = await listStoredMailboxMessages(safeLimit)
+      const campaigns = await listMarketingCampaigns(25).catch(() => [])
+      campaigns.forEach((camp) => {
+        messages.push({
+          id: `campaign-${camp.id}`,
+          subject: decodeHtmlEntities(camp.subject || camp.name),
+          from: 'booking@luxoratlaspalmas.com',
+          to: camp.audience_label || `${camp.recipient_count} Recipients`,
+          receivedAt: camp.sent_at || camp.created_at,
+          summary: `Marketing Campaign Blast: ${camp.name}. ${camp.sent_count} sent, ${camp.open_count} opens, ${camp.click_count} clicks.`,
+          hasAttachment: false,
+          direction: 'campaign',
+          folder: 'campaigns',
+          isRead: true,
+          storedLocally: true,
+        })
+      })
+      messages.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())
+      return NextResponse.json({
+        mailbox: session.mailboxAddress || session.email,
+        folder,
+        source: 'supabase',
+        messages: messages.slice(0, safeLimit),
       })
     }
 

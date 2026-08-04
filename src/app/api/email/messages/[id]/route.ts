@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorZohoMessageDetail } from '@/lib/zohoMailServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
+
+type StoredEmailJob = {
+  id: string
+  recipient_email: string
+  subject: string
+  body: string
+  sent_at: string | null
+  scheduled_for: string
+}
+
+type StoredEmailEvent = {
+  id: string
+  metadata: Record<string, unknown> | null
+}
 
 export async function GET(
   request: NextRequest,
@@ -74,7 +89,45 @@ export async function GET(
       })
     }
 
-    // Otherwise fetch from Zoho Mail API
+    if (id.startsWith('job-')) {
+      const jobId = id.replace(/^job-/, '')
+      const jobs = await supabaseRest<StoredEmailJob[]>(
+        `luxor_email_jobs?select=id,recipient_email,subject,body,sent_at,scheduled_for&id=eq.${encodeURIComponent(jobId)}&limit=1`,
+      )
+      const job = jobs[0]
+      if (!job) return NextResponse.json({ error: 'Stored email not found.' }, { status: 404 })
+      const isHtml = /<\/?[a-z][\s\S]*>/i.test(job.body)
+      return NextResponse.json({
+        id,
+        subject: job.subject,
+        from: 'booking@luxoratlaspalmas.com',
+        to: job.recipient_email,
+        receivedAt: job.sent_at || job.scheduled_for,
+        content: job.body,
+        htmlContent: isHtml ? job.body : undefined,
+        hasAttachment: false,
+        direction: 'outgoing',
+      })
+    }
+
+    if (id.startsWith('event-')) {
+      return NextResponse.json(
+        { error: 'Zoho did not include a retrievable message ID for this notification.' },
+        { status: 422 },
+      )
+    }
+
+    const storedEvents = await supabaseRest<StoredEmailEvent[]>(
+      `luxor_email_events?select=id,metadata&message_id=eq.${encodeURIComponent(id)}&limit=1`,
+    )
+    const storedEvent = storedEvents[0]
+    const cachedMessage = storedEvent?.metadata?.cachedMessage
+    if (cachedMessage && typeof cachedMessage === 'object') {
+      return NextResponse.json(cachedMessage)
+    }
+
+    // Incoming message bodies are requested from Zoho only once, then retained
+    // in the protected Supabase event record for subsequent views.
     const folderId = new URL(request.url).searchParams.get('folderId') || undefined
     const detail = await getLuxorZohoMessageDetail(id, folderId)
     if (!detail) {
@@ -82,6 +135,23 @@ export async function GET(
         { error: 'Zoho could not retrieve this email body. Refresh the mailbox and try again.' },
         { status: 502 },
       )
+    }
+
+    if (storedEvent) {
+      await supabaseRest(`luxor_email_events?id=eq.${encodeURIComponent(storedEvent.id)}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          metadata: {
+            ...(storedEvent.metadata || {}),
+            limitedData: false,
+            cachedAt: new Date().toISOString(),
+            cachedMessage: detail,
+          },
+        }),
+      }).catch((cacheError) => {
+        console.warn('Incoming email body could not be cached in Supabase:', cacheError instanceof Error ? cacheError.message : cacheError)
+      })
     }
 
     return NextResponse.json(detail)
