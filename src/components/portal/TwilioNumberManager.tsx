@@ -2,6 +2,7 @@
 
 import { Check, Laptop, Loader2, MapPin, MessageSquare, Phone, RefreshCw, Save, Search, ShieldCheck, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { formatUsDialInput, toUsE164 } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'
 
 type AvailableNumber = { phoneNumber: string; friendlyName: string; locality: string | null; region: string | null; postalCode: string | null; capabilities: { voice?: boolean; sms?: boolean; mms?: boolean }; addressRequirements: string }
@@ -57,7 +58,10 @@ export function TwilioNumberManager() {
         const response = await fetch('/api/twilio/phone-settings', { cache: 'no-store' })
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'Unable to load call routing.')
-        setRouting(data)
+        setRouting({
+          ...data,
+          ring_to_number: data.ring_to_number ? formatUsDialInput(data.ring_to_number) : null,
+        })
       } catch (error) {
         notify({ title: 'Call routing unavailable', description: error instanceof Error ? error.message : 'Unable to load settings.', variant: 'error' })
       } finally { setLoadingRouting(false) }
@@ -66,12 +70,13 @@ export function TwilioNumberManager() {
 
   async function saveRouting() {
     setSavingRouting(true)
+    const ringToNumber = toUsE164(routing.ring_to_number) || null
     try {
       const response = await fetch('/api/twilio/phone-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ringToNumber: routing.ring_to_number,
+          ringToNumber,
           outboundMode: routing.outbound_mode,
           ringBrowser: routing.ring_browser,
           ringPhone: routing.ring_phone,
@@ -84,7 +89,10 @@ export function TwilioNumberManager() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to save call routing.')
-      setRouting(data)
+      setRouting({
+        ...data,
+        ring_to_number: data.ring_to_number ? formatUsDialInput(data.ring_to_number) : null,
+      })
       notify({ title: 'Phone and text settings saved', description: 'Luxor will use these choices for calls and text automations.', variant: 'success' })
     } catch (error) {
       notify({ title: 'Could not save routing', description: error instanceof Error ? error.message : 'Unable to save settings.', variant: 'error' })
@@ -129,7 +137,15 @@ export function TwilioNumberManager() {
       <div className="flex items-start justify-between gap-3"><div><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Call routing</h4><p className="mt-1 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">Choose how calls leave the CRM and where incoming calls ring.</p></div><Smartphone size={17} className="text-[#caa24c]"/></div>
       {loadingRouting ? <p className="py-6 text-center text-xs text-[color:var(--portal-muted)]"><Loader2 size={14} className="mr-2 inline animate-spin"/>Loading routing</p> : <>
         <label className="mt-4 block text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Your real phone number</label>
-        <input type="tel" value={routing.ring_to_number || ''} onChange={(event) => setRouting((current) => ({ ...current, ring_to_number: event.target.value }))} placeholder="(210) 555-0123" className="mt-2 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 font-mono text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:ring-2 focus:ring-[#caa24c]/10"/>
+        <input
+          type="tel"
+          value={routing.ring_to_number || ''}
+          onChange={(event) => setRouting((current) => ({ ...current, ring_to_number: formatUsDialInput(event.target.value) }))}
+          placeholder="+1 (210) 555-0123"
+          inputMode="tel"
+          autoComplete="tel"
+          className="mt-2 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 focus:ring-2 focus:ring-[#caa24c]/10"
+        />
         <p className="mt-2 text-[9px] leading-relaxed text-[color:var(--portal-faint)]">This phone can ring first for CRM calls and can receive business calls when the browser is closed.</p>
 
         <p className="mt-5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">When I click Call</p>
