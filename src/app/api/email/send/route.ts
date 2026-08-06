@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+import { isLuxorZohoAuthorizationError, sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { instrumentMarketingHtml } from '@/lib/luxorMarketingServer'
@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Failed to send email.'
     const missingConfig = message.includes('Missing Zoho email credentials')
     const rateLimited = /too many requests|rate.?limit|429/i.test(message)
+    const authorizationRequired = isLuxorZohoAuthorizationError(error)
 
     console.error(JSON.stringify({
       level: rateLimited ? 'warning' : 'error',
@@ -135,6 +136,16 @@ export async function POST(request: NextRequest) {
           retryAfterSeconds: 60,
         },
         { status: 429, headers: { 'Retry-After': '60' } },
+      )
+    }
+
+    if (authorizationRequired) {
+      return NextResponse.json(
+        {
+          error: 'Email is not connected to Zoho right now. No email was sent. Reconnect the Luxor mailbox, then try again.',
+          code: 'ZOHO_AUTHORIZATION_REQUIRED',
+        },
+        { status: 503 },
       )
     }
 

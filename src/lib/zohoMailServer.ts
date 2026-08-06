@@ -256,7 +256,11 @@ async function getZohoAccessToken() {
   const tokenData = (await response.json().catch(() => ({}))) as ZohoTokenResponse
 
   if (!response.ok || !tokenData.access_token) {
-    throw new Error(tokenData.error_description || tokenData.error || `Zoho token refresh failed with ${response.status}.`)
+    const providerMessage = tokenData.error_description || tokenData.error || `Zoho token refresh failed with ${response.status}.`
+    if (tokenData.error === 'invalid_code' || /invalid code|invalid_code/i.test(providerMessage)) {
+      throw new Error('Zoho connection needs reconnecting. The saved authorization was rejected by Zoho.')
+    }
+    throw new Error(`Zoho connection check failed: ${providerMessage}`)
   }
 
   cachedAccessToken = {
@@ -265,6 +269,19 @@ async function getZohoAccessToken() {
   }
 
   return cachedAccessToken.token
+}
+
+/**
+ * Safely verifies that Zoho still accepts the saved authorization. This only
+ * requests an access token; it never sends, reads, or changes an email.
+ */
+export async function verifyLuxorZohoMailConnection() {
+  await getZohoAccessToken()
+}
+
+export function isLuxorZohoAuthorizationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '')
+  return /Zoho connection needs reconnecting|invalid[_ ]code/i.test(message)
 }
 
 function plainTextToHtml(content: string) {

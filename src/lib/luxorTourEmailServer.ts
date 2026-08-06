@@ -133,6 +133,7 @@ function fallbackCopy(context: TourEmailContext): TourCopy {
 function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
   const baseUrl = publicBaseUrl()
   const heroUrl = `${baseUrl}${eventImagePath(context.inquiry.event_type)}`
+  const heroAlt = `${context.inquiry.event_type || 'Celebration'} inspiration at Luxor Event Space`
   const detailRows = [
     ['Date', context.tourDateLabel],
     ['Time', `${context.tourTimeLabel} · ${context.durationMinutes} minutes`],
@@ -140,7 +141,7 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
     ['Location', FALLBACK_LOCATION],
   ]
 
-  return `<!doctype html><html lang="en"><head>
+  return `<!doctype html><html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
@@ -165,7 +166,11 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;"><tr><td align="center" style="padding:24px 12px;">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="luxor-card" style="max-width:600px;width:100%;background-color:#0a0807;border:1px solid rgba(202,162,76,.28);">
       <tr><td style="height:3px;background:#caa24c"></td></tr>
-      <tr><td><img src="${escapeHtml(heroUrl)}" width="600" alt="${escapeHtml(context.inquiry.event_type || 'Celebration')} inspiration at Luxor Event Space" style="display:block;width:100%;height:260px;object-fit:cover;border:0;" /></td></tr>
+      <tr><td role="img" aria-label="${escapeHtml(heroAlt)}" background="${escapeHtml(heroUrl)}" height="260" valign="middle" style="height:260px;background-color:#17120d;background-image:url('${escapeHtml(heroUrl)}');background-position:center center;background-repeat:no-repeat;background-size:cover;">
+        <!--[if gte mso 9]><v:rect fill="true" stroke="false" style="width:600px;height:260px;"><v:fill type="frame" src="${escapeHtml(heroUrl)}" color="#17120d" aspect="atleast"/><v:textbox inset="0,0,0,0"><![endif]-->
+        <div style="height:260px;line-height:260px;font-size:0;">&nbsp;</div>
+        <!--[if gte mso 9]></v:textbox></v:rect><![endif]-->
+      </td></tr>
       <tr><td style="padding:34px 42px 12px;"><p class="luxor-gold" style="margin:0 0 12px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;">Tour Confirmed</p><h1 class="luxor-title" style="margin:0;font-family:Georgia,serif;font-size:34px;font-weight:400;line-height:1.2;color:#f7efe3;">You are confirmed for your tour</h1></td></tr>
       <tr><td class="luxor-muted" style="padding:12px 42px;color:#d7c29a;font-size:15px;line-height:1.75;"><p style="margin:0 0 12px;color:#d7c29a;">${escapeHtml(copy.greeting)}</p><p style="margin:0;color:#d7c29a;">${escapeHtml(copy.introduction)}</p></td></tr>
       <tr><td style="padding:8px 42px 20px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="luxor-box" style="border:1px solid rgba(202,162,76,.2);background-color:#0f0c09;">${detailRows.map(([label, value]) => `<tr><td style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#8d7d64;font-size:10px;text-transform:uppercase;letter-spacing:.16em;width:28%;">${escapeHtml(label)}</td><td class="luxor-title" style="padding:10px 14px;border-bottom:1px solid rgba(202,162,76,.1);color:#f7efe3;font-size:13px;">${escapeHtml(value)}</td></tr>`).join('')}</table></td></tr>
