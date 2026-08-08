@@ -3,6 +3,7 @@ import 'server-only'
 import Stripe from 'stripe'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
+import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot, roundLuxorMoney } from './luxorOffer'
 
 export async function createLuxorPostContractCheckout(input: {
   invoice: LuxorInvoice
@@ -15,6 +16,10 @@ export async function createLuxorPostContractCheckout(input: {
   masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
+  if (isLuxorOfferExpired(invoice)) {
+    await updateInvoice(invoice.id, { offer_status: 'expired', stripe_checkout_session_id: null, stripe_checkout_url: null })
+    throw new Error('This offer has expired. Please contact Luxor for an updated proposal.')
+  }
   const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
   const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
@@ -41,6 +46,37 @@ export async function createLuxorPostContractCheckout(input: {
 
   const stripe = new Stripe(secretKey)
   const origin = input.origin.replace(/\/$/, '')
+  const offer = luxorOfferSnapshot(invoice)
+  const appliesStripeDiscount = offer.active && invoice.invoice_kind !== 'final_balance'
+  const discountFactor = 1 - (offer.percent / 100)
+  const undiscountedPaymentAmount = appliesStripeDiscount && discountFactor > 0
+    ? roundLuxorMoney(paymentAmount / discountFactor)
+    : paymentAmount
+  if (appliesStripeDiscount && undiscountedPaymentAmount < paymentAmount) {
+    throw new Error('The offer pricing could not be safely prepared for Stripe.')
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const maximumSessionExpiry = nowSeconds + (23 * 60 * 60) + (55 * 60)
+  const offerExpirySeconds = offer.expiresAt ? Math.floor(new Date(offer.expiresAt).getTime() / 1000) : null
+  const checkoutExpiry = offerExpirySeconds ? Math.min(offerExpirySeconds, maximumSessionExpiry) : undefined
+  if (checkoutExpiry && checkoutExpiry < nowSeconds + (30 * 60)) {
+    throw new Error('This offer expires in less than 30 minutes, so Stripe cannot safely create a checkout link. Extend the offer or send an updated proposal.')
+  }
+  let stripeCouponId = invoice.stripe_coupon_id || null
+  if (appliesStripeDiscount && !stripeCouponId) {
+    const coupon = await stripe.coupons.create({
+      percent_off: offer.percent,
+      duration: 'once',
+      ...(offerExpirySeconds ? { redeem_by: offerExpirySeconds } : {}),
+      name: `Luxor ${offer.percent}% limited-time offer`,
+      metadata: {
+        luxor_invoice_id: invoice.id,
+        luxor_booking_id: booking.id,
+        offer_expires_at: offer.expiresAt || '',
+      },
+    })
+    stripeCouponId = coupon.id
+  }
   let previousSessionMarker = invoice.stripe_checkout_session_id || 'first'
   if (invoice.stripe_checkout_session_id) {
     try {
@@ -49,7 +85,8 @@ export async function createLuxorPostContractCheckout(input: {
         Number(existing.amount_total || 0) === Math.round(paymentAmount * 100) &&
         existing.metadata?.invoice_id === invoice.id &&
         existing.metadata?.booking_id === booking.id &&
-        existing.metadata?.payment_label === paymentLabel
+        existing.metadata?.payment_label === paymentLabel &&
+        (!checkoutExpiry || Number(existing.expires_at || 0) <= checkoutExpiry)
       if (sameRequest && existing.url) {
         return { checkoutId: existing.id, checkoutUrl: existing.url, paymentAmount, paymentLabel, balanceDue, paidTotal, reused: true }
       }
@@ -74,7 +111,7 @@ export async function createLuxorPostContractCheckout(input: {
       quantity: 1,
       price_data: {
         currency: 'usd',
-        unit_amount: Math.round(paymentAmount * 100),
+        unit_amount: Math.round(undiscountedPaymentAmount * 100),
         product_data: { name: `${paymentLabel} - Luxor Event Space` },
       },
     }],
@@ -86,7 +123,13 @@ export async function createLuxorPostContractCheckout(input: {
       invoice_kind: invoice.invoice_kind || 'event',
       payment_label: paymentLabel,
       contract_signed: booking.contract_status === 'signed' ? 'true' : 'false',
+      offer_percent: appliesStripeDiscount ? String(offer.percent) : '0',
+      offer_savings: appliesStripeDiscount ? String(offer.savings) : '0',
+      offer_expires_at: offer.expiresAt || '',
+      stripe_coupon_id: stripeCouponId || '',
     },
+    ...(stripeCouponId ? { discounts: [{ coupon: stripeCouponId }] } : {}),
+    ...(checkoutExpiry ? { expires_at: checkoutExpiry } : {}),
     invoice_creation: {
       enabled: true,
       invoice_data: {
@@ -95,6 +138,9 @@ export async function createLuxorPostContractCheckout(input: {
           luxor_invoice_id: invoice.id,
           luxor_booking_id: booking.id,
           luxor_invoice_kind: invoice.invoice_kind || 'event',
+          luxor_offer_percent: appliesStripeDiscount ? String(offer.percent) : '0',
+          luxor_offer_expires_at: offer.expiresAt || '',
+          stripe_coupon_id: stripeCouponId || '',
         },
       },
     },
@@ -107,11 +153,17 @@ export async function createLuxorPostContractCheckout(input: {
 
   await updateInvoice(invoice.id, {
     payment_requested_at: new Date().toISOString(),
-    payment_requested_amount: paymentAmount,
+    payment_requested_amount: Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100,
     payment_requested_label: paymentLabel,
     stripe_checkout_session_id: checkout.id,
     stripe_checkout_url: checkout.url,
+    ...(stripeCouponId ? { stripe_coupon_id: stripeCouponId } : {}),
   })
 
-  return { checkoutId: checkout.id, checkoutUrl: checkout.url, paymentAmount, paymentLabel, balanceDue, paidTotal, reused: false }
+  const actualPaymentAmount = Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100
+  if (Math.abs(actualPaymentAmount - paymentAmount) > 0.01) {
+    await stripe.checkout.sessions.expire(checkout.id)
+    throw new Error('Stripe calculated an amount that does not match the approved proposal. No payment link was sent.')
+  }
+  return { checkoutId: checkout.id, checkoutUrl: checkout.url, paymentAmount: actualPaymentAmount, paymentLabel, balanceDue, paidTotal, reused: false }
 }

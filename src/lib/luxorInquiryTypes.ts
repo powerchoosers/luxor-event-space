@@ -148,6 +148,15 @@ export type LuxorInvoice = {
   subtotal: number
   tax_rate: number
   total: number
+  original_subtotal?: number | null
+  original_total?: number | null
+  discount_percent?: number | null
+  discount_amount?: number | null
+  offer_expires_at?: string | null
+  offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn' | null
+  offer_redeemed_at?: string | null
+  stripe_coupon_id?: string | null
+  stripe_promotion_code_id?: string | null
   status: LuxorInvoiceStatus
   due_date: string | null
   paid_at: string | null

@@ -23,6 +23,7 @@ import {
   type LuxorPackagePreset,
 } from '@/lib/luxorServiceCatalog'
 import { PortalDatePicker, PortalModal, PortalCloseButton } from '@/components/portal/PortalUI'
+import { calculateLuxorOfferPricing, formatLuxorOfferExpiry } from '@/lib/luxorOffer'
 
 type ProposalSubmitAction = 'save' | 'email'
 
@@ -37,6 +38,10 @@ type ProposalBuilderModalProps = {
   onDescriptionChange: (value: string) => void
   dueDate: string
   onDueDateChange: (value: string) => void
+  offerExpiryTime: string
+  onOfferExpiryTimeChange: (value: string) => void
+  discountPercent: string
+  onDiscountPercentChange: (value: string) => void
   items: LuxorInvoiceLineItem[]
   onItemsChange: (items: LuxorInvoiceLineItem[]) => void
   notes: string
@@ -78,6 +83,10 @@ export function ProposalBuilderModal({
   onDescriptionChange,
   dueDate,
   onDueDateChange,
+  offerExpiryTime,
+  onOfferExpiryTimeChange,
+  discountPercent,
+  onDiscountPercentChange,
   items,
   onItemsChange,
   notes,
@@ -105,9 +114,17 @@ export function ProposalBuilderModal({
     })
   }, [activeCategory, search])
 
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0)
-  const tax = subtotal * (Math.max(0, Number(taxRate) || 0) / 100)
-  const total = subtotal + tax
+  const offerPricing = calculateLuxorOfferPricing({
+    lineItems: items,
+    taxRate: Math.max(0, Number(taxRate) || 0) / 100,
+    discountPercent: Number(discountPercent) || 0,
+  })
+  const subtotal = offerPricing.subtotal
+  const total = offerPricing.total
+  const hasDiscount = offerPricing.discountPercent > 0 && offerPricing.totalSavings > 0
+  const offerExpiryLabel = dueDate
+    ? formatLuxorOfferExpiry(new Date(`${dueDate}T${offerExpiryTime || '23:59'}:00`).toISOString())
+    : null
   const selectedCatalogIds = new Set(items.map((item) => item.catalogId).filter(Boolean))
   const activePreset = LUXOR_PACKAGE_PRESETS.find((preset) => isSamePreset(items, preset))
 
@@ -230,9 +247,21 @@ export function ProposalBuilderModal({
                 <input required value={description} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="Event proposal" className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
               </label>
               <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Valid until</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Offer expires</span>
                 <PortalDatePicker value={dueDate} onChange={onDueDateChange} className="w-full" placeholder="Select date" />
+                <label className="mt-2 block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Time</span>
+                  <input type="time" value={offerExpiryTime} onChange={(event) => onOfferExpiryTimeChange(event.target.value)} className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/15" />
+                </label>
               </div>
+              <label className="space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Limited-time discount</span>
+                <span className="flex min-h-11 items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-within:border-[#caa24c]/60 focus-within:ring-2 focus-within:ring-[#caa24c]/15">
+                  <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={discountPercent} onChange={(event) => onDiscountPercentChange(event.target.value)} placeholder="0" className="min-h-10 min-w-0 flex-1 bg-transparent px-3 text-right font-mono text-sm outline-none" />
+                  <span className="pr-3 font-mono text-sm font-black text-[#8c6529] dark:text-[#f1d27a]">%</span>
+                </span>
+                <p className="text-[9px] leading-4 text-[color:var(--portal-muted)]">Leave at 0% for a regular offer. This discount expires at the date and time above.</p>
+              </label>
               <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Client</p>
                 <p className="mt-1 text-sm font-bold">{clientName}</p>
@@ -391,6 +420,7 @@ export function ProposalBuilderModal({
                 </ul>
                 <div className="my-5 h-px bg-[color:var(--portal-border)]" />
                 <div className="flex items-end justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Total investment</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</span></div>
+                {hasDiscount ? <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3"><p className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Limited-time offer applied</p><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]"><span className="line-through">{formatMoney(offerPricing.originalTotal)}</span> · Save {formatMoney(offerPricing.totalSavings)} ({offerPricing.discountPercent}%)</p>{offerExpiryLabel ? <p className="mt-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-200">Sign and pay by {offerExpiryLabel} to secure this price.</p> : null}</div> : null}
                 <p className="mt-3 rounded-lg bg-[#caa24c]/8 p-2.5 text-[9px] leading-4 text-[color:var(--portal-muted)]">Individual item prices are intentionally hidden from the client. Only this total appears in the proposal and invoice.</p>
               </div>
             </div>
@@ -400,7 +430,7 @@ export function ProposalBuilderModal({
 
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center justify-between gap-4 sm:justify-start">
-            <div><p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Proposal total</p><p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</p></div>
+            <div><p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Proposal total</p>{hasDiscount ? <p className="font-mono text-[10px] font-bold text-[color:var(--portal-muted)] line-through">{formatMoney(offerPricing.originalTotal)}</p> : null}<p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</p></div>
             <div className="hidden items-center gap-2 text-[10px] text-[color:var(--portal-muted)] lg:flex"><Sparkles size={14} className="text-[#a8792f]" /> Prices stay inside the CRM.</div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex">

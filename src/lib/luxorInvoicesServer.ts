@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment } from './luxorInquiryTypes'
+import { roundLuxorMoney } from './luxorOffer'
 
 type SupabaseError = {
   message?: string
@@ -89,6 +90,15 @@ export async function createInvoice(data: {
   subtotal: number
   tax_rate: number
   total: number
+  original_subtotal?: number | null
+  original_total?: number | null
+  discount_percent?: number | null
+  discount_amount?: number | null
+  offer_expires_at?: string | null
+  offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn'
+  offer_redeemed_at?: string | null
+  stripe_coupon_id?: string | null
+  stripe_promotion_code_id?: string | null
   due_date?: string | null
   inquiry_id?: string | null
   notes?: string | null
@@ -108,6 +118,15 @@ export async function createInvoice(data: {
       subtotal: data.subtotal,
       tax_rate: data.tax_rate,
       total: data.total,
+      original_subtotal: data.original_subtotal ?? data.subtotal,
+      original_total: data.original_total ?? data.total,
+      discount_percent: data.discount_percent ?? 0,
+      discount_amount: data.discount_amount ?? 0,
+      offer_expires_at: data.offer_expires_at ?? null,
+      offer_status: data.offer_status ?? 'active',
+      offer_redeemed_at: data.offer_redeemed_at ?? null,
+      stripe_coupon_id: data.stripe_coupon_id ?? null,
+      stripe_promotion_code_id: data.stripe_promotion_code_id ?? null,
       due_date: data.due_date || null,
       inquiry_id: data.inquiry_id || null,
       notes: data.notes || null,
@@ -132,6 +151,15 @@ export async function updateInvoice(
     | 'subtotal'
     | 'tax_rate'
     | 'total'
+    | 'original_subtotal'
+    | 'original_total'
+    | 'discount_percent'
+    | 'discount_amount'
+    | 'offer_expires_at'
+    | 'offer_status'
+    | 'offer_redeemed_at'
+    | 'stripe_coupon_id'
+    | 'stripe_promotion_code_id'
     | 'public_token'
     | 'proposal_sent_at'
     | 'proposal_viewed_at'
@@ -172,9 +200,7 @@ export async function listAllBills() {
 export const LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT = 750
 export const LUXOR_NON_REFUNDABLE_DEPOSIT_RATE = 0.3
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100
-}
+const roundMoney = roundLuxorMoney
 
 function securityDepositGross(invoice: LuxorInvoice) {
   const securitySubtotal = invoice.line_items
@@ -187,8 +213,13 @@ export function calculateLuxorThirtyPercentDeposit(invoice: LuxorInvoice) {
   const refundableSecurityDeposit = Math.min(Number(invoice.total || 0), securityDepositGross(invoice))
   const nonSecurityTotal = Math.max(0, roundMoney(Number(invoice.total || 0) - refundableSecurityDeposit))
   const depositAmount = Math.min(nonSecurityTotal, roundMoney(nonSecurityTotal * LUXOR_NON_REFUNDABLE_DEPOSIT_RATE))
+  const originalInvoiceTotal = Number(invoice.original_total ?? invoice.total ?? 0)
+  const originalNonSecurityTotal = Math.max(0, roundMoney(originalInvoiceTotal - refundableSecurityDeposit))
+  const originalDepositAmount = Math.min(originalNonSecurityTotal, roundMoney(originalNonSecurityTotal * LUXOR_NON_REFUNDABLE_DEPOSIT_RATE))
   return {
     depositAmount,
+    originalDepositAmount,
+    depositSavings: Math.max(0, roundMoney(originalDepositAmount - depositAmount)),
     refundableSecurityDeposit,
     finalBalance: Math.max(0, roundMoney(Number(invoice.total || 0) - depositAmount)),
   }
@@ -208,7 +239,7 @@ export async function ensureLuxorDepositInvoice(input: {
   dueDate?: string | null
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
-  const { depositAmount } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  const { depositAmount, originalDepositAmount, depositSavings } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
   if (depositAmount < 0.5) throw new Error('The event total is too low to create a 30% deposit invoice.')
   if (existing) {
     if (existing.status === 'paid') return existing
@@ -217,6 +248,14 @@ export async function ensureLuxorDepositInvoice(input: {
       subtotal: depositAmount,
       tax_rate: 0,
       total: depositAmount,
+      original_subtotal: originalDepositAmount,
+      original_total: originalDepositAmount,
+      discount_percent: input.masterInvoice.discount_percent ?? 0,
+      discount_amount: depositSavings,
+      offer_expires_at: input.masterInvoice.offer_expires_at ?? null,
+      offer_status: input.masterInvoice.offer_status ?? 'active',
+      stripe_coupon_id: input.masterInvoice.stripe_coupon_id ?? null,
+      stripe_promotion_code_id: input.masterInvoice.stripe_promotion_code_id ?? null,
       due_date: input.dueDate || new Date().toISOString().slice(0, 10),
       notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
     }) || existing
@@ -233,6 +272,14 @@ export async function ensureLuxorDepositInvoice(input: {
     subtotal: depositAmount,
     tax_rate: 0,
     total: depositAmount,
+    original_subtotal: originalDepositAmount,
+    original_total: originalDepositAmount,
+    discount_percent: input.masterInvoice.discount_percent ?? 0,
+    discount_amount: depositSavings,
+    offer_expires_at: input.masterInvoice.offer_expires_at ?? null,
+    offer_status: input.masterInvoice.offer_status ?? 'active',
+    stripe_coupon_id: input.masterInvoice.stripe_coupon_id ?? null,
+    stripe_promotion_code_id: input.masterInvoice.stripe_promotion_code_id ?? null,
     due_date: input.dueDate || new Date().toISOString().slice(0, 10),
     notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
   })

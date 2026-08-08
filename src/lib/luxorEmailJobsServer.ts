@@ -8,6 +8,7 @@ import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
 import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from './luxorInvoicesServer'
+import { isLuxorOfferExpired } from './luxorOffer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -604,13 +605,23 @@ export async function processLuxorEmailJobs(
   options: { markSending?: boolean } = {},
 ) {
   const { markSending = true } = options
-  const results: { id: string; status: 'sent' | 'failed'; error?: string }[] = []
+  const results: { id: string; status: 'sent' | 'failed' | 'skipped'; error?: string }[] = []
 
   for (const job of jobs) {
     try {
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
+      const offerInvoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
+      if (typeof metadata.offer_expires_at === 'string' && offerInvoiceId) {
+        const invoice = await getInvoice(offerInvoiceId)
+        const paidPayments = invoice ? await listPaidPaymentsByInvoice(invoice.id).catch(() => []) : []
+        if (!invoice || invoice.status === 'cancelled' || invoice.status === 'paid' || paidPayments.length > 0 || isLuxorOfferExpired(invoice)) {
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Offer is no longer active; reminder was not sent.' })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+      }
 
       if (markSending) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })

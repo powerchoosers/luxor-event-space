@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { formatLuxorOfferExpiry, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     ? await getLuxorBooking(invoice.booking_id)
     : bookings.find((item) => item.invoice_id === invoice.id)
   const contractSigned = booking?.contract_status === 'signed'
-  const paymentAvailable = invoice.invoice_kind === 'deposit' || contractSigned
+  const offerExpired = isLuxorOfferExpired(invoice)
+  const offer = luxorOfferSnapshot(invoice)
+  const paymentAvailable = !offerExpired && (invoice.invoice_kind === 'deposit' || contractSigned)
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   const requestedAmount = Math.min(Number(invoice.payment_requested_amount || balanceDue), balanceDue)
@@ -71,6 +74,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Proposal total</p>
+              {offer.active ? <p className="mt-2 font-mono text-xs text-zinc-500 line-through">{money(offer.originalTotal)}</p> : null}
               <p className="mt-2 font-mono text-sm font-bold text-[#f1d27a]">{money(invoice.total)}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -78,6 +82,14 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <p className="mt-2 font-mono text-sm font-bold text-white">{money(balanceDue)}</p>
             </div>
           </section>
+
+          {offer.active ? <section className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.08] p-5 sm:p-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Limited-time offer applied</p>
+            <p className="mt-2 text-lg font-bold text-white">Save {money(offer.savings)} ({offer.percent}%)</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100/80">This price is secured when your agreement is signed and required payment is completed by {formatLuxorOfferExpiry(offer.expiresAt) || 'the stated offer deadline'}.</p>
+          </section> : null}
+          {!offer.active && !offerExpired && invoice.offer_expires_at ? <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f1d27a]">Proposal availability</p><p className="mt-2 text-sm leading-6 text-zinc-200">Complete your agreement and required payment by {formatLuxorOfferExpiry(invoice.offer_expires_at) || 'the stated deadline'} to secure your date.</p></section> : null}
+          {offerExpired ? <section className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">Offer expired</p><p className="mt-2 text-sm leading-6 text-amber-100/85">This proposal is no longer available at the previous price. Please contact Luxor for an updated offer.</p></section> : null}
 
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
             <div className="flex items-center gap-3 border-b border-white/10 pb-4">
@@ -108,6 +120,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
                 <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-6 text-xs font-black uppercase tracking-wider text-emerald-300"><Check size={16} /> Paid in full</span>
               ) : paymentAvailable ? (
                 <a href={`/api/public/proposals/${encodeURIComponent(token)}/checkout`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
+              ) : offerExpired ? (
+                <p className="max-w-xs text-xs leading-5 text-amber-200">This offer has expired. Contact Luxor to receive an updated proposal before paying.</p>
               ) : !paymentAvailable ? (
                 <p className="max-w-xs text-xs leading-5 text-zinc-300">Payment unlocks after the event agreement is signed. Use the secure agreement link in your Luxor email to review and sign first.</p>
               ) : (

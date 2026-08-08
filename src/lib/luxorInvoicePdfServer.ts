@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
+import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -67,6 +68,21 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   y -= 28
   draw('TOTAL INVESTMENT', 340, 11, bold)
   draw(money(invoice.total), 485, 13, bold, gold)
+
+  if (hasLuxorOffer(invoice)) {
+    const offer = luxorOfferSnapshot(invoice)
+    y -= 26
+    draw('LIMITED-TIME OFFER APPLIED', 340, 8, bold, gold)
+    y -= 15
+    draw(`Original price ${money(offer.originalTotal)}  |  ${offer.percent}% savings ${money(offer.savings)}`, 340, 8.5, regular, muted)
+    if (offer.expiresAt) {
+      y -= 13
+      draw(`Price is secured when agreement and required payment are complete by ${formatLuxorOfferExpiry(offer.expiresAt) || offer.expiresAt}.`, 54, 8.5, regular, muted)
+    }
+  } else if (invoice.offer_expires_at) {
+    y -= 24
+    draw(`Proposal offer expires ${formatLuxorOfferExpiry(invoice.offer_expires_at) || invoice.offer_expires_at}.`, 54, 8.5, regular, muted)
+  }
 
   if (invoice.notes) {
     y -= 48

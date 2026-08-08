@@ -38,6 +38,9 @@ function defaultContractBody(booking: LuxorBooking) {
     booking.guest_count ? `Estimated guest count: ${booking.guest_count}.` : '',
     `Contract total: $${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     `Deposit required: $${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+    Number((booking.metadata?.proposalOffer as { percent?: number } | undefined)?.percent || 0) > 0
+      ? `Limited-time offer: ${(booking.metadata?.proposalOffer as { percent?: number; savings?: number; expiresAt?: string | null }).percent}% off, saving $${Number((booking.metadata?.proposalOffer as { savings?: number }).savings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, secured only when the agreement and required payment are complete by ${(booking.metadata?.proposalOffer as { expiresAt?: string | null }).expiresAt || 'the stated deadline'}.`
+      : '',
     serviceSummary,
     'By signing, the client confirms the reservation details and agrees to continue with Luxor Event Space booking requirements. Final legal language should be reviewed by the business owner.',
   ].filter(Boolean).join('\n\n')
@@ -59,6 +62,7 @@ export function getLuxorBookingContractFingerprint(booking: LuxorBooking) {
     notes: booking.notes,
     proposalLineItems: booking.metadata?.proposalLineItems || [],
     proposalTaxRate: booking.metadata?.proposalTaxRate || 0,
+    proposalOffer: booking.metadata?.proposalOffer || null,
   })).digest('hex')
 }
 
@@ -327,6 +331,7 @@ export async function signLuxorSignatureRequest(input: {
   await recordLuxorSignatureEvent({ signatureRequestId: signature.id, eventType: 'completed' })
 
   let paymentRequest: Awaited<ReturnType<typeof createLuxorPostContractCheckout>> = null
+  let paymentReviewUrl: string | null = null
   try {
     const [booking, inquiry] = await Promise.all([
       getLuxorBooking(signature.booking_id),
@@ -345,13 +350,17 @@ export async function signLuxorSignatureRequest(input: {
         paymentLabel: paymentInvoice.invoice_kind === 'deposit' ? '30% non-refundable booking deposit' : undefined,
         masterInvoiceId: masterInvoice?.id,
       })
+      if (paymentRequest && paymentInvoice.public_token) {
+        const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+        paymentReviewUrl = `${origin}/proposal/${paymentInvoice.public_token}`
+      }
     }
   } catch (paymentError) {
     console.error('Contract was signed, but the post-sign Stripe request could not be created:', paymentError)
   }
 
   const paymentSection = paymentRequest
-    ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: ${paymentRequest.paymentLabel}</p><p style="margin:0 0 18px;font-family:Georgia,serif;font-size:27px">$${paymentRequest.paymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><a href="${paymentRequest.checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Pay securely with Stripe</a></div>`
+    ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: ${paymentRequest.paymentLabel}</p><p style="margin:0 0 18px;font-family:Georgia,serif;font-size:27px">$${paymentRequest.paymentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><a href="${paymentReviewUrl || paymentRequest.checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Pay securely with Stripe</a></div>`
     : '<p style="color:#756755">Luxor will follow up separately with the secure payment link.</p>'
   const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
   const clientJob = await createLuxorEmailJob({
@@ -362,7 +371,7 @@ export async function signLuxorSignatureRequest(input: {
     recipientEmail: signature.client_email,
     subject: paymentRequest ? 'Agreement complete — secure your Luxor date' : 'Your Luxor Event Space agreement is complete',
     body: paymentRequest
-      ? `Your agreement is complete. Pay your ${paymentRequest.paymentLabel.toLowerCase()} securely: ${paymentRequest.checkoutUrl}`
+      ? `Your agreement is complete. Pay your ${paymentRequest.paymentLabel.toLowerCase()} securely: ${paymentReviewUrl || paymentRequest.checkoutUrl}`
       : 'Your agreement is complete. Your executed copy is attached.',
     scheduledFor: ownerSignedAt,
     metadata: { automated: true, flow_stage: 'contract_completed', includes_executed_contract: true, includes_payment_link: Boolean(paymentRequest) },

@@ -8,6 +8,7 @@ import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/lux
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { calculateLuxorOfferPricing, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,15 +54,23 @@ export async function POST(request: NextRequest) {
 
     let contractTotal = Number(body.contract_total || 0)
     let eventTotalForDeposit = contractTotal
+    let proposalOffer: ReturnType<typeof luxorOfferSnapshot> | null = null
     if (body.invoice_id) {
       const proposal = await getInvoice(body.invoice_id)
       if (proposal && proposal.status !== 'paid') {
         const lineItems = ensureRefundableSecurityDepositLineItem(proposal.line_items)
-        const subtotal = Math.round(lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0) * 100) / 100
-        const total = Math.round(subtotal * (1 + Math.max(0, Number(proposal.tax_rate || 0)) + 0) * 100) / 100
-        const updatedProposal = await updateInvoice(proposal.id, { line_items: lineItems, subtotal, total })
+        const pricing = calculateLuxorOfferPricing({ lineItems, taxRate: Number(proposal.tax_rate || 0), discountPercent: Number(proposal.discount_percent || 0) })
+        const updatedProposal = await updateInvoice(proposal.id, {
+          line_items: lineItems,
+          subtotal: pricing.subtotal,
+          total: pricing.total,
+          original_subtotal: pricing.originalSubtotal,
+          original_total: pricing.originalTotal,
+          discount_amount: pricing.discountAmount,
+        })
         if (updatedProposal) {
           contractTotal = Number(updatedProposal.total || 0)
+          proposalOffer = luxorOfferSnapshot(updatedProposal)
           const securityDeposit = lineItems.find((item) => item.category === 'Security Deposit')
           eventTotalForDeposit = Math.max(0, contractTotal - Number(securityDeposit?.total || 0))
         }
@@ -71,6 +80,10 @@ export async function POST(request: NextRequest) {
     const normalizedBody = {
       ...body,
       contract_total: contractTotal,
+      metadata: {
+        ...(body.metadata || {}),
+        ...(proposalOffer ? { proposalOffer } : {}),
+      },
       final_payment_due_date: body.final_payment_due_date || luxorFinalPaymentDueDate(body.event_date),
       deposit_required: body.metadata?.deposit_type === 'non_refundable_booking' && eventTotalForDeposit > 0
         ? Math.round(eventTotalForDeposit * 0.3 * 100) / 100

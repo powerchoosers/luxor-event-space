@@ -4,9 +4,10 @@ import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 import { createNote } from '@/lib/luxorNotesServer'
-import { getInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoice, getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -31,7 +32,9 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
 async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>, ensureCheckout = false) {
   if (signature.status !== 'signed') return {}
   const booking = await getLuxorBooking(signature.booking_id)
-  let invoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+  const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+  let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
+  invoice ||= masterInvoice
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
   if (!invoice.stripe_checkout_url && ensureCheckout && signature.inquiry_id) {
     const inquiry = await getLuxorInquiry(signature.inquiry_id)
@@ -46,8 +49,9 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
     }
   }
   if (!invoice?.stripe_checkout_url) return {}
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
   return {
-    payment_url: invoice.stripe_checkout_url,
+    payment_url: invoice.public_token ? `${siteUrl}/proposal/${invoice.public_token}` : invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || 0),
     payment_label: invoice.payment_requested_label || 'Event payment',
   }
@@ -117,6 +121,14 @@ export async function POST(request: NextRequest) {
     }
     if (signatureDataUrl.length > 2_500_000) {
       return NextResponse.json({ error: 'The signature image is too large. Please clear it and try again.' }, { status: 413 })
+    }
+
+    const pendingSignature = await getLuxorSignatureRequestByToken(String(body.token || ''))
+    const pendingBooking = pendingSignature ? await getLuxorBooking(pendingSignature.booking_id) : null
+    const pendingInvoice = pendingBooking?.invoice_id ? await getInvoice(pendingBooking.invoice_id) : null
+    if (pendingInvoice && isLuxorOfferExpired(pendingInvoice)) {
+      await updateLuxorSignatureRequest(pendingSignature!.id, { status: 'void', metadata: { ...pendingSignature!.metadata, voidReason: 'proposal_offer_expired', voidedAt: new Date().toISOString() } })
+      return NextResponse.json({ error: 'This proposal offer has expired. Luxor will need to send an updated agreement before it can be signed.' }, { status: 410 })
     }
 
     const signature = await signLuxorSignatureRequest({

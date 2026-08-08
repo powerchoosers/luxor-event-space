@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { LuxorBooking, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, LuxorNote, LuxorSignatureRequest } from './luxorInquiryTypes'
+import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -35,6 +36,78 @@ export function buildProposalReminderEmail(input: { inquiry: LuxorInquiry; invoi
       buttonLabel: 'Review proposal',
       buttonUrl: input.reviewUrl,
     }),
+  }
+}
+
+export async function buildAiOfferReminderEmail(input: {
+  inquiry: LuxorInquiry
+  invoice: LuxorInvoice
+  booking?: LuxorBooking | null
+  reviewUrl: string
+  reminderNumber: number
+  notes?: LuxorNote[]
+}) {
+  const offer = luxorOfferSnapshot(input.invoice)
+  const expiry = formatLuxorOfferExpiry(input.invoice.offer_expires_at) || 'the stated deadline'
+  const fallback = hasLuxorOffer(input.invoice)
+    ? `Your ${offer.percent}% limited-time offer is still available for your ${input.inquiry.event_type || 'event'}. Review the agreement and complete the required payment by ${expiry} to secure the discounted price and your date.`
+    : `Your Luxor proposal is still available for your ${input.inquiry.event_type || 'event'}. Review the agreement and complete the required payment by ${expiry} to secure your date.`
+  const apiKey = process.env.OPEN_ROUTER_API_KEY
+  let copy = fallback
+  let aiGenerated = false
+  if (apiKey) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://luxoratlaspalmas.com', 'X-Title': 'Luxor Offer Reminder Email Writer' },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: 'Write exactly two warm, concise sentences for a Luxor Event Space limited-time proposal reminder. Encourage the client to review, sign, and complete the required payment before the supplied deadline to secure their date. Use only the supplied facts. Never invent availability, urgency, pricing, amenities, promises, or terms. Do not repeat dollar amounts or percentages because the approved detail card supplies them. Return only the two sentences, maximum 55 words.' },
+            { role: 'user', content: JSON.stringify({
+              clientName: input.inquiry.full_name,
+              eventType: input.inquiry.event_type,
+              eventDate: input.booking?.event_date || input.inquiry.target_date,
+              guestCount: input.booking?.guest_count || input.inquiry.guest_count,
+              offerDeadline: expiry,
+              hasDiscount: hasLuxorOffer(input.invoice),
+              reminderNumber: input.reminderNumber,
+              recentNotes: (input.notes || []).slice(-5).map((note) => note.content),
+            }) },
+          ],
+        }),
+        signal: AbortSignal.timeout(12_000),
+      })
+      if (response.ok) {
+        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
+        const generated = payload.choices?.[0]?.message?.content?.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim()
+        if (generated) {
+          copy = generated.slice(0, 480)
+          aiGenerated = true
+        }
+      }
+    } catch (error) {
+      console.warn('AI offer reminder copy fell back to approved copy:', error instanceof Error ? error.message : error)
+    }
+  }
+  const detail = hasLuxorOffer(input.invoice)
+    ? `Regular price: ${money(offer.originalTotal)} · Your offer: ${money(offer.discountedTotal)} · Save ${money(offer.savings)} (${offer.percent}%) · Expires: ${expiry}`
+    : `Proposal total: ${money(input.invoice.total)} · Expires: ${expiry}`
+  return {
+    subject: hasLuxorOffer(input.invoice)
+      ? `Reminder: your ${offer.percent}% Luxor offer ends ${expiry}`
+      : `Reminder: reserve your Luxor date by ${expiry}`,
+    body: brandedEmail({
+      eyebrow: hasLuxorOffer(input.invoice) ? 'Limited-time event offer' : 'Event proposal reminder',
+      title: hasLuxorOffer(input.invoice) ? 'Your offer is ready to secure' : 'Your event date is ready to secure',
+      greeting: `Hi ${firstName(input.inquiry.full_name)},`,
+      copy,
+      detail,
+      buttonLabel: 'Review offer & secure date',
+      buttonUrl: input.reviewUrl,
+    }),
+    aiGenerated,
   }
 }
 
@@ -227,4 +300,3 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
 export function lifecycleAutomationKey(kind: LuxorEmailJobKind, recordId: string) {
   return `${kind}:${recordId}`
 }
-

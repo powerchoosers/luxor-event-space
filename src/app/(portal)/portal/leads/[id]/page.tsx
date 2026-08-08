@@ -228,6 +228,8 @@ export default function LeadDetailPage({
   ])
   const [invoiceNotes, setInvoiceNotes] = useState('')
   const [invoiceTaxRate, setInvoiceTaxRate] = useState('8.25')
+  const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState('0')
+  const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState('23:59')
   const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
@@ -1329,6 +1331,9 @@ export default function LeadDetailPage({
       const subtotal = getInvoiceSubtotal()
       const taxRate = Math.max(0, Number(invoiceTaxRate) || 0) / 100
       const total = getInvoiceTotal()
+      const offerExpiresAt = invoiceDueDate
+        ? new Date(`${invoiceDueDate}T${invoiceOfferExpiryTime || '23:59'}:00`).toISOString()
+        : null
 
       const res = await fetch('/api/invoices', {
         method: 'POST',
@@ -1342,6 +1347,8 @@ export default function LeadDetailPage({
           tax_rate: taxRate,
           total,
           due_date: invoiceDueDate || null,
+          offer_expires_at: offerExpiresAt,
+          discount_percent: invoiceDiscountPercent,
           inquiry_id: id,
           notes: invoiceNotes || null,
         }),
@@ -6080,6 +6087,10 @@ export default function LeadDetailPage({
         onDescriptionChange={setInvoiceDesc}
         dueDate={invoiceDueDate}
         onDueDateChange={setInvoiceDueDate}
+        offerExpiryTime={invoiceOfferExpiryTime}
+        onOfferExpiryTimeChange={setInvoiceOfferExpiryTime}
+        discountPercent={invoiceDiscountPercent}
+        onDiscountPercentChange={setInvoiceDiscountPercent}
         items={invoiceItems}
         onItemsChange={setInvoiceItems}
         notes={invoiceNotes}

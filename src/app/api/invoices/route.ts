@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { listInvoices, listInvoicesByInquiry, createInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
+import { calculateLuxorOfferPricing, clampLuxorDiscountPercent } from '@/lib/luxorOffer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { client_name, event_type, description, line_items, tax_rate, due_date, inquiry_id, notes } = body
+    const { client_name, event_type, description, line_items, tax_rate, due_date, inquiry_id, notes, discount_percent, offer_expires_at } = body
 
     if (!client_name || !line_items) {
       return NextResponse.json({ error: 'client_name and line_items are required.' }, { status: 400 })
@@ -66,17 +67,32 @@ export async function POST(request: NextRequest) {
       }
     }
     const normalizedTaxRate = Math.min(1, Math.max(0, Number(tax_rate) || 0))
-    const subtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.total, 0) * 100) / 100
-    const total = Math.round(subtotal * (1 + normalizedTaxRate) * 100) / 100
+    const discountPercent = clampLuxorDiscountPercent(discount_percent)
+    const offerExpiresAt = offer_expires_at ? new Date(String(offer_expires_at)) : null
+    if (offer_expires_at && (!offerExpiresAt || Number.isNaN(offerExpiresAt.getTime()))) {
+      return NextResponse.json({ error: 'Choose a valid offer expiration date and time.' }, { status: 400 })
+    }
+    if (offerExpiresAt && offerExpiresAt.getTime() <= Date.now()) {
+      return NextResponse.json({ error: 'The offer expiration must be in the future.' }, { status: 400 })
+    }
+    if (offerExpiresAt && offerExpiresAt.getTime() < Date.now() + 30 * 60_000) {
+      return NextResponse.json({ error: 'Set the offer expiration at least 30 minutes ahead so Stripe can safely create a checkout session.' }, { status: 400 })
+    }
+    const pricing = calculateLuxorOfferPricing({ lineItems: normalizedItems, taxRate: normalizedTaxRate, discountPercent })
 
     const invoice = await createInvoice({
       client_name,
       event_type,
       description,
       line_items: normalizedItems,
-      subtotal,
+      subtotal: pricing.subtotal,
       tax_rate: normalizedTaxRate,
-      total,
+      total: pricing.total,
+      original_subtotal: pricing.originalSubtotal,
+      original_total: pricing.originalTotal,
+      discount_percent: pricing.discountPercent,
+      discount_amount: pricing.discountAmount,
+      offer_expires_at: offerExpiresAt?.toISOString() || null,
       due_date,
       inquiry_id,
       notes,
@@ -112,6 +128,31 @@ export async function PATCH(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'Invoice id is required.' }, { status: 400 })
+    }
+
+    const existing = await getInvoice(id)
+    if (!existing) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    if (existing.status === 'paid') return NextResponse.json({ error: 'A paid invoice cannot be repriced.' }, { status: 409 })
+    const nextItems = Array.isArray(updates.line_items) ? updates.line_items : existing.line_items
+    const nextTaxRate = updates.tax_rate === undefined ? Number(existing.tax_rate || 0) : Math.min(1, Math.max(0, Number(updates.tax_rate) || 0))
+    const nextDiscountPercent = updates.discount_percent === undefined ? Number(existing.discount_percent || 0) : clampLuxorDiscountPercent(updates.discount_percent)
+    if (Array.isArray(updates.line_items) || updates.tax_rate !== undefined || updates.discount_percent !== undefined) {
+      const pricing = calculateLuxorOfferPricing({ lineItems: nextItems, taxRate: nextTaxRate, discountPercent: nextDiscountPercent })
+      updates.line_items = nextItems
+      updates.tax_rate = nextTaxRate
+      updates.subtotal = pricing.subtotal
+      updates.total = pricing.total
+      updates.original_subtotal = pricing.originalSubtotal
+      updates.original_total = pricing.originalTotal
+      updates.discount_percent = pricing.discountPercent
+      updates.discount_amount = pricing.discountAmount
+    }
+    if (updates.offer_expires_at) {
+      const expiry = new Date(String(updates.offer_expires_at))
+      if (Number.isNaN(expiry.getTime()) || expiry.getTime() < Date.now() + 30 * 60_000) {
+        return NextResponse.json({ error: 'Set the offer expiration at least 30 minutes ahead.' }, { status: 400 })
+      }
+      updates.offer_expires_at = expiry.toISOString()
     }
 
     const updatedInvoice = await updateInvoice(id, updates)

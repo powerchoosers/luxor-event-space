@@ -3,6 +3,7 @@ import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServe
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const invoice = await getInvoiceByPublicToken(token)
   if (!invoice || invoice.status === 'cancelled') {
     return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
+  }
+  if (isLuxorOfferExpired(invoice)) {
+    await updateInvoice(invoice.id, { offer_status: 'expired', stripe_checkout_session_id: null, stripe_checkout_url: null })
+    return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=offer-expired`, _request.url))
   }
 
   const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []

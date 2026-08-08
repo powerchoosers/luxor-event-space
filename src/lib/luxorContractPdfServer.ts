@@ -240,6 +240,8 @@ async function createWriter(documentLabel: string) {
 export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: string, agreementDate = new Date().toISOString()) {
   const names = parseClientName(booking.client_name)
   const balance = Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0))
+  const proposalOffer = booking.metadata?.proposalOffer as { originalTotal?: number; discountedTotal?: number; percent?: number; savings?: number; expiresAt?: string | null } | undefined
+  const hasOffer = Number(proposalOffer?.percent || 0) > 0 && Number(proposalOffer?.savings || 0) > 0
   const w = await createWriter('BOOKING AGREEMENT')
 
   // Page 1 - Parties and event details
@@ -268,7 +270,13 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.heading('3. Contract price')
   w.fieldPair('Total contract price', money(booking.contract_total), 'Reservation payment', money(booking.deposit_required))
   w.fieldPair('Remaining balance', money(balance), 'Final payment due', displayDate(booking.final_payment_due_date))
-  w.paragraph('The event date is not reserved until the required reservation payment has been received and this Agreement has been fully executed. Unless otherwise stated in writing, the remaining balance is due no later than thirty (30) days before the Event.')
+  if (hasOffer) {
+    w.fieldPair('Original contract price', money(Number(proposalOffer?.originalTotal || 0)), 'Limited-time savings', `${Number(proposalOffer?.percent || 0)}% (${money(Number(proposalOffer?.savings || 0))})`)
+    w.paragraph(`Limited-time offer: the discounted contract price above is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer?.expiresAt || null)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request at the regular price.`)
+  } else if (proposalOffer?.expiresAt) {
+    w.paragraph(`This proposal is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer.expiresAt)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request.`)
+  }
+  w.paragraph('The event date is not reserved until the required reservation payment has been received and this Agreement has been fully executed. Unless otherwise stated in writing, the remaining balance is due no later than sixty (60) days before the Event.')
   w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Card payments may be subject to a disclosed processing fee. Returned checks are subject to a $35.00 fee.')
   w.paragraph('Payments not received by the due date may incur a late fee equal to five percent (5%) of the overdue amount or $50.00, whichever is greater. Nonpayment may suspend planning services or result in cancellation of the Event.')
   w.paragraph('The Client agrees not to initiate a chargeback for amounts properly due under this Agreement. An unauthorized chargeback is a material breach, and the Client remains responsible for unpaid balances, chargeback fees, and reasonable collection costs to the extent permitted by Texas law.')
