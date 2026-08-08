@@ -5,6 +5,35 @@ import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTyp
 import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot, roundLuxorMoney } from './luxorOffer'
 
+/**
+ * A checkout URL remains usable even after its reference is removed from our
+ * database.  Any quote terms change must therefore expire the Stripe Session
+ * itself before issuing a replacement.
+ */
+export async function expireLuxorCheckoutForRepricing(invoice: LuxorInvoice) {
+  if (!invoice.stripe_checkout_session_id) return
+
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  if (!secretKey) {
+    throw new Error('Stripe must be connected before changing a quote with an active payment link.')
+  }
+
+  const stripe = new Stripe(secretKey)
+  try {
+    const session = await stripe.checkout.sessions.retrieve(invoice.stripe_checkout_session_id)
+    if (session.status === 'open') await stripe.checkout.sessions.expire(session.id)
+    if (session.status === 'complete' || session.payment_status === 'paid') {
+      throw new Error('Stripe has already received or is processing this payment. Refresh before changing the quote.')
+    }
+  } catch (error) {
+    if (error instanceof Error && /already received or is processing this payment/.test(error.message)) throw error
+    const stripeCode = typeof error === 'object' && error && 'code' in error ? String(error.code || '') : ''
+    if (stripeCode !== 'resource_missing') throw error
+  }
+
+  await updateInvoice(invoice.id, { stripe_checkout_session_id: null, stripe_checkout_url: null })
+}
+
 export async function createLuxorPostContractCheckout(input: {
   invoice: LuxorInvoice
   inquiry: LuxorInquiry
@@ -63,20 +92,6 @@ export async function createLuxorPostContractCheckout(input: {
     throw new Error('This offer expires in less than 30 minutes, so Stripe cannot safely create a checkout link. Extend the offer or send an updated proposal.')
   }
   let stripeCouponId = invoice.stripe_coupon_id || null
-  if (appliesStripeDiscount && !stripeCouponId) {
-    const coupon = await stripe.coupons.create({
-      percent_off: offer.percent,
-      duration: 'once',
-      ...(offerExpirySeconds ? { redeem_by: offerExpirySeconds } : {}),
-      name: `Luxor ${offer.percent}% limited-time offer`,
-      metadata: {
-        luxor_invoice_id: invoice.id,
-        luxor_booking_id: booking.id,
-        offer_expires_at: offer.expiresAt || '',
-      },
-    })
-    stripeCouponId = coupon.id
-  }
   let previousSessionMarker = invoice.stripe_checkout_session_id || 'first'
   if (invoice.stripe_checkout_session_id) {
     try {
@@ -101,6 +116,21 @@ export async function createLuxorPostContractCheckout(input: {
       if (stripeCode !== 'resource_missing') throw error
       previousSessionMarker = invoice.stripe_checkout_session_id
     }
+  }
+
+  if (appliesStripeDiscount && !stripeCouponId) {
+    const coupon = await stripe.coupons.create({
+      percent_off: offer.percent,
+      duration: 'once',
+      ...(offerExpirySeconds ? { redeem_by: offerExpirySeconds } : {}),
+      name: `Luxor ${offer.percent}% limited-time offer`,
+      metadata: {
+        luxor_invoice_id: invoice.id,
+        luxor_booking_id: booking.id,
+        offer_expires_at: offer.expiresAt || '',
+      },
+    })
+    stripeCouponId = coupon.id
   }
 
   const checkout = await stripe.checkout.sessions.create({

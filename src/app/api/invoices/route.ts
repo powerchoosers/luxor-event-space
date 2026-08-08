@@ -5,6 +5,7 @@ import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { calculateLuxorOfferPricing, clampLuxorDiscountPercent } from '@/lib/luxorOffer'
+import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -133,6 +134,10 @@ export async function PATCH(request: NextRequest) {
     const existing = await getInvoice(id)
     if (!existing) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
     if (existing.status === 'paid') return NextResponse.json({ error: 'A paid invoice cannot be repriced.' }, { status: 409 })
+    const offerTermsChanged = Array.isArray(updates.line_items) ||
+      updates.tax_rate !== undefined ||
+      updates.discount_percent !== undefined ||
+      updates.offer_expires_at !== undefined
     const nextItems = Array.isArray(updates.line_items) ? updates.line_items : existing.line_items
     const nextTaxRate = updates.tax_rate === undefined ? Number(existing.tax_rate || 0) : Math.min(1, Math.max(0, Number(updates.tax_rate) || 0))
     const nextDiscountPercent = updates.discount_percent === undefined ? Number(existing.discount_percent || 0) : clampLuxorDiscountPercent(updates.discount_percent)
@@ -153,6 +158,10 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Set the offer expiration at least 30 minutes ahead.' }, { status: 400 })
       }
       updates.offer_expires_at = expiry.toISOString()
+    }
+
+    if (offerTermsChanged && existing.stripe_checkout_session_id) {
+      await expireLuxorCheckoutForRepricing(existing)
     }
 
     const updatedInvoice = await updateInvoice(id, updates)

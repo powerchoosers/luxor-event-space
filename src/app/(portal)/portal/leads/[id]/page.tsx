@@ -1327,6 +1327,9 @@ export default function LeadDetailPage({
     if (!lead) return
 
     try {
+      if (!invoiceDueDate) {
+        throw new Error('Choose when this proposal offer expires before saving it.')
+      }
       setSubmittingInvoice(true)
       const subtotal = getInvoiceSubtotal()
       const taxRate = Math.max(0, Number(invoiceTaxRate) || 0) / 100
