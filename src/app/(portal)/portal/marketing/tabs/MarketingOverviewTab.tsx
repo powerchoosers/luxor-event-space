@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import {
   ArrowUpRight,
   CalendarClock,
@@ -170,10 +171,10 @@ export function MarketingOverviewTab({
         <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
           <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
             <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Grand Opening RSVP Activity</h3>
-              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">RSVP submissions received from the website.</p>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Grand Opening history</h3>
+              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Legacy RSVP records are read-only; use the private attendance report for check-ins.</p>
             </div>
-            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View RSVPs</button>
+            <Link href="/portal/attendance" className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Attendance report</Link>
           </div>
 
           {grandOpeningRsvps.length ? (
@@ -200,7 +201,7 @@ export function MarketingOverviewTab({
               </div>
             </>
           ) : (
-            <DataEmptyState loading={loading} message="No Grand Opening RSVPs have been submitted." />
+            <DataEmptyState loading={loading} message="No legacy Grand Opening RSVP rows are stored." />
           )}
         </section>
 

@@ -88,6 +88,14 @@ type ActivityEntry =
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
   | { kind: 'call'; id: string; createdAt: string; call: LuxorCall }
 
+function tourDisplayStatus(lead: LuxorInquiry) {
+  if (lead.tour_attendance_status === 'attended') return 'Completed'
+  if (lead.tour_attendance_status === 'no_show') return 'No show'
+  if (lead.status === 'tour_confirmed') return 'Confirmed'
+  if (lead.preferred_tour_date || lead.preferred_tour_time || lead.status === 'tour_requested') return 'Requested'
+  return 'Not scheduled'
+}
+
 type LeadMarketingEvent = {
   id: string
   created_at: string
@@ -472,6 +480,8 @@ export default function LeadDetailPage({
   const [tourNotes, setTourNotes] = useState('')
   const [tourBudget, setTourBudget] = useState('')
   const [cateringPreferences, setCateringPreferences] = useState('')
+  const [tourAssignees, setTourAssignees] = useState<string[]>([])
+  const [tourAssigneeCustom, setTourAssigneeCustom] = useState('')
   const [savingTourAttendance, setSavingTourAttendance] = useState(false)
 
   const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
@@ -635,10 +645,6 @@ export default function LeadDetailPage({
       setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.endTime : '')))
       setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || ''))
       setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || ''))
-      setTourGuests(String(metadata.tourGuests || ''))
-      setTourNotes(String(metadata.tourNotes || ''))
-      setTourBudget(String(metadata.estimatedBudget || ''))
-      setCateringPreferences(String(metadata.cateringPreferences || ''))
     }
   }, [lead, latestBooking])
 
@@ -705,6 +711,7 @@ export default function LeadDetailPage({
         tourNotes,
         estimatedBudget: tourBudget,
         cateringPreferences,
+        tour_assignees: [...tourAssignees.filter((item) => ['Arianna', 'Carlos', 'Alex'].includes(item)), ...(tourAssigneeCustom.trim() ? [tourAssigneeCustom.trim()] : [])],
       }
 
       const res = await fetch('/api/inquiries', {
@@ -730,6 +737,21 @@ export default function LeadDetailPage({
     } finally {
       setSavingTourAttendance(false)
     }
+  }
+
+  const openTourDetailsEditor = () => {
+    if (!lead) return
+    const metadata = lead.metadata || {}
+    setTourGuests(String(metadata.tourGuests || ''))
+    setTourNotes(String(metadata.tourNotes || ''))
+    setTourBudget(String(metadata.estimatedBudget || ''))
+    setCateringPreferences(String(metadata.cateringPreferences || ''))
+    const storedAssignees = Array.isArray(metadata.tour_assignees)
+      ? metadata.tour_assignees.map((value) => String(value)).filter(Boolean)
+      : metadata.tour_coordinator ? [String(metadata.tour_coordinator)] : []
+    setTourAssignees(storedAssignees)
+    setTourAssigneeCustom(storedAssignees.find((value) => !['Arianna', 'Carlos', 'Alex'].includes(value)) || '')
+    setIsEditingTourAttendance(true)
   }
 
   useLayoutEffect(() => {
@@ -1719,7 +1741,34 @@ export default function LeadDetailPage({
     setTourScheduleDuration(String(lead.metadata?.tourDurationMinutes || 60))
     setTourMeetingType(String(lead.metadata?.tourMeetingType || 'Private Venue Tour'))
     setTourClientFacingNotes(String(lead.metadata?.tourClientFacingNotes || lead.message || ''))
+    const savedAssignees = Array.isArray(lead.metadata?.tour_assignees)
+      ? lead.metadata.tour_assignees.map((value) => String(value)).filter(Boolean)
+      : lead.metadata?.tour_coordinator ? [String(lead.metadata.tour_coordinator)] : []
+    setTourAssignees(savedAssignees)
+    setTourAssigneeCustom(savedAssignees.find((value) => !['Arianna', 'Carlos', 'Alex'].includes(value)) || '')
     setIsTourScheduleModalOpen(true)
+  }
+
+  const handleTourAttendanceAction = async (attendance: 'attended' | 'no_show') => {
+    if (!lead) return
+    try {
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: lead.id, action: 'attendance', attendance }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
+      if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
+      await fetchAllData(false)
+      notify({
+        title: attendance === 'attended' ? 'Tour marked complete' : 'Tour marked no show',
+        description: attendance === 'no_show' ? 'A reschedule email is queued for three hours from now.' : 'Any pending no-show follow-up was cancelled.',
+        variant: 'success',
+      })
+    } catch (error) {
+      notify({ title: 'Tour status not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    }
   }
 
   const handleScheduleTour = async (event: React.FormEvent) => {
@@ -1739,6 +1788,7 @@ export default function LeadDetailPage({
           durationMinutes: Number(tourScheduleDuration),
           meetingType: tourMeetingType,
           clientFacingNotes: tourClientFacingNotes,
+          tourAssignees,
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -3019,7 +3069,7 @@ export default function LeadDetailPage({
                         {!isEditingTourAttendance && (
                           <button
                             type="button"
-                            onClick={() => setIsEditingTourAttendance(true)}
+                            onClick={openTourDetailsEditor}
                             className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer"
                           >
                             Edit Intake
@@ -3239,10 +3289,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {lead.preferred_tour_date ? 'Conduct venue tour & build proposal' : 'Schedule or confirm venue tour'}
+                              {tourDisplayStatus(lead) === 'Confirmed' ? 'Conduct the venue tour' : tourDisplayStatus(lead) === 'Requested' ? 'Accept the tour request' : 'Schedule a venue tour'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {lead.preferred_tour_date ? 'Show space features, answer questions, and draft proposal package.' : 'Select a date & time or send a calendar invite.'}
+                              {tourDisplayStatus(lead) === 'Confirmed' ? 'Show the space, answer questions, and capture what happens next.' : 'Choose a date and time so the client receives the correct confirmation and reminders.'}
                             </p>
                           </div>
                         </div>
@@ -3252,14 +3302,7 @@ export default function LeadDetailPage({
                             onClick={openTourScheduleModal}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer"
                           >
-                            <Calendar size={13} /> {lead.preferred_tour_date ? 'Reschedule Tour' : 'Schedule Tour'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsInvoiceModalOpen(true)}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
-                          >
-                            <FileText size={13} /> Build Proposal
+                            <Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Accept Tour Request' : tourDisplayStatus(lead) === 'Confirmed' ? 'Reschedule' : 'Schedule Tour'}
                           </button>
                         </div>
                       </div>
@@ -3284,7 +3327,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned To</span>
-                              <span className="font-bold text-white">{String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
+                              <span className="font-bold text-white">{Array.isArray(lead.metadata?.tour_assignees) && lead.metadata.tour_assignees.length ? lead.metadata.tour_assignees.join(', ') : String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
@@ -3292,17 +3335,20 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
-                              <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">Completed</span>
+                              <span className="rounded bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20 px-2 py-0.5 text-[9px] font-bold uppercase">{tourDisplayStatus(lead)}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Reschedule</button>
-                          <button type="button" className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Send Follow Up</button>
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="flex min-h-11 flex-[1.4] min-w-[140px] items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] cursor-pointer">
-                            <FileText size={14} /> Build Proposal
-                          </button>
+                          {tourDisplayStatus(lead) === 'Confirmed' ? (
+                            <span className="flex-1 min-w-[100px] py-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
+                          ) : null}
+                          {tourDisplayStatus(lead) !== 'Completed' ? (
+                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="flex-1 min-w-[90px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
+                          ) : null}
+                          <button type="button" onClick={openTourScheduleModal} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Reschedule</button>
+                          {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Call</button> : null}
+                          {tourDisplayStatus(lead) !== 'No show' ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="flex-1 min-w-[80px] py-1.5 rounded border border-red-500/20 text-[9px] font-black uppercase text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer">No Show</button> : null}
                         </div>
                       </section>
                       
@@ -3314,6 +3360,20 @@ export default function LeadDetailPage({
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c] mb-3">Edit Tour & Prep Details</p>
                               
                               <div className="space-y-3.5">
+                                <div>
+                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Tour Team</label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {['Arianna', 'Carlos', 'Alex'].map((name) => {
+                                      const selected = tourAssignees.includes(name)
+                                      return (
+                                        <button key={name} type="button" onClick={() => setTourAssignees((current) => selected ? current.filter((item) => item !== name) : [...current, name])} className={`rounded border px-2.5 py-1.5 text-[9px] font-black uppercase ${selected ? 'border-[#caa24c]/50 bg-[#caa24c]/15 text-[#a8792f]' : 'border-[color:var(--portal-border)] text-zinc-500'}`}>
+                                          {name}
+                                        </button>
+                                      )
+                                    })}
+                                    <input value={tourAssigneeCustom} onChange={(event) => setTourAssigneeCustom(event.target.value)} placeholder="Custom" className="min-w-24 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)] outline-none" />
+                                  </div>
+                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
                                     <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Primary Attendee</label>
@@ -3431,7 +3491,7 @@ export default function LeadDetailPage({
                                 </p>
                                 <button
                                   type="button"
-                                  onClick={() => setIsEditingTourAttendance(true)}
+                                    onClick={openTourDetailsEditor}
                                   className="text-[10px] text-[#caa24c] mt-2.5 hover:underline cursor-pointer font-bold text-left block"
                                 >
                                   Edit Prep Notes
@@ -5805,6 +5865,16 @@ export default function LeadDetailPage({
                 ]} className="w-full" buttonClassName="min-h-10" />
               </div>
             </div>
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+              <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Tour team</p>
+              <div className="flex flex-wrap gap-2">
+                {['Arianna', 'Carlos', 'Alex'].map((name) => {
+                  const selected = tourAssignees.includes(name)
+                  return <button key={name} type="button" onClick={() => setTourAssignees((current) => selected ? current.filter((item) => item !== name) : [...current, name])} className={`rounded-lg border px-3 py-2 text-[9px] font-black uppercase ${selected ? 'border-[#caa24c]/50 bg-[#caa24c]/15 text-[#a8792f]' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'}`}>{name}</button>
+                })}
+                <input value={tourAssigneeCustom} onChange={(event) => setTourAssigneeCustom(event.target.value)} placeholder="Custom" className="min-w-24 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
+              </div>
+            </div>
             <div>
               <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Details Elena AI may mention to the client</label>
               <textarea value={tourClientFacingNotes} onChange={(event) => setTourClientFacingNotes(event.target.value)} rows={5} maxLength={2000} placeholder="Example: They want space for a quince court entrance, a family photo area, and room for approximately 150 guests." className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
@@ -6669,6 +6739,7 @@ function EventContacts({ inquiryId }: { inquiryId: string }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [role, setRole] = useState('')
   const [removing, setRemoving] = useState<EventContact | null>(null)
   const [busy, setBusy] = useState(false)
@@ -6686,11 +6757,11 @@ function EventContacts({ inquiryId }: { inquiryId: string }) {
     if (!name.trim()) return
     setBusy(true)
     try {
-      const response = await fetch('/api/portal/event-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, fullName: name, email, roleLabel: role }) })
+      const response = await fetch('/api/portal/event-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, fullName: name, email, phone, roleLabel: role }) })
       const data = await response.json().catch(() => ({})) as { contact?: EventContact; error?: string }
       if (!response.ok) throw new Error(data.error || 'Could not add this contact.')
       setContacts((current) => [...current, data.contact!])
-      setName(''); setEmail(''); setRole(''); setAdding(false)
+      setName(''); setEmail(''); setPhone(''); setRole(''); setAdding(false)
     } catch (error) { window.alert(error instanceof Error ? error.message : 'Could not add this contact.') } finally { setBusy(false) }
   }
   const removeContact = async () => {
@@ -6714,13 +6785,14 @@ function EventContacts({ inquiryId }: { inquiryId: string }) {
       <div className="space-y-1.5">
         {contacts.map((contact) => <div key={contact.id} className="group flex items-center gap-2 rounded-xl bg-[color:var(--portal-soft)] px-2 py-2">
           <PortalContactAvatar name={contact.full_name} size="sm" />
-          <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="truncate text-[9px] text-[color:var(--portal-muted)]">{contact.email || 'No email — will not receive invite'}</p></div>
+          <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="truncate text-[9px] text-[color:var(--portal-muted)]">{contact.email || 'No email'}{contact.phone ? ` · ${formatPhoneDisplay(contact.phone)}` : ''}</p></div>
           <button type="button" onClick={() => setRemoving(contact)} className="p-1 text-[color:var(--portal-muted)] opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${contact.full_name}`}><Trash2 size={12} /></button>
         </div>)}
       </div>
       {adding ? <form onSubmit={addContact} className="mt-2 space-y-2 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] p-3">
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" autoFocus />
         <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email (optional)" type="email" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
+        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone (optional)" type="tel" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
         <input value={role} onChange={(event) => setRole(event.target.value)} placeholder="Role, e.g. Co-host (optional)" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="px-2 py-1 text-[9px] font-bold text-[color:var(--portal-muted)]">Cancel</button><button type="submit" disabled={busy || !name.trim()} className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-[9px] font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Add contact'}</button></div>
       </form> : null}

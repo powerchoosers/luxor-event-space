@@ -29,6 +29,7 @@ import {
   Workflow,
   Megaphone,
   SlidersHorizontal,
+  ClipboardCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -92,6 +93,7 @@ const navItems = [
   { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', isDropdown: true },
   { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
+  { href: '/portal/attendance', icon: <ClipboardCheck size={18} />, label: 'Grand Opening Attendance' },
 ]
 
 const operationsSubItems = [

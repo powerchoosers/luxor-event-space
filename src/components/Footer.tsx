@@ -8,12 +8,11 @@ import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
-  { label: 'Grand Opening', href: '/grand-opening-rsvp' },
   { label: 'Events', href: '/events' },
   { label: 'Spaces', href: '/spaces' },
   { label: 'Gallery', href: '/gallery' },
   { label: 'Packages & Rates', href: '/pricing' },
-  { label: 'Visit', href: '/visit' },
+  { label: 'Visit', href: '/tour' },
 ]
 
 const socialLinks = [

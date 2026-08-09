@@ -142,7 +142,7 @@ export function ProposalBuilderModal({
 
     const catalogItem = LUXOR_SERVICE_CATALOG.find((item) => item.id === catalogId)
     if (!catalogItem) return
-    const nextItem = catalogItemToLineItem(catalogItem)
+    const nextItem = { ...catalogItemToLineItem(catalogItem), id: `catalog-${catalogId}` }
     const replaceBlank = items.length === 1 && !items[0].description.trim() && items[0].unitPrice === 0
     onItemsChange(replaceBlank ? [nextItem] : [...items, nextItem])
   }
@@ -160,6 +160,7 @@ export function ProposalBuilderModal({
 
   const addCustomItem = () => {
     const customItem: LuxorInvoiceLineItem = {
+      id: `custom-${crypto.randomUUID()}`,
       category: 'Custom',
       description: 'Custom service',
       quantity: 1,
@@ -271,6 +272,7 @@ export function ProposalBuilderModal({
                 <p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Event</p>
                 <p className="mt-1 text-sm font-bold">{eventType || 'Event booking'}</p>
                 <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{formatEventDate(eventDate)}</p>
+                <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Changes are available until 60 days before the event; later changes require an amendment.</p>
               </div>
               <label className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Client notes</span>
@@ -370,7 +372,7 @@ export function ProposalBuilderModal({
               </div>
               <div className="mt-3 space-y-2">
                 {items.map((item, index) => (
-                  <div key={`${item.catalogId || 'custom'}-${index}`} className="grid gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:grid-cols-[minmax(180px,1fr)_76px_110px_90px_42px] sm:items-center">
+                  <div key={item.id || item.catalogId || `legacy-${index}`} className="grid gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:grid-cols-[minmax(180px,1fr)_76px_110px_90px_42px] sm:items-center">
                     <div>
                       <span className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{item.category || 'Custom'}</span>
                       <input required value={item.description} onChange={(event) => updateItem(index, 'description', event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-xs font-bold outline-none focus:border-[#caa24c]/60" />
@@ -391,7 +393,7 @@ export function ProposalBuilderModal({
               <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 sm:flex-row sm:items-center sm:justify-end">
                 <label className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] sm:justify-start">Tax rate <span className="flex items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><input type="number" min="0" step="0.01" value={taxRate} onChange={(event) => onTaxRateChange(event.target.value)} className="min-h-10 w-20 bg-transparent px-2 text-right font-mono text-xs outline-none" /><span className="pr-2">%</span></span></label>
                 <span className="hidden h-8 w-px bg-[color:var(--portal-border)] sm:block" />
-                <div className="flex items-baseline justify-between gap-4 sm:justify-start"><span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Internal total</span><span className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</span></div>
+                <div className="flex flex-col items-end gap-0.5 text-right"><span className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Subtotal {formatMoney(subtotal)}</span><span className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Tax {formatMoney(offerPricing.taxAmount)}</span><span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Estimate total <strong className="ml-1 font-mono text-lg text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</strong></span></div>
               </div>
             </section>
           </main>
@@ -419,9 +421,9 @@ export function ProposalBuilderModal({
                   ))}
                 </ul>
                 <div className="my-5 h-px bg-[color:var(--portal-border)]" />
+                <div className="space-y-1 text-[10px] text-[color:var(--portal-muted)]"><div className="flex justify-between"><span>Services subtotal</span><span className="font-mono">{formatMoney(subtotal)}</span></div><div className="flex justify-between"><span>Tax ({Number(taxRate) || 0}%)</span><span className="font-mono">{formatMoney(offerPricing.taxAmount)}</span></div>{hasDiscount ? <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Discount</span><span className="font-mono">−{formatMoney(offerPricing.discountAmount)}</span></div> : null}</div>
                 <div className="flex items-end justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Total investment</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</span></div>
                 {hasDiscount ? <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3"><p className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Limited-time offer applied</p><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]"><span className="line-through">{formatMoney(offerPricing.originalTotal)}</span> · Save {formatMoney(offerPricing.totalSavings)} ({offerPricing.discountPercent}%)</p>{offerExpiryLabel ? <p className="mt-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-200">Sign and pay by {offerExpiryLabel} to secure this price.</p> : null}</div> : null}
-                <p className="mt-3 rounded-lg bg-[#caa24c]/8 p-2.5 text-[9px] leading-4 text-[color:var(--portal-muted)]">Individual item prices are intentionally hidden from the client. Only this total appears in the proposal and invoice.</p>
               </div>
             </div>
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-3 text-[10px] leading-4 text-emerald-800 dark:text-emerald-200"><PackageCheck size={15} className="mt-0.5 shrink-0" /><span>The emailed PDF uses this same client-safe item list.</span></div>

@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       const quantity = Math.max(1, Number(item.quantity) || 1)
       const unitPrice = Math.max(0, Number(item.unitPrice) || 0)
       return {
+        id: typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 120) : crypto.randomUUID(),
         ...(typeof item.catalogId === 'string' ? { catalogId: item.catalogId } : {}),
         ...(typeof item.category === 'string' ? { category: item.category } : {}),
         ...(item.included === true ? { included: true } : {}),

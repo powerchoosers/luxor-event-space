@@ -807,7 +807,7 @@ export function LuxorConciergeChat() {
                         ) : null}
 
                         <Link
-                          href="/visit"
+                          href="/tour"
                           className="flex items-center justify-center gap-2 rounded-md px-3 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#f1d27a] transition hover:text-[#fff0b5]"
                         >
                           Full form

@@ -27,6 +27,8 @@ export type EventLayoutDocument = {
   version: 1
   name: string
   items: LayoutItem[]
+  roomWidthFeet?: number
+  roomHeightFeet?: number
   updatedAt?: string
 }
 
@@ -92,6 +94,8 @@ function templateFor(name: string): LayoutItem[] {
 export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, eventType, eventDate, guestCount, onSave }: Props) {
   const [name, setName] = useState(initialLayout?.name || 'Classic Banquet Layout')
   const [items, setItems] = useState<LayoutItem[]>(() => initialLayout?.items?.length ? initialLayout.items : banquetTemplate())
+  const [roomWidthFeet, setRoomWidthFeet] = useState(initialLayout?.roomWidthFeet || 60)
+  const [roomHeightFeet, setRoomHeightFeet] = useState(initialLayout?.roomHeightFeet || 45)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [history, setHistory] = useState<LayoutItem[][]>([])
   const [future, setFuture] = useState<LayoutItem[][]>([])
@@ -178,8 +182,10 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
     if (!drag || !bounds) return
     const item = items.find((entry) => entry.id === drag.id)
     if (!item) return
-    const x = Math.max(0, Math.min(100 - item.width, ((event.clientX - bounds.left) / bounds.width) * 100 - drag.dx))
-    const y = Math.max(0, Math.min(100 - item.height, ((event.clientY - bounds.top) / bounds.height) * 100 - drag.dy))
+    const snapX = 100 / Math.max(1, roomWidthFeet * 2)
+    const snapY = 100 / Math.max(1, roomHeightFeet * 2)
+    const x = Math.max(0, Math.min(100 - item.width, Math.round((((event.clientX - bounds.left) / bounds.width) * 100 - drag.dx) / snapX) * snapX))
+    const y = Math.max(0, Math.min(100 - item.height, Math.round((((event.clientY - bounds.top) / bounds.height) * 100 - drag.dy) / snapY) * snapY))
     setItems((current) => current.map((entry) => entry.id === drag.id ? { ...entry, x, y } : entry))
   }
 
@@ -191,7 +197,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const save = async () => {
     setSaving(true)
     const now = new Date().toISOString()
-    const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, updatedAt: now })
+    const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, roomWidthFeet, roomHeightFeet, updatedAt: now })
     setSaving(false)
     if (ok) setSavedAt(now)
   }
@@ -237,9 +243,9 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
         </main>
 
         <aside className="hidden overflow-y-auto border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] lg:block">
-          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Layout details</p><label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Layout name<input value={name} onChange={(event) => setName(event.target.value)} className="planning-editor-input mt-2"/></label>{savedAt && <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">Last saved {new Date(savedAt).toLocaleString()}</p>}</section>
+          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Layout details</p><label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Layout name<input value={name} onChange={(event) => setName(event.target.value)} className="planning-editor-input mt-2"/></label><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Room width (ft)<input type="number" min="10" value={roomWidthFeet} onChange={(event) => setRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Room depth (ft)<input type="number" min="10" value={roomHeightFeet} onChange={(event) => setRoomHeightFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label></div><p className="mt-2 text-[9px] leading-4 text-[color:var(--portal-muted)]">Items snap to six-inch increments. Add exact walls and fixtures after the blueprint is supplied.</p>{savedAt && <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">Last saved {new Date(savedAt).toLocaleString()}</p>}</section>
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Capacity estimate</p><div className="mt-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-sm font-black"><Users size={16}/>{capacity} seats</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">{guestCount ? `${guestCount} guests expected` : 'No guest count recorded'}</p></div><div className={`flex h-14 w-14 items-center justify-center rounded-full border-[5px] ${guestCount && capacity < guestCount ? 'border-red-400 text-red-500' : 'border-[#caa24c] text-[#a8792f]'}`}><span className="text-[10px] font-black">{guestCount ? Math.round((capacity / guestCount) * 100) : 0}%</span></div></div></section>
-          {selected ? <Inspector item={selected} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={() => { const clone = { ...selected, id: uid(), x: Math.min(selected.x + 3, 100 - selected.width), y: Math.min(selected.y + 3, 100 - selected.height), label: `${selected.label} copy` }; commit((current) => [...current, clone]); setSelectedId(clone.id) }}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
+          {selected ? <Inspector item={selected} roomWidthFeet={roomWidthFeet} roomHeightFeet={roomHeightFeet} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={() => { const clone = { ...selected, id: uid(), x: Math.min(selected.x + 3, 100 - selected.width), y: Math.min(selected.y + 3, 100 - selected.height), label: `${selected.label} copy` }; commit((current) => [...current, clone]); setSelectedId(clone.id) }}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Quick templates</p><div className="mt-3 space-y-2">{['Classic banquet','Ceremony + reception','Cocktail hour','Conference / meeting'].map((template) => <button key={template} type="button" onClick={() => { if (!items.length || confirm('Replace the current floor plan with this template?')) { commit(templateFor(template)); setName(`${template} layout`); setSelectedId(null) } }} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left text-[10px] font-bold hover:border-[#caa24c]/50">{template}</button>)}</div></section>
           <section className="p-5"><p className="layout-kicker">Event info</p><dl className="mt-4 space-y-3 text-[10px]"><Info label="Client" value={leadName}/><Info label="Event" value={eventType || 'Not selected'}/><Info label="Date" value={eventDate ? new Date(`${eventDate}T12:00:00`).toLocaleDateString() : 'Not scheduled'}/><Info label="Guests" value={guestCount ? String(guestCount) : 'Not recorded'}/></dl></section>
         </aside>
@@ -256,12 +262,12 @@ function CanvasItem({ item, selected, onPointerDown }: { item: LayoutItem; selec
   </button>
 }
 
-function Inspector({ item, onUpdate, onDelete, onDuplicate }: { item: LayoutItem; onUpdate: (updates: Partial<LayoutItem>) => void; onDelete: () => void; onDuplicate: () => void }) {
+function Inspector({ item, roomWidthFeet, roomHeightFeet, onUpdate, onDelete, onDuplicate }: { item: LayoutItem; roomWidthFeet: number; roomHeightFeet: number; onUpdate: (updates: Partial<LayoutItem>) => void; onDelete: () => void; onDuplicate: () => void }) {
   return <section className="border-b border-[color:var(--portal-border)] p-5"><div className="flex items-center justify-between"><p className="layout-kicker">Customize {item.label}</p><div className="flex gap-1"><button type="button" onClick={onDuplicate} className="layout-icon" aria-label="Duplicate item"><Copy size={13}/></button><button type="button" onClick={onDelete} className="layout-icon hover:text-red-500" aria-label="Delete item"><Trash2 size={13}/></button></div></div>
     <label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Name<input value={item.label} onChange={(event) => onUpdate({ label: event.target.value })} className="planning-editor-input mt-2"/></label>
     {item.seats > 0 && <label className="mt-3 block text-[9px] font-bold text-[color:var(--portal-muted)]">Seats<input type="number" min="0" max="24" value={item.seats} onChange={(event) => onUpdate({ seats: Number(event.target.value) })} className="planning-editor-input mt-2"/></label>}
     {item.kind.includes('table') && <div className="mt-4"><p className="text-[9px] font-bold text-[color:var(--portal-muted)]">Table color</p><div className="mt-2 flex gap-2">{TABLE_COLORS.map((color) => <button key={color} type="button" onClick={() => onUpdate({ color })} className={`h-7 w-7 rounded-md border ${item.color === color ? 'ring-2 ring-[#caa24c] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'border-[color:var(--portal-border)]'}`} style={{ backgroundColor: color }} aria-label={`Use ${color}`}/>)}</div></div>}
-    <div className="mt-4 grid grid-cols-2 gap-3"><Range label="Width" value={item.width} min={5} max={50} onChange={(width) => onUpdate({ width })}/><Range label="Height" value={item.height} min={5} max={50} onChange={(height) => onUpdate({ height })}/></div>
+    <div className="mt-4 grid grid-cols-2 gap-3"><Range label={`Width (${Math.round((item.width / 100) * roomWidthFeet * 12)} in)`} value={Math.round((item.width / 100) * roomWidthFeet * 12)} min={6} max={roomWidthFeet * 12} onChange={(inches) => onUpdate({ width: Math.min(95, (inches / (roomWidthFeet * 12)) * 100) })}/><Range label={`Depth (${Math.round((item.height / 100) * roomHeightFeet * 12)} in)`} value={Math.round((item.height / 100) * roomHeightFeet * 12)} min={6} max={roomHeightFeet * 12} onChange={(inches) => onUpdate({ height: Math.min(95, (inches / (roomHeightFeet * 12)) * 100) })}/></div>
     <label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Rotation · {item.rotation}°<input type="range" min="0" max="345" step="15" value={item.rotation} onChange={(event) => onUpdate({ rotation: Number(event.target.value) })} className="mt-2 w-full accent-[#caa24c]"/></label>
   </section>
 }

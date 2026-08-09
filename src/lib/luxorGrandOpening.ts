@@ -8,6 +8,6 @@ export const LUXOR_GRAND_OPENING = {
   timeLabel: '1:00 PM–5:00 PM',
   durationMinutes: 240,
   address: '803 Castroville Rd #402, San Antonio, TX 78237',
-  rsvpPath: '/grand-opening-rsvp',
-  tourPath: '/visit',
+  rsvpPath: '/tour',
+  tourPath: '/tour',
 } as const

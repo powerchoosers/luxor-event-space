@@ -31,6 +31,7 @@ export function calculateLuxorOfferPricing(input: {
   const subtotal = Math.max(0, roundLuxorMoney(originalSubtotal - discountAmount))
   const originalTotal = roundLuxorMoney(originalSubtotal * (1 + taxRate))
   const total = roundLuxorMoney(subtotal * (1 + taxRate))
+  const taxAmount = roundLuxorMoney(total - subtotal)
 
   return {
     originalSubtotal,
@@ -40,6 +41,7 @@ export function calculateLuxorOfferPricing(input: {
     discountAmount,
     subtotal,
     total,
+    taxAmount,
     totalSavings: Math.max(0, roundLuxorMoney(originalTotal - total)),
   }
 }

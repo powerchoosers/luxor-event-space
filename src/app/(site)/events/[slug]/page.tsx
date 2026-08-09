@@ -24,7 +24,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
   const event = getLuxorPublicEventPage((await params).slug)
   if (!event) notFound()
 
-  const visitHref = `/visit?event=${encodeURIComponent(event.singular)}`
+  const visitHref = `/tour?event=${encodeURIComponent(event.singular)}`
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">

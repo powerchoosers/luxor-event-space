@@ -17,7 +17,7 @@ import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
-const TOUR_LOCATION = 'Luxor Event Space, 803 Castroville Rd #402, San Antonio, TX 78237'
+const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,13 +49,39 @@ export async function POST(request: NextRequest) {
 
     if (action === 'attendance') {
       const attendance = String(body.attendance || 'pending') as LuxorTourAttendanceStatus
+      if (!['pending', 'attended', 'no_show', 'rescheduled', 'cancelled'].includes(attendance)) {
+        return NextResponse.json({ error: 'Unsupported attendance status.' }, { status: 400 })
+      }
       const updates: Record<string, unknown> = { tour_attendance_status: attendance }
       if (attendance === 'attended') updates.status = 'tour_confirmed'
       if (attendance === 'no_show') updates.pipeline_stage = 'tour'
+      if (attendance === 'rescheduled') updates.status = 'tour_requested'
 
       const updated = await updateLuxorInquiry(inquiryId, updates)
+      if (attendance === 'attended' || attendance === 'rescheduled' || attendance === 'cancelled') {
+        await cancelQueuedTourEmailJobs(inquiryId)
+      }
+      let noShowJob = null
+      if (attendance === 'no_show' && inquiry.email) {
+        const existingJobs = await listLuxorEmailJobsForInquiry(inquiryId)
+        const alreadyQueued = existingJobs.some((job) => job.job_type === 'tour_no_show_reschedule' && job.status === 'queued')
+        if (!alreadyQueued) {
+          const token = inquiry.tour_response_token || createPublicToken()
+          const email = buildTourEmail('tour_no_show_reschedule', inquiry, token)
+          noShowJob = await createLuxorEmailJob({
+            inquiryId,
+            jobType: 'tour_no_show_reschedule',
+            recipientEmail: inquiry.email,
+            subject: email.subject,
+            body: email.body,
+            scheduledFor: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+            metadata: { attendance_occurrence: inquiry.tour_confirmed_at || inquiry.preferred_tour_date || new Date().toISOString(), requestedBy: session.email },
+          })
+          if (noShowJob && !inquiry.tour_response_token) await updateLuxorInquiry(inquiryId, { tour_response_token: token })
+        }
+      }
       await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
-      return NextResponse.json(updated)
+      return NextResponse.json({ inquiry: updated, noShowJob })
     }
 
     if (action === 'schedule-tour') {
@@ -65,6 +91,9 @@ export async function POST(request: NextRequest) {
       const tourTime = String(body.tourTime || '').trim()
       const meetingType = String(body.meetingType || 'Private Venue Tour').trim().slice(0, 120)
       const clientFacingNotes = String(body.clientFacingNotes || '').trim().slice(0, 2_000)
+      const tourAssignees = Array.isArray(body.tourAssignees)
+        ? body.tourAssignees.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 12)
+        : []
       const durationMinutes = Math.min(Math.max(Number(body.durationMinutes) || 60, 30), 180)
       const startUtc = zonedDateTimeToUtc(tourDate, tourTime, TOUR_TIMEZONE)
       const endUtc = new Date(startUtc.getTime() + durationMinutes * 60_000)
@@ -84,7 +113,7 @@ export async function POST(request: NextRequest) {
         tourDateLabel,
         tourTimeLabel,
         durationMinutes,
-        responseUrl: links.confirmUrl,
+        responseUrl: links.rescheduleUrl,
       }
       const confirmation = await buildAiTourConfirmationEmail(emailContext)
 
@@ -100,7 +129,7 @@ export async function POST(request: NextRequest) {
           `Event: ${inquiry.event_type || 'Private event'}`,
           inquiry.guest_count ? `Estimated guests: ${inquiry.guest_count}` : '',
           clientFacingNotes ? `Details: ${clientFacingNotes}` : '',
-          `Confirm or reschedule: ${links.confirmUrl}`,
+          `Confirm or reschedule: ${links.rescheduleUrl}`,
         ].filter(Boolean).join('\n'),
         location: TOUR_LOCATION,
         startUtc: startUtc.toISOString(),
@@ -154,12 +183,14 @@ export async function POST(request: NextRequest) {
         preferred_tour_date: tourDate,
         preferred_tour_time: formatStoredTime(tourTime),
         tour_confirmed_at: new Date().toISOString(),
+        tour_attendance_status: 'pending',
         tour_response_token: token,
         metadata: {
           ...inquiry.metadata,
           tourMeetingType: meetingType,
           tourClientFacingNotes: clientFacingNotes,
           tourDurationMinutes: durationMinutes,
+          ...(tourAssignees.length ? { tour_assignees: tourAssignees } : {}),
           tourStartAt: startUtc.toISOString(),
           zohoCalendarEventId: calendar.eventId,
           zohoCalendarEventUid: calendar.eventUid,
@@ -200,7 +231,6 @@ export async function POST(request: NextRequest) {
       })
       const marker: Record<string, unknown> = { tour_response_token: token }
       if (jobType === 'tour_confirmation') marker.tour_confirmed_at = new Date().toISOString()
-      if (jobType === 'tour_no_show_reschedule') marker.tour_no_show_email_sent_at = new Date().toISOString()
       await updateLuxorInquiry(inquiryId, marker)
       await createNote(inquiryId, `Queued ${jobType.replaceAll('_', ' ')} email to ${inquiry.email}.`, 'email_log', 'Portal Owner')
       return NextResponse.json(job, { status: 201 })

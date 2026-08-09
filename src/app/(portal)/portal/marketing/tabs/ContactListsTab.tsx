@@ -268,7 +268,6 @@ export function ContactListsTab({
       { label: 'Venue Tour Request', count: countsMap.get('Venue Tour Request') || 0, filterVal: 'Venue Tour Request' },
       { label: 'Pricing Guide Download', count: countsMap.get('Pricing Guide Download') || 0, filterVal: 'Pricing Guide Download' },
       { label: 'VIP Newsletter Signup', count: countsMap.get('VIP Newsletter Signup') || countsMap.get('VIP Newsletter') || 0, filterVal: 'VIP Newsletter' },
-      { label: 'Grand Opening RSVP', count: countsMap.get('Grand Opening RSVP') || 0, filterVal: 'Grand Opening RSVP' },
       { label: 'Vendor Application', count: countsMap.get('Vendor Application') || 0, filterVal: 'Vendor Application' },
       { label: 'General Contact Form', count: countsMap.get('General Contact Form') || 0, filterVal: 'General Contact Form' }
     ]

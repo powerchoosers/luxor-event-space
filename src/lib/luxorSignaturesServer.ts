@@ -68,7 +68,7 @@ export function getLuxorBookingContractFingerprint(booking: LuxorBooking) {
   })).digest('hex')
 }
 
-export async function createLuxorSignatureRequest(booking: LuxorBooking) {
+export async function createLuxorSignatureRequest(booking: LuxorBooking, options?: { status?: 'draft' | 'sent'; signingMode?: 'email' | 'in_person' }) {
   if (!booking.email) {
     throw new Error('Booking needs a client email before a contract can be sent.')
   }
@@ -94,7 +94,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
       client_name: booking.client_name,
       client_email: booking.email,
       token,
-      status: 'sent',
+      status: options?.status || 'sent',
       contract_title: `${booking.event_type || 'Event'} Contract`,
       contract_body: defaultContractBody(booking),
       client_first_name: parsedName.firstName,
@@ -109,6 +109,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
         guestCount: booking.guest_count,
         contractTotal: booking.contract_total,
         bookingFingerprint: getLuxorBookingContractFingerprint(booking),
+        signingMode: options?.signingMode || 'email',
       },
     }),
   })
@@ -131,12 +132,16 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
     metadata: { ...(created.metadata || {}), signaturePlacement: contractResult.signaturePlacement },
   })
 
-  await updateLuxorBooking(booking.id, {
-    contract_status: 'sent',
-    contract_sent_at: new Date().toISOString(),
-  })
-
-  await recordLuxorSignatureEvent({ signatureRequestId: created.id, eventType: 'sent', metadata: { ownerName, ownerEmail } })
+  if ((options?.status || 'sent') === 'sent') {
+    await updateLuxorBooking(booking.id, {
+      contract_status: 'sent',
+      contract_sent_at: new Date().toISOString(),
+    })
+    await recordLuxorSignatureEvent({ signatureRequestId: created.id, eventType: 'sent', metadata: { ownerName, ownerEmail } })
+  } else {
+    await updateLuxorBooking(booking.id, { contract_status: 'not_sent' })
+    await recordLuxorSignatureEvent({ signatureRequestId: created.id, eventType: 'drafted', metadata: { ownerName, ownerEmail, signingMode: options?.signingMode || 'email' } })
+  }
   return ready || created
 }
 

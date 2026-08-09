@@ -71,7 +71,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       subject: 'Want to reschedule your Luxor tour?',
       body: [
         `Hi ${inquiry.full_name},`,
-        `We missed you for your Luxor Event Space tour for ${eventLine}.`,
+        `We missed you for your Luxor at Las Palmas Events tour for ${eventLine}.`,
         'If you still want to see the space, use the reschedule link below and we will help find a better time.',
         `Reschedule: ${links.rescheduleUrl}`,
         inquiry.message ? `Your event notes: ${inquiry.message}` : '',
@@ -85,7 +85,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       subject: 'Reminder: your Luxor tour is tomorrow',
       body: [
         `Hi ${inquiry.full_name},`,
-        `This is a reminder for your Luxor Event Space tour on ${dateLine}.`,
+        `This is a reminder for your Luxor at Las Palmas Events tour on ${dateLine}.`,
         `Event type: ${eventLine}`,
         inquiry.message ? `Details you shared: ${inquiry.message}` : '',
         `Confirm your tour: ${links.confirmUrl}`,
@@ -96,10 +96,10 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
   }
 
   return {
-    subject: 'Your Luxor Event Space tour request',
+    subject: 'Your Luxor tour request',
     body: [
       `Hi ${inquiry.full_name},`,
-      `Thank you for requesting a tour of Luxor Event Space. We have your preferred tour for ${dateLine}.`,
+      `Thank you for requesting a tour of Luxor at Las Palmas Events. We have your preferred tour for ${dateLine}.`,
       `Event type: ${eventLine}`,
       inquiry.message ? `Details you shared: ${inquiry.message}` : '',
       `Confirm your tour: ${links.confirmUrl}`,
@@ -255,7 +255,7 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const interestLine = inquiry.package_interest || inquiry.event_type || 'Future event planning'
   const websiteUrl = absoluteUrl('/')
-  const tourUrl = absoluteUrl('/visit')
+  const tourUrl = absoluteUrl('/tour')
   const pricingUrl = absoluteUrl('/pricing')
 
   return `<!DOCTYPE html>
@@ -369,7 +369,7 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
 export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
-  const tourUrl = absoluteUrl('/visit')
+  const tourUrl = absoluteUrl('/tour')
   const pricingUrl = absoluteUrl('/pricing')
 
   return `<!DOCTYPE html>
@@ -561,7 +561,7 @@ export async function listLuxorEmailJobsForInquiry(inquiryId: string, limit = 10
 
 export async function cancelQueuedTourEmailJobs(inquiryId: string) {
   await supabaseRest(
-    `luxor_email_jobs?inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&job_type=in.(tour_confirmation,tour_reminder)`,
+    `luxor_email_jobs?inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&job_type=in.(tour_confirmation,tour_reminder,tour_no_show_reschedule)`,
     {
       method: 'PATCH',
       body: JSON.stringify({ status: 'cancelled', updated_at: new Date().toISOString() }),

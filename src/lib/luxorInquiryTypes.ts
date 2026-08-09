@@ -34,6 +34,27 @@ export type LuxorPipelineStage =
 
 export type LuxorTourAttendanceStatus = 'pending' | 'attended' | 'no_show' | 'rescheduled' | 'cancelled'
 
+export type LuxorGrandOpeningAttendee = {
+  id: string
+  created_at: string
+  updated_at: string
+  campaign_key: string
+  inquiry_id: string | null
+  invited_by_inquiry_id: string | null
+  full_name: string
+  phone: string | null
+  attendee_type: 'rsvp' | 'guest'
+  checked_in_at: string
+  checked_in_by: 'self' | 'staff'
+  marketing_opt_in: boolean
+  eligible: boolean
+  winner_at: string | null
+  prize_label: string | null
+  disqualified_at: string | null
+  disqualification_reason: string | null
+  metadata: Record<string, unknown>
+}
+
 export type LuxorInquiryInput = {
   fullName: string
   email?: string
@@ -126,7 +147,38 @@ export function parseGuestCount(value: unknown) {
 export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
 export type LuxorInvoiceKind = 'event' | 'deposit' | 'final_balance'
 
+export type LuxorPromotion = {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  code: string
+  discount_type: 'percent' | 'fixed'
+  value: number
+  active: boolean
+  metadata: Record<string, unknown>
+}
+
+export type LuxorPaymentInstallment = {
+  id: string
+  created_at: string
+  updated_at: string
+  booking_id: string
+  invoice_id: string | null
+  inquiry_id: string | null
+  label: string
+  installment_order: number
+  amount: number
+  due_at: string | null
+  status: 'scheduled' | 'sent' | 'partial' | 'paid' | 'void'
+  payment_method: 'card' | 'cash' | 'check' | 'ACH' | 'Zelle' | null
+  reference: string | null
+  paid_at: string | null
+  metadata: Record<string, unknown>
+}
+
 export type LuxorInvoiceLineItem = {
+  id?: string
   catalogId?: string
   category?: string
   included?: boolean

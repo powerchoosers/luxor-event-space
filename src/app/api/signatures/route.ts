@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     }
 
-    const { bookingId } = await request.json()
+    const body = await request.json() as { bookingId?: string; sendEmail?: boolean; signingMode?: 'email' | 'in_person' }
+    const bookingId = body.bookingId
     if (!bookingId) {
       return NextResponse.json({ error: 'bookingId is required.' }, { status: 400 })
     }
@@ -64,7 +65,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     }
 
-    const signature = await createLuxorSignatureRequest(booking)
+    const sendEmail = body.sendEmail !== false && body.signingMode !== 'in_person'
+    const signingMode = body.signingMode === 'in_person' ? 'in_person' : 'email'
+    const signature = await createLuxorSignatureRequest(booking, { status: sendEmail ? 'sent' : 'draft', signingMode })
+    if (!sendEmail) {
+      await updateLuxorBooking(booking.id, {
+        status: 'tentative',
+        metadata: { ...booking.metadata, contractDraftHoldExpiresAt: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), contractSigningMode: signingMode },
+      })
+      return NextResponse.json({ signature, signingUrl: `/secure-portal/sign/${encodeURIComponent(signature.token)}`, sentEmail: false, signingMode }, { status: 201 })
+    }
     const email = buildSignatureEmail(signature)
     const job = await createLuxorEmailJob({
       inquiryId: signature.inquiry_id,

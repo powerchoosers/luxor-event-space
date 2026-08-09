@@ -2,7 +2,6 @@ import 'server-only'
 
 import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
-import { addRecipientToGrandOpeningCampaign, addRecipientToGrandOpeningReminderCampaigns } from './luxorMarketingServer'
 import { supabaseRest } from './supabaseRestServer'
 import { recordLuxorSmsConsent } from './luxorTextAutomationsServer'
 import {
@@ -82,7 +81,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     target_date: compactText(input.targetDate) || null,
     guest_count: parseGuestCount(input.guestCount),
     preferred_tour_date: compactText(input.preferredTourDate) || null,
-    preferred_tour_time: compactText(input.preferredTourTime) || null,
+    preferred_tour_time: compactText(input.preferredTourTime) || compactText(input.metadata?.preferredTourWindow) || null,
     package_interest: compactText(input.packageInterest) || null,
     message: message || null,
     source: compactText(input.source) || 'website',
@@ -200,7 +199,7 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     } catch (emailError) {
       console.error('Luxor tour request email queue failed:', emailError)
     }
-  } else if (created?.email && created.source !== 'grand_opening_rsvp') {
+  } else if (created?.email) {
     try {
       const { buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
       const emailHtml = buildStandardInquiryEmailHtml(created)
@@ -222,32 +221,6 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       }
     } catch (emailError) {
       console.error('Luxor standard inquiry confirmation email queue failed:', emailError)
-    }
-  }
-
-  if (created?.email && created.source === 'grand_opening_rsvp' && created.rsvp_status === 'attending') {
-    try {
-      const { buildGrandOpeningRsvpEmailHtml } = await import('./luxorEmailJobsServer')
-      await addRecipientToGrandOpeningCampaign({
-        email: created.email,
-        name: created.full_name,
-        htmlBody: buildGrandOpeningRsvpEmailHtml(created),
-        senderFrom: 'hello@luxoratlaspalmas.com',
-        senderName: 'Luxor Event Space',
-        metadata: {
-          automation_type: 'grand_opening_rsvp_confirmation',
-          inquiry_id: created.id,
-          campaign_key: created.campaign_key,
-          source: created.source,
-        },
-      })
-      await addRecipientToGrandOpeningReminderCampaigns({
-        inquiryId: created.id,
-        email: created.email,
-        name: created.full_name,
-      })
-    } catch (emailError) {
-      console.error('Luxor grand opening RSVP email queue failed:', emailError)
     }
   }
 
