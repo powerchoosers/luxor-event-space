@@ -271,13 +271,15 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
     ? `Upcoming: 60-day balance payment for your Luxor event (${money(input.balanceDue)})`
     : `Payment reminder: ${money(input.balanceDue)} remaining for your Luxor event`
 
-  const hasSecurityDeposit = input.invoice.line_items.some((item) => /security deposit/i.test(item.description))
+  const securityDepositAmount = input.invoice.line_items
+    .filter((item) => /security deposit/i.test(item.description) || item.category === 'Security Deposit')
+    .reduce((total, item) => total + Number(item.total ?? item.unitPrice ?? 0) * Math.max(1, Number(item.quantity || 1)), 0)
 
   const detailText = [
     `Balance due: ${money(input.balanceDue)}`,
     input.dueDate ? `Due date: ${input.dueDate}` : null,
     eventDate ? `Event date: ${eventDate}` : null,
-    hasSecurityDeposit ? `Includes $750 refundable security deposit` : null,
+    securityDepositAmount > 0 ? `Includes ${money(securityDepositAmount)} refundable security deposit` : null,
   ]
     .filter(Boolean)
     .join(' · ')

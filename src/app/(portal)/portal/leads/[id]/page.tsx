@@ -1416,7 +1416,7 @@ export default function LeadDetailPage({
           contract_status: status,
           contract_sent_at: status === 'sent' ? now : booking.contract_sent_at,
           contract_signed_at: status === 'signed' ? now : booking.contract_signed_at,
-          status: status === 'signed' && (Boolean(booking.metadata?.deposit_paid_at) || booking.security_deposit_status === 'collected') ? 'confirmed' : booking.status,
+          status: status === 'signed' && Boolean(booking.metadata?.deposit_paid_at || booking.metadata?.deposit_paid_before_booking) ? 'confirmed' : booking.status,
           metadata: {
             ...booking.metadata,
             manual_contract_tracking: true,
@@ -1507,19 +1507,19 @@ export default function LeadDetailPage({
       const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'date_lock_deposit' }),
+        body: JSON.stringify({ mode: 'proposal_contract' }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Date reservation deposit invoice could not be sent.')
+      if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
       await fetchAllData(false)
       notify({
-        title: 'Booking Package Sent',
-        description: `Sent the reservation-deposit invoice, Stripe link, agreement, and Guest Guide to ${lead?.email}. The date confirms after payment and signature.`,
+        title: 'Proposal and Agreement Sent',
+        description: `Sent the proposal, agreement, and Guest Guide to ${lead?.email}. The negotiated reservation-deposit link is sent automatically after signature.`,
         variant: 'success',
       })
     } catch (err) {
       console.error(err)
-      notify({ title: 'Date-lock invoice not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Proposal and agreement not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingContractBookingId(null)
       setUpdatingStatus(false)
@@ -1761,10 +1761,13 @@ export default function LeadDetailPage({
   }
 
   const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final') => {
-    const paidTotal = getPaidTotal(payments)
-    const remainingBalance = Math.max(0, Number(booking.contract_total || 0) - paidTotal)
-    const depositBalance = Math.max(0, Number(booking.deposit_required || 0) - getPaidTotal(payments, 'deposit'))
-    const amount = paymentKind === 'deposit' ? depositBalance : remainingBalance
+    const relatedInvoice = paymentKind === 'deposit'
+      ? invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'deposit')
+      : invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'final_balance')
+    const fallbackAmount = paymentKind === 'deposit'
+      ? Math.max(0, Number(booking.deposit_required || 0) - getPaidTotal(payments, 'deposit'))
+      : Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0) + Number(booking.security_deposit_amount || 0) - getPaidTotal(payments, 'final'))
+    const amount = relatedInvoice ? getInvoiceBalance(relatedInvoice) : fallbackAmount
 
     if (amount <= 0) {
       try {
@@ -1776,7 +1779,7 @@ export default function LeadDetailPage({
           body: JSON.stringify({
             id: booking.id,
             status: paymentKind === 'deposit' ? 'tentative' : booking.status,
-            security_deposit_status: booking.security_deposit_status,
+            security_deposit_status: paymentKind === 'final' ? 'collected' : booking.security_deposit_status,
             metadata: {
               ...booking.metadata,
               ...(paymentKind === 'deposit' ? { deposit_paid_at: now } : {}),
@@ -1805,10 +1808,11 @@ export default function LeadDetailPage({
         body: JSON.stringify({
           inquiry_id: id,
           booking_id: booking.id,
+          invoice_id: relatedInvoice?.id || null,
           amount,
           status: 'paid',
           payment_method: 'Manual record',
-          notes: paymentKind === 'deposit' ? 'Security deposit recorded manually in owner portal.' : 'Final balance recorded manually in owner portal.',
+          notes: paymentKind === 'deposit' ? 'Reservation deposit recorded manually in owner portal.' : 'Final event balance and refundable security deposit recorded manually in owner portal.',
           metadata: {
             payment_kind: paymentKind,
             manual_entry: true,
@@ -1818,6 +1822,16 @@ export default function LeadDetailPage({
       const paymentPayload = await paymentRes.json().catch(() => ({}))
       if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
 
+      if (relatedInvoice) {
+        const invoiceRes = await fetch('/api/invoices', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: relatedInvoice.id, status: 'paid', paid_at: new Date().toISOString() }),
+        })
+        const invoicePayload = await invoiceRes.json().catch(() => ({}))
+        if (!invoiceRes.ok) throw new Error(invoicePayload.error || 'Payment was recorded, but the invoice could not be marked paid.')
+      }
+
       const nextStatus: LuxorBookingStatus = paymentKind === 'deposit' ? 'tentative' : booking.status
       const bookingRes = await fetch('/api/bookings', {
         method: 'PATCH',
@@ -1825,7 +1839,7 @@ export default function LeadDetailPage({
         body: JSON.stringify({
           id: booking.id,
           status: nextStatus,
-          security_deposit_status: booking.security_deposit_status,
+          security_deposit_status: paymentKind === 'final' ? 'collected' : booking.security_deposit_status,
           metadata: {
             ...booking.metadata,
             ...(paymentKind === 'deposit' ? { deposit_paid_at: new Date().toISOString() } : {}),
@@ -1837,7 +1851,7 @@ export default function LeadDetailPage({
       if (!bookingRes.ok) throw new Error(bookingPayload.error || 'Failed to update booking after payment.')
 
       await createFlowNote(
-        `${paymentKind === 'deposit' ? 'Security deposit' : 'Final balance'} recorded manually for ${formatMoney(amount)}.`,
+        `${paymentKind === 'deposit' ? 'Reservation deposit' : 'Final event balance and refundable security deposit'} recorded manually for ${formatMoney(amount)}.`,
         'status_change',
       )
       await fetchAllData(false)
@@ -2102,17 +2116,20 @@ export default function LeadDetailPage({
     sortedInvoices,
     sortedPayments,
   } = leadDerivedData
-  const paidTotal = getPaidTotal(sortedPayments)
   const depositPaidTotal = getPaidTotal(sortedPayments, 'deposit')
   const bookingContractAmount = Number(latestBooking?.contract_total || 0)
   const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
   const depositBalance = Math.max(0, bookingDepositAmount - depositPaidTotal)
-  const remainingBalance = Math.max(0, bookingContractAmount - paidTotal)
   const proposalInvoice = sortedInvoices.find((invoice) => invoice.id === latestBooking?.invoice_id)
     || sortedInvoices.find((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
     || latestInvoice
+  const depositInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'deposit')
   const finalBalanceInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
-  const refundableSecurityDepositAmount = Number(finalBalanceInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || 0)
+  const refundableSecurityDepositAmount = Number(finalBalanceInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || latestBooking?.security_deposit_amount || 0)
+  const finalPaymentTotal = Number(finalBalanceInvoice?.total || (Math.max(0, bookingContractAmount - bookingDepositAmount) + refundableSecurityDepositAmount))
+  const finalPaymentBalance = finalBalanceInvoice
+    ? getInvoiceBalance(finalBalanceInvoice)
+    : Math.max(0, finalPaymentTotal - getPaidTotal(sortedPayments, 'final'))
   const proposalPaidTotal = latestBooking
     ? sortedPayments.filter((payment) => payment.booking_id === latestBooking.id && payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     : 0
@@ -3829,10 +3846,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the booking package' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send proposal and agreement' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the deposit invoice, Stripe link, agreement, and Guest Guide together.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the reservation deposit.' : 'The signed agreement and paid deposit are both recorded.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the proposal, agreement, and Guest Guide. The reservation-deposit link follows signature.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the reservation deposit.' : 'The signed agreement and paid deposit are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -3841,14 +3858,9 @@ export default function LeadDetailPage({
                         ) : !latestBooking ? (
                           <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
                         ) : latestBooking.contract_status !== 'signed' ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button type="button" onClick={() => handleSendDateLockInvoice(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all disabled:opacity-40 cursor-pointer">
-                              Send Booking Package
-                            </button>
-                            <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
-                              {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
-                            </button>
-                          </div>
+                          <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
+                            {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
+                          </button>
                         ) : (
                           <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                         )}
@@ -4298,10 +4310,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Security deposit collected' : 'Collect security deposit'}
+                              {depositBalance <= 0 ? 'Reservation deposit received' : 'Collect reservation deposit'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {latestBooking?.security_deposit_status === 'collected' || depositBalance <= 0 ? 'Deposit is secured. Track event rental balance.' : 'The Stripe link was emailed after signature. Resend it here if the client needs it again.'}
+                              {depositBalance <= 0 ? 'The reservation deposit is received. The remaining event balance and refundable security deposit are due 60 days before the event.' : 'The Stripe link was emailed after signature. Resend it here if the client needs it again.'}
                             </p>
                           </div>
                         </div>
@@ -4326,11 +4338,11 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Number</span>
-                              <span className="font-bold text-white">{latestInvoice ? latestInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                              <span className="font-bold text-white">{depositInvoice ? depositInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Due Date</span>
-                              <span className="font-bold text-white">{latestInvoice?.due_date ? formatDisplayDate(latestInvoice.due_date) : 'No due date set'}</span>
+                              <span className="font-bold text-white">Due with agreement signature</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Amount</span>
@@ -4338,11 +4350,11 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Paid Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{latestBooking?.security_deposit_status || (depositBalance <= 0 && bookingDepositAmount > 0 ? 'collected' : 'pending')}</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && bookingDepositAmount > 0 ? 'collected' : 'pending'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-white font-mono">{formatMoney(remainingBalance)}</span>
+                              <span className="font-bold text-white font-mono">{formatMoney(depositBalance)}</span>
                             </div>
                           </div>
                         </div>
@@ -4361,17 +4373,17 @@ export default function LeadDetailPage({
                           <div className="space-y-3 text-xs">
                             <div className="flex justify-between py-1 border-b border-zinc-850">
                               <div>
-                                <p className="font-bold text-white">1. Initial Security Deposit</p>
-                                <p className="text-[9px] text-zinc-500">{latestInvoice?.due_date ? `Due ${formatDisplayDate(latestInvoice.due_date)}` : 'Due date not set'}</p>
+                                <p className="font-bold text-white">1. Reservation Deposit</p>
+                                <p className="text-[9px] text-zinc-500">Due with agreement signature</p>
                               </div>
                               <span className="font-mono font-bold text-[#caa24c]">{formatMoney(bookingDepositAmount)}</span>
                             </div>
                             <div className="flex justify-between py-1">
                               <div>
-                                <p className="font-bold text-zinc-400">2. Event Rental Balance</p>
+                                <p className="font-bold text-zinc-400">2. Remaining Event Balance + Refundable Security Deposit</p>
                                 <p className="text-[9px] text-zinc-500">{latestBooking?.final_payment_due_date ? `Due ${formatDisplayDate(latestBooking.final_payment_due_date)}` : 'Due date not set'}</p>
                               </div>
-                              <span className="font-mono font-bold text-zinc-400">{formatMoney(remainingBalance)}</span>
+                              <span className="font-mono font-bold text-zinc-400">{formatMoney(finalBalanceInvoice?.total || (Math.max(0, bookingContractAmount - bookingDepositAmount) + refundableSecurityDepositAmount))}</span>
                             </div>
                           </div>
                         </div>
@@ -4394,10 +4406,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {remainingBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
+                              {finalPaymentBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {remainingBalance <= 0 ? 'All invoice balances settled. Ready for event day operations.' : `${formatMoney(remainingBalance)} balance remaining. Send payment link or record manual payment.`}
+                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. Ready for event day operations.' : `${formatMoney(finalPaymentBalance)} balance remaining, including the refundable security deposit. Send payment link or record manual payment.`}
                             </p>
                           </div>
                         </div>
@@ -4426,7 +4438,7 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(remainingBalance)}</span>
+                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(finalPaymentBalance)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
@@ -4442,7 +4454,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{remainingBalance <= 0 && bookingContractAmount > 0 ? 'paid' : 'pending'}</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{finalPaymentBalance <= 0 && finalPaymentTotal > 0 ? 'paid' : 'pending'}</span>
                             </div>
                           </div>
                         </div>
@@ -6783,7 +6795,7 @@ function LeadLifecycleRail({
       return {
         ...step,
         label: 'Deposit',
-        subtext: latestBooking?.security_deposit_status === 'collected'
+        subtext: Boolean(latestBooking?.metadata?.deposit_paid_at || latestBooking?.metadata?.deposit_paid_before_booking)
           ? 'Paid'
           : latestBooking?.contract_status === 'signed'
             ? 'Pending'
@@ -7549,7 +7561,7 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
-  const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking) || latestBooking?.security_deposit_status === 'collected'
+  const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking)
   const leadCompleted = Boolean(bookingMetadata.lead_completed_at) || isLegacyComplete
   const planningCompleted = Boolean(bookingMetadata.planning_completed_at) || leadCompleted
   const finalPaymentCompleted = Boolean(bookingMetadata.final_payment_recorded_manually_at) || Boolean(bookingMetadata.final_payment_paid_at) || leadCompleted

@@ -29,6 +29,14 @@ export async function getLuxorBooking(id: string) {
   return booking ?? null
 }
 
+export async function getLuxorBookingByInvoice(invoiceId: string) {
+  const [booking] = await supabaseRest<LuxorBooking[]>(
+    `luxor_bookings?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}&limit=1`,
+  )
+
+  return booking ?? null
+}
+
 export async function findLuxorBookingConflicts(eventDate: string, excludeId?: string) {
   const filters = [
     'select=id,client_name,event_date,start_time,end_time,status',

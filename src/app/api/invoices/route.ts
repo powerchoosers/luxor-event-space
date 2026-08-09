@@ -4,8 +4,11 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
-import { calculateLuxorOfferPricing, clampLuxorDiscountPercent } from '@/lib/luxorOffer'
+import { calculateLuxorOfferPricing, clampLuxorDiscountPercent, luxorOfferSnapshot } from '@/lib/luxorOffer'
 import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
+import { getLuxorBookingByInvoice, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { createNote } from '@/lib/luxorNotesServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -165,6 +168,42 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updatedInvoice = await updateInvoice(id, updates)
+    if (updatedInvoice && offerTermsChanged) {
+      const booking = await getLuxorBookingByInvoice(updatedInvoice.id)
+      if (booking) {
+        const refreshedBooking = await updateLuxorBooking(booking.id, {
+          contract_total: Number(updatedInvoice.total || 0),
+          metadata: {
+            ...booking.metadata,
+            proposalLineItems: updatedInvoice.line_items,
+            proposalTaxRate: Number(updatedInvoice.tax_rate || 0),
+            proposalOffer: luxorOfferSnapshot(updatedInvoice),
+          },
+        }) || booking
+        const activeAgreement = await getActiveLuxorSignatureRequestByBooking(refreshedBooking.id)
+        if (activeAgreement && activeAgreement.metadata?.bookingFingerprint !== getLuxorBookingContractFingerprint(refreshedBooking)) {
+          const invalidatedAt = new Date().toISOString()
+          await updateLuxorSignatureRequest(activeAgreement.id, {
+            status: 'void',
+            expires_at: invalidatedAt,
+            metadata: {
+              ...(activeAgreement.metadata || {}),
+              invalidatedAt,
+              invalidatedReason: 'Proposal financial terms changed before signature.',
+            },
+          })
+          await recordLuxorSignatureEvent({
+            signatureRequestId: activeAgreement.id,
+            eventType: 'invalidated',
+            metadata: { reason: 'Proposal financial terms changed before signature.' },
+          })
+          await updateLuxorBooking(refreshedBooking.id, { contract_status: 'void' })
+          if (refreshedBooking.inquiry_id) {
+            await createNote(refreshedBooking.inquiry_id, 'Unsigned agreement invalidated because proposal financial terms changed. Send a new agreement before the client signs.', 'status_change', session.email)
+          }
+        }
+      }
+    }
     if (updatedInvoice?.inquiry_id) {
       try {
         const inquiry = await getLuxorInquiry(updatedInvoice.inquiry_id)

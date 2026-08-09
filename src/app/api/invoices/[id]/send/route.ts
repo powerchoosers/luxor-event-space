@@ -57,7 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ? await getLuxorBooking(invoice.booking_id)
       : bookings.find((item) => item.invoice_id === invoice.id) || null
 
-    if (body.mode === 'date_lock_deposit') {
+    if (body.mode === 'date_lock_deposit' && process.env.LUXOR_ENABLE_LEGACY_PRE_SIGN_DEPOSIT_FLOW === 'true') {
+      // Legacy pre-sign payment flow retained below temporarily for source
+      // history. New requests are rejected after this block.
       if (!booking) {
         return NextResponse.json({ error: 'Create the booking record first so the date reservation is linked to the event.' }, { status: 409 })
       }
@@ -236,6 +238,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
     }
 
+    if (body.mode === 'date_lock_deposit') {
+      return NextResponse.json({ error: 'Reservation deposits are issued only after the agreement is signed. Send the proposal and agreement package first.' }, { status: 409 })
+    }
+
     if (body.mode === 'proposal_contract') {
       if (!booking) {
         return NextResponse.json({ error: 'Create the booking record first so the agreement uses the confirmed event fields, pricing, and notes.' }, { status: 409 })
@@ -329,6 +335,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await updateLuxorEmailJob(job.id, { status: 'failed', last_error: sendError instanceof Error ? sendError.message : 'Email send failed.' })
         throw sendError
       }
+
+      booking = await updateLuxorBooking(booking.id, {
+        metadata: {
+          ...booking.metadata,
+          booking_package_sent_at: now,
+          latest_signature_request_id: signature.id,
+          reservation_state: 'awaiting_signature',
+        },
+      }) || booking
 
       const updated = await updateInvoice(invoice.id, {
         public_token: publicToken,

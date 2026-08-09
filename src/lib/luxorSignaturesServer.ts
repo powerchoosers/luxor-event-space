@@ -10,7 +10,7 @@ import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsSe
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
-import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
+import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 import { createNote } from './luxorNotesServer'
 
@@ -345,7 +345,15 @@ export async function signLuxorSignatureRequest(input: {
       signature.inquiry_id ? getLuxorInquiry(signature.inquiry_id) : Promise.resolve(null),
     ])
     const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
-    const depositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
+    const existingDepositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
+    const depositInvoice = booking && masterInvoice
+      ? await ensureLuxorDepositInvoice({
+          masterInvoice,
+          bookingId: booking.id,
+          dueDate: signedAt.slice(0, 10),
+          reservationDepositAmount: booking.deposit_required,
+        })
+      : existingDepositInvoice
     const paymentInvoice = depositInvoice || masterInvoice
     if (booking && inquiry && paymentInvoice) {
       paymentRequest = await createLuxorPostContractCheckout({
