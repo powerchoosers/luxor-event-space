@@ -20,6 +20,7 @@ export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const isLightTourPage = pathname === '/tour' || pathname.startsWith('/es/tour')
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export const Header = () => {
   return (
     <header 
       id="shared-header"
-      className={`fixed top-0 left-0 right-0 z-[90] border-b transition-all duration-500 ease-in-out
+      className={`fixed top-0 left-0 right-0 z-[90] border-b transition-all duration-500 ease-in-out ${isLightTourPage ? 'site-header--light' : ''}
         ${isScrolled 
           ? 'h-[4.5rem] border-[#caa24c]/20 bg-black/[0.82] py-3 shadow-2xl backdrop-blur-xl' 
           : 'h-28 border-[#caa24c]/10 bg-black/20 py-6 backdrop-blur-[2px]'
@@ -82,7 +83,7 @@ export const Header = () => {
             <Link
               key={item.label}
               href={item.href}
-              className="group relative font-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
+              className="site-header-link group relative font-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
               {item.label}
               <motion.span 
@@ -97,7 +98,7 @@ export const Header = () => {
 
         <div className="flex items-center gap-4">
 
-          <PublicPhoneLink compact className="hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
+          <PublicPhoneLink compact className="site-header-phone hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
 
           <motion.div
             whileHover={{ scale: 1.05 }}
@@ -118,7 +119,7 @@ export const Header = () => {
           <button 
             ref={mobileMenuButtonRef}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="relative z-[120] p-2 text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
+            className="site-header-menu relative z-[120] p-2 text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"

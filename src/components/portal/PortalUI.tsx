@@ -822,6 +822,7 @@ export function PortalSelect({
   buttonClassName = '',
   placeholder = 'Select option...',
   disabled = false,
+  theme = 'portal',
 }: {
   value: string
   onChange: (val: string) => void
@@ -830,12 +831,14 @@ export function PortalSelect({
   buttonClassName?: string
   placeholder?: string
   disabled?: boolean
+  theme?: 'portal' | 'light'
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const selectedOption = options.find((opt) => opt.value === value)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const [coords, setCoords] = React.useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 })
+  const isLight = theme === 'light'
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
@@ -908,7 +911,7 @@ export function PortalSelect({
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 ${buttonClassName}`}
+        className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
@@ -934,13 +937,13 @@ export function PortalSelect({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className="portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-1.5 shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                className={`portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: `${coords.width}px`,
-                  backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                  backdropFilter: 'blur(24px)',
+                  backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                  backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'
                 }}
               >
@@ -957,14 +960,14 @@ export function PortalSelect({
                             onChange(opt.value)
                             setIsOpen(false)
                           }}
-                          className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                            className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                             isSelected
-                              ? 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
-                              : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                              ? isLight ? 'border-[#b98a3d]/40 bg-[#f5ead8] text-[#6f4d1f]' : 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
+                              : isLight ? 'border-transparent text-[#5b4632] hover:border-[#d8c4a4] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
                         >
                           <span>{opt.label}</span>
-                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? 'text-[#f1d27a]' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
+                          <span className={`text-[9px] transition-opacity duration-150 ${isSelected ? isLight ? 'text-[#8d672b]' : 'text-[#f1d27a]' : isLight ? 'text-[#8d672b] opacity-0 group-hover:opacity-100' : 'text-[color:var(--portal-muted,#d7c29a)] opacity-0 group-hover:opacity-100'}`}>
                             ●
                           </span>
                         </button>
@@ -986,16 +989,19 @@ export function PortalDatePicker({
   onChange,
   className = '',
   placeholder = 'Select Date...',
+  theme = 'portal',
 }: {
   value: string
   onChange: (val: string) => void
   className?: string
   placeholder?: string
+  theme?: 'portal' | 'light'
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const [coords, setCoords] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const isLight = theme === 'light'
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
@@ -1130,7 +1136,7 @@ export function PortalDatePicker({
         }}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-[color:var(--portal-text,#f7efe3)] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.26))] hover:bg-[color:var(--portal-soft,rgba(13,11,10,0.98))] focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30"
+        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[#caa24c]/50 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] text-[color:var(--portal-text,#f7efe3)]'}`}
       >
         <span>{formattedDisplay}</span>
         <Calendar size={13} className="text-[#caa24c]/80" />
@@ -1157,13 +1163,13 @@ export function PortalDatePicker({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className="portal-scrollbar fixed z-[9999] w-64 rounded-md border border-[color:var(--portal-border,rgba(202,162,76,0.18))] p-4 text-xs shadow-2xl shadow-black/35 ring-1 ring-black/5"
+                className={`portal-scrollbar fixed z-[9999] w-64 rounded-md border p-4 text-xs shadow-2xl ring-1 ring-black/5 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: '256px',
-                  backgroundColor: 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
-                  backdropFilter: 'blur(24px)',
+                  backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                  backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'
                 }}
               >
@@ -1172,24 +1178,24 @@ export function PortalDatePicker({
                     <button
                       type="button"
                       onClick={handlePrevMonth}
-                      className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
+                      className={`cursor-pointer rounded p-1 transition-colors hover:bg-black/5 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
                     >
                       ◀
                     </button>
-                    <span className="font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
+                    <span className={`font-bold uppercase tracking-wider ${isLight ? 'text-[#3b2b1d]' : 'text-[color:var(--portal-text)]'}`}>
                       {monthNames[month]} {year}
                     </span>
                     <button
                       type="button"
                       onClick={handleNextMonth}
-                      className="cursor-pointer rounded p-1 text-[color:var(--portal-muted,#d7c29a)] transition-colors hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]"
+                      className={`cursor-pointer rounded p-1 transition-colors hover:bg-black/5 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
                     >
                       ▶
                     </button>
                   </div>
 
                   {/* Weekday Labels */}
-                  <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                  <div className={`mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-[#8b7b6b]' : 'text-[color:var(--portal-muted)]'}`}>
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
                       <span key={day}>{day}</span>
                     ))}
@@ -1210,10 +1216,10 @@ export function PortalDatePicker({
                           onClick={() => handleSelectDay(day)}
                           className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all border ${
                             isSelected
-                              ? 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
+                              ? isLight ? 'border-[#b98a3d]/50 bg-[#f5ead8] font-bold text-[#6f4d1f] shadow' : 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                               : isToday
-                              ? 'border-blue-500/30 hover:border-[#caa24c]/50 font-bold text-blue-500 hover:bg-black/5'
-                              : 'border-transparent hover:border-[#caa24c]/50 text-[color:var(--portal-text,#f7efe3)] hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                              ? isLight ? 'border-[#b98a3d]/30 font-bold text-[#8d672b] hover:bg-[#f8f1e6]' : 'border-blue-500/30 hover:border-[#caa24c]/50 font-bold text-blue-500 hover:bg-black/5'
+                              : isLight ? 'border-transparent text-[#5b4632] hover:border-[#d8c4a4] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-text,#f7efe3)] hover:border-[#caa24c]/50 hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
                         >
                           {day.getDate()}

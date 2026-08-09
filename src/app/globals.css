@@ -584,6 +584,53 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     text-shadow: 0 0 16px rgba(202, 162, 76, 0.16);
   }
 
+  /* The tour page is intentionally light, so its fixed public header needs a quiet ink treatment at the top of the page. */
+  .site-header--light {
+    border-color: rgba(141, 103, 43, 0.2) !important;
+    background: rgba(250, 247, 241, 0.94) !important;
+    box-shadow: 0 10px 28px -24px rgba(49, 35, 20, 0.45);
+    backdrop-filter: blur(16px);
+  }
+
+  .site-header--light .luxor-wordmark {
+    color: #3b2b1d;
+    background: none;
+    -webkit-text-fill-color: #3b2b1d;
+  }
+
+  .site-header--light .luxor-subline {
+    color: #8d672b;
+    background: none;
+    -webkit-text-fill-color: #8d672b;
+    text-shadow: none;
+  }
+
+  .site-header--light .site-header-link {
+    color: #5b4632;
+  }
+
+  .site-header--light .site-header-link:hover {
+    color: #8d672b;
+  }
+
+  .site-header--light .site-header-phone {
+    color: #5b4632;
+    border-color: rgba(141, 103, 43, 0.3);
+  }
+
+  .site-header--light .site-header-phone:hover {
+    color: #8d672b;
+    border-color: rgba(141, 103, 43, 0.55);
+  }
+
+  .site-header--light .site-header-menu {
+    color: #5b4632;
+  }
+
+  .site-header--light .site-header-menu:hover {
+    color: #8d672b;
+  }
+
   .luxor-axis-lockup {
     display: flex;
     flex-direction: column;
