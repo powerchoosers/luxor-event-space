@@ -230,6 +230,7 @@ export default function LeadDetailPage({
 
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [invoiceDesc, setInvoiceDesc] = useState('')
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
   const [invoiceItems, setInvoiceItems] = useState<LuxorInvoiceLineItem[]>([
@@ -1346,6 +1347,35 @@ export default function LeadDetailPage({
   const getInvoiceTax = () => getInvoiceSubtotal() * (Math.max(0, Number(invoiceTaxRate) || 0) / 100)
   const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
 
+  const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
+    setEditingInvoiceId(invoice?.id || null)
+
+    if (invoice) {
+      const expiry = invoice.offer_expires_at ? new Date(invoice.offer_expires_at) : null
+      const expiryTime = expiry && !Number.isNaN(expiry.getTime())
+        ? `${String(expiry.getHours()).padStart(2, '0')}:${String(expiry.getMinutes()).padStart(2, '0')}`
+        : '23:59'
+      const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
+        ? invoice.line_items.map((item) => ({
+            ...item,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            unitPrice: Math.max(0, Number(item.unitPrice) || 0),
+            total: Math.round((Number(item.quantity) || 1) * (Number(item.unitPrice) || 0) * 100) / 100,
+          }))
+        : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }]
+
+      setInvoiceDesc(invoice.description || '')
+      setInvoiceDueDate(invoice.due_date || expiry?.toISOString().slice(0, 10) || '')
+      setInvoiceOfferExpiryTime(expiryTime)
+      setInvoiceDiscountPercent(String(Number(invoice.discount_percent || 0)))
+      setInvoiceItems(lineItems)
+      setInvoiceNotes(invoice.notes || '')
+      setInvoiceTaxRate(String(Number(invoice.tax_rate || 0) * 100))
+    }
+
+    setIsInvoiceModalOpen(true)
+  }
+
   const handleCreateInvoice = async (action: 'save' | 'email') => {
     if (!lead) return
 
@@ -1362,9 +1392,10 @@ export default function LeadDetailPage({
         : null
 
       const res = await fetch('/api/invoices', {
-        method: 'POST',
+        method: editingInvoiceId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(editingInvoiceId ? { id: editingInvoiceId } : {}),
           client_name: lead.full_name,
           event_type: lead.event_type || 'Event Booking',
           description: invoiceDesc || `${lead.event_type || 'Event'} Booking fee`,
@@ -1381,12 +1412,15 @@ export default function LeadDetailPage({
       })
 
       const responseBody = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(responseBody.error || 'Failed to create invoice.')
+      if (!res.ok) throw new Error(responseBody.error || `Failed to ${editingInvoiceId ? 'update' : 'create'} proposal.`)
       const invoice = responseBody as LuxorInvoice
-      setInvoices((prev) => [invoice, ...prev])
+      setInvoices((prev) => editingInvoiceId
+        ? prev.map((item) => item.id === invoice.id ? invoice : item)
+        : [invoice, ...prev])
       await handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
       setIsInvoiceModalOpen(false)
-      notify({ title: 'Proposal saved', description: `${formatMoney(total)} was added to this lead.`, variant: 'success' })
+      setEditingInvoiceId(null)
+      notify({ title: editingInvoiceId ? 'Proposal updated' : 'Proposal saved', description: `${formatMoney(total)} ${editingInvoiceId ? 'is ready to review or send again.' : 'was added to this lead.'}`, variant: 'success' })
       if (action === 'email') openPaymentRequest(invoice)
     } catch (err) {
       console.error(err)
@@ -3913,17 +3947,22 @@ export default function LeadDetailPage({
                             </p>
                           </div>
                         </div>
-                        {!proposalInvoice ? (
-                          <button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
-                        ) : !latestBooking ? (
-                          <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
-                        ) : latestBooking.contract_status !== 'signed' ? (
-                          <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
-                            {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
-                          </button>
-                        ) : (
-                          <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {proposalInvoice ? (
+                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/15 cursor-pointer">Edit Proposal</button>
+                          ) : null}
+                          {!proposalInvoice ? (
+                            <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                          ) : !latestBooking ? (
+                            <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
+                          ) : latestBooking.contract_status !== 'signed' ? (
+                            <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
+                              {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
+                          )}
+                        </div>
                       </div>
                     </section>
 
@@ -4007,7 +4046,12 @@ export default function LeadDetailPage({
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Proposal line items</p>
                           <p className="mt-1 text-xs text-[color:var(--portal-muted)]">The exact services and numbers stored on the latest sent proposal.</p>
                         </div>
-                        {proposalInvoice ? <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/30 transition-all cursor-pointer">View PDF</button> : null}
+                        {proposalInvoice ? (
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] hover:bg-[#caa24c]/15 transition-all cursor-pointer">Edit Proposal</button>
+                            <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/30 transition-all cursor-pointer">View PDF</button>
+                          </div>
+                        ) : null}
                       </div>
                       {proposalInvoice?.line_items?.length ? (
                         <>
@@ -4030,7 +4074,7 @@ export default function LeadDetailPage({
                           </div>
                         </>
                       ) : (
-                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => setIsInvoiceModalOpen(true)} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button></div>
+                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => openProposalBuilder()} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button></div>
                       )}
                     </section>
                   </>
@@ -6164,7 +6208,11 @@ export default function LeadDetailPage({
 
       <ProposalBuilderModal
         isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
+        isEditing={Boolean(editingInvoiceId)}
+        onClose={() => {
+          setIsInvoiceModalOpen(false)
+          setEditingInvoiceId(null)
+        }}
         clientName={lead.full_name}
         clientEmail={lead.email}
         eventType={lead.event_type}

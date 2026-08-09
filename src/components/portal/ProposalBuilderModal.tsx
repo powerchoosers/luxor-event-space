@@ -30,6 +30,7 @@ type ProposalSubmitAction = 'save' | 'email'
 type ProposalBuilderModalProps = {
   isOpen: boolean
   onClose: () => void
+  isEditing?: boolean
   clientName: string
   clientEmail?: string | null
   eventType?: string | null
@@ -75,6 +76,7 @@ function isSamePreset(items: LuxorInvoiceLineItem[], preset: LuxorPackagePreset)
 export function ProposalBuilderModal({
   isOpen,
   onClose,
+  isEditing = false,
   clientName,
   clientEmail,
   eventType,
@@ -186,7 +188,7 @@ export function ProposalBuilderModal({
             </div>
             <div className="min-w-0">
               <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#a8792f] dark:text-[#caa24c]">Luxor Event Space</p>
-              <h2 className="truncate text-sm font-black uppercase tracking-[0.12em] sm:text-base">Proposal Builder</h2>
+              <h2 className="truncate text-sm font-black uppercase tracking-[0.12em] sm:text-base">{isEditing ? 'Edit Proposal' : 'Proposal Builder'}</h2>
             </div>
           </div>
 
