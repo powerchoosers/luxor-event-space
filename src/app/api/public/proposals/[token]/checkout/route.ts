@@ -37,7 +37,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     booking,
     origin,
     paymentAmount: invoice.invoice_kind === 'deposit' ? Number(invoice.payment_requested_amount || invoice.total) : undefined,
-    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? '30% non-refundable booking deposit' : 'Final event balance'),
+    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Non-refundable reservation deposit' : 'Final event balance and refundable security deposit'),
     allowPreContract,
     masterInvoiceId: invoice.parent_invoice_id || booking.invoice_id || undefined,
   })

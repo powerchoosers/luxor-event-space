@@ -30,7 +30,7 @@ export default function PaymentSuccessPage() {
           <div>
             <p className="text-sm font-semibold text-[#f7efe3]">One final check</p>
             <p className="mt-1 text-xs leading-5 text-[#9f9891] sm:text-sm">
-              Your date is officially reserved when both the 30% deposit and agreement are complete. If you have not signed yet, use the agreement link in your booking-package email.
+              Your date is officially reserved when both the reservation deposit and agreement are complete. If you have not signed yet, use the agreement link in your booking-package email.
             </p>
           </div>
         </div>

@@ -257,6 +257,7 @@ export type LuxorBooking = {
   booked_at: string | null
   contract_total: number
   deposit_required: number
+  security_deposit_amount?: number | null
   final_payment_due_date: string | null
   contract_status?: LuxorContractStatus | null
   contract_sent_at?: string | null

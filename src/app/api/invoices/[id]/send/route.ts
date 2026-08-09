@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { calculateLuxorThirtyPercentDeposit, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
@@ -70,9 +70,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: 'The lead email and booking email do not match. Update them before sending.' }, { status: 409 })
       }
 
-      const { depositAmount } = calculateLuxorThirtyPercentDeposit(invoice)
+      const depositAmount = Number(booking.deposit_required || 0)
       const finalPaymentDueDate = luxorFinalPaymentDueDate(booking.event_date)
-      const paymentLabel = '30% non-refundable booking deposit'
+      const paymentLabel = 'Non-refundable reservation deposit'
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
       booking = await updateLuxorBooking(booking.id, {
@@ -81,8 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         status: booking.status === 'draft' ? 'tentative' : booking.status,
         metadata: {
           ...booking.metadata,
-          deposit_type: 'non_refundable_booking',
-          deposit_rate: 0.3,
+          deposit_type: 'negotiated_reservation_deposit',
           proposalLineItems: invoice.line_items,
           proposalTaxRate: invoice.tax_rate,
           proposalInvoiceId: invoice.id,
@@ -104,7 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       signature ||= await createLuxorSignatureRequest(booking)
       const signingUrl = `${origin}/secure-portal/sign/${signature.token}`
-      const depositInvoice = await ensureLuxorDepositInvoice({ masterInvoice: invoice, bookingId: booking.id })
+      const depositInvoice = await ensureLuxorDepositInvoice({ masterInvoice: invoice, bookingId: booking.id, reservationDepositAmount: depositAmount })
 
       const checkout = await createLuxorPostContractCheckout({
         invoice: depositInvoice,
@@ -148,6 +147,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         signingUrl,
         depositAmount,
         finalPaymentDueDate,
+        securityDepositAmount: booking.security_deposit_amount,
         notes,
       })
 
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         jobType: 'booking_package',
         recipientEmail: inquiry.email,
         subject: email.subject,
-        body: `Your booking package is ready. Pay the 30% deposit: ${checkout.checkoutUrl} Sign the agreement: ${signingUrl}`,
+        body: `Your booking package is ready. Pay the negotiated reservation deposit: ${checkout.checkoutUrl} Sign the agreement: ${signingUrl}`,
         scheduledFor: now,
         metadata: { manual: true, requestedBy: session.email, deposit_invoice_id: updatedDepositInvoice.id, master_invoice_id: invoice.id, includes_deposit_invoice: true, includes_contract: true, includes_guest_guide: true },
       })
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       }) ?? inquiry
 
-      await createNote(inquiry.id, `Booking package sent to ${inquiry.email}: 30% non-refundable deposit invoice, Stripe payment link, agreement, and Guest Guide. The date remains pending until both payment and signature are complete.`, 'status_change', session.email)
+      await createNote(inquiry.id, `Booking package sent to ${inquiry.email}: negotiated reservation-deposit invoice, Stripe payment link, agreement, and Guest Guide. The date remains pending until both payment and signature are complete.`, 'status_change', session.email)
       await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder', 'contract_view_reminder', 'contract_signature_reminder'])
       const viewReminder = buildContractReminderEmail({ signature, kind: 'view' })
       const signatureReminder = buildContractReminderEmail({ signature, kind: 'sign' })

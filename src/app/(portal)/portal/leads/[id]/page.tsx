@@ -48,7 +48,8 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorDepositType, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { defaultLuxorReservationDeposit, formatLuxorCurrency, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -248,10 +249,10 @@ export default function LeadDetailPage({
   const [bookingPackageName, setBookingPackageName] = useState('')
   const [bookingContractTotal, setBookingContractTotal] = useState('')
   const [bookingDepositRequired, setBookingDepositRequired] = useState('')
+  const [bookingSecurityDepositAmount, setBookingSecurityDepositAmount] = useState(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
   const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
-  const [bookingDepositType, setBookingDepositType] = useState<LuxorDepositType>('non_refundable_booking')
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [refundingDeposit, setRefundingDeposit] = useState(false)
   const [confirmRefundModalOpen, setConfirmRefundModalOpen] = useState(false)
@@ -1513,7 +1514,7 @@ export default function LeadDetailPage({
       await fetchAllData(false)
       notify({
         title: 'Booking Package Sent',
-        description: `Sent the 30% deposit invoice, Stripe link, agreement, and Guest Guide to ${lead?.email}. The date confirms after payment and signature.`,
+        description: `Sent the reservation-deposit invoice, Stripe link, agreement, and Guest Guide to ${lead?.email}. The date confirms after payment and signature.`,
         variant: 'success',
       })
     } catch (err) {
@@ -1669,7 +1670,7 @@ export default function LeadDetailPage({
       : paymentRequestKind === 'deposit'
         ? Math.min(suggestedDeposit, balance)
         : Number(customPaymentAmount)
-    const paymentLabel = paymentRequestKind === 'deposit' ? '30% non-refundable booking deposit' : paymentRequestKind === 'balance' ? 'Full remaining event balance' : 'Custom event payment installment'
+    const paymentLabel = paymentRequestKind === 'deposit' ? 'Non-refundable reservation deposit' : paymentRequestKind === 'balance' ? 'Remaining event balance and refundable security deposit' : 'Custom event payment installment'
     try {
       setSendingInvoiceId(invoiceId)
       const response = await fetch(`/api/invoices/${invoiceId}/send`, {
@@ -1857,8 +1858,9 @@ export default function LeadDetailPage({
     setBookingStartTime('')
     setBookingEndTime('')
     setBookingPackageName(lead?.package_interest || '')
-    setBookingContractTotal(suggestedContractTotal > 0 ? String(suggestedContractTotal) : '')
-    setBookingDepositRequired(suggestedContractTotal > 0 ? String(Math.round(suggestedContractTotal * 0.3)) : '')
+    setBookingContractTotal(suggestedContractTotal > 0 ? suggestedContractTotal.toFixed(2) : '')
+    setBookingDepositRequired(suggestedContractTotal > 0 ? defaultLuxorReservationDeposit(suggestedContractTotal).toFixed(2) : '')
+    setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
     if (targetDate) {
       const dueDate = new Date(`${targetDate}T12:00:00-05:00`)
       dueDate.setDate(dueDate.getDate() - 60)
@@ -1868,7 +1870,6 @@ export default function LeadDetailPage({
     }
     setBookingNotes(lead?.message || '')
     setBookingStatus('tentative')
-    setBookingDepositType('non_refundable_booking')
     setIsBookingModalOpen(true)
   }
 
@@ -1905,10 +1906,9 @@ export default function LeadDetailPage({
     e.preventDefault()
     if (!lead) return
 
-    const parsedContractTotal = Number.parseFloat(bookingContractTotal)
-    const contractTotal = Number.isFinite(parsedContractTotal) ? parsedContractTotal : 0
-    const parsedDeposit = Number.parseFloat(bookingDepositRequired)
-    const depositRequired = Number.isFinite(parsedDeposit) ? parsedDeposit : Math.round(contractTotal * 0.3)
+    const contractTotal = parseLuxorCurrency(bookingContractTotal)
+    const depositRequired = parseLuxorCurrency(bookingDepositRequired) || defaultLuxorReservationDeposit(contractTotal)
+    const securityDepositAmount = parseLuxorCurrency(bookingSecurityDepositAmount) || LUXOR_DEFAULT_SECURITY_DEPOSIT
 
     try {
       setSubmittingBooking(true)
@@ -1931,13 +1931,13 @@ export default function LeadDetailPage({
           status: bookingStatus,
           contract_total: contractTotal,
           deposit_required: depositRequired,
+          security_deposit_amount: securityDepositAmount,
           final_payment_due_date: bookingFinalPaymentDueDate || null,
           notes: bookingNotes.trim() || lead.message,
           metadata: {
             proposalLineItems: invoiceItems,
             proposalTaxRate: Math.max(0, Number(invoiceTaxRate) || 0) / 100,
-            deposit_type: bookingDepositType,
-            deposit_rate: bookingDepositType === 'non_refundable_booking' ? 0.3 : null,
+            payment_schedule: 'negotiated_reservation_deposit_then_60_day_balance',
           },
         }),
       })
@@ -1954,6 +1954,7 @@ export default function LeadDetailPage({
       setBookingPackageName('')
       setBookingContractTotal('')
       setBookingDepositRequired('')
+      setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
       setBookingFinalPaymentDueDate('')
       setBookingNotes('')
       setBookingStatus('tentative')
@@ -3828,10 +3829,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the 30% booking package' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the booking package' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the deposit invoice, Stripe link, agreement, and Guest Guide together.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the 30% deposit.' : 'The signed agreement and paid deposit are both recorded.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the deposit invoice, Stripe link, agreement, and Guest Guide together.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the reservation deposit.' : 'The signed agreement and paid deposit are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -3842,7 +3843,7 @@ export default function LeadDetailPage({
                         ) : latestBooking.contract_status !== 'signed' ? (
                           <div className="flex flex-wrap items-center gap-2">
                             <button type="button" onClick={() => handleSendDateLockInvoice(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all disabled:opacity-40 cursor-pointer">
-                              Send 30% Booking Package
+                              Send Booking Package
                             </button>
                             <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
                               {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
@@ -5943,7 +5944,7 @@ export default function LeadDetailPage({
                   value={paymentRequestKind}
                   onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
                   options={[
-                    { value: 'deposit', label: `30% non-refundable deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
+                    { value: 'deposit', label: `Reservation deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
                     { value: 'balance', label: `Pay invoice in full — ${formatMoney(getInvoiceBalance(paymentRequestInvoice))}` },
                     { value: 'custom', label: 'Custom installment — choose an amount' },
                   ]}
@@ -6336,44 +6337,9 @@ export default function LeadDetailPage({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Final Payment Due Date</label>
-                <PortalDatePicker
-                  value={bookingFinalPaymentDueDate}
-                  onChange={setBookingFinalPaymentDueDate}
-                  className="w-full"
-                  placeholder="Select final payment due date"
-                />
-                <p className="text-[10px] leading-4 text-zinc-600">This controls the balance status and final-payment reminder.</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Deposit Structure</label>
-                <PortalSelect
-                  value={bookingDepositType}
-                  onChange={(val) => {
-                    const mode = val as LuxorDepositType
-                    setBookingDepositType(mode)
-                    const total = Number(bookingContractTotal) || 0
-                    if (total > 0) {
-                      if (mode === 'solidify_date') {
-                        setBookingDepositRequired(String(Math.round(total * 0.5 + 500)))
-                      } else {
-                        setBookingDepositRequired(String(Math.round(total * 0.3)))
-                      }
-                    }
-                  }}
-                  className="w-full"
-                  options={[
-                    { value: 'solidify_date', label: '50% Booking Deposit (refundable security deposit due with final payment)' },
-                    { value: 'non_refundable_booking', label: 'Non-Refundable Booking Deposit (balance due 60 days before event)' },
-                  ]}
-                />
-                <p className="text-[10px] leading-4 text-zinc-500">
-                  {bookingDepositType === 'solidify_date'
-                    ? 'Collect 50% now. The refundable security deposit is added as its own line item on the final invoice, due 60 days before the event.'
-                    : 'Locks date with fixed non-refundable deposit. Full balance + $750 security deposit due 60 days prior to event.'}
-                </p>
+              <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.04] p-4 text-[11px] leading-5 text-zinc-400">
+                <p className="font-semibold uppercase tracking-widest text-[#f1d27a]">Payment schedule</p>
+                <p className="mt-1">The negotiated reservation deposit is due when the agreement is signed. The remaining event balance and refundable security deposit are automatically due 60 days before the event.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -6391,30 +6357,37 @@ export default function LeadDetailPage({
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contract Total</label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     required
                     value={bookingContractTotal}
-                    onChange={(e) => setBookingContractTotal(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9.]/g, '')
+                      setBookingContractTotal(value)
+                      if (!bookingDepositRequired.trim()) setBookingDepositRequired(defaultLuxorReservationDeposit(value).toFixed(2))
+                    }}
                     placeholder="2500"
                     className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
                   />
                   <p className="text-[10px] leading-4 text-zinc-600">If there is already an invoice, this starts from that total.</p>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Deposit Required</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={bookingDepositRequired}
-                    onChange={(e) => setBookingDepositRequired(e.target.value)}
-                    placeholder="625"
-                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
-                  />
-                  <p className="text-[10px] leading-4 text-zinc-600">If left blank, this defaults to a 30% non-refundable booking deposit.</p>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Reservation Deposit Due at Signing</label>
+                  <div className="flex overflow-hidden rounded border border-zinc-800 bg-zinc-950 focus-within:border-blue-500">
+                    <span className="flex items-center border-r border-zinc-800 px-3 text-xs font-bold text-[#caa24c]">$</span>
+                    <input type="text" inputMode="decimal" value={bookingDepositRequired} onChange={(e) => setBookingDepositRequired(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => setBookingDepositRequired(parseLuxorCurrency(bookingDepositRequired).toFixed(2))} placeholder="625.00" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs text-zinc-300 outline-none" />
+                  </div>
+                  <p className="text-[10px] leading-4 text-zinc-600">Negotiable. Defaults to 30%: {formatLuxorCurrency(defaultLuxorReservationDeposit(bookingContractTotal))}.</p>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Refundable Security Deposit</label>
+                <div className="flex overflow-hidden rounded border border-zinc-800 bg-zinc-950 focus-within:border-blue-500">
+                  <span className="flex items-center border-r border-zinc-800 px-3 text-xs font-bold text-[#caa24c]">$</span>
+                  <input type="text" inputMode="decimal" value={bookingSecurityDepositAmount} onChange={(e) => setBookingSecurityDepositAmount(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => setBookingSecurityDepositAmount(parseLuxorCurrency(bookingSecurityDepositAmount).toFixed(2))} className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs text-zinc-300 outline-none" />
+                </div>
+                <p className="text-[10px] leading-4 text-zinc-600">Due with the remaining balance 60 days before the event. Any undisputed remainder is returned within 14 business days after the event.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -6429,12 +6402,12 @@ export default function LeadDetailPage({
 
               <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-[11px] leading-5 text-zinc-500">
                 <p className="font-semibold text-zinc-300">What happens next</p>
-                <p className="mt-1">We save the booking and prepare the 30% deposit, agreement, and Guest Guide package. The date becomes official after both payment and signature.</p>
+                <p className="mt-1">We save the booking and prepare the reservation-deposit invoice, agreement, and Guest Guide package. The date becomes official after both payment and signature.</p>
               </div>
 
               <button
                 type="submit"
-                disabled={submittingBooking || !bookingEventDate || !bookingStartTime || !bookingEndTime || !bookingFinalPaymentDueDate || !bookingContractTotal.trim()}
+                disabled={submittingBooking || !bookingEventDate || !bookingStartTime || !bookingEndTime || !bookingContractTotal.trim()}
                 className="w-full rounded-lg bg-blue-600 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-xl shadow-blue-600/20 transition-colors hover:bg-blue-500 disabled:opacity-40"
               >
                 {submittingBooking ? 'Saving Booking...' : 'Save Booking Record'}

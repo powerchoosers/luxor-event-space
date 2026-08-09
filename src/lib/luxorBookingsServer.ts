@@ -90,6 +90,7 @@ export async function createLuxorBooking(data: Partial<LuxorBooking> & { client_
       booked_at: data.booked_at || new Date().toISOString(),
       contract_total: data.contract_total || 0,
       deposit_required: data.deposit_required || 0,
+      security_deposit_amount: data.security_deposit_amount ?? 750,
       final_payment_due_date: data.final_payment_due_date || null,
       contract_status: data.contract_status || 'not_sent',
       security_deposit_status: data.security_deposit_status || 'not_collected',

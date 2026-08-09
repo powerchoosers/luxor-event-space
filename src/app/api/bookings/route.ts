@@ -3,12 +3,14 @@ import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLux
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { ensureRefundableSecurityDepositLineItem, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { calculateLuxorOfferPricing, luxorOfferSnapshot } from '@/lib/luxorOffer'
+import { defaultLuxorReservationDeposit, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
+import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (body.invoice_id) {
       const proposal = await getInvoice(body.invoice_id)
       if (proposal && proposal.status !== 'paid') {
-        const lineItems = ensureRefundableSecurityDepositLineItem(proposal.line_items)
+        const lineItems = proposal.line_items.filter((item) => item.category !== 'Security Deposit' && !/refundable security deposit/i.test(item.description))
         const pricing = calculateLuxorOfferPricing({ lineItems, taxRate: Number(proposal.tax_rate || 0), discountPercent: Number(proposal.discount_percent || 0) })
         const updatedProposal = await updateInvoice(proposal.id, {
           line_items: lineItems,
@@ -77,6 +79,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const requestedDeposit = parseLuxorCurrency(body.deposit_required)
+    const securityDepositAmount = parseLuxorCurrency(body.security_deposit_amount) || LUXOR_DEFAULT_SECURITY_DEPOSIT
     const normalizedBody = {
       ...body,
       contract_total: contractTotal,
@@ -84,10 +88,9 @@ export async function POST(request: NextRequest) {
         ...(body.metadata || {}),
         ...(proposalOffer ? { proposalOffer } : {}),
       },
-      final_payment_due_date: body.final_payment_due_date || luxorFinalPaymentDueDate(body.event_date),
-      deposit_required: body.metadata?.deposit_type === 'non_refundable_booking' && eventTotalForDeposit > 0
-        ? Math.round(eventTotalForDeposit * 0.3 * 100) / 100
-        : body.deposit_required,
+      final_payment_due_date: luxorFinalPaymentDueDate(body.event_date),
+      deposit_required: Math.min(eventTotalForDeposit, requestedDeposit || defaultLuxorReservationDeposit(eventTotalForDeposit)),
+      security_deposit_amount: securityDepositAmount,
     }
     let booking = await createLuxorBooking(normalizedBody)
     if (booking.invoice_id && Number(booking.deposit_required || 0) > 0) {
@@ -170,7 +173,37 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const booking = await updateLuxorBooking(id, updates)
+    const normalizedUpdates = {
+      ...updates,
+      ...(updates.deposit_required === undefined ? {} : { deposit_required: parseLuxorCurrency(updates.deposit_required) }),
+      ...(updates.security_deposit_amount === undefined ? {} : { security_deposit_amount: parseLuxorCurrency(updates.security_deposit_amount) }),
+      ...(updates.event_date === undefined ? {} : { final_payment_due_date: luxorFinalPaymentDueDate(updates.event_date) }),
+    }
+    let booking = await updateLuxorBooking(id, normalizedUpdates)
+    if (booking) {
+      const activeAgreement = await getActiveLuxorSignatureRequestByBooking(booking.id)
+      const currentFingerprint = getLuxorBookingContractFingerprint(booking)
+      if (activeAgreement && activeAgreement.metadata?.bookingFingerprint !== currentFingerprint) {
+        await updateLuxorSignatureRequest(activeAgreement.id, {
+          status: 'void',
+          expires_at: new Date().toISOString(),
+          metadata: {
+            ...(activeAgreement.metadata || {}),
+            invalidatedAt: new Date().toISOString(),
+            invalidatedReason: 'Booking financial or agreement terms changed before signature.',
+          },
+        })
+        await recordLuxorSignatureEvent({
+          signatureRequestId: activeAgreement.id,
+          eventType: 'invalidated',
+          metadata: { reason: 'Booking financial or agreement terms changed before signature.' },
+        })
+        booking = await updateLuxorBooking(booking.id, { contract_status: 'void' }) || booking
+        if (booking.inquiry_id) {
+          await createNote(booking.inquiry_id, 'Unsigned agreement invalidated because booking terms changed. Send a new agreement before the client signs.', 'status_change', session.email)
+        }
+      }
+    }
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
       if (inquiry && inquiry.status !== 'closed_lost') {

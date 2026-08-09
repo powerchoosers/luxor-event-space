@@ -2,6 +2,7 @@ import 'server-only'
 
 import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment } from './luxorInquiryTypes'
 import { roundLuxorMoney } from './luxorOffer'
+import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 
 type SupabaseError = {
   message?: string
@@ -197,7 +198,7 @@ export async function listAllBills() {
   return supabaseRest<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc')
 }
 
-export const LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT = 750
+export const LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT = LUXOR_DEFAULT_SECURITY_DEPOSIT
 export const LUXOR_NON_REFUNDABLE_DEPOSIT_RATE = 0.3
 
 const roundMoney = roundLuxorMoney
@@ -237,14 +238,25 @@ export async function ensureLuxorDepositInvoice(input: {
   masterInvoice: LuxorInvoice
   bookingId: string
   dueDate?: string | null
+  reservationDepositAmount?: number | null
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
-  const { depositAmount, originalDepositAmount, depositSavings } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
-  if (depositAmount < 0.5) throw new Error('The event total is too low to create a 30% deposit invoice.')
+  const calculated = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  const depositAmount = Math.min(
+    Math.max(0, Number(input.masterInvoice.total || 0) - calculated.refundableSecurityDeposit),
+    Math.max(0, roundMoney(Number(input.reservationDepositAmount ?? calculated.depositAmount))),
+  )
+  const offerPercent = Math.max(0, Math.min(100, Number(input.masterInvoice.discount_percent || 0)))
+  const originalDepositAmount = offerPercent > 0 && offerPercent < 100
+    ? roundMoney(depositAmount / (1 - offerPercent / 100))
+    : depositAmount
+  const depositSavings = Math.max(0, roundMoney(originalDepositAmount - depositAmount))
+  if (depositAmount < 0.5) throw new Error('The reservation deposit must be at least $0.50 to create a payment invoice.')
+  const label = 'Non-Refundable Reservation Deposit'
   if (existing) {
     if (existing.status === 'paid') return existing
     return await updateInvoice(existing.id, {
-      line_items: [{ description: '30% Non-Refundable Booking Deposit', quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
+      line_items: [{ description: label, quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
       subtotal: depositAmount,
       tax_rate: 0,
       total: depositAmount,
@@ -257,7 +269,7 @@ export async function ensureLuxorDepositInvoice(input: {
       stripe_coupon_id: input.masterInvoice.stripe_coupon_id ?? null,
       stripe_promotion_code_id: input.masterInvoice.stripe_promotion_code_id ?? null,
       due_date: input.dueDate || new Date().toISOString().slice(0, 10),
-      notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
+      notes: 'Negotiated non-refundable reservation deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
     }) || existing
   }
   return createInvoice({
@@ -267,8 +279,8 @@ export async function ensureLuxorDepositInvoice(input: {
     invoice_kind: 'deposit',
     client_name: input.masterInvoice.client_name,
     event_type: input.masterInvoice.event_type,
-    description: '30% non-refundable booking deposit',
-    line_items: [{ description: '30% Non-Refundable Booking Deposit', quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
+    description: 'Non-refundable reservation deposit',
+    line_items: [{ description: label, quantity: 1, unitPrice: depositAmount, total: depositAmount, category: 'Booking Deposit' }],
     subtotal: depositAmount,
     tax_rate: 0,
     total: depositAmount,
@@ -281,7 +293,7 @@ export async function ensureLuxorDepositInvoice(input: {
     stripe_coupon_id: input.masterInvoice.stripe_coupon_id ?? null,
     stripe_promotion_code_id: input.masterInvoice.stripe_promotion_code_id ?? null,
     due_date: input.dueDate || new Date().toISOString().slice(0, 10),
-    notes: 'Non-refundable deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
+    notes: 'Negotiated non-refundable reservation deposit required to reserve the event date. The reservation is confirmed after both payment and contract signature.',
   })
 }
 
@@ -290,12 +302,18 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   bookingId: string
   dueDate: string | null
   depositPaid?: number
+  securityDepositAmount?: number | null
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'final_balance')
   const { depositAmount: defaultDepositAmount, refundableSecurityDeposit } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
   // Older proposals may not have the security line yet.  The final invoice is
   // the safe place to collect it whenever the event was not paid in full.
-  const securityDepositAmount = refundableSecurityDeposit || LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT
+  const suppliedSecurityDeposit = input.securityDepositAmount == null ? Number.NaN : Number(input.securityDepositAmount)
+  const securityDepositAmount = Math.max(0, roundMoney(
+    Number.isFinite(suppliedSecurityDeposit)
+      ? suppliedSecurityDeposit
+      : (refundableSecurityDeposit || LUXOR_REFUNDABLE_SECURITY_DEPOSIT_AMOUNT),
+  ))
   const eventTotal = Math.max(0, roundMoney(Number(input.masterInvoice.total || 0) - refundableSecurityDeposit))
   const depositAmount = Math.min(eventTotal, Math.max(0, roundMoney(input.depositPaid ?? defaultDepositAmount)))
   const remainingEventBalance = Math.max(0, roundMoney(eventTotal - depositAmount))

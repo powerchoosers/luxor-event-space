@@ -242,6 +242,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   const balance = Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0))
   const proposalOffer = booking.metadata?.proposalOffer as { originalTotal?: number; discountedTotal?: number; percent?: number; savings?: number; expiresAt?: string | null } | undefined
   const hasOffer = Number(proposalOffer?.percent || 0) > 0 && Number(proposalOffer?.savings || 0) > 0
+  const securityDeposit = Math.max(0, Number(booking.security_deposit_amount ?? 750))
   const w = await createWriter('BOOKING AGREEMENT')
 
   // Page 1 - Parties and event details
@@ -270,16 +271,20 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.heading('3. Contract price')
   w.fieldPair('Total contract price', money(booking.contract_total), 'Reservation payment', money(booking.deposit_required))
   w.fieldPair('Remaining balance', money(balance), 'Final payment due', displayDate(booking.final_payment_due_date))
+  w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', displayDate(booking.final_payment_due_date))
   if (hasOffer) {
     w.fieldPair('Original contract price', money(Number(proposalOffer?.originalTotal || 0)), 'Limited-time savings', `${Number(proposalOffer?.percent || 0)}% (${money(Number(proposalOffer?.savings || 0))})`)
     w.paragraph(`Limited-time offer: the discounted contract price above is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer?.expiresAt || null)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request at the regular price.`)
   } else if (proposalOffer?.expiresAt) {
     w.paragraph(`This proposal is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer.expiresAt)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request.`)
   }
-  w.paragraph('The event date is not reserved until the required reservation payment has been received and this Agreement has been fully executed. Unless otherwise stated in writing, the remaining balance is due no later than sixty (60) days before the Event.')
+  w.paragraph('The event date is not reserved until the negotiated reservation payment has been received and this Agreement has been fully executed. Unless otherwise stated in writing, the remaining event balance and refundable security deposit are due no later than sixty (60) days before the Event.')
   w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Card payments may be subject to a disclosed processing fee. Returned checks are subject to a $35.00 fee.')
   w.paragraph('Payments not received by the due date may incur a late fee equal to five percent (5%) of the overdue amount or $50.00, whichever is greater. Nonpayment may suspend planning services or result in cancellation of the Event.')
   w.paragraph('The Client agrees not to initiate a chargeback for amounts properly due under this Agreement. An unauthorized chargeback is a material breach, and the Client remains responsible for unpaid balances, chargeback fees, and reasonable collection costs to the extent permitted by Texas law.')
+  w.heading('Security deposit')
+  w.paragraph(`Client shall pay the ${money(securityDeposit)} security deposit no later than sixty (60) days before the Event. The security deposit secures Client obligations under this Agreement and may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`)
+  w.paragraph('Luxor may inspect and document the Premises and Venue property before, during, and after the Event. If deductions are necessary, Luxor may provide Client with an itemized statement. Any undisputed remaining security-deposit balance will be returned within fourteen (14) business days following the Event, subject to any pending damage, repair, insurance, or other authorized claim that reasonably requires additional time to determine. If authorized charges exceed the security deposit, Client remains responsible for the full remaining balance; the security deposit does not limit Client liability.')
   w.heading('Overtime and additional charges')
   w.paragraph('Overtime is not guaranteed and depends on venue availability. If approved or incurred because the Client, guests, vendors, equipment, or property remain after the contracted rental period, overtime is billed at $150.00 per 30-minute increment and is due upon invoice.')
   w.paragraph('Excessive cleaning, damage, repairs, replacement costs, false alarm charges, administrative fees, and other authorized charges may be deducted from the security deposit or invoiced separately. The Guest Guide fee schedule provides common examples; actual repair or replacement cost controls when it is higher.')
@@ -298,7 +303,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.heading('5. Liability and insurance')
   w.paragraph('The Client is responsible for the conduct of all guests, vendors, contractors, entertainers, and invitees, and for damage, injury, loss, overtime, or additional cleaning resulting from their actions, except to the extent caused by Luxor.')
   w.y -= 8
-  w.paragraph('The Client must obtain special event liability insurance with minimum coverage of $1,000,000 per occurrence and provide proof of coverage no later than fourteen (14) days before the Event. Luxor may also require vendors to provide proof of liability insurance before entering or working at the Venue.')
+  w.paragraph('The Client must obtain special event liability insurance with minimum coverage of $1,000,000 per occurrence and provide proof of coverage no later than fourteen (14) days before the Event. When alcoholic beverages will be present or served, the policy must provide coverage applicable to alcohol-related exposure, including host liquor liability or equivalent coverage when available and applicable. Luxor may require additional coverage, endorsements, or certificates from Client or vendors based on the nature, size, or risk of the Event.')
   w.y -= 8
   w.paragraph('Luxor is not responsible for loss, theft, or damage to personal property, vehicles, vendor equipment, rentals, or items left at the Venue. The Client is responsible for coordinating delivery, setup, removal, and return of all outside property.')
   w.y -= 8
@@ -311,18 +316,23 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.title('Venue operations', 'Rules incorporated from the Guest Guide')
   w.heading('6. Access, use and occupancy')
   w.bullet('The contracted rental period includes vendor load-in, setup, decorating, event time, cleanup, and breakdown unless Luxor approves otherwise in writing.')
-  w.bullet('Maximum occupancy is 200 persons, including guests, vendors, entertainers, and staff, unless a lower limit is required by fire code or another authority.')
+  w.bullet('Maximum permitted occupancy is 200 persons total, including guests, Client representatives, vendors, contractors, entertainers, bartenders, security personnel, photographers, DJs, Venue personnel, and all other persons present, unless a lower limit is required by law, fire code, property management, or an applicable authority. Client must ensure the limit is not exceeded; Luxor may limit admission, require persons to leave, pause, or terminate the Event to maintain lawful and safe occupancy.')
   w.bullet('Children must be supervised. Fire lanes, exits, sidewalks, hallways, and neighboring business access must remain clear.')
   w.bullet('Illegal activity, illegal gambling, unsafe conduct, indoor smoking or vaping, illegal drugs, prohibited weapons, and unapproved ticket sales are not permitted.')
   w.heading('7. Vendors, decorations and entertainment')
   w.bullet('The Client must coordinate vendors and ensure they comply with arrival, insurance, safety, cleanup, and removal requirements. Luxor may deny access to a vendor who creates a legal, safety, or property concern.')
   w.bullet('Nails, screws, staples, tacks, tape, adhesive hooks, glue, glitter, confetti, fireworks, and unapproved special effects are prohibited. Hanging installations, cold sparks, fog, haze, inflatables, stages, truss systems, specialty lighting, and similar equipment require prior written approval.')
   w.bullet('Music and amplified sound must remain at a reasonable level and end at the approved time. Luxor may require volume, bass, speaker placement, or performance changes to protect guests, neighboring businesses, and lease compliance.')
-  w.heading('8. BYOB, damage and cleanup')
-  w.bullet('Luxor is a private BYOB venue and does not sell or furnish alcohol. Alcohol may not be sold or exchanged for admission, donations, tickets, or other compensation. Luxor may require a licensed or TABC-certified bartender and licensed security.')
-  w.bullet('The Client is responsible for lawful alcohol service and must not permit service to minors or visibly intoxicated persons. Luxor may stop alcohol service or remove alcoholic beverages when safety or legal requirements are not followed.')
+  w.heading('8. BYOB, alcohol, damage and cleanup')
+  w.bullet('Luxor is a private BYOB venue and does not sell, furnish, or provide alcohol. Because of Venue zoning restrictions, Luxor does not operate a cash bar or permit alcohol sales for on-premises consumption. Client/Event Host must provide all alcohol. Alcohol may not be sold, resold, exchanged for money, admission, donations, drink tickets, cover charges, tips conditioned on alcohol, or other compensation.')
+  w.bullet('All alcohol must be distributed by a qualified bartender meeting Luxor requirements and any applicable legal or regulatory requirements, including current TABC seller/server certification when required by Luxor. Client arranges bartender service unless included in writing. Bartender compensation and voluntary gratuities are for labor only and may not be required, solicited, conditioned upon, or calculated from alcohol consumption or receipt.')
+  w.bullet('The Client is responsible for lawful alcohol service and must not permit service to minors or visibly intoxicated persons. Luxor may immediately stop alcohol service, require alcohol removal, remove a bartender or person, require corrective action, contact property management or law enforcement, suspend, or terminate the Event when alcohol creates a safety, legal, insurance, or property risk.')
   w.bullet('The Client must remove personal property, decorations, food, beverages, rentals, and vendor equipment before the rental period ends. Excessive cleaning, damage, missing property, and false alarm costs may be charged to the Client.')
   w.note('Luxor may stop an unsafe or unlawful activity, remove a person or vendor, end alcohol service, or terminate the Event for a serious or repeated violation. Ending an Event does not cancel unpaid balances or responsibility for damage and cleanup.')
+  w.heading('Venue operations, emergencies & documentation')
+  w.paragraph('Luxor does not guarantee uninterrupted utilities, HVAC, lighting, Wi-Fi, audiovisual systems, parking, or other Venue services when interruption results from circumstances beyond Luxor’s reasonable control. Luxor will make reasonable efforts to address service interruptions within its control. Nothing in this provision limits any responsibility imposed on Luxor by applicable law for its own negligence or willful misconduct.')
+  w.paragraph('Client, guests, vendors, contractors, entertainers, and invitees must immediately comply with reasonable instructions from Luxor staff, property management, shopping-center security, law enforcement, fire personnel, emergency medical personnel, and other emergency responders. Luxor may pause, relocate, evacuate, suspend, or terminate the Event when reasonably necessary to protect persons or property, address an emergency, comply with law, or follow emergency or property-management instructions.')
+  w.paragraph('Luxor may photograph, video, inspect, inventory, and otherwise document the condition of the Premises, furniture, fixtures, equipment, decorations, and Venue property before, during, and after the Event for operational, safety, insurance, damage assessment, policy enforcement, billing, and dispute-resolution purposes. Client is encouraged to photograph the Premises before setup and after removal of Client property.')
 
   // Page 5 - Legal and acknowledgements
   w.addPage()
@@ -353,7 +363,8 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.y -= 6
   w.bullet('I understand force majeure events are governed by this Agreement.')
 
-  // Page 6 - Fixed signature page. Keep coordinates synchronized with luxorSignaturePlacement.ts.
+  // Capture this page after all agreement clauses are laid out. The saved
+  // placement moves with the document if later edits add or remove pages.
   w.addPage()
   w.title('Signatures', 'Electronic execution')
   w.paragraph('By signing below, the Client confirms that they have read, understood, and agree to this Booking Agreement, the Venue Policies & Guest Guide, and all incorporated proposals, invoices, schedules, exhibits, and addenda.')
@@ -378,7 +389,12 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.page.drawText('After execution, the Client receives a clean signed PDF. Luxor retains a separate audit copy', { x: margin + 14, y: 258, size: 8.4, font: w.regular, color: ink })
   w.page.drawText('containing the document hash and signing timeline.', { x: margin + 14, y: 245, size: 8.4, font: w.regular, color: ink })
 
-  return w.finish()
+  const signaturePlacement = {
+    pageIndex: w.pdf.getPages().indexOf(w.page),
+    client: { x: 52, y: 500, width: 228, height: 42 },
+    owner: { x: 330, y: 500, width: 230, height: 42 },
+  }
+  return { pdf: await w.finish(), signaturePlacement }
 }
 
 const guestGuideSections = [
@@ -401,7 +417,7 @@ const guestGuideSections = [
       ['Guest conduct and children', 'Disorderly, disruptive, illegal, dangerous, or abusive behavior is prohibited. Minors must be supervised by a responsible adult at all times. Luxor may remove individuals or end an Event for serious violations.'],
       ['Parking and neighboring businesses', 'Park only in designated areas. Do not block fire lanes, entrances, exits, loading areas, sidewalks, or neighboring businesses. Unauthorized vehicles may be towed at the owner\'s expense.'],
       ['Smoking, drugs and weapons', 'Smoking, vaping, electronic cigarettes, marijuana, and illegal drugs are prohibited indoors. Prohibited weapons, explosives, and dangerous items are not permitted except as required by applicable Texas law.'],
-      ['Occupancy and event purpose', 'Maximum occupancy is 200 persons unless a lower legal limit applies. The Event must match the purpose in the Booking Agreement. Ticket sales, cover charges, public admission, or a material change in event type require prior written approval.'],
+      ['Occupancy and event purpose', 'Maximum occupancy is 200 persons total, including guests, Client representatives, vendors, contractors, entertainers, bartenders, security personnel, photographers, DJs, Venue personnel, and all other persons present, unless a lower legal limit applies. Client must ensure this limit is not exceeded. Luxor may limit admission, require persons to leave, pause, or terminate the Event to maintain lawful and safe occupancy. Ticket sales, cover charges, public admission, or a material change in event type require prior written approval.'],
     ],
   },
   {
@@ -429,12 +445,13 @@ const guestGuideSections = [
   {
     number: '5',
     title: 'Private BYOB alcohol policy',
-    intro: 'Luxor is a Bring Your Own Beverage venue. Luxor does not sell, provide, distribute, or furnish alcohol. Client-provided alcohol is permitted only for a private Event and must comply with all laws and Venue requirements.',
+    intro: 'Luxor at Las Palmas Events is a private BYOB venue. Because of applicable Venue zoning restrictions, Luxor does not sell, furnish, distribute, or provide alcohol and does not operate a cash bar or other alcohol-sales service. Client/Event Host provides all alcohol for private Events and must comply with all laws, regulations, Venue requirements, and property rules.',
     items: [
-      ['No alcohol sales', 'Alcohol may not be sold or exchanged for money, admission, donations, drink tickets, cover charges, or any other compensation unless legally authorized and approved in writing.'],
-      ['Bartender and security', 'Luxor may require a licensed or TABC-certified bartender and one or more licensed security officers based on event type, attendance, and risk. The Client is responsible for related fees unless the Booking Agreement says otherwise.'],
+      ['No alcohol sales', 'Alcohol may not be sold, resold, exchanged for money, admission, donations, drink tickets, cover charges, or other compensation. Luxor does not purchase, sell, furnish, or provide alcohol for Events.'],
+      ['Required bartender', 'All alcohol must be distributed by a qualified bartender who meets Luxor requirements and applicable legal or regulatory requirements, including current TABC seller/server certification when required by Luxor. Client provides the bartender unless bartender service is included in the selected package or separately provided in writing. Luxor may require credentials before the Event.'],
+      ['Bartender compensation & gratuity', 'Bartender compensation is for bartending and beverage-service labor only, not alcohol. Voluntary gratuities may be accepted for bartending labor, but cannot be required, solicited, conditioned upon, or calculated based on alcohol purchase, receipt, or consumption.'],
       ['Lawful service', 'Do not serve minors or visibly intoxicated people. Bartenders may refuse service. Alcohol may not be consumed in shopping-center common areas, parking areas, or sidewalks.'],
-      ['Enforcement', 'Luxor may stop alcohol service, remove beverages, assess authorized fees, terminate the Event, or contact law enforcement when alcohol rules or applicable laws are violated.'],
+      ['Enforcement', 'Luxor may immediately stop alcohol service, require alcohol removal, remove a bartender or person, require corrective action, contact property management or law enforcement, suspend, or terminate the Event when alcohol is sold, unlawfully provided, improperly served, or creates a safety, legal, insurance, or property risk. Client remains responsible for permitted alcohol-related damages, costs, penalties, emergency-response expenses, and cleaning.'],
     ],
   },
   {
@@ -456,7 +473,8 @@ const guestGuideSections = [
       ['Standard and excessive cleaning', 'Luxor performs routine post-event cleaning. The Client must remove belongings, decor, rentals, food, beverages, and vendor equipment and place trash in designated receptacles. Extra charges may apply for stains, bodily fluids, smoke residue, prohibited materials, adhesive residue, abandoned decor, or unusual trash.'],
       ['Damage and property', 'Repair or replacement costs may be deducted from the security deposit or invoiced separately. Venue furniture, decor, fixtures, and equipment may not be removed. The Client is responsible for damaged, broken, lost, stolen, or missing Venue property.'],
       ['False alarms and lost items', 'The Client is responsible for emergency-response costs caused by event activities, cooking equipment, smoke, fog, haze, or special effects. Luxor is not responsible for lost or abandoned property and may dispose of unclaimed items.'],
-      ['Documentation', 'Luxor may photograph or record the condition of the Venue before, during, and after the Event. Clients are encouraged to photograph the space before setup and after removing their property.'],
+      ['Security deposit & post-event inspection', 'Luxor may inspect and document the Premises before, during, and after the Event through photographs, video, written reports, inventory checks, and other reasonable records. Luxor may apply the security deposit toward authorized damage, excessive cleaning, overtime, missing property, false alarm or emergency-response costs, prohibited materials, policy violations, and other charges allowed by the Booking Agreement. Luxor may provide an itemized deduction statement. Any undisputed remaining balance is returned under the Booking Agreement, generally within 14 business days after the Event; Client remains responsible if charges exceed the deposit.'],
+      ['Venue condition documentation', 'Luxor may photograph, video, inspect, inventory, and otherwise document the condition of the Premises, furniture, fixtures, equipment, decorations, and Venue property for operational, safety, insurance, damage assessment, policy enforcement, billing, and dispute-resolution purposes. Clients are encouraged to photograph the space before setup and after removing their property.'],
     ],
   },
   {
@@ -466,6 +484,7 @@ const guestGuideSections = [
     items: [
       ['Event termination', 'Luxor may suspend or terminate an Event without refund for material or repeated policy violations, illegal or violent conduct, property risk, occupancy violations, unpaid required balances, unsafe alcohol service, or refusal to follow reasonable staff instructions.'],
       ['Removal and emergency response', 'Luxor may remove disruptive, unsafe, unlawful, abusive, or intoxicated persons and contact law enforcement, fire personnel, emergency medical services, property management, or shopping-center security when reasonably necessary.'],
+      ['Emergency procedures', 'Client, guests, vendors, contractors, entertainers, and invitees must immediately follow reasonable instructions from Luxor staff, property management, shopping-center security, law enforcement, fire personnel, emergency medical personnel, and other responders. Luxor may pause, relocate, evacuate, suspend, or terminate an Event when reasonably necessary to protect people or property, respond to an emergency, comply with law, or follow responder or property-management instructions.'],
       ['Financial remedies', 'Termination does not remove responsibility for unpaid balances, damage, cleaning, overtime, or other authorized charges. Luxor may deduct authorized amounts from the security deposit, issue an invoice, deny future bookings, or pursue remedies available under Texas law.'],
     ],
   },
@@ -480,6 +499,8 @@ export async function buildLuxorGuestGuidePdf(booking: LuxorBooking) {
   w.fieldPair('Client', names.fullName, 'Event date', displayDate(booking.event_date))
   w.fieldPair('Event type', booking.event_type || 'Private event', 'Estimated guests', booking.guest_count ? String(booking.guest_count) : 'To be confirmed')
   w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Package', booking.package_name || 'Custom venue booking')
+  w.fieldPair('Refundable security deposit', money(Number(booking.security_deposit_amount ?? 750)), 'Due date', displayDate(booking.final_payment_due_date))
+  w.note(`The refundable security deposit is due with the remaining event balance 60 days before the Event. Luxor may inspect and document the Premises before, during, and after the Event. Authorized deductions may include damage, excessive cleaning, overtime, missing property, emergency-response costs, prohibited materials, and policy violations. Luxor may provide an itemized statement; any undisputed remaining balance is returned within fourteen (14) business days after the Event.`)
   w.heading('How to use this guide')
   w.paragraph('Share the relevant sections with your planner, family, vendors, bartender, DJ, decorator, and rental companies before the Event. Clear timing and expectations are the best way to prevent delays, policy issues, and unexpected charges.')
   w.paragraph('If you are unsure whether a decoration, vendor setup, special effect, entertainment plan, or service is permitted, contact Luxor before purchasing or scheduling it. Written approval protects both the Client and the Venue.')
@@ -540,6 +561,7 @@ export async function buildExecutedLuxorContract(input: {
   events: Array<{ created_at: string; event_type: string; ip_address?: string | null; user_agent?: string | null }>
 }) {
   const originalHash = crypto.createHash('sha256').update(input.original).digest('hex')
+  const executionAt = input.clientSignedAt
   const addCertificate = async (detailed: boolean) => {
     const pdf = await PDFDocument.load(input.original)
     pdf.registerFontkit(fontkit)
@@ -581,14 +603,14 @@ export async function buildExecutedLuxorContract(input: {
       color: ink,
       maxWidth: ownerBox.width,
     })
-    signaturePage.drawText(displaySignatureDate(input.clientSignedAt), {
+    signaturePage.drawText(displaySignatureDate(executionAt), {
       x: clientBox.x,
       y: clientBox.y - 74,
       size: 8.5,
       font: bold,
       color: ink,
     })
-    signaturePage.drawText(displaySignatureDate(input.ownerSignedAt), {
+    signaturePage.drawText(displaySignatureDate(executionAt), {
       x: ownerBox.x,
       y: ownerBox.y - 74,
       size: 8.5,
@@ -606,11 +628,11 @@ export async function buildExecutedLuxorContract(input: {
     page.drawText(input.clientName, { x: margin, y: 636, size: clientSignatureSize, font: script, color: ink })
     page.drawLine({ start: { x: margin, y: 624 }, end: { x: 280, y: 624 }, thickness: 0.8, color: muted })
     page.drawText(`Client | ${input.clientEmail}`, { x: margin, y: 606, size: 8.5, font: regular, color: muted })
-    page.drawText(`Signed ${new Date(input.clientSignedAt).toISOString()}`, { x: margin, y: 590, size: 8.5, font: regular, color: muted })
+    page.drawText(`Executed ${displaySignatureDate(executionAt)}`, { x: margin, y: 590, size: 8.5, font: regular, color: muted })
     page.drawText(input.ownerName, { x: 330, y: 636, size: ownerSignatureSize, font: script, color: ink })
     page.drawLine({ start: { x: 330, y: 624 }, end: { x: 560, y: 624 }, thickness: 0.8, color: muted })
     page.drawText(`Owner, Luxor Event Space | ${input.ownerEmail}`, { x: 330, y: 606, size: 8.5, font: regular, color: muted })
-    page.drawText(`Countersigned ${new Date(input.ownerSignedAt).toISOString()}`, { x: 330, y: 590, size: 8.5, font: regular, color: muted })
+    page.drawText(`Executed ${displaySignatureDate(executionAt)}`, { x: 330, y: 590, size: 8.5, font: regular, color: muted })
     page.drawText('DOCUMENT VERIFICATION', { x: margin, y: 530, size: 9, font: bold, color: gold })
     const hashLines = [`Request ID: ${input.signature.id}`, `Original SHA-256: ${originalHash.slice(0, 32)}`, `                 ${originalHash.slice(32)}`]
     hashLines.forEach((line, index) => page.drawText(line, { x: margin, y: 505 - index * 18, size: 8.5, font: regular, color: ink }))
@@ -624,8 +646,18 @@ export async function buildExecutedLuxorContract(input: {
       for (const wrapped of wrap(line, regular, 7.8, contentWidth)) { page.drawText(wrapped, { x: margin, y, size: 7.8, font: regular, color: ink }); y -= 13 }
       y -= 5
     }
-    page.drawLine({ start: { x: margin, y: 43 }, end: { x: pageWidth - margin, y: 43 }, thickness: 0.45, color: paleGold })
-    page.drawText('Electronic signatures apply to the entire agreement and all signature locations.', { x: margin, y: 25, size: 7.4, font: regular, color: muted })
+    // The draft agreement is numbered before this certificate exists. Redraw the
+    // footer after adding it so every customer-facing page uses the true total.
+    const executedPages = pdf.getPages()
+    executedPages.forEach((target, index) => {
+      target.drawRectangle({ x: 0, y: 0, width: pageWidth, height: 52, color: cream })
+      target.drawLine({ start: { x: margin, y: 43 }, end: { x: pageWidth - margin, y: 43 }, thickness: 0.45, color: paleGold })
+      target.drawText(index === executedPages.length - 1
+        ? 'Electronic signatures apply to the entire agreement and all signature locations.'
+        : `Luxor Event Space  |  ${LUXOR_VENUE_ADDRESS}`, { x: margin, y: 25, size: 7.4, font: regular, color: muted })
+      const pageText = `${index + 1} / ${executedPages.length}`
+      target.drawText(pageText, { x: pageWidth - margin - regular.widthOfTextAtSize(pageText, 7.2), y: 25, size: 7.2, font: regular, color: muted })
+    })
     const bytes = await pdf.save({ useObjectStreams: false })
     return { bytes, hash: crypto.createHash('sha256').update(bytes).digest('hex'), originalHash }
   }

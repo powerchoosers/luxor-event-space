@@ -679,7 +679,7 @@ export async function queueUpcoming60DayInvoiceReminders() {
       if (!masterInvoice) continue
       const dueDate = booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date)
       let invoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
-      invoice ||= await ensureLuxorFinalBalanceInvoice({ masterInvoice, bookingId: booking.id, dueDate, depositPaid: Number(booking.deposit_required || 0) })
+      invoice ||= await ensureLuxorFinalBalanceInvoice({ masterInvoice, bookingId: booking.id, dueDate, depositPaid: Number(booking.deposit_required || 0), securityDepositAmount: booking.security_deposit_amount })
 
       const paidPayments = await listPaidPaymentsByInvoice(invoice.id).catch(() => [])
       const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)

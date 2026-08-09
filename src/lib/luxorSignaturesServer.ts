@@ -38,6 +38,7 @@ function defaultContractBody(booking: LuxorBooking) {
     booking.guest_count ? `Estimated guest count: ${booking.guest_count}.` : '',
     `Contract total: $${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     `Deposit required: $${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+    `Refundable security deposit: $${Number(booking.security_deposit_amount ?? 750).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     Number((booking.metadata?.proposalOffer as { percent?: number } | undefined)?.percent || 0) > 0
       ? `Limited-time offer: ${(booking.metadata?.proposalOffer as { percent?: number; savings?: number; expiresAt?: string | null }).percent}% off, saving $${Number((booking.metadata?.proposalOffer as { savings?: number }).savings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, secured only when the agreement and required payment are complete by ${(booking.metadata?.proposalOffer as { expiresAt?: string | null }).expiresAt || 'the stated deadline'}.`
       : '',
@@ -58,6 +59,7 @@ export function getLuxorBookingContractFingerprint(booking: LuxorBooking) {
     packageName: booking.package_name,
     contractTotal: Number(booking.contract_total || 0),
     depositRequired: Number(booking.deposit_required || 0),
+    securityDepositAmount: Number(booking.security_deposit_amount ?? 750),
     finalPaymentDueDate: booking.final_payment_due_date,
     notes: booking.notes,
     proposalLineItems: booking.metadata?.proposalLineItems || [],
@@ -113,10 +115,11 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
 
   const contractPath = `contracts/${booking.id}/${created.id}/Luxor-Event-Agreement.pdf`
   const guidePath = `contracts/${booking.id}/${created.id}/Luxor-Guest-Guide.pdf`
-  const [contractPdf, guestGuidePdf] = await Promise.all([
+  const [contractResult, guestGuidePdf] = await Promise.all([
     buildLuxorContractPdf(booking, created.id, created.created_at),
     buildLuxorGuestGuidePdf(booking),
   ])
+  const contractPdf = contractResult.pdf
   await Promise.all([
     saveLuxorPrivatePdf(contractPath, contractPdf),
     saveLuxorPrivatePdf(guidePath, guestGuidePdf),
@@ -125,6 +128,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking) {
     contract_document_path: contractPath,
     guest_guide_path: guidePath,
     document_hash: crypto.createHash('sha256').update(contractPdf).digest('hex'),
+    metadata: { ...(created.metadata || {}), signaturePlacement: contractResult.signaturePlacement },
   })
 
   await updateLuxorBooking(booking.id, {
@@ -254,6 +258,7 @@ export async function signLuxorSignatureRequest(input: {
           bookingId: booking.id,
           dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
           depositPaid: Number(booking.deposit_required || 0),
+          securityDepositAmount: booking.security_deposit_amount,
         }) : null
         reconciledBooking = await updateLuxorBooking(booking.id, {
           status: 'confirmed',
@@ -274,7 +279,7 @@ export async function signLuxorSignatureRequest(input: {
         })
       }
       if (depositPaid && reconciledBooking) {
-        await createNote(signature.inquiry_id, 'Agreement signed and 30% deposit confirmed. The event date is officially reserved and the booking moved to Planning.', 'status_change', 'Booking Automation').catch(() => null)
+        await createNote(signature.inquiry_id, 'Agreement signed and the reservation deposit confirmed. The event date is officially reserved and the booking moved to Planning.', 'status_change', 'Booking Automation').catch(() => null)
       }
       await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder', 'contract_signature_reminder'])
     }
@@ -290,13 +295,15 @@ export async function signLuxorSignatureRequest(input: {
 
   const ownerName = resolveOwnerSignerName(signature.owner_name || process.env.LUXOR_OWNER_SIGNER_NAME)
   const ownerEmail = signature.owner_email || process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
-  const ownerSignedAt = signature.owner_signed_at || new Date().toISOString()
+  // One canonical execution instant prevents signature-page and certificate dates
+  // drifting across a midnight boundary. The separate event log retains audit timing.
+  const ownerSignedAt = signature.owner_signed_at || signedAt
   const existingEvents = await listLuxorSignatureEvents(signature.id)
   if (!existingEvents.some((event) => event.event_type === 'owner_countersigned')) {
     await recordLuxorSignatureEvent({
       signatureRequestId: signature.id,
       eventType: 'owner_countersigned',
-      metadata: { ownerName, automatic: true },
+      metadata: { ownerName, automatic: true, systemRecordedAt: new Date().toISOString(), executionAt: signedAt },
     })
   }
   const events = await listLuxorSignatureEvents(signature.id)
@@ -347,7 +354,7 @@ export async function signLuxorSignatureRequest(input: {
         invoice: paymentInvoice,
         origin: process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com',
         paymentAmount: paymentInvoice.invoice_kind === 'deposit' ? Number(paymentInvoice.total) : undefined,
-        paymentLabel: paymentInvoice.invoice_kind === 'deposit' ? '30% non-refundable booking deposit' : undefined,
+        paymentLabel: paymentInvoice.invoice_kind === 'deposit' ? 'non-refundable reservation deposit' : undefined,
         masterInvoiceId: masterInvoice?.id,
       })
       if (paymentRequest && paymentInvoice.public_token) {

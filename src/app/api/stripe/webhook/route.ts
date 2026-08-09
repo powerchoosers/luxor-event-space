@@ -105,6 +105,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             bookingId: booking.id,
             dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
             depositPaid: Number(booking.deposit_required || 0),
+            securityDepositAmount: booking.security_deposit_amount,
           })
         : null
       const updatedBooking = await updateLuxorBooking(booking.id, {
@@ -167,10 +168,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             bookingId: booking.id,
             jobType: 'deposit_payment_confirmation',
             recipientEmail: inquiry.email,
-            subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your 30% Luxor deposit is paid',
+            subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor reservation deposit is paid',
             body: reservationConfirmed
-              ? 'Your 30% non-refundable deposit and signed agreement are complete. Your event date is officially reserved.'
-              : 'Your 30% non-refundable deposit is paid. Complete the agreement to officially reserve your event date.',
+              ? 'Your non-refundable reservation deposit and signed agreement are complete. Your event date is officially reserved.'
+              : 'Your non-refundable reservation deposit is paid. Complete the agreement to officially reserve your event date.',
             scheduledFor: paidAt,
             automationKey: `deposit_payment_confirmation:${session.id}`,
             metadata: { automated: true, invoice_id: invoice.id, stripe_checkout_session_id: session.id, includes_paid_invoice: true },
@@ -178,8 +179,8 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           if (job.status !== 'sent') try {
             await sendLuxorZohoEmail({
               to: inquiry.email,
-              subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your 30% Luxor deposit is paid',
-              content: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your deposit is confirmed'}</h1><p>Hi ${inquiry.full_name.split(/\s+/)[0] || inquiry.full_name},</p><p>We received your 30% non-refundable booking deposit of ${Number(paidInvoice.total).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}.</p><p>${reservationConfirmed ? 'Your agreement is also complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed. Please use the agreement link from your booking-package email.'}</p>${securedOfferMessage}<p>Your paid deposit invoice is attached for your records.</p></div>`,
+              subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor reservation deposit is paid',
+              content: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your deposit is confirmed'}</h1><p>Hi ${inquiry.full_name.split(/\s+/)[0] || inquiry.full_name},</p><p>We received your non-refundable reservation deposit of ${Number(paidInvoice.total).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}.</p><p>${reservationConfirmed ? 'Your agreement is also complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed. Please use the agreement link from your booking-package email.'}</p>${securedOfferMessage}<p>Your paid deposit invoice is attached for your records.</p></div>`,
               from: 'booking@luxoratlaspalmas.com',
               fromName: 'Luxor Event Space',
               attachments: [{ filename: `Luxor-Paid-Deposit-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }],
