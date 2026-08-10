@@ -247,8 +247,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (body.mode === 'proposal') {
-      if (!booking) return NextResponse.json({ error: 'Create the booking record first so an accepted estimate can immediately open the correct agreement.' }, { status: 409 })
-      if (Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The booking total does not match the estimate. Update the booking amount before sending.' }, { status: 409 })
+      // An estimate is intentionally sent before a booking exists. The booking
+      // record is created after the client accepts the estimate, before the
+      // agreement package is issued.
+      if (booking && Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The booking total does not match the estimate. Update the booking amount before sending.' }, { status: 409 })
       const now = new Date().toISOString()
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       const publicToken = invoice.public_token || crypto.randomUUID()
@@ -256,7 +258,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
       await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
       const email = buildLuxorEstimateEmail({ invoice, inquiry, reviewUrl })
-      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor estimate is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'estimate' } })
+      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor estimate is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'estimate' } })
       try {
         await sendLuxorZohoEmail({ to: inquiry.email, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: `Luxor-Estimate-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] })
         await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
@@ -264,7 +266,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await updateLuxorEmailJob(job.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Email send failed.' })
         throw error
       }
-      booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, estimate_sent_at: now, reservation_state: 'awaiting_estimate_acceptance', proposalLineItems: invoice.line_items, proposalInvoiceId: invoice.id } }) || booking
+      if (booking) {
+        booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, estimate_sent_at: now, reservation_state: 'awaiting_estimate_acceptance', proposalLineItems: invoice.line_items, proposalInvoiceId: invoice.id } }) || booking
+      }
       const updated = await updateInvoice(invoice.id, { public_token: publicToken, status: 'sent', proposal_sent_at: now })
       const updatedInquiry = await updateLuxorInquiry(inquiry.id, { status: 'proposal_sent', pipeline_stage: 'proposal', metadata: { ...inquiry.metadata, proposal_sent_at: now, latest_proposal_invoice_id: invoice.id } }) || inquiry
       await createNote(inquiry.id, 'Estimate sent. Client must accept it before the booking agreement is issued.', 'status_change', session.email)

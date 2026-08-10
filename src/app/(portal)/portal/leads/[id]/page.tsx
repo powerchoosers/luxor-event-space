@@ -4319,10 +4319,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the estimate' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.estimate_sent_at ? 'Send estimate' : latestBooking.contract_status !== 'signed' ? 'Await estimate acceptance and signature' : depositPaidTotal <= 0 ? 'Agreement signed — payment choice pending' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build the estimate' : !proposalSentAt ? 'Send estimate' : !latestBooking ? 'Create the booking record' : latestBooking.contract_status !== 'signed' ? 'Await estimate acceptance and signature' : depositPaidTotal <= 0 ? 'Agreement signed — payment choice pending' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The estimate needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.estimate_sent_at ? 'Send the estimate alone. The client accepts it before receiving the agreement.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the estimate is accepted and the agreement is signed.' : depositPaidTotal <= 0 ? 'The client chooses card, cash, Zelle, or check after signing; the date stays pending until payment is confirmed.' : 'The signed agreement and paid deposit are both recorded.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Send the estimate alone. A booking record is created after the client accepts it.' : !latestBooking ? 'Create the booking record after the client accepts the estimate.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the estimate is accepted and the agreement is signed.' : depositPaidTotal <= 0 ? 'The client chooses card, cash, Zelle, or check after signing; the date stays pending until payment is confirmed.' : 'The signed agreement and paid deposit are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -4332,11 +4332,13 @@ export default function LeadDetailPage({
                           ) : null}
                           {!proposalInvoice ? (
                             <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                          ) : !proposalSentAt ? (
+                            <button type="button" onClick={() => handleSendEstimate(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Send Estimate'}</button>
                           ) : !latestBooking ? (
                             <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
                           ) : latestBooking.contract_status !== 'signed' ? (
-                            <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
-                              {proposalSentAt ? 'Resend Estimate' : 'Send Estimate'}
+                            <button type="button" onClick={() => handleSendEstimate(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
+                              {sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Resend Estimate'}
                             </button>
                           ) : (
                             <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
