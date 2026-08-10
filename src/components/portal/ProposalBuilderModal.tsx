@@ -412,8 +412,9 @@ export function ProposalBuilderModal({
                 <p className="mt-1 text-[7px] uppercase tracking-[0.32em] text-white/65">Event Space</p>
               </div>
               <div className="p-5">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Event proposal</p>
-                <h4 className="mt-2 text-lg font-black leading-6">{description || `${eventType || 'Event'} proposal`}</h4>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Event estimate</p>
+                <h4 className="mt-2 text-lg font-black leading-6">{description || `${eventType || 'Event'} estimate`}</h4>
+                <p className="mt-2 text-[10px] font-semibold leading-4 text-[#8c6529] dark:text-[#f1d27a]">This is an estimate only, not a booking agreement or payment request.</p>
                 <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">Prepared for {clientName}<br />{formatEventDate(eventDate)}</p>
                 <div className="my-5 h-px bg-[color:var(--portal-border)]" />
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Included services</p>
@@ -424,7 +425,7 @@ export function ProposalBuilderModal({
                 </ul>
                 <div className="my-5 h-px bg-[color:var(--portal-border)]" />
                 <div className="space-y-1 text-[10px] text-[color:var(--portal-muted)]"><div className="flex justify-between"><span>Services subtotal</span><span className="font-mono">{formatMoney(subtotal)}</span></div><div className="flex justify-between"><span>Tax ({Number(taxRate) || 0}%)</span><span className="font-mono">{formatMoney(offerPricing.taxAmount)}</span></div>{hasDiscount ? <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Discount</span><span className="font-mono">−{formatMoney(offerPricing.discountAmount)}</span></div> : null}</div>
-                <div className="flex items-end justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Total investment</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</span></div>
+                <div className="flex items-end justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Total estimated investment</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</span></div>
                 {hasDiscount ? <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3"><p className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Limited-time offer applied</p><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]"><span className="line-through">{formatMoney(offerPricing.originalTotal)}</span> · Save {formatMoney(offerPricing.totalSavings)} ({offerPricing.discountPercent}%)</p>{offerExpiryLabel ? <p className="mt-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-200">Sign and pay by {offerExpiryLabel} to secure this price.</p> : null}</div> : null}
               </div>
             </div>
@@ -434,12 +435,12 @@ export function ProposalBuilderModal({
 
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center justify-between gap-4 sm:justify-start">
-            <div><p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Proposal total</p>{hasDiscount ? <p className="font-mono text-[10px] font-bold text-[color:var(--portal-muted)] line-through">{formatMoney(offerPricing.originalTotal)}</p> : null}<p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</p></div>
+          <div><p className="text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Estimate total</p>{hasDiscount ? <p className="font-mono text-[10px] font-bold text-[color:var(--portal-muted)] line-through">{formatMoney(offerPricing.originalTotal)}</p> : null}<p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(total)}</p></div>
             <div className="hidden items-center gap-2 text-[10px] text-[color:var(--portal-muted)] lg:flex"><Sparkles size={14} className="text-[#a8792f]" /> Prices stay inside the CRM.</div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex">
-            <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider transition hover:border-[#caa24c]/45 disabled:opacity-40"><FileText size={15} /> Save proposal</button>
-            <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-lg shadow-[#b98a3e]/20 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={15} className="!text-white" /> {submitting ? 'Saving…' : 'Save & email'}</button>
+            <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider transition hover:border-[#caa24c]/45 disabled:opacity-40"><FileText size={15} /> Save estimate</button>
+            <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-lg shadow-[#b98a3e]/20 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={15} className="!text-white" /> {submitting ? 'Saving…' : 'Save & send estimate'}</button>
           </div>
         </footer>
       </div>

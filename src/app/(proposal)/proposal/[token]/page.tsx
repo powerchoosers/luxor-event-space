@@ -5,6 +5,8 @@ import { getInvoiceByPublicToken, listPaidPaymentsByInvoice, updateInvoice } fro
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { formatLuxorOfferExpiry, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
+import { AcceptEstimateButton } from '@/components/proposal/AcceptEstimateButton'
+import { PaymentChoice } from '@/components/proposal/PaymentChoice'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +38,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   const requestedAmount = Math.min(Number(invoice.payment_requested_amount || balanceDue), balanceDue)
+  const isEstimate = invoice.invoice_kind === 'event' && booking?.contract_status !== 'signed'
+  const savedPreference = booking?.metadata?.client_payment_preference as { method?: 'card' | 'cash' | 'zelle' | 'check'; amount?: 'deposit' | 'full' } | undefined
 
   const cookieStore = await cookies()
   const isInternalOwner = Boolean(cookieStore.get('luxor_portal_session'))
@@ -58,9 +62,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
         <div className="px-5 py-7 sm:px-10 sm:py-10">
           <div className="flex flex-col gap-5 border-b border-white/10 pb-8 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#caa24c]">Event proposal</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#caa24c]">{isEstimate ? 'Event estimate' : 'Event proposal'}</p>
               <h1 className="mt-3 font-serif text-3xl font-semibold text-white sm:text-4xl">Prepared for {invoice.client_name}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">Review the included services below. Your agreement must be signed before Luxor requests payment.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">{isEstimate ? 'This is an estimate only—not a booking agreement or payment request. Accept it when the services and estimate look right, and we will take you to your agreement.' : 'Review the included services below. Your agreement must be signed before Luxor requests payment.'}</p>
             </div>
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-300">
               <ShieldCheck size={14} /> Secure proposal
@@ -73,7 +77,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <p className="mt-2 text-sm font-bold text-white">{invoice.event_type || 'Private event'}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Proposal total</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{isEstimate ? 'Total estimated investment' : 'Proposal total'}</p>
               {offer.active ? <p className="mt-2 font-mono text-xs text-zinc-500 line-through">{money(offer.originalTotal)}</p> : null}
               <p className="mt-2 font-mono text-sm font-bold text-[#f1d27a]">{money(invoice.total)}</p>
             </div>
@@ -109,7 +113,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
             </div>
           </section>
 
-          <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6">
+          {isEstimate && !offerExpired ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Ready to move forward?</p><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-200">Accepting this estimate does not charge you. Your booking agreement comes next, followed by your payment options after it is signed.</p></div><AcceptEstimateButton token={token} /></div></section> : null}
+
+          {!isEstimate ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{paymentAvailable ? (invoice.payment_requested_label || 'Payment due now') : 'Payment after agreement'}</p>
@@ -118,8 +124,10 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               </div>
               {balanceDue <= 0 ? (
                 <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-6 text-xs font-black uppercase tracking-wider text-emerald-300"><Check size={16} /> Paid in full</span>
-              ) : paymentAvailable ? (
+              ) : paymentAvailable && invoice.invoice_kind !== 'deposit' ? (
                 <a href={`/api/public/proposals/${encodeURIComponent(token)}/checkout`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68]"><CreditCard size={16} /> Continue to secure payment</a>
+              ) : paymentAvailable ? (
+                <p className="max-w-xs text-xs leading-5 text-zinc-300">Choose your payment method and amount below.</p>
               ) : offerExpired ? (
                 <p className="max-w-xs text-xs leading-5 text-amber-200">This offer has expired. Contact Luxor to receive an updated proposal before paying.</p>
               ) : !paymentAvailable ? (
@@ -129,9 +137,11 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               )}
             </div>
           </section>
+          : null}
+          {contractSigned && invoice.invoice_kind === 'deposit' && balanceDue > 0 ? <PaymentChoice token={token} deposit={Number(booking?.deposit_required || invoice.total)} full={Math.max(0, Number(booking?.contract_total || invoice.total) - paidTotal)} initialMethod={savedPreference?.method || 'card'} initialAmount={savedPreference?.amount || 'deposit'} /> : null}
 
           <footer className="mt-8 text-center text-[11px] leading-5 text-zinc-500">
-            Agreements are completed before payment. Approved payments are processed securely by Stripe. Questions? Email booking@luxoratlaspalmas.com.
+            {isEstimate ? 'An estimate becomes a booking only after the agreement is signed and the required payment is received.' : 'Agreements are completed before payment. Approved payments are processed securely by Stripe.'} Questions? Email booking@luxoratlaspalmas.com.
           </footer>
         </div>
       </div>

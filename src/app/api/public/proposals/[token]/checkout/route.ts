@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoice, getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
@@ -30,14 +30,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
   if (!inquiry) return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
 
+  const payFull = new URL(_request.url).searchParams.get('pay') === 'full'
+  const paymentInvoice = payFull && booking.invoice_id ? (await getInvoice(booking.invoice_id).catch(() => invoice)) || invoice : invoice
   const origin = new URL(_request.url).origin
   const checkout = await createLuxorPostContractCheckout({
-    invoice,
+    invoice: paymentInvoice,
     inquiry,
     booking,
     origin,
-    paymentAmount: invoice.invoice_kind === 'deposit' ? Number(invoice.payment_requested_amount || invoice.total) : undefined,
-    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Non-refundable reservation deposit' : 'Final event balance and refundable security deposit'),
+    paymentAmount: payFull ? Math.max(0, Number(booking.contract_total || paymentInvoice.total)) : (invoice.invoice_kind === 'deposit' ? Number(invoice.payment_requested_amount || invoice.total) : undefined),
+    paymentLabel: payFull ? 'Full event payment (security deposit due separately)' : (invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Non-refundable reservation deposit' : 'Final event balance and refundable security deposit')),
     allowPreContract,
     masterInvoiceId: invoice.parent_invoice_id || booking.invoice_id || undefined,
   })

@@ -259,6 +259,8 @@ export default function LeadDetailPage({
   const [bookingContractTotal, setBookingContractTotal] = useState('')
   const [bookingDepositRequired, setBookingDepositRequired] = useState('')
   const [bookingSecurityDepositAmount, setBookingSecurityDepositAmount] = useState(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
+  const [bookingPaymentMethod, setBookingPaymentMethod] = useState<'card' | 'zelle' | 'cash' | 'check'>('card')
+  const [bookingPaymentAmount, setBookingPaymentAmount] = useState<'deposit' | 'full'>('deposit')
   const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
   const [bookingNotes, setBookingNotes] = useState('')
   const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
@@ -1421,7 +1423,7 @@ export default function LeadDetailPage({
       setIsInvoiceModalOpen(false)
       setEditingInvoiceId(null)
       notify({ title: editingInvoiceId ? 'Proposal updated' : 'Proposal saved', description: `${formatMoney(total)} ${editingInvoiceId ? 'is ready to review or send again.' : 'was added to this lead.'}`, variant: 'success' })
-      if (action === 'email') openPaymentRequest(invoice)
+      if (action === 'email') await handleSendEstimate(invoice)
     } catch (err) {
       console.error(err)
       notify({ title: 'Proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
@@ -1539,7 +1541,7 @@ export default function LeadDetailPage({
       const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'proposal_contract' }),
+        body: JSON.stringify({ mode: 'proposal' }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
@@ -1563,7 +1565,7 @@ export default function LeadDetailPage({
       const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'proposal_contract' }),
+        body: JSON.stringify({ mode: 'proposal' }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
@@ -1708,10 +1710,14 @@ export default function LeadDetailPage({
   }
 
   const openPaymentRequest = (invoice: LuxorInvoice) => {
-    const balance = getInvoiceBalance(invoice)
-    const suggestedDeposit = getSuggestedInvoiceDeposit(invoice)
-    setPaymentRequestInvoice(invoice)
-    setPaymentRequestKind(getInvoicePaidTotal(invoice.id) > 0 ? 'balance' : 'deposit')
+    const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
+    const paymentInvoice = invoice.invoice_kind === 'event' && booking?.contract_status === 'signed'
+      ? invoices.find((item) => item.booking_id === booking.id && item.invoice_kind === 'deposit') || invoice
+      : invoice
+    const balance = getInvoiceBalance(paymentInvoice)
+    const suggestedDeposit = getSuggestedInvoiceDeposit(paymentInvoice)
+    setPaymentRequestInvoice(paymentInvoice)
+    setPaymentRequestKind(getInvoicePaidTotal(paymentInvoice.id) > 0 ? 'balance' : 'deposit')
     setCustomPaymentAmount(String(suggestedDeposit || balance))
   }
 
@@ -1783,6 +1789,35 @@ export default function LeadDetailPage({
     setIsTourScheduleModalOpen(true)
   }
 
+  const handleSendEstimate = async (invoice: LuxorInvoice) => {
+    try {
+      setSendingInvoiceId(invoice.id)
+      const response = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'proposal' }) })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'The estimate could not be sent.')
+      await fetchAllData(false)
+      notify({ title: 'Estimate sent', description: 'The client received the estimate only. They can accept it before moving to the booking agreement.', variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Estimate not sent', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSendingInvoiceId(null)
+    }
+  }
+
+  const saveBookingPaymentPreference = async (booking: LuxorBooking, changes: Partial<{ method: 'card' | 'zelle' | 'cash' | 'check'; amount: 'deposit' | 'full' }>) => {
+    const current = (booking.metadata?.client_payment_preference || {}) as { method?: 'card' | 'zelle' | 'cash' | 'check'; amount?: 'deposit' | 'full' }
+    const preference = { method: changes.method || current.method || 'card', amount: changes.amount || current.amount || 'deposit', setBy: 'owner', selectedAt: new Date().toISOString() }
+    try {
+      const response = await fetch('/api/bookings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: booking.id, metadata: { ...booking.metadata, client_payment_preference: preference } }) })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Payment preference could not be saved.')
+      await fetchAllData(false)
+      notify({ title: 'Payment preference saved', description: `Client page will default to ${preference.method === 'zelle' ? 'Zelle' : preference.method} and ${preference.amount === 'deposit' ? 'reservation deposit' : 'full event balance'}.`, variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Payment preference not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    }
+  }
+
   const handleTourAttendanceAction = async (attendance: 'attended' | 'no_show') => {
     if (!lead) return
     try {
@@ -1845,6 +1880,7 @@ export default function LeadDetailPage({
   }
 
   const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final') => {
+    const preferredMethod = ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
     const relatedInvoice = paymentKind === 'deposit'
       ? invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'deposit')
       : invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'final_balance')
@@ -1895,11 +1931,12 @@ export default function LeadDetailPage({
           invoice_id: relatedInvoice?.id || null,
           amount,
           status: 'paid',
-          payment_method: 'Manual record',
-          notes: paymentKind === 'deposit' ? 'Reservation deposit recorded manually in owner portal.' : 'Final event balance and refundable security deposit recorded manually in owner portal.',
+          payment_method: preferredMethod === 'zelle' ? 'Zelle' : preferredMethod === 'cash' ? 'Cash' : preferredMethod === 'check' ? 'Check' : 'Manual record',
+          notes: paymentKind === 'deposit' ? `Reservation deposit recorded manually in owner portal${preferredMethod !== 'manual' ? ` (${preferredMethod})` : ''}.` : `Final event balance and refundable security deposit recorded manually in owner portal${preferredMethod !== 'manual' ? ` (${preferredMethod})` : ''}.`,
           metadata: {
             payment_kind: paymentKind,
             manual_entry: true,
+            payment_method_selected: preferredMethod,
           },
         }),
       })
@@ -1967,6 +2004,8 @@ export default function LeadDetailPage({
       setBookingFinalPaymentDueDate('')
     }
     setBookingNotes(lead?.message || '')
+    setBookingPaymentMethod('card')
+    setBookingPaymentAmount('deposit')
     setBookingStatus('tentative')
     setIsBookingModalOpen(true)
   }
@@ -2036,6 +2075,7 @@ export default function LeadDetailPage({
             proposalLineItems: invoiceItems,
             proposalTaxRate: Math.max(0, Number(invoiceTaxRate) || 0) / 100,
             payment_schedule: 'negotiated_reservation_deposit_then_60_day_balance',
+            client_payment_preference: { method: bookingPaymentMethod, amount: bookingPaymentAmount, setBy: 'owner', selectedAt: new Date().toISOString() },
           },
         }),
       })
@@ -2053,6 +2093,8 @@ export default function LeadDetailPage({
       setBookingContractTotal('')
       setBookingDepositRequired('')
       setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
+      setBookingPaymentMethod('card')
+      setBookingPaymentAmount('deposit')
       setBookingFinalPaymentDueDate('')
       setBookingNotes('')
       setBookingStatus('tentative')
@@ -3940,10 +3982,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the proposal' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.booking_package_sent_at ? 'Send proposal and agreement' : latestBooking.contract_status !== 'signed' ? 'Await the client signature' : depositPaidTotal <= 0 ? 'Agreement signed — deposit pending' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build the estimate' : !latestBooking ? 'Create the booking record' : !latestBooking.metadata?.estimate_sent_at ? 'Send estimate' : latestBooking.contract_status !== 'signed' ? 'Await estimate acceptance and signature' : depositPaidTotal <= 0 ? 'Agreement signed — payment choice pending' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The agreement needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.booking_package_sent_at ? 'Send the proposal, agreement, and Guest Guide. The reservation-deposit link follows signature.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the agreement is signed.' : depositPaidTotal <= 0 ? 'The date remains pending until Stripe confirms the reservation deposit.' : 'The signed agreement and paid deposit are both recorded.'}
+                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !latestBooking ? 'The estimate needs the event fields, pricing, and notes saved on a booking.' : !latestBooking.metadata?.estimate_sent_at ? 'Send the estimate alone. The client accepts it before receiving the agreement.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the estimate is accepted and the agreement is signed.' : depositPaidTotal <= 0 ? 'The client chooses card, cash, Zelle, or check after signing; the date stays pending until payment is confirmed.' : 'The signed agreement and paid deposit are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -3957,13 +3999,14 @@ export default function LeadDetailPage({
                             <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
                           ) : latestBooking.contract_status !== 'signed' ? (
                             <button type="button" onClick={() => handleSendContractPackage(latestBooking)} disabled={!lead.email || sendingContractBookingId === latestBooking.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
-                              {proposalSentAt ? 'Resend Proposal + Agreement' : 'Send Full Proposal + Agreement'}
+                              {proposalSentAt ? 'Resend Estimate' : 'Send Estimate'}
                             </button>
                           ) : (
                             <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                           )}
                         </div>
                       </div>
+                      {latestBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment method</p><PortalSelect value={String((latestBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(latestBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment amount</p><PortalSelect value={String((latestBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(latestBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div></div> : null}
                     </section>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -6518,6 +6561,15 @@ export default function LeadDetailPage({
                   <input type="text" inputMode="decimal" value={bookingSecurityDepositAmount} onChange={(e) => setBookingSecurityDepositAmount(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => setBookingSecurityDepositAmount(parseLuxorCurrency(bookingSecurityDepositAmount).toFixed(2))} className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs text-zinc-300 outline-none" />
                 </div>
                 <p className="text-[10px] leading-4 text-zinc-600">Due with the remaining balance 60 days before the event. Any undisputed remainder is returned within 14 business days after the event.</p>
+              </div>
+
+              <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Client payment preference</p>
+                <p className="mt-1 text-[10px] leading-4 text-zinc-500">This pre-fills the client’s payment-choice page after they sign. They can still choose differently.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5"><label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preferred method</label><PortalSelect value={bookingPaymentMethod} onChange={(value) => setBookingPaymentMethod(value as 'card' | 'zelle' | 'cash' | 'check')} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preferred amount</label><PortalSelect value={bookingPaymentAmount} onChange={(value) => setBookingPaymentAmount(value as 'deposit' | 'full')} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div>
+                </div>
               </div>
 
               <div className="space-y-1.5">

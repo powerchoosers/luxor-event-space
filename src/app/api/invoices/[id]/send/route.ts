@@ -6,7 +6,7 @@ import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
-import { buildLuxorDateLockDepositEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { buildLuxorDateLockDepositEmail, buildLuxorEstimateEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
 import { downloadLuxorPrivatePdf, saveLuxorInvoicePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
-    const body = await request.json().catch(() => ({})) as { mode?: 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string }
+    const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string }
     const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
     const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
@@ -239,7 +239,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (body.mode === 'date_lock_deposit') {
-      return NextResponse.json({ error: 'Reservation deposits are issued only after the agreement is signed. Send the proposal and agreement package first.' }, { status: 409 })
+      return NextResponse.json({ error: 'Reservation deposits are issued only after the agreement is signed. Send the estimate first; the agreement follows client acceptance.' }, { status: 409 })
+    }
+
+    if ((body.mode as string) === 'proposal_contract') {
+      return NextResponse.json({ error: 'Send the estimate first. The booking agreement is issued only after the client accepts the estimate.' }, { status: 409 })
+    }
+
+    if (body.mode === 'proposal') {
+      if (!booking) return NextResponse.json({ error: 'Create the booking record first so an accepted estimate can immediately open the correct agreement.' }, { status: 409 })
+      if (Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The booking total does not match the estimate. Update the booking amount before sending.' }, { status: 409 })
+      const now = new Date().toISOString()
+      const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+      const publicToken = invoice.public_token || crypto.randomUUID()
+      const reviewUrl = `${origin}/proposal/${publicToken}`
+      const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
+      await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
+      const email = buildLuxorEstimateEmail({ invoice, inquiry, reviewUrl })
+      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor estimate is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'estimate' } })
+      try {
+        await sendLuxorZohoEmail({ to: inquiry.email, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: `Luxor-Estimate-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] })
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
+      } catch (error) {
+        await updateLuxorEmailJob(job.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Email send failed.' })
+        throw error
+      }
+      booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, estimate_sent_at: now, reservation_state: 'awaiting_estimate_acceptance', proposalLineItems: invoice.line_items, proposalInvoiceId: invoice.id } }) || booking
+      const updated = await updateInvoice(invoice.id, { public_token: publicToken, status: 'sent', proposal_sent_at: now })
+      const updatedInquiry = await updateLuxorInquiry(inquiry.id, { status: 'proposal_sent', pipeline_stage: 'proposal', metadata: { ...inquiry.metadata, proposal_sent_at: now, latest_proposal_invoice_id: invoice.id } }) || inquiry
+      await createNote(inquiry.id, 'Estimate sent. Client must accept it before the booking agreement is issued.', 'status_change', session.email)
+      return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, reviewUrl, mode: 'proposal' })
     }
 
     if (body.mode === 'proposal_contract') {

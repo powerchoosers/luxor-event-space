@@ -94,7 +94,12 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     const booking = await getLuxorBooking(bookingId)
     if (booking) {
       paymentContact ||= { phone: booking.phone, name: booking.client_name, inquiryId: booking.inquiry_id }
-      const depositCovered = kind === 'deposit' && paidTotal + 0.005 >= Number(invoice.total || 0)
+      // A client may choose to pay the full event price from the post-signature
+      // chooser. That charge is recorded against the master invoice, but it also
+      // covers the reservation deposit needed to hold the date. The refundable
+      // security deposit remains a separate 60-day obligation.
+      const fullEventPaymentCoversDeposit = invoice.id === booking.invoice_id && paidTotal + 0.005 >= Number(booking.deposit_required || 0)
+      const depositCovered = (kind === 'deposit' && paidTotal + 0.005 >= Number(invoice.total || 0)) || fullEventPaymentCoversDeposit
       const finalCovered = kind === 'final' && paidTotal + 0.005 >= Number(invoice.total || 0)
       const reservationConfirmed = (depositCovered || Boolean(booking.metadata?.deposit_paid_at)) && booking.contract_status === 'signed'
       const masterInvoiceId = session.metadata?.master_invoice_id || booking.invoice_id
@@ -104,7 +109,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             masterInvoice,
             bookingId: booking.id,
             dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
-            depositPaid: Number(booking.deposit_required || 0),
+            depositPaid: fullEventPaymentCoversDeposit && paidTotal + 0.005 >= Number(booking.contract_total || masterInvoice.total || 0)
+              ? Number(booking.contract_total || masterInvoice.total || 0)
+              : Number(booking.deposit_required || 0),
             securityDepositAmount: booking.security_deposit_amount,
           })
         : null

@@ -18,6 +18,16 @@ function offerDisclosureHtml(invoice: LuxorInvoice) {
   return ''
 }
 
+/** A proposal is deliberately not a contract or payment request. */
+export function buildLuxorEstimateEmail(input: { invoice: LuxorInvoice; inquiry: LuxorInquiry; reviewUrl: string }) {
+  const firstName = input.inquiry.full_name.split(/\s+/)[0] || input.inquiry.full_name
+  return {
+    subject: 'Your Luxor event estimate is ready',
+    html: `<!doctype html><html><body style="margin:0;background:#050505;color:#f7efe3;font-family:Arial,sans-serif"><div style="max-width:620px;margin:28px auto;padding:42px;background:#0a0807;border:1px solid rgba(202,162,76,.28)"><p style="letter-spacing:.25em;color:#caa24c;font-size:10px;font-weight:800;text-transform:uppercase">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px;line-height:1.15">Your event estimate is ready</h1><p style="line-height:1.7">Hi ${escapeHtml(firstName)}, your personalized estimate is ready to review.</p><div style="margin:25px 0;padding:20px;border:1px solid rgba(202,162,76,.2);background:#0d0b09"><p style="margin:0 0 8px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Total estimated investment</p><p style="margin:0;font-family:Georgia,serif;font-size:28px;color:#f1d27a">${money(input.invoice.total)}</p></div>${offerDisclosureHtml(input.invoice)}<p style="line-height:1.7;color:#d7c29a">This is an estimate, not a booking agreement or payment request. If the services and estimate look right, select <strong>Accept estimate</strong> on the secure page. We will then present your booking agreement for review and signature.</p><p style="margin:30px 0"><a href="${escapeHtml(input.reviewUrl)}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 24px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Review estimate</a></p></div></body></html>`,
+    aiGenerated: false,
+  }
+}
+
 export async function buildLuxorProposalContractEmail(input: {
   invoice: LuxorInvoice
   inquiry: LuxorInquiry

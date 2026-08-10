@@ -32,7 +32,8 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   draw('LUXOR', margin, 26, bold, gold)
   y -= 22
   draw('EVENT SPACE', margin, 9, bold, muted)
-  draw(invoice.status === 'draft' ? 'PROPOSAL' : 'INVOICE', 455, 18, bold, ink)
+  const isEstimate = invoice.invoice_kind === 'event' && !invoice.payment_requested_at
+  draw(isEstimate ? 'EVENT ESTIMATE' : 'INVOICE', 455, 18, bold, ink)
   y -= 42
   page.drawLine({ start: { x: margin, y }, end: { x: 558, y }, thickness: 1, color: gold })
   y -= 30
@@ -48,6 +49,11 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   draw([invoice.event_type, inquiry?.target_date ? displayDate(inquiry.target_date) : null].filter(Boolean).join(' - '), margin, 10, regular, muted)
   if (invoice.due_date) draw(`Due ${displayDate(invoice.due_date)}`, 360, 10, regular, muted)
   y -= 38
+
+  if (isEstimate) {
+    draw('ESTIMATE ONLY — NOT A BOOKING AGREEMENT OR PAYMENT REQUEST.', margin, 8, bold, gold)
+    y -= 20
+  }
 
   draw('SERVICE', margin, 8, bold, muted)
   draw('QTY', 520, 8, bold, muted)
@@ -66,7 +72,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   y -= 8
   page.drawLine({ start: { x: 340, y }, end: { x: 558, y }, thickness: 0.6, color: rgb(0.8, 0.79, 0.76) })
   y -= 28
-  draw('TOTAL INVESTMENT', 340, 11, bold)
+  draw(isEstimate ? 'TOTAL ESTIMATED INVESTMENT' : 'TOTAL INVESTMENT', 340, 11, bold)
   draw(money(invoice.total), 485, 13, bold, gold)
 
   if (hasLuxorOffer(invoice)) {

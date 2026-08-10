@@ -5,8 +5,6 @@ import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getInvoice, getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
-import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
@@ -29,31 +27,18 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
   }
 }
 
-async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>, ensureCheckout = false) {
+async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>) {
   if (signature.status !== 'signed') return {}
   const booking = await getLuxorBooking(signature.booking_id)
   const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
   let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
   invoice ||= masterInvoice
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
-  if (!invoice.stripe_checkout_url && ensureCheckout && signature.inquiry_id) {
-    const inquiry = await getLuxorInquiry(signature.inquiry_id)
-    if (inquiry) {
-      await createLuxorPostContractCheckout({
-        invoice,
-        inquiry,
-        booking,
-        origin: process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com',
-      })
-      invoice = await getInvoice(invoice.id)
-    }
-  }
-  if (!invoice?.stripe_checkout_url) return {}
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
   return {
     payment_url: invoice.public_token ? `${siteUrl}/proposal/${invoice.public_token}` : invoice.stripe_checkout_url,
-    payment_amount: Number(invoice.payment_requested_amount || 0),
-    payment_label: invoice.payment_requested_label || 'Event payment',
+    payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
+    payment_label: invoice.payment_requested_label || 'Choose payment method',
   }
 }
 
@@ -139,7 +124,7 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get('user-agent'),
     })
 
-    return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature, true) })
+    return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to submit signature.'
     return NextResponse.json({ error: message }, { status: 500 })
