@@ -97,6 +97,13 @@ export async function listLuxorDocumentsByInquiry(inquiryId: string) {
   )
 }
 
+export async function getLuxorDocument(id: string) {
+  const documents = await supabaseRest<LuxorDocument[]>(
+    `luxor_documents?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
+  )
+  return documents[0] ?? null
+}
+
 export async function deleteLuxorDocumentsByInvoice(invoiceId: string) {
   const documents = await supabaseRest<LuxorDocument[]>(
     `luxor_documents?select=*&invoice_id=eq.${encodeURIComponent(invoiceId)}`,

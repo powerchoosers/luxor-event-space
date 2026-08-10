@@ -49,7 +49,7 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { defaultLuxorReservationDeposit, formatLuxorCurrency, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
@@ -65,6 +65,7 @@ import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_PACKAGE_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
+import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 
 type ZohoEmailMessage = {
   id: string
@@ -210,6 +211,8 @@ export default function LeadDetailPage({
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const [documents, setDocuments] = useState<LuxorDocument[]>([])
+  const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>>([])
   const [leadEvents, setLeadEvents] = useState<LuxorLeadEvent[]>([])
   const [activeEventId, setActiveEventId] = useState<string | null>(null)
   const initializedEventPreferenceRef = useRef(false)
@@ -252,6 +255,8 @@ export default function LeadDetailPage({
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
+  const [documentPreview, setDocumentPreview] = useState<{ title: string; url: string } | null>(null)
+  const [emailPreview, setEmailPreview] = useState<{ subject: string; html: string } | null>(null)
   const [invoiceToDelete, setInvoiceToDelete] = useState<LuxorInvoice | null>(null)
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
@@ -1134,7 +1139,7 @@ export default function LeadDetailPage({
 
       if (refreshEmailHistory) void fetchClientEmailThread(leadData.email || '')
 
-      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData, leadEventsData, eventPreferenceData] = await Promise.all([
+      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData, leadEventsData, eventPreferenceData, documentsData, signaturesData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -1162,11 +1167,19 @@ export default function LeadDetailPage({
         fetch(`/api/portal/lead-event-preference?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : null))
           .catch(() => null),
+        fetch(`/api/documents?inquiryId=${id}`, { cache: 'no-store' })
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+        fetch('/api/signatures?limit=250', { cache: 'no-store' })
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
       ])
 
       setNotes(notesData)
       setTasks(tasksData)
       setInvoices(invoicesData)
+      setDocuments((documentsData as LuxorDocument[]).filter((document) => document.inquiry_id === id))
+      setSignatureRequests((signaturesData as Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>).filter((signature) => signature.inquiry_id === id))
       const nextBookings = bookingsData as LuxorBooking[]
       const previousStatuses = contractStatusSnapshotRef.current
       if (Object.keys(previousStatuses).length) {
@@ -2068,6 +2081,44 @@ export default function LeadDetailPage({
     setIsTourScheduleModalOpen(true)
   }
 
+  const previewContractPdf = async (booking: LuxorBooking) => {
+    try {
+      setContractActionKey(`preview-${booking.id}`)
+      let response = await fetch(`/api/signatures?bookingId=${encodeURIComponent(booking.id)}`, { cache: 'no-store' })
+      let data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string }; error?: string }
+      if (!response.ok) {
+        response = await fetch('/api/signatures', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId: booking.id, sendEmail: false, signingMode: 'in_person' }),
+        })
+        data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string }; error?: string }
+      }
+      if (!response.ok || !data.signature?.id) throw new Error(data.error || 'The agreement preview could not be prepared.')
+      const signed = data.signature.status === 'signed'
+      setDocumentPreview({
+        title: signed ? 'Executed agreement preview' : 'Agreement preview',
+        url: `/api/signatures/${encodeURIComponent(data.signature.id)}/document?kind=${signed ? 'executed' : 'contract'}`,
+      })
+      await fetchAllData(false)
+    } catch (error) {
+      notify({ title: 'Agreement preview unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setContractActionKey(null)
+    }
+  }
+
+  const previewInvoiceEmail = async (invoice: LuxorInvoice, mode: 'proposal' | 'proposal_contract' = 'proposal') => {
+    try {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/email-preview?mode=${mode}`, { cache: 'no-store' })
+      const data = await response.json().catch(() => ({})) as { subject?: string; html?: string; error?: string }
+      if (!response.ok || !data.subject || !data.html) throw new Error(data.error || 'The email preview could not be prepared.')
+      setEmailPreview({ subject: data.subject, html: data.html })
+    } catch (error) {
+      notify({ title: 'Email preview unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    }
+  }
+
   const handleSendEstimate = async (invoice: LuxorInvoice) => {
     try {
       setSendingInvoiceId(invoice.id)
@@ -2872,7 +2923,7 @@ export default function LeadDetailPage({
     { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
     { id: 'vendors', label: 'Vendors', count: (lead?.metadata?.vendors as unknown[])?.length || 0 },
     { id: 'timeline', label: 'Timeline', count: (lead?.metadata?.timeline as unknown[])?.length || 0 },
-    { id: 'documents', label: 'Documents', count: sortedBookings.length + sortedInvoices.length },
+    { id: 'documents', label: 'Documents', count: documents.length + signatureRequests.length },
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
@@ -6059,6 +6110,41 @@ export default function LeadDetailPage({
           ) : null}
 
           {activeLeadTab === 'documents' ? (
+          <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> PDF library</h3>
+                <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Preview the exact estimate, agreement, and signed contract saved for this lead. These files are private to the owner portal.</p>
+              </div>
+              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{documents.length + signatureRequests.length} files</span>
+            </div>
+            {documents.length === 0 && signatureRequests.length === 0 ? (
+              <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">PDFs will appear here after an estimate or agreement is generated.</div>
+            ) : (
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                {documents.map((document) => {
+                  const label = document.document_type === 'proposal' ? 'Estimate PDF' : document.document_type.replaceAll('_', ' ')
+                  const url = `/api/documents/${encodeURIComponent(document.id)}/pdf`
+                  return <div key={document.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                    <div className="min-w-0"><p className="truncate text-xs font-bold capitalize text-[color:var(--portal-text)]">{label}</p><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{document.file_name}</p></div>
+                    <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => setDocumentPreview({ title: label, url })} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Eye size={12} /> Preview</button><a href={url} download={document.file_name} className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Download</a></div>
+                  </div>
+                })}
+                {signatureRequests.map((signature) => {
+                  const signed = signature.status === 'signed' || Boolean(signature.signed_at)
+                  const title = signed ? 'Executed agreement' : 'Agreement PDF'
+                  const url = `/api/signatures/${encodeURIComponent(signature.id)}/document?kind=${signed ? 'executed' : 'contract'}`
+                  return <div key={signature.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                    <div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{title}</p><p className="mt-1 truncate text-[10px] capitalize text-[color:var(--portal-muted)]">{signature.status.replaceAll('_', ' ')}{signature.signed_at ? ` • ${formatDisplayDate(signature.signed_at)}` : ''}</p></div>
+                    <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => setDocumentPreview({ title, url })} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Eye size={12} /> Preview</button><a href={url} download className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Download</a></div>
+                  </div>
+                })}
+              </div>
+            )}
+          </div>
+          ) : null}
+
+          {activeLeadTab === 'documents' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-[color:var(--portal-text)]">
               <span className="flex items-center gap-2.5">
@@ -6111,6 +6197,14 @@ export default function LeadDetailPage({
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => previewContractPdf(booking)}
+                        disabled={contractActionKey === `preview-${booking.id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-45 cursor-pointer"
+                      >
+                        <Eye size={12} /> {contractActionKey === `preview-${booking.id}` ? 'Preparing preview…' : 'Preview agreement'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => !booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
@@ -6204,6 +6298,9 @@ export default function LeadDetailPage({
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => setPdfPreviewInvoice(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <Eye size={12} /> View PDF
+                      </button>
+                      <button type="button" onClick={() => void previewInvoiceEmail(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
+                        <Mail size={12} /> Preview email
                       </button>
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
@@ -6578,12 +6675,31 @@ export default function LeadDetailPage({
                 <PortalCloseButton onClick={() => setPdfPreviewInvoice(null)} aria-label="Close PDF preview window" />
               </div>
             </div>
-            <iframe
-              key={pdfPreviewInvoice.id}
-              title={`${pdfPreviewInvoice.status === 'draft' ? 'Proposal' : 'Invoice'} PDF preview`}
-              src={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`}
-              className="min-h-0 flex-1 bg-white"
-            />
+            <PortalPdfViewer url={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`} title={pdfPreviewInvoice.status === 'draft' ? 'estimate' : 'invoice'} />
+          </div>
+        ) : null}
+      </PortalModal>
+
+      <PortalModal isOpen={Boolean(documentPreview)} onClose={() => setDocumentPreview(null)} maxWidth="max-w-6xl">
+        {documentPreview ? (
+          <div className="flex h-[min(86vh,900px)] min-h-[560px] flex-col overflow-hidden bg-[color:var(--portal-bg)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
+              <div className="min-w-0"><h3 className="truncate text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{documentPreview.title}</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Private owner preview of the saved PDF.</p></div>
+              <div className="flex shrink-0 items-center gap-3"><a href={documentPreview.url} download className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] hover:text-[#caa24c] sm:inline-flex"><FileText size={13} /> Download</a><PortalCloseButton onClick={() => setDocumentPreview(null)} aria-label="Close document preview" /></div>
+            </div>
+            <PortalPdfViewer url={documentPreview.url} title={documentPreview.title} />
+          </div>
+        ) : null}
+      </PortalModal>
+
+      <PortalModal isOpen={Boolean(emailPreview)} onClose={() => setEmailPreview(null)} maxWidth="max-w-3xl">
+        {emailPreview ? (
+          <div className="flex h-[min(82vh,820px)] min-h-[520px] flex-col overflow-hidden bg-[color:var(--portal-bg)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
+              <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#caa24c]">Email preview</p><h3 className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{emailPreview.subject}</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">This is a preview only. Nothing is sent from this window.</p></div>
+              <PortalCloseButton onClick={() => setEmailPreview(null)} aria-label="Close email preview" />
+            </div>
+            <iframe title="Email preview" srcDoc={emailPreview.html} className="min-h-0 flex-1 bg-white" sandbox="allow-same-origin" />
           </div>
         ) : null}
       </PortalModal>

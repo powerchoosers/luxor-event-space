@@ -152,6 +152,13 @@ export async function getLuxorSignatureRequestByToken(token: string) {
   return signature ?? null
 }
 
+export async function getLuxorSignatureRequestById(id: string) {
+  const [signature] = await supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
+  )
+  return signature ?? null
+}
+
 export async function getActiveLuxorSignatureRequestByBooking(bookingId: string) {
   const [signature] = await supabaseRest<LuxorSignatureRequest[]>(
     `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&status=in.(sent,viewed)&order=created_at.desc&limit=1`,

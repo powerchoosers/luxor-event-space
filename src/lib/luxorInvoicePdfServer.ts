@@ -72,8 +72,13 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   y -= 8
   page.drawLine({ start: { x: 340, y }, end: { x: 558, y }, thickness: 0.6, color: rgb(0.8, 0.79, 0.76) })
   y -= 28
-  draw(isEstimate ? 'TOTAL ESTIMATED INVESTMENT' : 'TOTAL INVESTMENT', 340, 11, bold)
-  draw(money(invoice.total), 485, 13, bold, gold)
+  const totalLabel = isEstimate ? 'TOTAL ESTIMATED INVESTMENT' : 'TOTAL INVESTMENT'
+  const totalAmount = money(invoice.total)
+  // Keep the amount in a right-aligned column with enough separation from
+  // the label. Fixed x positions caused longer totals to print over the label.
+  const totalAmountX = 558 - bold.widthOfTextAtSize(totalAmount, 13)
+  draw(totalLabel, 340, 9, bold)
+  page.drawText(totalAmount, { x: totalAmountX, y, size: 13, font: bold, color: gold })
 
   if (hasLuxorOffer(invoice)) {
     const offer = luxorOfferSnapshot(invoice)
