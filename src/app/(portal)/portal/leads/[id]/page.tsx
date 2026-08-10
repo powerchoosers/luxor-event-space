@@ -236,6 +236,7 @@ export default function LeadDetailPage({
 
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+  const proposalEditorOpenRef = useRef(false)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [invoiceDesc, setInvoiceDesc] = useState('')
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
@@ -255,6 +256,10 @@ export default function LeadDetailPage({
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
   const [customPaymentAmount, setCustomPaymentAmount] = useState('')
+
+  useEffect(() => {
+    proposalEditorOpenRef.current = isInvoiceModalOpen
+  }, [isInvoiceModalOpen])
 
   // Booking creation state
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
@@ -698,7 +703,7 @@ export default function LeadDetailPage({
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
-    if (!selectedLeadEvent) return
+    if (!selectedLeadEvent || proposalEditorOpenRef.current) return
     const savedItems = selectedLeadEvent.metadata?.proposalLineItems
     setInvoiceItems(Array.isArray(savedItems) && savedItems.length
       ? savedItems as LuxorInvoiceLineItem[]
@@ -1117,12 +1122,14 @@ export default function LeadDetailPage({
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
-      const savedProposalItems = leadData.metadata?.proposalLineItems
-      if (Array.isArray(savedProposalItems) && savedProposalItems.length) {
-        setInvoiceItems(savedProposalItems as LuxorInvoiceLineItem[])
-      }
-      if (typeof leadData.metadata?.proposalTaxRate === 'number') {
-        setInvoiceTaxRate(String(leadData.metadata.proposalTaxRate * 100))
+      if (!proposalEditorOpenRef.current) {
+        const savedProposalItems = leadData.metadata?.proposalLineItems
+        if (Array.isArray(savedProposalItems) && savedProposalItems.length) {
+          setInvoiceItems(savedProposalItems as LuxorInvoiceLineItem[])
+        }
+        if (typeof leadData.metadata?.proposalTaxRate === 'number') {
+          setInvoiceTaxRate(String(leadData.metadata.proposalTaxRate * 100))
+        }
       }
 
       if (refreshEmailHistory) void fetchClientEmailThread(leadData.email || '')
@@ -1618,6 +1625,7 @@ export default function LeadDetailPage({
   const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
 
   const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
+    proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
 
     if (invoice) {
@@ -6621,6 +6629,7 @@ export default function LeadDetailPage({
         isOpen={isInvoiceModalOpen}
         isEditing={Boolean(editingInvoiceId)}
         onClose={() => {
+          proposalEditorOpenRef.current = false
           setIsInvoiceModalOpen(false)
           setEditingInvoiceId(null)
         }}
