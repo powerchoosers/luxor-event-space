@@ -128,6 +128,22 @@ export type LuxorInquiry = {
   tour_response_token?: string | null
 }
 
+export type LuxorLeadEvent = {
+  id: string
+  created_at: string
+  updated_at: string
+  inquiry_id: string
+  event_type: string | null
+  target_date: string | null
+  guest_count: number | null
+  package_interest: string | null
+  status: LuxorInquiryStatus
+  pipeline_stage: LuxorPipelineStage
+  notes: string | null
+  metadata: Record<string, unknown>
+  is_primary: boolean
+}
+
 export function compactText(value: unknown) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
 }
@@ -214,6 +230,7 @@ export type LuxorInvoice = {
   paid_at: string | null
   notes: string | null
   booking_id?: string | null
+  lead_event_id?: string | null
   parent_invoice_id?: string | null
   invoice_kind?: LuxorInvoiceKind
   public_token?: string | null
@@ -296,6 +313,7 @@ export type LuxorBooking = {
   updated_at: string
   inquiry_id: string | null
   invoice_id: string | null
+  lead_event_id?: string | null
   client_name: string
   email: string | null
   phone: string | null

@@ -35,6 +35,7 @@ import {
   Star,
   ChevronDown,
   ChevronRight,
+  MoreVertical,
   Eye,
   MousePointerClick,
   RefreshCw,
@@ -48,7 +49,7 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { defaultLuxorReservationDeposit, formatLuxorCurrency, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
@@ -207,6 +208,9 @@ export default function LeadDetailPage({
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const [leadEvents, setLeadEvents] = useState<LuxorLeadEvent[]>([])
+  const [activeEventId, setActiveEventId] = useState<string | null>(null)
+  const initializedEventPreferenceRef = useRef(false)
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
@@ -302,7 +306,15 @@ export default function LeadDetailPage({
   const [showInternalSignals, setShowInternalSignals] = useState(false)
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
-  const [showInvoiceMenu, setShowInvoiceMenu] = useState(false)
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showEventPicker, setShowEventPicker] = useState(false)
+  const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false)
+  const [newEventType, setNewEventType] = useState('')
+  const [newEventDate, setNewEventDate] = useState('')
+  const [newEventGuestCount, setNewEventGuestCount] = useState('')
+  const [newEventPackage, setNewEventPackage] = useState('')
+  const [newEventNotes, setNewEventNotes] = useState('')
+  const [submittingEvent, setSubmittingEvent] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
@@ -371,7 +383,7 @@ export default function LeadDetailPage({
 
   const toggleVendorSelection = async (vendorId: string) => {
     if (!lead) return
-    const currentLinked = (lead.metadata?.vendors as Array<{ id: string; notes: string }>) || []
+    const currentLinked = ((selectedLeadEvent?.metadata?.vendors as Array<{ id: string; notes: string }> | undefined) || [])
     const exists = currentLinked.some((v) => v.id === vendorId)
     let nextLinked
     if (exists) {
@@ -379,14 +391,14 @@ export default function LeadDetailPage({
     } else {
       nextLinked = [...currentLinked, { id: vendorId, notes: '' }]
     }
-    await handleMetadataUpdate({ vendors: nextLinked })
+    await (selectedLeadEvent ? handleEventMetadataUpdate({ vendors: nextLinked }) : handleMetadataUpdate({ vendors: nextLinked }))
   }
 
   const updateVendorNotes = async (vendorId: string, notes: string) => {
     if (!lead) return
-    const currentLinked = (lead.metadata?.vendors as Array<{ id: string; notes: string }>) || []
+    const currentLinked = ((selectedLeadEvent?.metadata?.vendors as Array<{ id: string; notes: string }> | undefined) || [])
     const nextLinked = currentLinked.map((v) => (v.id === vendorId ? { ...v, notes } : v))
-    await handleMetadataUpdate({ vendors: nextLinked })
+    await (selectedLeadEvent ? handleEventMetadataUpdate({ vendors: nextLinked }) : handleMetadataUpdate({ vendors: nextLinked }))
   }
 
   const parseTimeToMinutes = (timeStr: string) => {
@@ -403,7 +415,7 @@ export default function LeadDetailPage({
   const openTimelineModal = (editIndex: number | null) => {
     setTimelineEditIndex(editIndex)
     if (editIndex !== null && lead?.metadata?.timeline) {
-      const items = (lead.metadata.timeline as Array<{ time: string; title: string; description?: string }>)
+      const items = ((selectedLeadEvent?.metadata?.timeline || lead.metadata.timeline) as Array<{ time: string; title: string; description?: string }>)
       const item = items[editIndex]
       setTimelineTime(item.time)
       setTimelineTitle(item.title)
@@ -418,21 +430,21 @@ export default function LeadDetailPage({
 
   const saveTimelineItem = async (item: { time: string; title: string; description?: string }, editIndex: number | null) => {
     if (!lead) return false
-    const currentTimeline = (lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }>) || []
+    const currentTimeline = ((selectedLeadEvent?.metadata?.timeline || lead.metadata?.timeline) as Array<{ time: string; title: string; description?: string }>) || []
     let nextTimeline
     if (editIndex !== null) {
       nextTimeline = currentTimeline.map((itemVal, idx) => idx === editIndex ? item : itemVal)
     } else {
       nextTimeline = [...currentTimeline, item]
     }
-    return await handleMetadataUpdate({ timeline: nextTimeline })
+    return await (selectedLeadEvent ? handleEventMetadataUpdate({ timeline: nextTimeline }) : handleMetadataUpdate({ timeline: nextTimeline }))
   }
 
   const deleteTimelineItem = async (indexToDelete: number) => {
     if (!lead) return
-    const currentTimeline = (lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }>) || []
+    const currentTimeline = ((selectedLeadEvent?.metadata?.timeline || lead.metadata?.timeline) as Array<{ time: string; title: string; description?: string }>) || []
     const nextTimeline = currentTimeline.filter((_, idx) => idx !== indexToDelete)
-    await handleMetadataUpdate({ timeline: nextTimeline })
+    await (selectedLeadEvent ? handleEventMetadataUpdate({ timeline: nextTimeline }) : handleMetadataUpdate({ timeline: nextTimeline }))
   }
 
   const handleTimelineSubmit = async (e: React.FormEvent) => {
@@ -487,7 +499,39 @@ export default function LeadDetailPage({
   const [tourAssigneeCustom, setTourAssigneeCustom] = useState('')
   const [savingTourAttendance, setSavingTourAttendance] = useState(false)
 
-  const latestBooking = useMemo(() => getMostRecentBooking(bookings), [bookings])
+  const selectedLeadEvent = useMemo(
+    () => leadEvents.find((event) => event.id === activeEventId) || leadEvents.find((event) => event.is_primary) || leadEvents[0] || null,
+    [activeEventId, leadEvents],
+  )
+  const eventBookings = useMemo(
+    () => selectedLeadEvent ? bookings.filter((booking) => booking.lead_event_id === selectedLeadEvent.id) : bookings,
+    [bookings, selectedLeadEvent],
+  )
+  const eventBookingIds = useMemo(() => new Set(eventBookings.map((booking) => booking.id)), [eventBookings])
+  const eventInvoices = useMemo(
+    () => selectedLeadEvent
+      ? invoices.filter((invoice) => invoice.lead_event_id === selectedLeadEvent.id || (!invoice.lead_event_id && Boolean(invoice.booking_id && eventBookingIds.has(invoice.booking_id))))
+      : invoices,
+    [eventBookingIds, invoices, selectedLeadEvent],
+  )
+  const eventInvoiceIds = useMemo(() => new Set(eventInvoices.map((invoice) => invoice.id)), [eventInvoices])
+  const eventPayments = useMemo(
+    () => selectedLeadEvent
+      ? payments.filter((payment) => Boolean((payment.booking_id && eventBookingIds.has(payment.booking_id)) || (payment.invoice_id && eventInvoiceIds.has(payment.invoice_id))))
+      : payments,
+    [eventBookingIds, eventInvoiceIds, payments, selectedLeadEvent],
+  )
+  const latestBooking = useMemo(() => getMostRecentBooking(eventBookings), [eventBookings])
+  const activeEventForDisplay = useMemo(() => {
+    if (!lead) return null
+    if (!selectedLeadEvent) return null
+    const sharedTourReached = ['tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
+    return {
+      ...selectedLeadEvent,
+      status: selectedLeadEvent.status === 'new' && sharedTourReached ? 'tour_confirmed' as const : selectedLeadEvent.status,
+      pipeline_stage: selectedLeadEvent.pipeline_stage === 'inquiry' && sharedTourReached ? 'tour' as const : selectedLeadEvent.pipeline_stage,
+    }
+  }, [lead, selectedLeadEvent])
 
   const leadDerivedData = useMemo(() => {
     if (!lead) {
@@ -545,17 +589,17 @@ export default function LeadDetailPage({
       const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
       return aDue - bDue
     })
-    const derivedSortedBookings = [...bookings].sort((a, b) => {
+    const derivedSortedBookings = [...eventBookings].sort((a, b) => {
       const aTime = new Date(a.updated_at || a.created_at).getTime()
       const bTime = new Date(b.updated_at || b.created_at).getTime()
       return bTime - aTime
     })
-    const derivedSortedInvoices = [...invoices].sort((a, b) => {
+    const derivedSortedInvoices = [...eventInvoices].sort((a, b) => {
       const aTime = new Date(a.updated_at || a.created_at).getTime()
       const bTime = new Date(b.updated_at || b.created_at).getTime()
       return bTime - aTime
     })
-    const derivedSortedPayments = [...payments].sort((a, b) => {
+    const derivedSortedPayments = [...eventPayments].sort((a, b) => {
       const aTime = new Date(a.paid_at || a.updated_at || a.created_at).getTime()
       const bTime = new Date(b.paid_at || b.updated_at || b.created_at).getTime()
       return bTime - aTime
@@ -581,7 +625,7 @@ export default function LeadDetailPage({
       sortedInvoices: derivedSortedInvoices,
       sortedPayments: derivedSortedPayments,
     }
-  }, [bookings, callRecords, emailMessages, invoices, lead, notes, payments, tasks])
+  }, [bookings, callRecords, emailMessages, eventBookings, eventInvoices, eventPayments, lead, notes, payments, tasks])
 
   const activityEntries = useMemo(() => {
     return leadDerivedData.allActivityEntries.filter((entry) => {
@@ -623,7 +667,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const steps = getLeadLifecycleSteps(lead, latestBooking)
+    const steps = getLeadLifecycleSteps(activeEventForDisplay || lead, latestBooking)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -640,8 +684,19 @@ export default function LeadDetailPage({
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
+    if (!selectedLeadEvent) return
+    const savedItems = selectedLeadEvent.metadata?.proposalLineItems
+    setInvoiceItems(Array.isArray(savedItems) && savedItems.length
+      ? savedItems as LuxorInvoiceLineItem[]
+      : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
+    setInvoiceTaxRate(typeof selectedLeadEvent.metadata?.proposalTaxRate === 'number'
+      ? String(Number(selectedLeadEvent.metadata.proposalTaxRate) * 100)
+      : '8.25')
+  }, [selectedLeadEvent?.id])
+
+  useEffect(() => {
     if (lead) {
-      const metadata = lead.metadata || {}
+      const metadata = activeEventForDisplay?.metadata || lead.metadata || {}
       setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || ''))
       const grandOpeningLead = isGrandOpeningRsvp(lead)
       setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.startTime : '')))
@@ -649,7 +704,7 @@ export default function LeadDetailPage({
       setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || ''))
       setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || ''))
     }
-  }, [lead, latestBooking])
+  }, [activeEventForDisplay, lead, latestBooking])
 
   const handleSaveSummary = async () => {
     if (!lead) return
@@ -672,6 +727,25 @@ export default function LeadDetailPage({
               duration_minutes: durationMinutes,
             }
           })
+        })
+        if (!res.ok) throw new Error('Failed to save event summary details.')
+      } else if (selectedLeadEvent) {
+        const res = await fetch('/api/lead-events', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: selectedLeadEvent.id,
+            inquiry_id: lead.id,
+            metadata: {
+              ...selectedLeadEvent.metadata,
+              venue: summaryVenue,
+              start_time: summaryStartTime,
+              end_time: summaryEndTime,
+              setup_time: summarySetupTime,
+              breakdown_time: summaryBreakdownTime,
+              duration_minutes: durationMinutes,
+            },
+          }),
         })
         if (!res.ok) throw new Error('Failed to save event summary details.')
       } else {
@@ -739,6 +813,32 @@ export default function LeadDetailPage({
       notify({ title: 'Tour details not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSavingTourAttendance(false)
+    }
+  }
+
+  const handleEventMetadataUpdate = async (updatedMetadata: Record<string, unknown>) => {
+    if (!lead || !selectedLeadEvent) return false
+    const previousEvent = selectedLeadEvent
+    const mergedMetadata = { ...selectedLeadEvent.metadata, ...updatedMetadata }
+    setLeadEvents((current) => current.map((event) => event.id === selectedLeadEvent.id
+      ? { ...event, metadata: mergedMetadata, updated_at: new Date().toISOString() }
+      : event))
+    try {
+      const res = await fetch('/api/lead-events', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedLeadEvent.id, inquiry_id: lead.id, metadata: mergedMetadata }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to update event details.')
+      const updated = payload as LuxorLeadEvent
+      setLeadEvents((current) => current.map((event) => event.id === updated.id ? updated : event))
+      return true
+    } catch (err) {
+      console.error(err)
+      setLeadEvents((current) => current.map((event) => event.id === previousEvent.id ? previousEvent : event))
+      notify({ title: 'Event update failed', description: err instanceof Error ? err.message : 'Failed to update event details.', variant: 'error' })
+      return false
     }
   }
 
@@ -913,6 +1013,87 @@ export default function LeadDetailPage({
     }
   }
 
+  const eventPreferenceCacheKey = `luxor:lead-event:${id}`
+
+  const persistLeadEventPreference = async (eventId: string) => {
+    try {
+      window.localStorage.setItem(eventPreferenceCacheKey, eventId)
+    } catch {
+      // Browser storage can be unavailable in private browsing; Supabase remains the durable fallback.
+    }
+    try {
+      await fetch('/api/portal/lead-event-preference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiry_id: id, lead_event_id: eventId }),
+      })
+    } catch (error) {
+      console.warn('Lead event preference could not be synced.', error)
+    }
+  }
+
+  const selectLeadEvent = (eventId: string) => {
+    setActiveEventId(eventId)
+    setShowEventPicker(false)
+    setShowActionsMenu(false)
+    void persistLeadEventPreference(eventId)
+  }
+
+  const openAddEventModal = () => {
+    setShowActionsMenu(false)
+    setNewEventType('')
+    setNewEventDate('')
+    setNewEventGuestCount('')
+    setNewEventPackage('')
+    setNewEventNotes('')
+    setIsAddEventModalOpen(true)
+  }
+
+  const handleAddEvent = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!lead || !newEventType.trim()) return
+    try {
+      setSubmittingEvent(true)
+      const res = await fetch('/api/lead-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiry_id: lead.id,
+          event_type: newEventType,
+          target_date: newEventDate || null,
+          guest_count: newEventGuestCount || null,
+          package_interest: newEventPackage || null,
+          notes: newEventNotes || null,
+        }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to add event.')
+      const created = payload as LuxorLeadEvent
+      setLeadEvents((current) => [...current, created])
+      setActiveEventId(created.id)
+      await persistLeadEventPreference(created.id)
+      setIsAddEventModalOpen(false)
+      notify({ title: 'Event added', description: `${created.event_type || 'New event'} is now selected.`, variant: 'success' })
+    } catch (error) {
+      console.error(error)
+      notify({ title: 'Event not added', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSubmittingEvent(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showEventPicker && !showActionsMenu) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowEventPicker(false)
+        setShowActionsMenu(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showActionsMenu, showEventPicker])
+
   const fetchAllData = async (showPageLoader = true, refreshEmailHistory = showPageLoader) => {
     try {
       if (showPageLoader) setLoading(true)
@@ -932,7 +1113,7 @@ export default function LeadDetailPage({
 
       if (refreshEmailHistory) void fetchClientEmailThread(leadData.email || '')
 
-      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData] = await Promise.all([
+      const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData, leadEventsData, eventPreferenceData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -954,6 +1135,12 @@ export default function LeadDetailPage({
         fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
+        fetch(`/api/lead-events?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : []))
+          .catch(() => []),
+        fetch(`/api/portal/lead-event-preference?inquiryId=${id}`)
+          .then(async (res) => (res.ok ? await res.json() : null))
+          .catch(() => null),
       ])
 
       setNotes(notesData)
@@ -977,6 +1164,27 @@ export default function LeadDetailPage({
       setPayments(paymentsData)
       setTourEmailJobs(tourJobsData)
       setCallRecords(callsData)
+      const nextLeadEvents = leadEventsData as LuxorLeadEvent[]
+      setLeadEvents(nextLeadEvents)
+      if (!initializedEventPreferenceRef.current) {
+        let cachedEventId: string | null = null
+        try {
+          cachedEventId = window.localStorage.getItem(eventPreferenceCacheKey)
+        } catch {
+          cachedEventId = null
+        }
+        const serverEventId = eventPreferenceData?.lead_event_id || null
+        const rememberedEventId = [serverEventId, cachedEventId].find((eventId) => eventId && nextLeadEvents.some((event) => event.id === eventId))
+        const fallbackEventId = nextLeadEvents.find((event) => event.is_primary)?.id || nextLeadEvents[0]?.id || null
+        const initialEventId = rememberedEventId || fallbackEventId
+        setActiveEventId(initialEventId)
+        initializedEventPreferenceRef.current = true
+        if (initialEventId) void persistLeadEventPreference(initialEventId)
+      } else if (activeEventId && !nextLeadEvents.some((event) => event.id === activeEventId)) {
+        const fallbackEventId = nextLeadEvents.find((event) => event.is_primary)?.id || nextLeadEvents[0]?.id || null
+        setActiveEventId(fallbackEventId)
+        if (fallbackEventId) void persistLeadEventPreference(fallbackEventId)
+      }
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An error occurred loading the client profile.')
@@ -1118,20 +1326,36 @@ export default function LeadDetailPage({
 
   const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
     if (!lead) return false
-    const previousStatus = lead.status
+    const eventScopedStatus = Boolean(selectedLeadEvent && ['proposal_sent', 'booked', 'closed_lost'].includes(newStatus))
+    const previousStatus = eventScopedStatus ? selectedLeadEvent?.status || lead.status : lead.status
     try {
       setUpdatingStatus(true)
       setPendingLifecycleStatus(newStatus)
-      const res = await fetch(`/api/inquiries`, {
+      const pipelineStage = newStatus === 'tour_requested' || newStatus === 'tour_confirmed'
+        ? 'tour'
+        : newStatus === 'proposal_sent'
+          ? 'proposal'
+          : newStatus === 'booked'
+            ? 'contract'
+            : newStatus === 'closed_lost'
+              ? 'closed_lost'
+              : 'inquiry'
+      const res = await fetch(eventScopedStatus ? '/api/lead-events' : '/api/inquiries', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: newStatus }),
+        body: JSON.stringify(eventScopedStatus
+          ? { id: selectedLeadEvent?.id, inquiry_id: id, status: newStatus, pipeline_stage: pipelineStage }
+          : { id, status: newStatus }),
       })
       if (!res.ok) throw new Error('Failed to update status.')
       const updated = await res.json()
-      setLead(updated)
+      if (eventScopedStatus) {
+        setLeadEvents((current) => current.map((event) => event.id === updated.id ? updated : event))
+      } else {
+        setLead(updated)
+      }
       const statusNote = await createFlowNote(
-        `Lead status changed from ${previousStatus.replaceAll('_', ' ')} to ${newStatus.replaceAll('_', ' ')}.`,
+        `${eventScopedStatus ? `${selectedLeadEvent?.event_type || 'Event'} status` : 'Lead status'} changed from ${previousStatus.replaceAll('_', ' ')} to ${newStatus.replaceAll('_', ' ')}.`,
         'status_change',
       )
       setNotes((current) => [statusNote, ...current])
@@ -1183,6 +1407,36 @@ export default function LeadDetailPage({
         console.error(err)
         setLead(previousLead)
         notify({ title: 'Address not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+        return false
+      } finally {
+        setSavingLeadField(null)
+      }
+    }
+
+    const eventField = selectedLeadEvent && (field === 'event_type' || field === 'guest_count' || field === 'target_date' || field === 'package_interest')
+      ? field
+      : null
+    if (eventField && selectedLeadEvent) {
+      const currentValue = selectedLeadEvent[eventField]
+      if (normalizeComparableValue(currentValue) === normalizeComparableValue(normalizedValue)) return true
+      const previousEvent = selectedLeadEvent
+      try {
+        setSavingLeadField(field)
+        const nextValue = field === 'guest_count' ? (normalizedValue ? Number(normalizedValue) : null) : normalizedValue
+        setLeadEvents((current) => current.map((event) => event.id === selectedLeadEvent.id ? { ...event, [eventField]: nextValue } : event))
+        const res = await fetch('/api/lead-events', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selectedLeadEvent.id, inquiry_id: lead.id, [eventField]: nextValue }),
+        })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(payload.error || 'Failed to update event detail.')
+        setLeadEvents((current) => current.map((event) => event.id === payload.id ? payload : event))
+        return true
+      } catch (err) {
+        console.error(err)
+        setLeadEvents((current) => current.map((event) => event.id === previousEvent.id ? previousEvent : event))
+        notify({ title: 'Event detail not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
         return false
       } finally {
         setSavingLeadField(null)
@@ -1399,8 +1653,8 @@ export default function LeadDetailPage({
         body: JSON.stringify({
           ...(editingInvoiceId ? { id: editingInvoiceId } : {}),
           client_name: lead.full_name,
-          event_type: lead.event_type || 'Event Booking',
-          description: invoiceDesc || `${lead.event_type || 'Event'} Booking fee`,
+          event_type: activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
+          description: invoiceDesc || `${activeEventForDisplay?.event_type || lead.event_type || 'Event'} Booking fee`,
           line_items: invoiceItems,
           subtotal,
           tax_rate: taxRate,
@@ -1409,6 +1663,7 @@ export default function LeadDetailPage({
           offer_expires_at: offerExpiresAt,
           discount_percent: invoiceDiscountPercent,
           inquiry_id: id,
+          lead_event_id: selectedLeadEvent?.id || null,
           notes: invoiceNotes || null,
         }),
       })
@@ -1419,7 +1674,9 @@ export default function LeadDetailPage({
       setInvoices((prev) => editingInvoiceId
         ? prev.map((item) => item.id === invoice.id ? invoice : item)
         : [invoice, ...prev])
-      await handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
+      await (selectedLeadEvent
+        ? handleEventMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
+        : handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate }))
       setIsInvoiceModalOpen(false)
       setEditingInvoiceId(null)
       notify({ title: editingInvoiceId ? 'Proposal updated' : 'Proposal saved', description: `${formatMoney(total)} ${editingInvoiceId ? 'is ready to review or send again.' : 'was added to this lead.'}`, variant: 'success' })
@@ -1519,7 +1776,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const getInvoicePaidTotal = (invoiceId: string) => payments
+  const getInvoicePaidTotal = (invoiceId: string) => eventPayments
     .filter((payment) => payment.invoice_id === invoiceId && payment.status === 'paid')
     .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
 
@@ -1616,7 +1873,7 @@ export default function LeadDetailPage({
 
   const beginPlanningEdit = (section: Exclude<PlanningEditSection, null>) => {
     if (!lead) return
-    const metadata = lead.metadata || {}
+    const metadata = selectedLeadEvent?.metadata || lead.metadata || {}
     setPlanningEditSection(section)
     setPlanningDraft({
       event_style: String(metadata.event_style || ''),
@@ -1648,7 +1905,7 @@ export default function LeadDetailPage({
     const updates: Record<string, unknown> = {}
     for (const field of fieldsBySection[planningEditSection]) updates[field] = planningDraft[field]?.trim() || null
     if (planningEditSection === 'preferences') updates.color_palette = planningColors
-    const saved = await handleMetadataUpdate(updates)
+    const saved = await (selectedLeadEvent ? handleEventMetadataUpdate(updates) : handleMetadataUpdate(updates))
     setSavingPlanningSection(false)
     if (saved) {
       setPlanningEditSection(null)
@@ -1710,7 +1967,7 @@ export default function LeadDetailPage({
   }
 
   const openPaymentRequest = (invoice: LuxorInvoice) => {
-    const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
+    const booking = eventBookings.find((item) => item.invoice_id === invoice.id) || latestBooking
     const paymentInvoice = invoice.invoice_kind === 'event' && booking?.contract_status === 'signed'
       ? invoices.find((item) => item.booking_id === booking.id && item.invoice_kind === 'deposit') || invoice
       : invoice
@@ -1986,13 +2243,14 @@ export default function LeadDetailPage({
   }
 
   const openBookingModal = () => {
-    const suggestedContractTotal = invoices[0]?.total ? Number(invoices[0].total) : 0
-    const targetDate = lead?.target_date && /^\d{4}-\d{2}-\d{2}$/.test(lead.target_date) ? lead.target_date : ''
+    const suggestedContractTotal = eventInvoices[0]?.total ? Number(eventInvoices[0].total) : 0
+    const eventDate = activeEventForDisplay?.target_date || lead?.target_date || ''
+    const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? eventDate : ''
 
     setBookingEventDate(targetDate)
     setBookingStartTime('')
     setBookingEndTime('')
-    setBookingPackageName(lead?.package_interest || '')
+    setBookingPackageName(activeEventForDisplay?.package_interest || lead?.package_interest || '')
     setBookingContractTotal(suggestedContractTotal > 0 ? suggestedContractTotal.toFixed(2) : '')
     setBookingDepositRequired(suggestedContractTotal > 0 ? defaultLuxorReservationDeposit(suggestedContractTotal).toFixed(2) : '')
     setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
@@ -2003,7 +2261,7 @@ export default function LeadDetailPage({
     } else {
       setBookingFinalPaymentDueDate('')
     }
-    setBookingNotes(lead?.message || '')
+    setBookingNotes(activeEventForDisplay?.notes || lead?.message || '')
     setBookingPaymentMethod('card')
     setBookingPaymentAmount('deposit')
     setBookingStatus('tentative')
@@ -2058,13 +2316,14 @@ export default function LeadDetailPage({
           client_name: lead.full_name,
           email: lead.email,
           phone: lead.phone,
-          event_type: lead.event_type,
+          event_type: activeEventForDisplay?.event_type || lead.event_type,
+          lead_event_id: selectedLeadEvent?.id || null,
           event_date: bookingEventDate || null,
           start_time: bookingStartTime || null,
           end_time: bookingEndTime || null,
           package_name: bookingPackageName || null,
-          invoice_id: invoices[0]?.id || null,
-          guest_count: lead.guest_count,
+          invoice_id: eventInvoices[0]?.id || null,
+          guest_count: activeEventForDisplay?.guest_count ?? lead.guest_count,
           status: bookingStatus,
           contract_total: contractTotal,
           deposit_required: depositRequired,
@@ -2242,6 +2501,7 @@ export default function LeadDetailPage({
     sortedInvoices,
     sortedPayments,
   } = leadDerivedData
+  const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
   const depositPaidTotal = getPaidTotal(sortedPayments, 'deposit')
   const bookingContractAmount = Number(latestBooking?.contract_total || 0)
   const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
@@ -2268,11 +2528,11 @@ export default function LeadDetailPage({
   ) || notes.find((note) => (
     note.note_type === 'status_change' &&
     note.content.toLowerCase().includes('proposal')
-  ))?.created_at || (lead.status === 'proposal_sent' ? lead.updated_at : null)
+  ))?.created_at || (activeEventForDisplay?.status === 'proposal_sent' ? activeEventForDisplay.updated_at : null)
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
   const proposalReminderJobs = tourEmailJobs.filter((job) => job.job_type === 'proposal_view_reminder' || job.job_type === 'proposal_payment_reminder')
   const queuedProposalReminders = proposalReminderJobs.filter((job) => job.status === 'queued')
-  const nextBestMove = getLeadNextStep(lead, latestBooking, latestInvoice)
+  const nextBestMove = getLeadNextStep(activeEventForDisplay || lead, latestBooking, latestInvoice)
   const marketingRecentEvents = marketingEngagement?.recent_events ?? []
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
   const marketingTopCampaign = marketingCampaigns[0] ?? null
@@ -2291,18 +2551,18 @@ export default function LeadDetailPage({
   }> = [
     {
       label: 'Event Type',
-      value: lead.event_type || 'Quinceañera',
-      editValue: lead.event_type || '',
-      copyValue: lead.event_type || '',
+      value: activeEventForDisplay?.event_type || lead.event_type || 'Quinceañera',
+      editValue: activeEventForDisplay?.event_type || lead.event_type || '',
+      copyValue: activeEventForDisplay?.event_type || lead.event_type || '',
       field: 'event_type',
       icon: <Sparkles size={14} />,
       placeholder: 'Wedding, Quinceañera, birthday...',
     },
     {
       label: 'Guest Count',
-      value: lead.guest_count ? `${lead.guest_count} guests` : 'Unspecified',
-      editValue: lead.guest_count ? String(lead.guest_count) : '',
-      copyValue: lead.guest_count ? String(lead.guest_count) : '',
+      value: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} guests` : 'Unspecified',
+      editValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
+      copyValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
       field: 'guest_count',
       icon: <Users size={14} />,
       inputType: 'number',
@@ -2310,18 +2570,18 @@ export default function LeadDetailPage({
     },
     {
       label: 'Target Date',
-      value: lead.target_date ? formatDisplayDate(lead.target_date) : 'TBD',
-      editValue: lead.target_date || '',
-      copyValue: lead.target_date || '',
+      value: (activeEventForDisplay?.target_date || lead.target_date) ? formatDisplayDate(activeEventForDisplay?.target_date || lead.target_date || '') : 'TBD',
+      editValue: activeEventForDisplay?.target_date || lead.target_date || '',
+      copyValue: activeEventForDisplay?.target_date || lead.target_date || '',
       field: 'target_date',
       icon: <Calendar size={14} />,
       inputType: 'date',
     },
     {
       label: 'Package Interest',
-      value: lead.package_interest || 'Not selected',
-      editValue: lead.package_interest || '',
-      copyValue: lead.package_interest || '',
+      value: activeEventForDisplay?.package_interest || lead.package_interest || 'Not selected',
+      editValue: activeEventForDisplay?.package_interest || lead.package_interest || '',
+      copyValue: activeEventForDisplay?.package_interest || lead.package_interest || '',
       field: 'package_interest',
       icon: <Briefcase size={14} />,
       inputType: 'select',
@@ -2580,13 +2840,13 @@ export default function LeadDetailPage({
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
-  const linkedVendorRefs = (lead.metadata?.vendors as Array<{ id: string; notes?: string }> | undefined) || []
+  const linkedVendorRefs = (activeEventMetadata.vendors as Array<{ id: string; notes?: string }> | undefined) || []
   const linkedVendorIds = new Set(linkedVendorRefs.map((vendor) => vendor.id))
   const linkedVendors = linkedVendorRefs.map((vendorRef) => ({
     ref: vendorRef,
     vendor: allVendors.find((vendor) => vendor.id === vendorRef.id) || null,
   }))
-  const timelineItems = ((lead.metadata?.timeline as Array<{ time: string; title: string; description?: string }> | undefined) || [])
+  const timelineItems = ((activeEventMetadata.timeline as Array<{ time: string; title: string; description?: string }> | undefined) || [])
     .map((item, originalIndex) => ({ item, originalIndex }))
     .sort((a, b) => parseTimeToMinutes(a.item.time) - parseTimeToMinutes(b.item.time))
 
@@ -2733,6 +2993,9 @@ export default function LeadDetailPage({
     </section>
   )
 
+  const displayEventType = activeEventForDisplay?.event_type || lead.event_type || 'Event'
+  const displayEventDate = activeEventForDisplay?.target_date || lead.target_date
+  const displayGuestCount = activeEventForDisplay?.guest_count ?? lead.guest_count
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0">
@@ -2769,10 +3032,10 @@ export default function LeadDetailPage({
               />
               <div
                 className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
-                title={`${lead.event_type || 'Other'} event`}
-                aria-label={`${lead.event_type || 'Other'} event`}
+                title={`${displayEventType} event`}
+                aria-label={`${displayEventType} event`}
               >
-                <EventTypeIcon eventType={lead.event_type} />
+                <EventTypeIcon eventType={displayEventType} />
               </div>
             </div>
             <div className="min-w-0 pt-1">
@@ -2827,11 +3090,58 @@ export default function LeadDetailPage({
                 )}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
-                <span>{lead.event_type || 'Quinceañera'}</span>
+                {leadEvents.length ? (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowEventPicker((current) => !current)}
+                      aria-expanded={showEventPicker}
+                      aria-haspopup="listbox"
+                      className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <EventTypeIcon eventType={displayEventType} />
+                      <span className="truncate">{displayEventType}</span>
+                      <ChevronDown size={11} className="shrink-0 text-[#caa24c]" />
+                    </button>
+                    <AnimatePresence>
+                      {showEventPicker ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                          role="listbox"
+                          className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(340px,calc(100vw-3rem))] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                        >
+                          <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
+                          {leadEvents.map((event) => (
+                            <button
+                              key={event.id}
+                              type="button"
+                              role="option"
+                              aria-selected={event.id === selectedLeadEvent?.id}
+                              onClick={() => selectLeadEvent(event.id)}
+                              className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
+                            >
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[11px] font-bold text-[color:var(--portal-text)]">{event.event_type || 'Event'}</span>
+                                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">
+                                  {event.target_date ? formatDisplayDate(event.target_date) : 'Date TBD'} · {event.guest_count ? `${event.guest_count} guests` : 'Guest count open'} · {(event.pipeline_stage || 'inquiry').replaceAll('_', ' ')}
+                                </span>
+                              </span>
+                              {event.id === selectedLeadEvent?.id ? <Check size={13} className="mt-1 shrink-0 text-[#caa24c]" /> : null}
+                            </button>
+                          ))}
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                ) : <span>{displayEventType}</span>}
                 <span className="text-zinc-700 font-normal select-none">•</span>
-                <span>{lead.target_date ? formatDisplayDate(lead.target_date) : 'Date TBD'}</span>
+                <span>{displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD'}</span>
                 <span className="text-zinc-700 font-normal select-none">•</span>
-                <span>{lead.guest_count ? `${lead.guest_count} Guests` : 'Guest count open'}</span>
+                <span>{displayGuestCount ? `${displayGuestCount} Guests` : 'Guest count open'}</span>
               </div>
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
@@ -2874,64 +3184,55 @@ export default function LeadDetailPage({
                 <MessageSquare size={15} />
               </button>
             )}
-            <div className="portal-gold-button relative inline-flex items-center rounded-lg bg-[#caa24c] hover:bg-[#dfbd68] shadow-lg shadow-[#caa24c]/20 transition-all active:scale-95">
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => setIsInvoiceModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white cursor-pointer"
+                onClick={() => setShowActionsMenu((current) => !current)}
+                aria-expanded={showActionsMenu}
+                aria-haspopup="menu"
+                aria-label="More lead options"
+                title="More options"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               >
-                <Plus size={13} /> Create Invoice
+                <MoreVertical size={16} />
               </button>
-              <span className="h-4 w-px bg-white/20" />
-              <button 
-                type="button" 
-                onClick={() => setShowInvoiceMenu((current) => !current)}
-                aria-expanded={showInvoiceMenu}
-                className="px-2.5 py-2 text-white/80 hover:text-white transition-colors cursor-pointer" 
-                aria-label="More invoice options"
-              >
-                <ChevronDown size={12} />
-              </button>
-              {showInvoiceMenu ? (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowInvoiceMenu(false)} />
-                  <div
-                    data-portal-dropdown="true"
-                    className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowInvoiceMenu(false)
-                        setIsInvoiceModalOpen(true)
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+              <AnimatePresence>
+                {showActionsMenu ? (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                      role="menu"
+                      data-portal-dropdown="true"
+                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-60 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                     >
-                      <Plus size={13} className="text-[#caa24c]" />
-                      <span>Draft custom invoice</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowInvoiceMenu(false)
-                        setActiveLeadTab('documents')
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                    >
-                      <FileText size={13} className="text-[#caa24c]" />
-                      <span>View invoices & documents</span>
-                    </button>
-                  </div>
-                </>
-              ) : null}
+                      <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                        <Plus size={13} className="text-[#caa24c]" />
+                        <span>Add event</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setIsInvoiceModalOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                        <ReceiptText size={13} className="text-[#caa24c]" />
+                        <span>Create invoice for selected event</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setActiveLeadTab('documents') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                        <FileText size={13} className="text-[#caa24c]" />
+                        <span>View invoices & documents</span>
+                      </button>
+                    </motion.div>
+                  </>
+                ) : null}
+              </AnimatePresence>
             </div>
           </div>
         </div>
 
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
           <LeadLifecycleRail
-            lead={lead}
-            bookings={bookings}
+            lead={activeEventForDisplay || lead}
+            bookings={eventBookings}
             latestBooking={latestBooking}
             latestInvoice={latestInvoice}
             isSaving={updatingStatus}
@@ -3790,7 +4091,7 @@ export default function LeadDetailPage({
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Date</span>
-                                <span className="font-bold text-white">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : lead.target_date ? formatDisplayDate(lead.target_date) : 'Date not set'}</span>
+                              <span className="font-bold text-white">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : activeEventForDisplay?.target_date ? formatDisplayDate(activeEventForDisplay.target_date) : 'Date not set'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
@@ -3802,7 +4103,7 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
-                                <span className="font-bold text-white">{lead.event_type || 'Event type not captured'}</span>
+                                <span className="font-bold text-white">{activeEventForDisplay?.event_type || lead.event_type || 'Event type not captured'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
@@ -3810,11 +4111,11 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
-                                <span className="font-bold text-white">{lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
+                                <span className="font-bold text-white">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.event_style || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.event_style || 'Not captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -3829,22 +4130,22 @@ export default function LeadDetailPage({
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Color Palette</span>
                                 <div className="flex gap-1.5">
-                                  {(Array.isArray(lead.metadata?.color_palette) && lead.metadata.color_palette.length > 0 ? lead.metadata.color_palette.map(String) : PLANNING_COLOR_OPTIONS[0].colors).map((color) => (
+                                  {(Array.isArray(activeEventMetadata.color_palette) && activeEventMetadata.color_palette.length > 0 ? activeEventMetadata.color_palette.map(String) : PLANNING_COLOR_OPTIONS[0].colors).map((color) => (
                                     <span key={color} title={color} className="h-4.5 w-4.5 rounded-full border border-black/10" style={{ backgroundColor: color }} />
                                   ))}
                                 </div>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Music Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.music_style || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.music_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Lighting</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.lighting_preference || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.lighting_preference || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Special Requests</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.special_requests || lead.message || 'None captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.special_requests || activeEventForDisplay?.notes || lead.message || 'None captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -3862,24 +4163,24 @@ export default function LeadDetailPage({
                             </div>
                             <div className="grid grid-cols-5 gap-4">
                               <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
-                                <span className="text-[8px] font-bold uppercase text-center">{PLANNING_LAYOUT_OPTIONS.find((option) => option.id === lead.metadata?.floor_plan_layout)?.label || 'Layout not selected'}</span>
+                                <span className="text-[8px] font-bold uppercase text-center">{PLANNING_LAYOUT_OPTIONS.find((option) => option.id === activeEventMetadata.floor_plan_layout)?.label || 'Layout not selected'}</span>
                               </div>
                               <div className="col-span-3 space-y-2 text-xs">
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Head Table</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.head_table || 'Not captured')}</span>
+                                  <span className="font-bold text-white">{String(activeEventMetadata.head_table || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Dance Floor</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.dance_floor || 'Not captured')}</span>
+                                  <span className="font-bold text-white">{String(activeEventMetadata.dance_floor || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Stage</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.stage_needed || 'Not captured')}</span>
+                                  <span className="font-bold text-white">{String(activeEventMetadata.stage_needed || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[10px] uppercase font-bold text-zinc-500">Other Areas</span>
-                                  <span className="font-bold text-white">{String(lead.metadata?.other_areas || 'Not captured')}</span>
+                                  <span className="font-bold text-white">{String(activeEventMetadata.other_areas || 'Not captured')}</span>
                                 </div>
                               </div>
                             </div>
@@ -3894,19 +4195,19 @@ export default function LeadDetailPage({
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Selected Package</span>
-                                <span className="font-bold text-white">{lead.package_interest || latestBooking?.package_name || 'Not selected'}</span>
+                                <span className="font-bold text-white">{activeEventForDisplay?.package_interest || latestBooking?.package_name || lead.package_interest || 'Not selected'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Décor Style</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.decor_style || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.decor_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Centerpieces</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.centerpieces || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.centerpieces || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Linens</span>
-                                <span className="font-bold text-white">{String(lead.metadata?.linens || 'Not captured')}</span>
+                                <span className="font-bold text-white">{String(activeEventMetadata.linens || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between items-start">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500 mt-0.5">Additional Notes</span>
@@ -4680,19 +4981,19 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned Coordinator</span>
-                              <span className="font-bold text-white">{String(lead.metadata?.event_coordinator || 'Not assigned')}</span>
+                              <span className="font-bold text-white">{String(activeEventMetadata.event_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Gate Access Code</span>
-                              <span className="font-mono font-bold text-[#caa24c]">{String(lead.metadata?.gate_access_code || 'Not set')}</span>
+                              <span className="font-mono font-bold text-[#caa24c]">{String(activeEventMetadata.gate_access_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Backdoor Code</span>
-                              <span className="font-mono font-bold text-white">{String(lead.metadata?.backdoor_code || 'Not set')}</span>
+                              <span className="font-mono font-bold text-white">{String(activeEventMetadata.backdoor_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Emergency Line</span>
-                              <span className="font-bold text-white">{String(lead.metadata?.emergency_contact || 'Not set')}</span>
+                              <span className="font-bold text-white">{String(activeEventMetadata.emergency_contact || 'Not set')}</span>
                             </div>
                           </div>
                         </div>
@@ -4703,11 +5004,11 @@ export default function LeadDetailPage({
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Operation Milestones</p>
                         <div className="space-y-2 text-xs">
                           {[
-                            { label: 'Coordinator assigned', done: Boolean(lead.metadata?.event_coordinator) },
-                            { label: 'Access details captured', done: Boolean(lead.metadata?.gate_access_code || lead.metadata?.backdoor_code) },
-                            { label: 'Run of show confirmed', done: Boolean(lead.metadata?.run_of_show_confirmed_at) },
-                            { label: 'Vendor arrival windows confirmed', done: Boolean(lead.metadata?.vendor_windows_confirmed_at) },
-                            { label: 'Final walkthrough complete', done: Boolean(lead.metadata?.final_walkthrough_completed_at) },
+                            { label: 'Coordinator assigned', done: Boolean(activeEventMetadata.event_coordinator) },
+                            { label: 'Access details captured', done: Boolean(activeEventMetadata.gate_access_code || activeEventMetadata.backdoor_code) },
+                            { label: 'Run of show confirmed', done: Boolean(activeEventMetadata.run_of_show_confirmed_at) },
+                            { label: 'Vendor arrival windows confirmed', done: Boolean(activeEventMetadata.vendor_windows_confirmed_at) },
+                            { label: 'Final walkthrough complete', done: Boolean(activeEventMetadata.final_walkthrough_completed_at) },
                           ].map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
@@ -4790,12 +5091,12 @@ export default function LeadDetailPage({
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Wrap-Up Checklist</p>
                         <div className="space-y-2 text-xs">
                           {[
-                            { label: 'Thank-you follow-up logged', done: Boolean(lead.metadata?.thank_you_follow_up_logged_at) },
-                            { label: 'Review request ready', done: Boolean(lead.metadata?.review_request_ready_at) },
-                            { label: 'Photo/video assets requested', done: Boolean(lead.metadata?.assets_requested_at) },
-                            { label: 'Security deposit return authorized', done: Boolean(lead.metadata?.deposit_return_authorized_at) },
-                            { label: 'Damage report & final inspection cleared', done: Boolean(lead.metadata?.final_inspection_cleared_at) },
-                            { label: 'Anniversary reminder noted', done: Boolean(lead.metadata?.anniversary_reminder_date) },
+                            { label: 'Thank-you follow-up logged', done: Boolean(activeEventMetadata.thank_you_follow_up_logged_at) },
+                            { label: 'Review request ready', done: Boolean(activeEventMetadata.review_request_ready_at) },
+                            { label: 'Photo/video assets requested', done: Boolean(activeEventMetadata.assets_requested_at) },
+                            { label: 'Security deposit return authorized', done: Boolean(activeEventMetadata.deposit_return_authorized_at) },
+                            { label: 'Damage report & final inspection cleared', done: Boolean(activeEventMetadata.final_inspection_cleared_at) },
+                            { label: 'Anniversary reminder noted', done: Boolean(activeEventMetadata.anniversary_reminder_date) },
                           ].map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
@@ -4814,8 +5115,8 @@ export default function LeadDetailPage({
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Anniversary Reminder</p>
                           <p className="text-xs text-zinc-400 leading-relaxed">
-                            {lead.metadata?.anniversary_reminder_date
-                              ? <>Anniversary reminder noted for <strong>{formatDisplayDate(String(lead.metadata.anniversary_reminder_date))}</strong>. No post-event email automation is created from this page.</>
+                            {activeEventMetadata.anniversary_reminder_date
+                              ? <>Anniversary reminder noted for <strong>{formatDisplayDate(String(activeEventMetadata.anniversary_reminder_date))}</strong>. No post-event email automation is created from this page.</>
                               : 'No anniversary reminder date has been captured yet.'}
                           </p>
                         </div>
@@ -5917,10 +6218,10 @@ export default function LeadDetailPage({
 
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 pb-7 portal-scrollbar sm:p-6 sm:pb-8">
             <div className="overflow-hidden rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-soft)] shadow-md">
-              <img src={getEventPreviewImage(lead.event_type)} alt={`${lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-90" />
+              <img src={getEventPreviewImage(activeEventForDisplay?.event_type || lead.event_type)} alt={`${activeEventForDisplay?.event_type || lead.event_type || 'Event'} inspiration`} className="h-36 w-full object-cover opacity-90" />
               <div className="px-4 py-3 bg-[color:var(--portal-card)] border-t border-[color:var(--portal-border)]">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">Email image selected from event type</p>
-                <p className="mt-1 text-xs font-bold text-[color:var(--portal-text)]">{lead.event_type || 'Private Event'} inspiration</p>
+                <p className="mt-1 text-xs font-bold text-[color:var(--portal-text)]">{activeEventForDisplay?.event_type || lead.event_type || 'Private Event'} inspiration</p>
               </div>
             </div>
             <div className="grid auto-rows-fr gap-4 sm:grid-cols-2">
@@ -6249,6 +6550,45 @@ export default function LeadDetailPage({
         ) : null}
       </PortalModal>
 
+      <PortalModal isOpen={isAddEventModalOpen} onClose={() => !submittingEvent && setIsAddEventModalOpen(false)} maxWidth="max-w-lg">
+        <form onSubmit={handleAddEvent} className="bg-[color:var(--portal-bg)] p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">New event</p>
+              <h3 className="mt-1 text-xl font-serif font-semibold text-[color:var(--portal-text)]">Add another event</h3>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">This stays under {lead.full_name}&apos;s lead and starts with its own proposal, booking, and planning track.</p>
+            </div>
+            <PortalCloseButton onClick={() => setIsAddEventModalOpen(false)} aria-label="Close add event" />
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event type <span className="text-[#caa24c]">Required</span></label>
+              <PortalSelect value={newEventType} onChange={setNewEventType} options={[{ value: '', label: 'Choose event type' }, ...LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))]} className="w-full" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Date</label>
+              <input value={newEventDate} onChange={(event) => setNewEventDate(event.target.value)} placeholder="Date TBD or 2027-08-11" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Guest count</label>
+              <input type="number" min="0" value={newEventGuestCount} onChange={(event) => setNewEventGuestCount(event.target.value)} placeholder="150" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Package interest</label>
+              <PortalSelect value={newEventPackage} onChange={setNewEventPackage} options={[{ value: '', label: 'Not decided yet' }, ...LUXOR_PACKAGE_INTEREST_OPTIONS]} className="w-full" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Notes</label>
+              <textarea value={newEventNotes} onChange={(event) => setNewEventNotes(event.target.value)} rows={3} placeholder="Anything specific to this event..." className="w-full resize-none rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" onClick={() => setIsAddEventModalOpen(false)} disabled={submittingEvent} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] disabled:opacity-40">Cancel</button>
+            <button type="submit" disabled={submittingEvent || !newEventType} className="rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">{submittingEvent ? 'Adding event...' : 'Add event'}</button>
+          </div>
+        </form>
+      </PortalModal>
+
       <ProposalBuilderModal
         isOpen={isInvoiceModalOpen}
         isEditing={Boolean(editingInvoiceId)}
@@ -6258,8 +6598,8 @@ export default function LeadDetailPage({
         }}
         clientName={lead.full_name}
         clientEmail={lead.email}
-        eventType={lead.event_type}
-        eventDate={lead.target_date}
+        eventType={activeEventForDisplay?.event_type || lead.event_type}
+        eventDate={activeEventForDisplay?.target_date || lead.target_date}
         description={invoiceDesc}
         onDescriptionChange={setInvoiceDesc}
         dueDate={invoiceDueDate}
@@ -6281,16 +6621,16 @@ export default function LeadDetailPage({
       {layoutDesignerOpen ? <EventLayoutDesigner
         open={layoutDesignerOpen}
         onClose={() => setLayoutDesignerOpen(false)}
-        initialLayout={(lead.metadata?.event_layout as EventLayoutDocument | undefined) || null}
+        initialLayout={(activeEventMetadata.event_layout as EventLayoutDocument | undefined) || null}
         leadName={lead.full_name}
-        eventType={lead.event_type}
-        eventDate={latestBooking?.event_date || lead.target_date}
-        guestCount={latestBooking?.guest_count || lead.guest_count}
+        eventType={activeEventForDisplay?.event_type || lead.event_type}
+        eventDate={latestBooking?.event_date || activeEventForDisplay?.target_date || lead.target_date}
+        guestCount={latestBooking?.guest_count || activeEventForDisplay?.guest_count || lead.guest_count}
         onSave={async (layout) => {
-          const saved = await handleMetadataUpdate({
+          const saved = await (selectedLeadEvent ? handleEventMetadataUpdate({
             event_layout: layout,
             floor_plan_layout: layout.name,
-          })
+          }) : handleMetadataUpdate({ event_layout: layout, floor_plan_layout: layout.name }))
           if (saved) notify({ title: 'Layout saved', description: 'The editable floor plan is saved with this lead.', variant: 'success' })
           return saved
         }}

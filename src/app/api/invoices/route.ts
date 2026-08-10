@@ -9,6 +9,7 @@ import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer
 import { getLuxorBookingByInvoice, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,10 +42,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { client_name, event_type, description, line_items, tax_rate, due_date, inquiry_id, notes, discount_percent, offer_expires_at } = body
+    const { client_name, event_type, description, line_items, tax_rate, due_date, inquiry_id, lead_event_id, notes, discount_percent, offer_expires_at } = body
 
     if (!client_name || !line_items) {
       return NextResponse.json({ error: 'client_name and line_items are required.' }, { status: 400 })
+    }
+    if (lead_event_id && (!inquiry_id || !await getLuxorLeadEventForInquiry(String(lead_event_id), String(inquiry_id)))) {
+      return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
     }
 
     const normalizedItems = (Array.isArray(line_items) ? line_items : []).map((item) => {
@@ -100,6 +104,7 @@ export async function POST(request: NextRequest) {
       offer_expires_at: offerExpiresAt?.toISOString() || null,
       due_date,
       inquiry_id,
+      lead_event_id,
       notes,
     })
 

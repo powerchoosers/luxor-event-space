@@ -102,6 +102,7 @@ export async function createInvoice(data: {
   stripe_promotion_code_id?: string | null
   due_date?: string | null
   inquiry_id?: string | null
+  lead_event_id?: string | null
   notes?: string | null
   booking_id?: string | null
   parent_invoice_id?: string | null
@@ -130,6 +131,7 @@ export async function createInvoice(data: {
       stripe_promotion_code_id: data.stripe_promotion_code_id ?? null,
       due_date: data.due_date || null,
       inquiry_id: data.inquiry_id || null,
+      lead_event_id: data.lead_event_id || null,
       notes: data.notes || null,
       booking_id: data.booking_id || null,
       parent_invoice_id: data.parent_invoice_id || null,

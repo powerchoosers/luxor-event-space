@@ -8,9 +8,10 @@ import {
   listLuxorEmailJobsForInquiry,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { LuxorEmailJobKind, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
+import { LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import { createLuxorZohoCalendarEvent } from '@/lib/zohoMailServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -18,6 +19,12 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
+const PRE_PROPOSAL_STATUSES = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed'])
+const PRE_PROPOSAL_STAGES = new Set<LuxorPipelineStage | null | undefined>([null, undefined, 'inquiry', 'tour'])
+
+function canAdvanceAttendedTour(status: string | null | undefined, pipelineStage: string | null | undefined) {
+  return PRE_PROPOSAL_STATUSES.has(status as LuxorInquiryStatus) && PRE_PROPOSAL_STAGES.has(pipelineStage as LuxorPipelineStage | null | undefined)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,11 +48,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const inquiryId = String(body.inquiryId || '')
     const action = String(body.action || '')
+    const leadEventId = body.leadEventId ? String(body.leadEventId) : null
 
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
 
     const inquiry = await getLuxorInquiry(inquiryId)
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
+
+    let selectedLeadEvent = null
+    if (leadEventId) {
+      selectedLeadEvent = await getLuxorLeadEventForInquiry(leadEventId, inquiryId)
+      if (!selectedLeadEvent) return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
+    } else if (action === 'attendance' && body.attendance === 'attended') {
+      const leadEvents = await listLuxorLeadEventsByInquiry(inquiryId)
+      const primaryEvents = leadEvents.filter((event) => event.is_primary)
+      selectedLeadEvent = primaryEvents.length === 1 ? primaryEvents[0] : null
+    }
 
     if (action === 'attendance') {
       const attendance = String(body.attendance || 'pending') as LuxorTourAttendanceStatus
@@ -53,11 +71,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unsupported attendance status.' }, { status: 400 })
       }
       const updates: Record<string, unknown> = { tour_attendance_status: attendance }
-      if (attendance === 'attended') updates.status = 'tour_confirmed'
-      if (attendance === 'no_show') updates.pipeline_stage = 'tour'
-      if (attendance === 'rescheduled') updates.status = 'tour_requested'
+      if (attendance === 'attended' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) {
+        updates.status = 'tour_confirmed'
+        updates.pipeline_stage = 'proposal'
+      }
+      if (attendance === 'no_show' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) updates.pipeline_stage = 'tour'
+      if (attendance === 'rescheduled' && PRE_PROPOSAL_STATUSES.has(inquiry.status)) updates.status = 'tour_requested'
 
       const updated = await updateLuxorInquiry(inquiryId, updates)
+      let updatedLeadEvent = null
+      if (attendance === 'attended' && selectedLeadEvent && canAdvanceAttendedTour(selectedLeadEvent.status, selectedLeadEvent.pipeline_stage)) {
+        updatedLeadEvent = await updateLuxorLeadEvent(selectedLeadEvent.id, {
+          status: 'tour_confirmed',
+          pipeline_stage: 'proposal',
+        })
+      }
       if (attendance === 'attended' || attendance === 'rescheduled' || attendance === 'cancelled') {
         await cancelQueuedTourEmailJobs(inquiryId)
       }
@@ -81,7 +109,7 @@ export async function POST(request: NextRequest) {
         }
       }
       await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
-      return NextResponse.json({ inquiry: updated, noShowJob })
+      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob })
     }
 
     if (action === 'schedule-tour') {

@@ -85,6 +85,7 @@ export async function createLuxorBooking(data: Partial<LuxorBooking> & { client_
     body: JSON.stringify({
       inquiry_id: data.inquiry_id || null,
       invoice_id: data.invoice_id || null,
+      lead_event_id: data.lead_event_id || null,
       client_name: data.client_name,
       email: data.email || null,
       phone: data.phone || null,

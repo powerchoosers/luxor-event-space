@@ -11,6 +11,8 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { calculateLuxorOfferPricing, luxorOfferSnapshot } from '@/lib/luxorOffer'
 import { defaultLuxorReservationDeposit, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
+import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,6 +47,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     if (!body.client_name) {
       return NextResponse.json({ error: 'client_name is required.' }, { status: 400 })
+    }
+
+    const leadEventId = body.lead_event_id ? String(body.lead_event_id) : null
+    if (leadEventId && (!body.inquiry_id || !await getLuxorLeadEventForInquiry(leadEventId, String(body.inquiry_id)))) {
+      return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
     }
 
     if (body.event_date && (body.status === 'tentative' || body.status === 'confirmed')) {
@@ -118,17 +125,33 @@ export async function POST(request: NextRequest) {
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
       if (inquiry && inquiry.status !== 'closed_lost') {
-        await updateLuxorInquiry(inquiry.id, {
-          status: 'booked',
-          pipeline_stage: 'contract',
-          metadata: {
-            ...inquiry.metadata,
-            booking_created_at: booking.created_at,
-            latest_booking_id: booking.id,
-          },
-        })
-        if (inquiry.status !== 'booked') {
-          await createNote(inquiry.id, 'Booking record created. Lead advanced to Contract.', 'status_change', session.email)
+        if (leadEventId) {
+          const event = await getLuxorLeadEventForInquiry(leadEventId, inquiry.id)
+          if (event) {
+            await updateLuxorLeadEvent(event.id, {
+              status: 'booked',
+              pipeline_stage: 'contract',
+              metadata: {
+                ...event.metadata,
+                booking_created_at: booking.created_at,
+                latest_booking_id: booking.id,
+              },
+            })
+          }
+          await createNote(inquiry.id, `${booking.event_type || 'Event'} booking record created. Event advanced to Contract.`, 'status_change', session.email)
+        } else {
+          await updateLuxorInquiry(inquiry.id, {
+            status: 'booked',
+            pipeline_stage: 'contract',
+            metadata: {
+              ...inquiry.metadata,
+              booking_created_at: booking.created_at,
+              latest_booking_id: booking.id,
+            },
+          })
+          if (inquiry.status !== 'booked') {
+            await createNote(inquiry.id, 'Booking record created. Lead advanced to Contract.', 'status_change', session.email)
+          }
         }
         await cancelQueuedLuxorEmailJobs(inquiry.id, ['proposal_view_reminder', 'proposal_payment_reminder'])
         try {
@@ -163,6 +186,11 @@ export async function PATCH(request: NextRequest) {
 
     const existing = await getLuxorBooking(id)
     if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+
+    const leadEventId = updates.lead_event_id || existing.lead_event_id || null
+    if (leadEventId && (!existing.inquiry_id || !await getLuxorLeadEventForInquiry(String(leadEventId), existing.inquiry_id))) {
+      return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
+    }
 
     const nextDate = updates.event_date === undefined ? existing.event_date : updates.event_date
     const nextStatus = updates.status === undefined ? existing.status : updates.status
@@ -207,10 +235,17 @@ export async function PATCH(request: NextRequest) {
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
       if (inquiry && inquiry.status !== 'closed_lost') {
-        await updateLuxorInquiry(inquiry.id, {
-          status: 'booked',
-          pipeline_stage: pipelineStageForBooking(booking),
-        })
+        if (leadEventId) {
+          await updateLuxorLeadEvent(leadEventId, {
+            status: 'booked',
+            pipeline_stage: eventPipelineStageForBooking(booking),
+          })
+        } else {
+          await updateLuxorInquiry(inquiry.id, {
+            status: 'booked',
+            pipeline_stage: pipelineStageForBooking(booking),
+          })
+        }
         try {
           await syncBookingEmailAutomations({ inquiry, booking, previous: existing })
         } catch (automationError) {
@@ -244,6 +279,11 @@ function pipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<typeof 
   if (!metadata.planning_completed_at) return 'planning'
   if (!(metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at)) return 'final_payment'
   return 'event'
+}
+
+function eventPipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<typeof getLuxorBooking>>>) {
+  const stage = pipelineStageForBooking(booking)
+  return (stage === 'complete' ? 'closing' : stage) as LuxorPipelineStage
 }
 
 async function syncBookingEmailAutomations(input: {
