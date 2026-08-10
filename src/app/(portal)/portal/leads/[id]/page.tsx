@@ -3,7 +3,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
   Calendar,
@@ -200,6 +200,8 @@ export default function LeadDetailPage({
 }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const { notify } = useToast()
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
@@ -526,12 +528,24 @@ export default function LeadDetailPage({
     if (!lead) return null
     if (!selectedLeadEvent) return null
     const sharedTourReached = ['tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
+    const sharedTourCompleted = lead.tour_attendance_status === 'attended'
     return {
       ...selectedLeadEvent,
       status: selectedLeadEvent.status === 'new' && sharedTourReached ? 'tour_confirmed' as const : selectedLeadEvent.status,
-      pipeline_stage: selectedLeadEvent.pipeline_stage === 'inquiry' && sharedTourReached ? 'tour' as const : selectedLeadEvent.pipeline_stage,
+      pipeline_stage: ['inquiry', 'tour'].includes(selectedLeadEvent.pipeline_stage) && sharedTourCompleted
+        ? 'proposal' as const
+        : selectedLeadEvent.pipeline_stage === 'inquiry' && sharedTourReached ? 'tour' as const : selectedLeadEvent.pipeline_stage,
     }
   }, [lead, selectedLeadEvent])
+  const lifecycleLead = useMemo(() => {
+    if (!lead) return null
+    if (!activeEventForDisplay) return lead
+    return {
+      ...lead,
+      status: activeEventForDisplay.status,
+      pipeline_stage: activeEventForDisplay.pipeline_stage,
+    }
+  }, [activeEventForDisplay, lead])
 
   const leadDerivedData = useMemo(() => {
     if (!lead) {
@@ -667,7 +681,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const steps = getLeadLifecycleSteps(activeEventForDisplay || lead, latestBooking)
+    const steps = getLeadLifecycleSteps(lifecycleLead || lead, latestBooking)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -680,7 +694,7 @@ export default function LeadDetailPage({
     }
     
     return 'closing'
-  }, [lead, latestBooking])
+  }, [lead, latestBooking, lifecycleLead])
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
@@ -2081,11 +2095,18 @@ export default function LeadDetailPage({
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: lead.id, action: 'attendance', attendance }),
+        body: JSON.stringify({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, action: 'attendance', attendance }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
       if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
+      if (attendance === 'attended') {
+        setSelectedStageOverride('proposal')
+        const nextParams = new URLSearchParams(searchParams?.toString() || '')
+        nextParams.set('tab', 'overview')
+        nextParams.set('stage', 'proposal')
+        router.replace(`${pathname || `/portal/leads/${id}`}?${nextParams.toString()}`, { scroll: false })
+      }
       await fetchAllData(false)
       notify({
         title: attendance === 'attended' ? 'Tour marked complete' : 'Tour marked no show',
@@ -2440,8 +2461,15 @@ export default function LeadDetailPage({
     }
 
     if (requestedStage) {
-      setSelectedStageOverride(requestedStage)
+      const completedTourOpenedAtTourStage = requestedStage === 'tour' && lead?.tour_attendance_status === 'attended' && activeStage === 'proposal'
+      const effectiveRequestedStage = completedTourOpenedAtTourStage ? 'proposal' : requestedStage
+      setSelectedStageOverride(effectiveRequestedStage)
       setActiveLeadTab('overview')
+      if (completedTourOpenedAtTourStage) {
+        const nextParams = new URLSearchParams(searchParams?.toString() || '')
+        nextParams.set('stage', 'proposal')
+        router.replace(`${pathname || `/portal/leads/${id}`}?${nextParams.toString()}`, { scroll: false })
+      }
     }
 
     if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
@@ -2459,7 +2487,7 @@ export default function LeadDetailPage({
         window.clearTimeout(timeoutId)
       }
     }
-  }, [searchParams])
+  }, [activeStage, id, lead?.tour_attendance_status, pathname, router, searchParams])
 
   if (loading) {
     return <ClientDossierLoading />
@@ -2532,7 +2560,7 @@ export default function LeadDetailPage({
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
   const proposalReminderJobs = tourEmailJobs.filter((job) => job.job_type === 'proposal_view_reminder' || job.job_type === 'proposal_payment_reminder')
   const queuedProposalReminders = proposalReminderJobs.filter((job) => job.status === 'queued')
-  const nextBestMove = getLeadNextStep(activeEventForDisplay || lead, latestBooking, latestInvoice)
+  const nextBestMove = getLeadNextStep(lifecycleLead || lead, latestBooking, latestInvoice)
   const marketingRecentEvents = marketingEngagement?.recent_events ?? []
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
   const marketingTopCampaign = marketingCampaigns[0] ?? null
@@ -3231,7 +3259,7 @@ export default function LeadDetailPage({
 
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
           <LeadLifecycleRail
-            lead={activeEventForDisplay || lead}
+            lead={lifecycleLead || lead}
             bookings={eventBookings}
             latestBooking={latestBooking}
             latestInvoice={latestInvoice}
@@ -8070,7 +8098,9 @@ type LeadLifecycleStepState = {
 
 function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null): LeadLifecycleStepState[] {
   const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
-  const hasProposalStepBeenReached = lead.status === 'proposal_sent' || lead.status === 'booked'
+  const hasTourBeenCompleted = lead.tour_attendance_status === 'attended' || ['proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '') || lead.status === 'proposal_sent' || lead.status === 'booked'
+  const hasProposalStepBeenReached = lead.status === 'booked' || ['contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '')
+  const proposalIsActive = lead.pipeline_stage === 'proposal' || lead.status === 'proposal_sent'
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
   const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking)
@@ -8088,13 +8118,13 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     },
     {
       id: 'tour',
-      isCompleted: hasTourStepBeenReached,
-      isActive: lead.status === 'contacted' || lead.status === 'tour_requested' || lead.status === 'tour_confirmed',
+      isCompleted: hasTourBeenCompleted || hasTourStepBeenReached && lead.tour_attendance_status === 'attended',
+      isActive: !hasTourBeenCompleted && (lead.status === 'contacted' || lead.status === 'tour_requested' || lead.status === 'tour_confirmed'),
     },
     {
       id: 'proposal',
       isCompleted: hasProposalStepBeenReached,
-      isActive: lead.status === 'proposal_sent' && !latestBooking,
+      isActive: proposalIsActive && !latestBooking && !hasProposalStepBeenReached,
     },
     {
       id: 'contract',

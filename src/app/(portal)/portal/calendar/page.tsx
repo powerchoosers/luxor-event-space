@@ -146,7 +146,7 @@ export default function CalendarPage() {
         title: tour.full_name,
         subtitle: `${tour.preferred_tour_time || 'Flexible time'} • ${tour.event_type || 'Event'}${tour.guest_count ? ` • ${tour.guest_count} guests` : ''}`,
         tone: tour.tour_attendance_status === 'no_show' ? 'rose' : tour.tour_attendance_status === 'attended' ? 'green' : 'gold',
-        href: `/portal/leads/${tour.id}?tab=overview&stage=tour`,
+        href: `/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`,
         openLabel: 'Open tour',
         content: (
           <TourControls
@@ -315,7 +315,7 @@ function TourControls({
       </div>
       <div className="flex items-center justify-between">
         <PortalStatusBadge status={tour.tour_attendance_status || 'pending'} />
-        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=tour`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
           Open <ExternalLink size={10} className="inline" />
         </Link>
       </div>
