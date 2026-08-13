@@ -1803,6 +1803,14 @@ export default function LeadDetailPage({
     setProposalContext((current) => {
       const currentSelection = asProposalRecord(current?.pricing_selection) || {}
       const calculatedSelection = asProposalRecord(calculationContext.pricing_selection) || {}
+      // A calculation response can finish just after the owner adds, edits, or
+      // removes a custom row. Keep the locally selected custom list in that
+      // race so a stale response cannot resurrect a removed charge.
+      const currentCustomItems = Array.isArray(currentSelection.customItems)
+        ? currentSelection.customItems
+        : Array.isArray(currentSelection.custom_items)
+          ? currentSelection.custom_items
+          : undefined
       // Calculation responses arrive asynchronously. A response that began
       // before the owner selected (or completed) Step 5 has no valid payment
       // plan yet, so it must never erase the in-progress owner input.
@@ -1813,7 +1821,11 @@ export default function LeadDetailPage({
         ...calculationContext,
         ...(currentPaymentPlan && !calculatedPaymentPlan ? { payment_plan: currentPaymentPlan } : {}),
         package_id: activePackageId || normalizeProposalPackageId(calculationContext.package_id) || current?.package_id,
-        pricing_selection: { ...currentSelection, ...calculatedSelection },
+        pricing_selection: {
+          ...currentSelection,
+          ...calculatedSelection,
+          ...(currentCustomItems ? { customItems: currentCustomItems } : {}),
+        },
       }
     })
   }
@@ -1830,6 +1842,15 @@ export default function LeadDetailPage({
     const addOns = proposalServiceIds(contextSelection).length
       ? proposalServiceIds(contextSelection)
       : proposalServiceIds(calculationSelection)
+    const customItems = Array.isArray(contextSelection?.customItems)
+      ? contextSelection.customItems
+      : Array.isArray(contextSelection?.custom_items)
+        ? contextSelection.custom_items
+        : Array.isArray(calculationSelection?.customItems)
+          ? calculationSelection.customItems
+          : Array.isArray(calculationSelection?.custom_items)
+            ? calculationSelection.custom_items
+            : undefined
     const paymentPlan = asProposalRecord(context.payment_plan || calculationContext.payment_plan)
 
     return {
@@ -1851,6 +1872,7 @@ export default function LeadDetailPage({
         type: invoiceDiscountType,
         value: Math.max(0, Number(invoiceDiscountValue) || 0),
       },
+      ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
     }
   }

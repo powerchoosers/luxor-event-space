@@ -8,6 +8,32 @@ export type LuxorProposalPackageId =
 
 export type LuxorRentalPeriod = 'morning' | 'evening' | 'full_day'
 
+/**
+ * A non-catalog line entered by an authenticated Luxor owner. Custom items
+ * are deliberately explicit: the calculator owns the multiplication and
+ * snapshot, but it never invents a description, quantity, or price.
+ */
+export type LuxorProposalCustomItem = {
+  id?: string
+  category?: string
+  description?: string
+  quantity?: number | string
+  unitPrice?: number | string
+  paymentBucket?: 'venue' | 'event'
+  detail?: string
+}
+
+export type LuxorProposalAddOnQuote = {
+  id: string
+  label: string
+  category: string
+  rateTier: 'retail' | 'all_inclusive'
+  available: boolean
+  total: number | null
+  lineItems: LuxorInvoiceLineItem[]
+  error?: string
+}
+
 export type LuxorProposalSelection = {
   packageId?: LuxorProposalPackageId | string | null
   eventDate?: string | null
@@ -23,6 +49,8 @@ export type LuxorProposalSelection = {
   adminOverride?: boolean | null
   bartenderAdditionalHours?: number | string | null
   bartenderStaffCount?: number | string | null
+  customItems?: LuxorProposalCustomItem[] | null
+  custom_items?: LuxorProposalCustomItem[] | null
   [key: string]: unknown
 }
 
@@ -91,6 +119,8 @@ export type LuxorProposalCalculation = {
   totalWithSecurityDeposit: number
   amountDueToBook: number | null
   amount_due_to_book: number | null
+  /** Exact pre-tax quotes for each catalog add-on under the selected package's rate tier. */
+  addOnQuotes: LuxorProposalAddOnQuote[]
   proposalContext: LuxorProposalContext
   context: LuxorProposalContext
   snapshot: Record<string, unknown>
@@ -215,10 +245,28 @@ const ADD_ON_ALIASES: Record<string, string> = {
   bartender: 'bartender_service',
   bartenderservice: 'bartender_service',
   signaturebyob: 'byob_signature',
+  byobsignature: 'byob_signature',
   premiumbyob: 'byob_premium',
+  byobpremium: 'byob_premium',
   nonalcoholic: 'byob_non_alcoholic',
   nonalcoholicbar: 'byob_non_alcoholic',
+  byobnonalcoholic: 'byob_non_alcoholic',
 }
+
+const ADD_ON_QUOTE_OPTIONS = [
+  { id: 'essential_decor', label: 'Essential Decor', category: 'Decor' },
+  { id: 'full_decor', label: 'Full Decor & Planning', category: 'Decor' },
+  { id: 'buffet_catering', label: 'Buffet catering', category: 'Catering' },
+  { id: 'plated_catering', label: 'Plated catering', category: 'Catering' },
+  { id: 'dj', label: 'DJ (6 hours)', category: 'Entertainment' },
+  { id: 'photo_booth_signature', label: 'Signature Photo Booth', category: 'Photo booth' },
+  { id: 'photo_booth_celebration', label: 'Celebration Photo Booth', category: 'Photo booth' },
+  { id: 'photo_booth_forever', label: 'Forever Photo Booth', category: 'Photo booth' },
+  { id: 'bartender_service', label: 'Bartender service', category: 'Bar' },
+  { id: 'byob_signature', label: 'Signature BYOB bar', category: 'Bar' },
+  { id: 'byob_premium', label: 'Premium BYOB bar', category: 'Bar' },
+  { id: 'byob_non_alcoholic', label: 'Non-alcoholic bar package', category: 'Bar' },
+] as const
 
 function record(value: unknown): PricingRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as PricingRecord : null
@@ -278,6 +326,77 @@ function normalizeAddOn(value: unknown) {
   const normalized = String(value || '').toLowerCase().replace(/[^a-z]/g, '')
   if (normalized === 'dj') return 'dj'
   return ADD_ON_ALIASES[normalized] || null
+}
+
+function trimmedString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function exactNumber(value: unknown) {
+  if (typeof value === 'string' && !value.trim()) return undefined
+  return numberValue(value)
+}
+
+function normalizeCustomItems(selection: LuxorProposalSelection) {
+  const source = selection.customItems ?? selection.custom_items
+  if (source === undefined || source === null) return { items: [] as LuxorInvoiceLineItem[], errors: [] as string[] }
+  if (!Array.isArray(source)) {
+    return { items: [] as LuxorInvoiceLineItem[], errors: ['Custom items must be a list of owner-entered item details.'] }
+  }
+
+  const errors: string[] = []
+  const seenIds = new Set<string>()
+  const items: LuxorInvoiceLineItem[] = []
+
+  source.forEach((value, index) => {
+    const custom = record(value)
+    const label = `Custom item ${index + 1}`
+    const description = trimmedString(custom?.description ?? custom?.name)
+    const quantity = exactNumber(custom?.quantity)
+    const unitPrice = exactNumber(custom?.unitPrice ?? custom?.unit_price)
+    const category = trimmedString(custom?.category) || 'Custom items'
+    const detail = trimmedString(custom?.detail)
+    const requestedBucket = trimmedString(custom?.paymentBucket ?? custom?.payment_bucket)
+    const paymentBucket = requestedBucket || 'event'
+
+    if (!description || quantity === undefined || quantity <= 0 || unitPrice === undefined || unitPrice <= 0) {
+      errors.push(`${label} needs a description, a positive quantity, and an exact positive unit price.`)
+      return
+    }
+    if (paymentBucket !== 'venue' && paymentBucket !== 'event') {
+      errors.push(`${label} must be assigned to Venue Services or Event Services.`)
+      return
+    }
+
+    const requestedId = trimmedString(custom?.id || custom?.catalogId || custom?.catalog_id)
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80)
+    const baseId = requestedId || `custom-${index + 1}`
+    let id = baseId.startsWith('custom-') ? baseId : `custom-${baseId}`
+    let duplicate = 2
+    while (seenIds.has(id)) {
+      id = `${baseId.startsWith('custom-') ? baseId : `custom-${baseId}`}-${duplicate}`
+      duplicate += 1
+    }
+    seenIds.add(id)
+
+    items.push({
+      id,
+      catalogId: id,
+      category,
+      description,
+      quantity,
+      unitPrice: rounded(unitPrice),
+      total: rounded(quantity * unitPrice),
+      pricingRole: 'custom',
+      pricingRuleId: 'owner_custom_item',
+      paymentBucket,
+      ...(detail ? { detail } : {}),
+    })
+  })
+
+  return { items, errors: [...new Set(errors)] }
 }
 
 function tierForGuestCount(value: unknown, guestCount: number) {
@@ -408,8 +527,9 @@ function calculatePackage(input: {
   securityDeposit: number
   paymentPlan: LuxorProposalPaymentPlan | null
   taxRate: number
+  customItems: LuxorInvoiceLineItem[]
 }) {
-  const { packageId, selection, config, eventDate, guestCount, requestedRentalPeriod, securityDeposit, paymentPlan, taxRate } = input
+  const { packageId, selection, config, eventDate, guestCount, requestedRentalPeriod, securityDeposit, paymentPlan, taxRate, customItems } = input
   const errors: string[] = []
   const warnings: string[] = []
   const items: LuxorInvoiceLineItem[] = []
@@ -646,6 +766,11 @@ function calculatePackage(input: {
     else if (addOn === 'byob_non_alcoholic') addBar('non_alcoholic')
   }
 
+  // Custom items are owner-entered, but their arithmetic is still calculated
+  // here and preserved in the immutable proposal snapshot. They are never
+  // treated as a package-rate exception or a client-editable price.
+  items.push(...customItems)
+
   const subtotal = rounded(items.reduce((sum, item) => sum + Number(item.total || 0), 0))
   const nestedDiscount = record(selection.discount)
   const requestedDiscount = Math.max(0, numberValue(selection.discountValue ?? nestedDiscount?.value) || 0)
@@ -688,6 +813,93 @@ function calculatePackage(input: {
   } satisfies PackageCalculation
 }
 
+function addedLineItems(base: LuxorInvoiceLineItem[], quoted: LuxorInvoiceLineItem[]) {
+  const counts = new Map<string, number>()
+  for (const item of base) {
+    const key = `${item.id || item.catalogId || item.description}|${item.quantity}|${item.unitPrice}|${item.total}`
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return quoted.filter((item) => {
+    const key = `${item.id || item.catalogId || item.description}|${item.quantity}|${item.unitPrice}|${item.total}`
+    const remaining = counts.get(key) || 0
+    if (remaining <= 0) return true
+    counts.set(key, remaining - 1)
+    return false
+  })
+}
+
+function calculateAddOnQuotes(input: {
+  packageId: LuxorProposalPackageId
+  selection: LuxorProposalSelection
+  config: LuxorProposalPricingConfig
+  eventDate: string
+  guestCount: number
+  requestedRentalPeriod: LuxorRentalPeriod
+  securityDeposit: number
+}) {
+  const rateTier = input.packageId === 'gold_all_inclusive' ? 'all_inclusive' as const : 'retail' as const
+  const quoteSelection: LuxorProposalSelection = {
+    ...input.selection,
+    addOns: [],
+    customItems: [],
+    custom_items: [],
+    discountType: 'percent',
+    discountValue: 0,
+    discountApproved: true,
+    taxRate: 0,
+    paymentPlan: null,
+  }
+  const base = calculatePackage({ ...input, selection: quoteSelection, paymentPlan: null, taxRate: 0, customItems: [] })
+  const baseError = base.errors[0]
+
+  return ADD_ON_QUOTE_OPTIONS.map((option): LuxorProposalAddOnQuote => {
+    if (baseError) {
+      return {
+        ...option,
+        rateTier,
+        available: false,
+        total: null,
+        lineItems: [],
+        error: baseError,
+      }
+    }
+
+    const quoted = calculatePackage({
+      ...input,
+      selection: { ...quoteSelection, addOns: [option.id] },
+      paymentPlan: null,
+      taxRate: 0,
+      customItems: [],
+    })
+    const quoteError = quoted.errors.find((error) => !base.errors.includes(error))
+    const lineItems = addedLineItems(base.lineItems, quoted.lineItems)
+    const total = rounded(quoted.subtotal - base.subtotal)
+
+    if (quoteError) {
+      return {
+        ...option,
+        rateTier,
+        available: false,
+        total: null,
+        lineItems: [],
+        error: quoteError,
+      }
+    }
+    if (total <= 0 || !lineItems.length) {
+      return {
+        ...option,
+        rateTier,
+        available: false,
+        total: 0,
+        lineItems: [],
+        error: 'Included with the selected package.',
+      }
+    }
+
+    return { ...option, rateTier, available: true, total, lineItems }
+  })
+}
+
 export function calculateLuxorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG): LuxorProposalCalculation {
   const selectedPackageId = normalizePackageId(selection.packageId)
   const eventDate = typeof selection.eventDate === 'string' ? selection.eventDate : ''
@@ -695,6 +907,8 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
   const requestedRentalPeriod = normalizeRentalPeriod(selection.rentalPeriod)
   const baseErrors: string[] = []
   const baseWarnings: string[] = []
+  const customItemResult = normalizeCustomItems(selection)
+  baseErrors.push(...customItemResult.errors)
   const maxGuests = readNumber(config, 'guest_count', 'maximum') || 200
   const minGuests = readNumber(config, 'guest_count', 'minimum') || 1
   if (!selectedPackageId) baseErrors.push('Choose one of Luxor’s four packages before calculating the final proposal.')
@@ -728,6 +942,7 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
       securityDeposit: securityDeposit || 750,
       paymentPlan,
       taxRate: taxRate ?? 0,
+      customItems: customItemResult.items,
     })
     return {
       ...calculation,
@@ -736,6 +951,15 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
     }
   })
   const selected = packages.find((item) => item.id === safePackage) || packages[0]
+  const addOnQuotes = calculateAddOnQuotes({
+    packageId: selected.id,
+    selection,
+    config,
+    eventDate: safeDate,
+    guestCount: safeGuests,
+    requestedRentalPeriod: safePeriod,
+    securityDeposit: securityDeposit || 750,
+  })
   const calculationErrors = selected.errors
   // Terms decide what is due after the agreement is signed. They do not make
   // an otherwise complete package price unknown, so keep this message precise
@@ -759,8 +983,16 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
     event_access: selected.id === 'silver_premier' || selected.id === 'gold_all_inclusive'
       ? '8 hours of event access plus 4 hours for setup and breakdown'
       : safePeriod,
-    venue_services_total: rounded(selected.lineItems.filter((item) => item.category === 'Venue Services').reduce((sum, item) => sum + item.total, 0)),
-    event_services_total: rounded(selected.lineItems.filter((item) => item.category === 'Event Services').reduce((sum, item) => sum + item.total, 0)),
+    // Catalog rows keep their established category-based buckets. Custom rows
+    // have a freeform category, so use the explicit owner-selected bucket;
+    // otherwise the payment-plan breakdown would not add up to the exact
+    // Final Event Price after a custom charge is added.
+    venue_services_total: rounded(selected.lineItems
+      .filter((item) => item.pricingRole === 'custom' ? item.paymentBucket === 'venue' : item.category === 'Venue Services')
+      .reduce((sum, item) => sum + item.total, 0)),
+    event_services_total: rounded(selected.lineItems
+      .filter((item) => item.pricingRole === 'custom' ? item.paymentBucket === 'event' : item.category === 'Event Services')
+      .reduce((sum, item) => sum + item.total, 0)),
     final_event_price: selected.finalEventPrice,
     tax_rate: selected.taxRate,
     refundable_security_deposit: securityDeposit || 750,
@@ -775,6 +1007,15 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
       discountType: selection.discountType === 'fixed' ? 'fixed' : 'percent',
       discountValue: Math.max(0, numberValue(selection.discountValue ?? record(selection.discount)?.value) || 0),
       discountApproved: Math.max(0, numberValue(selection.discountValue ?? record(selection.discount)?.value) || 0) <= 0 || selection.discountApproved === true || record(selection.discount)?.approved === true,
+      customItems: customItemResult.items.map((item) => ({
+        id: item.id,
+        category: item.category,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        paymentBucket: item.paymentBucket,
+        ...(item.detail ? { detail: item.detail } : {}),
+      })),
       ...(paymentPlan ? { paymentPlan } : {}),
     },
     calculation_warnings: warnings,
@@ -824,6 +1065,7 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
     totalWithSecurityDeposit: rounded(selected.finalEventPrice + (securityDeposit || 750)),
     amountDueToBook: selected.amountDueToBook,
     amount_due_to_book: selected.amountDueToBook,
+    addOnQuotes,
     proposalContext: finalContext,
     context: finalContext,
     snapshot,

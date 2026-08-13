@@ -1,7 +1,20 @@
 'use client'
 
-import { Check, CircleDollarSign, LockKeyhole, PackageCheck, Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  Check,
+  CircleDollarSign,
+  FilePenLine,
+  LockKeyhole,
+  PackageCheck,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type { LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
+import { PortalSelect } from '@/components/portal/PortalUI'
 
 export type ProposalPackageServiceOption = {
   id: string
@@ -10,23 +23,62 @@ export type ProposalPackageServiceOption = {
   detail?: string
   exclusiveGroup?: 'decor' | 'catering' | 'photo_booth' | 'bar'
   quantityLabel?: string
+  /** A visible package/required row that can be inspected but never changed here. */
+  locked?: boolean
+  required?: boolean
+}
+
+export type ProposalPackageOption = {
+  id: string
+  name: string
+  eyebrow?: string
+  description?: string
+  finalEventPrice?: number | null
+}
+
+type CustomItemDraft = {
+  id?: string
+  category: string
+  description: string
+  detail: string
+  quantity: string
+  unitPrice: string
+  paymentBucket: 'venue' | 'event'
 }
 
 type ProposalPackageItemsPanelProps = {
   packageName?: string | null
+  /** A compact, in-context package switcher for the Services & Items workspace. */
+  packageOptions?: ProposalPackageOption[]
+  selectedPackageId?: string | null
+  onSelectPackage?: (packageId: string) => void
   lineItems: LuxorInvoiceLineItem[]
+  /** Owner-created rows are rendered separately so calculator rows cannot be mistaken for manual ones. */
+  customItems?: LuxorInvoiceLineItem[]
   optionalServices: ProposalPackageServiceOption[]
+  /** The full service library gives the owner context for what the package already covers. */
+  catalogServices?: ProposalPackageServiceOption[]
+  /** Services eligible to be added to the selected package. Defaults to optionalServices. */
+  addableServiceIds?: string[]
+  /** Services already covered by the selected package. */
+  lockedServiceIds?: string[]
+  /** Package replacements or incompatible services that need an approved pricing rule. */
+  unavailableServiceIds?: string[]
   selectedServiceIds: string[]
+  /** Exact current price for each selectable service, supplied by the pricing calculator. */
+  servicePrices?: Record<string, number | null>
   pricingReady: boolean
   finalEventPrice?: number | null
   refundableSecurityDeposit?: number | null
   onToggleService: (serviceId: string) => void
+  onAddCustomItem?: (item: LuxorInvoiceLineItem) => void
+  onUpdateCustomItem?: (item: LuxorInvoiceLineItem) => void
+  onRemoveCustomItem?: (itemId: string) => void
 }
 
 const formatMoney = (value: number | null | undefined) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  // Keep every line-item amount contract-ready and visually consistent.
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 }).format(Number(value || 0))
@@ -36,12 +88,18 @@ const lineAmount = (item: LuxorInvoiceLineItem) => {
   return Number.isFinite(total) ? total : Number(item.quantity || 1) * Number(item.unitPrice || 0)
 }
 
+function normalized(value?: string | null) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 function statusFor(item: LuxorInvoiceLineItem) {
-  if (item.pricingRole === 'discount' || lineAmount(item) < 0) return { label: 'Adjustment', tone: 'rose' }
-  if (item.pricingRole === 'tax') return { label: 'Tax', tone: 'slate' }
-  if (item.included || item.pricingRole === 'included') return { label: 'Included', tone: 'emerald' }
-  if (item.required || item.pricingRole === 'required') return { label: 'Required', tone: 'blue' }
-  return { label: 'Add-on', tone: 'gold' }
+  if (item.pricingRole === 'custom') return { label: 'Custom', tone: 'gold' as const }
+  if (item.pricingRole === 'discount' || lineAmount(item) < 0) return { label: 'Adjustment', tone: 'rose' as const }
+  if (item.pricingRole === 'tax') return { label: 'Tax', tone: 'slate' as const }
+  if (item.included || item.pricingRole === 'included') return { label: 'Included', tone: 'emerald' as const }
+  if (item.required || item.pricingRole === 'required') return { label: 'Required', tone: 'blue' as const }
+  if (item.pricingRole === 'add_on') return { label: 'Add-on', tone: 'gold' as const }
+  return { label: 'Calculated', tone: 'slate' as const }
 }
 
 function statusClass(tone: ReturnType<typeof statusFor>['tone']) {
@@ -52,8 +110,8 @@ function statusClass(tone: ReturnType<typeof statusFor>['tone']) {
   return 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]'
 }
 
-function groupByCategory(items: LuxorInvoiceLineItem[]) {
-  const groups = new Map<string, LuxorInvoiceLineItem[]>()
+function groupByCategory<T extends { category?: string }>(items: T[]) {
+  const groups = new Map<string, T[]>()
   for (const item of items) {
     const category = item.category || 'Package details'
     const grouped = groups.get(category) || []
@@ -63,35 +121,109 @@ function groupByCategory(items: LuxorInvoiceLineItem[]) {
   return [...groups.entries()]
 }
 
-function groupServicesByCategory(services: ProposalPackageServiceOption[]) {
-  const groups = new Map<string, ProposalPackageServiceOption[]>()
-  for (const service of services) {
-    const grouped = groups.get(service.category) || []
-    grouped.push(service)
-    groups.set(service.category, grouped)
+function serviceMatchesLineItem(service: ProposalPackageServiceOption, item: LuxorInvoiceLineItem) {
+  const haystack = normalized(`${item.catalogId || ''} ${item.id || ''} ${item.description || ''}`)
+  const directKeys = [normalized(service.id), normalized(service.name)]
+  if (directKeys.some((key) => key && (haystack.includes(key) || key.includes(haystack)))) return true
+
+  const nameWords = service.name.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 1)
+  return nameWords.length > 0 && nameWords.every((word) => haystack.includes(word))
+}
+
+function defaultCustomDraft(item?: LuxorInvoiceLineItem): CustomItemDraft {
+  return {
+    id: item?.id,
+    category: item?.category || 'Custom item',
+    description: item?.description || '',
+    detail: item?.detail || '',
+    quantity: String(Math.max(1, Number(item?.quantity) || 1)),
+    unitPrice: item ? String(Math.max(0.01, Number(item.unitPrice) || 0)) : '',
+    paymentBucket: item?.paymentBucket === 'venue' ? 'venue' : 'event',
   }
-  return [...groups.entries()]
+}
+
+function libraryPrice(service: ProposalPackageServiceOption, lineItems: LuxorInvoiceLineItem[], servicePrices?: Record<string, number | null>) {
+  const quoted = servicePrices?.[service.id]
+  if (typeof quoted === 'number' && Number.isFinite(quoted)) return quoted
+  const matched = lineItems.find((item) => serviceMatchesLineItem(service, item))
+  return matched ? lineAmount(matched) : null
 }
 
 export function ProposalPackageItemsPanel({
   packageName,
+  packageOptions,
+  selectedPackageId,
+  onSelectPackage,
   lineItems,
+  customItems,
   optionalServices,
+  catalogServices,
+  addableServiceIds,
+  lockedServiceIds,
+  unavailableServiceIds,
   selectedServiceIds,
+  servicePrices,
   pricingReady,
   finalEventPrice,
   refundableSecurityDeposit,
   onToggleService,
+  onAddCustomItem,
+  onUpdateCustomItem,
+  onRemoveCustomItem,
 }: ProposalPackageItemsPanelProps) {
-  const selectedServiceIdsSet = new Set(selectedServiceIds)
-  const itemGroups = groupByCategory(lineItems)
-  const serviceGroups = groupServicesByCategory(optionalServices)
+  const [search, setSearch] = useState('')
+  const [customDraft, setCustomDraft] = useState<CustomItemDraft | null>(null)
+  const selectedServiceIdsSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
+  const addableServiceIdsSet = useMemo(() => new Set(addableServiceIds || optionalServices.map((service) => service.id)), [addableServiceIds, optionalServices])
+  const lockedServiceIdsSet = useMemo(() => new Set(lockedServiceIds || []), [lockedServiceIds])
+  const unavailableServiceIdsSet = useMemo(() => new Set(unavailableServiceIds || []), [unavailableServiceIds])
+  const allServices = catalogServices?.length ? catalogServices : optionalServices
+  const searchTerm = search.trim().toLowerCase()
+  const visibleServiceGroups = useMemo(() => groupByCategory(allServices.filter((service) => (
+    !searchTerm || `${service.name} ${service.category} ${service.detail || ''}`.toLowerCase().includes(searchTerm)
+  ))), [allServices, searchTerm])
+  const displayedPackages = packageOptions?.length
+    ? packageOptions
+    : packageName
+      ? [{ id: selectedPackageId || packageName, name: packageName, finalEventPrice }]
+      : []
+  const calculatedLineItems = customItems === undefined
+    ? lineItems
+    : lineItems.filter((item) => item.pricingRole !== 'custom')
+  const proposalItems = [...calculatedLineItems, ...(customItems || [])]
+  const itemGroups = groupByCategory(proposalItems)
+  const customItemIds = useMemo(() => new Set((customItems || []).map((item) => item.id).filter((id): id is string => Boolean(id))), [customItems])
+
+  const beginCustomItem = (item?: LuxorInvoiceLineItem) => {
+    setCustomDraft(defaultCustomDraft(item))
+  }
+
+  const saveCustomItem = () => {
+    if (!customDraft || !customDraft.description.trim()) return
+    const quantity = Math.max(1, Math.floor(Number(customDraft.quantity) || 1))
+    const unitPrice = Number(customDraft.unitPrice)
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return
+    const lineItem: LuxorInvoiceLineItem = {
+      id: customDraft.id || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      category: customDraft.category.trim() || 'Custom item',
+      description: customDraft.description.trim(),
+      ...(customDraft.detail.trim() ? { detail: customDraft.detail.trim() } : {}),
+      quantity,
+      unitPrice,
+      total: Math.round(quantity * unitPrice * 100) / 100,
+      pricingRole: 'custom',
+      paymentBucket: customDraft.paymentBucket,
+    }
+    if (customDraft.id) onUpdateCustomItem?.(lineItem)
+    else onAddCustomItem?.(lineItem)
+    setCustomDraft(null)
+  }
 
   if (!packageName) {
     return (
       <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-5 text-sm leading-6 text-amber-900 dark:text-amber-100">
         <p className="font-bold">Choose a package before building its item list.</p>
-        <p className="mt-1">The selected package will prefill its included and required services here, so an item is never charged twice.</p>
+        <p className="mt-1">The selected package fills its required and included services first, then only compatible upgrades remain available.</p>
       </div>
     )
   }
@@ -99,103 +231,202 @@ export function ProposalPackageItemsPanel({
   return (
     <div className="space-y-5">
       <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-        <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex flex-col gap-2 border-b border-[color:var(--portal-border)] px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Your package, prefilled</p>
-            <h4 className="mt-1 text-base font-bold">{packageName}</h4>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Included and required items are locked to the selected package. Only genuine optional upgrades can be changed below.</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Package selection</p>
+            <h4 className="mt-1 text-base font-bold">Start from the package, then refine the details.</h4>
           </div>
-          <span className="inline-flex w-fit items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">
-            <PackageCheck size={14} /> {lineItems.length || 0} calculated items
-          </span>
+          <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Package changes keep the service list in sync.</p>
         </div>
-
-        {pricingReady && itemGroups.length ? (
-          <div className="divide-y divide-[color:var(--portal-border)]">
-            {itemGroups.map(([category, categoryItems]) => {
-              const categoryTotal = categoryItems.reduce((sum, item) => sum + lineAmount(item), 0)
-              return (
-                <section key={category} className="px-4 py-4 sm:px-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
-                    <p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(categoryTotal)}</p>
-                  </div>
-                  <div className="mt-3 divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45">
-                    {categoryItems.map((item, index) => {
-                      const status = statusFor(item)
-                      const amount = lineAmount(item)
-                      return (
-                        <div key={`${item.id || item.catalogId || item.description}-${index}`} className="flex min-h-14 items-center gap-3 px-3 py-2.5 sm:px-4">
-                          <LockKeyhole size={14} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold">{item.description}{Number(item.quantity || 1) > 1 ? ` × ${item.quantity}` : ''}</p>
-                            {item.detail ? <p className="mt-0.5 text-[11px] leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="font-mono text-xs font-bold">{status.label === 'Included' && amount === 0 ? 'Included' : formatMoney(amount)}</p>
-                            <span className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ${statusClass(status.tone)}`}>{status.label}</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="px-5 py-9 text-center text-sm text-[color:var(--portal-muted)]">Complete the event details and wait for the pricing calculation to load this package’s exact item list.</div>
-        )}
+        <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+          {displayedPackages.map((pkg) => {
+            const selected = normalized(pkg.id) === normalized(selectedPackageId || packageName)
+            const packagePrice = pkg.finalEventPrice
+            const sharedClassName = `min-h-[126px] rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.09] shadow-sm shadow-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 hover:border-[#caa24c]/35'}`
+            const contents = <>
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{pkg.eyebrow || 'Package'}</span>
+                {selected ? <span className="inline-flex items-center gap-1 rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-[#8c6529] dark:text-[#f1d27a]"><Check size={10} /> Selected</span> : null}
+              </div>
+              <p className="mt-2 text-sm font-bold leading-5 text-[color:var(--portal-text)]">{pkg.name}</p>
+              <p className="mt-2 font-mono text-sm font-black text-[#8c6529] dark:text-[#f1d27a]">{pricingReady && typeof packagePrice === 'number' ? formatMoney(packagePrice) : 'Awaiting event facts'}</p>
+              {pkg.description ? <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">{pkg.description}</p> : null}
+            </>
+            return onSelectPackage ? (
+              <button key={pkg.id} type="button" onClick={() => onSelectPackage(pkg.id)} aria-pressed={selected} className={sharedClassName}>
+                {contents}
+              </button>
+            ) : <div key={pkg.id} className={sharedClassName}>{contents}</div>
+          })}
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-        <div className="flex flex-col gap-2 border-b border-[color:var(--portal-border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Available add-ons</p>
-            <h4 className="mt-1 text-base font-bold">Only services not already included in {packageName}</h4>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Their exact price updates from the date and guest count. Package replacements that need an approved rule are intentionally not offered here.</p>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,.86fr)_minmax(0,1.14fr)]">
+        <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+          <div className="border-b border-[color:var(--portal-border)] p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Service library</p>
+                <h4 className="mt-1 text-base font-bold">Add services by category.</h4>
+              </div>
+              <span className="inline-flex items-center gap-1.5 pt-0.5 text-[10px] font-bold text-[color:var(--portal-muted)]"><CircleDollarSign size={13} /> Exact price</span>
+            </div>
+            <label className="mt-4 flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12">
+              <Search size={14} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+              <span className="sr-only">Search services</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--portal-faint)]" />
+              {search ? <button type="button" onClick={() => setSearch('')} className="rounded p-1 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]" aria-label="Clear service search"><X size={13} /></button> : null}
+            </label>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 text-[10px] font-bold text-[color:var(--portal-muted)]"><CircleDollarSign size={13} /> Exact calculation, no manual prices</span>
-        </div>
 
-        {serviceGroups.length ? (
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {serviceGroups.map(([category, services]) => (
-              <section key={category} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3">
+          <div className="space-y-4 p-3 sm:p-4">
+            {visibleServiceGroups.length ? visibleServiceGroups.map(([category, services]) => (
+              <section key={category} aria-label={category}>
                 <p className="px-1 text-[9px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
-                <div className="mt-2 space-y-2">
-                  {services.map((service) => {
+                <div className="mt-2 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40">
+                  {services.map((service, index) => {
                     const selected = selectedServiceIdsSet.has(service.id)
+                    const covered = lockedServiceIdsSet.has(service.id) || service.locked === true
+                    const unavailable = unavailableServiceIdsSet.has(service.id)
+                    const canToggle = selected || (addableServiceIdsSet.has(service.id) && !covered && !unavailable)
+                    const price = libraryPrice(service, calculatedLineItems, servicePrices)
+                    const stateLabel = service.required ? 'Required' : covered ? 'Included' : selected ? 'Added' : unavailable ? 'Not offered' : 'Add'
                     return (
-                      <button
-                        key={service.id}
-                        type="button"
-                        onClick={() => onToggleService(service.id)}
-                        aria-pressed={selected}
-                        className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/55 bg-[#caa24c]/10' : 'border-transparent bg-[color:var(--portal-card)] hover:border-[#caa24c]/35'}`}
-                      >
-                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'}`}>
-                          {selected ? <Check size={13} /> : <Plus size={13} />}
-                        </span>
-                        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{service.name}</span>{service.detail ? <span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</span> : null}</span>
-                        <span className={`shrink-0 text-[9px] font-black uppercase tracking-[0.1em] ${selected ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}>{selected ? 'Added' : 'Add'}</span>
-                      </button>
+                      <div key={service.id} className={`flex gap-3 px-3 py-3 ${index ? 'border-t border-[color:var(--portal-border)]' : ''} ${selected ? 'bg-[#caa24c]/[0.055]' : ''}`}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm font-semibold leading-5">{service.name}</p>
+                            <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{pricingReady && price !== null ? formatMoney(price) : '—'}</p>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {service.detail ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
+                            {covered ? <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] ${service.required ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>{service.required ? 'Required for this event' : 'Included in package'}</span> : null}
+                            {unavailable ? <span className="inline-flex rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-[color:var(--portal-muted)]">Needs a pricing rule</span> : null}
+                          </div>
+                        </div>
+                        {canToggle ? (
+                          <button
+                            type="button"
+                            onClick={() => onToggleService(service.id)}
+                            aria-pressed={selected}
+                            className={`inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border px-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a] hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'}`}
+                          >
+                            {selected ? <><X size={12} /> Remove</> : <><Plus size={12} /> {stateLabel}</>}
+                          </button>
+                        ) : (
+                          <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{stateLabel}</span>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
               </section>
-            ))}
+            )) : (
+              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-4 py-8 text-center text-sm text-[color:var(--portal-muted)]">No services match “{search}”.</div>
+            )}
           </div>
-        ) : (
-          <p className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-5 text-sm leading-6 text-[color:var(--portal-muted)]">Every currently configured service is already included in this package. No optional upgrades are available.</p>
-        )}
-      </section>
+        </section>
 
-      <section className="grid gap-3 rounded-2xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4 sm:grid-cols-3 sm:p-5">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p><p className="mt-1 font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{pricingReady ? formatMoney(finalEventPrice) : 'Calculating…'}</p></div>
-        <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Refundable security deposit</p><p className="mt-1 font-mono text-lg font-black">{formatMoney(refundableSecurityDeposit ?? 750)}</p></div>
-        <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Next</p><p className="mt-1 text-sm font-bold">Review the selected proposal</p><p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">The client-facing version stays read-only.</p></div>
-      </section>
+        <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+          <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Your proposal</p>
+                <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[9px] font-bold text-[color:var(--portal-muted)]">{proposalItems.length} {proposalItems.length === 1 ? 'item' : 'items'}</span>
+              </div>
+              <h4 className="mt-1 text-base font-bold">{packageName}</h4>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Package and required rows are protected. Optional add-ons and owner items can be changed here.</p>
+            </div>
+            <div className="flex shrink-0 items-start gap-2">
+              <div className="text-right">
+                <p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</p>
+                <p className="mt-1 font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{pricingReady ? formatMoney(finalEventPrice) : 'Calculating…'}</p>
+              </div>
+              {onAddCustomItem ? <button type="button" onClick={() => beginCustomItem()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-[0.1em] text-[#8c6529] transition hover:bg-[#caa24c]/16 dark:text-[#f1d27a]"><Plus size={13} /> Custom item</button> : null}
+            </div>
+          </div>
+
+          {customDraft ? (
+            <div className="border-b border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Owner-only custom item</p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">This editor is owner-only. Use client-ready wording because a charged item appears in the final proposal.</p>
+                </div>
+                <button type="button" onClick={() => setCustomDraft(null)} className="rounded p-1 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]" aria-label="Cancel custom item"><X size={15} /></button>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Item name</span><input value={customDraft.description} onChange={(event) => setCustomDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="Example: Ceremony draping" className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Category</span><input value={customDraft.category} onChange={(event) => setCustomDraft((current) => current ? { ...current, category: event.target.value } : current)} placeholder="Custom item" className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
+                <label className="block space-y-1.5 sm:col-span-2"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Client-ready detail</span><input value={customDraft.detail} onChange={(event) => setCustomDraft((current) => current ? { ...current, detail: event.target.value } : current)} placeholder="Optional detail shown with the item" className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Quantity</span><input type="number" min="1" step="1" inputMode="numeric" value={customDraft.quantity} onChange={(event) => setCustomDraft((current) => current ? { ...current, quantity: event.target.value } : current)} className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Exact unit price</span><span className="flex min-h-10 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12"><span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">$</span><input type="number" min="0.01" step="0.01" inputMode="decimal" value={customDraft.unitPrice} onChange={(event) => setCustomDraft((current) => current ? { ...current, unitPrice: event.target.value } : current)} className="min-h-10 min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none" /></span></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Payment bucket</span><PortalSelect value={customDraft.paymentBucket} onChange={(value) => setCustomDraft((current) => current ? { ...current, paymentBucket: value === 'venue' ? 'venue' : 'event' } : current)} options={[{ value: 'event', label: 'Event Services' }, { value: 'venue', label: 'Venue Services' }]} className="w-full" buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setCustomDraft(null)} className="inline-flex min-h-9 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={saveCustomItem} disabled={!customDraft.description.trim() || !(Number(customDraft.unitPrice) > 0)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#b98a3e] px-3 text-[9px] font-black uppercase tracking-[0.1em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><FilePenLine size={13} /> {customDraft.id ? 'Update item' : 'Add item'}</button></div>
+            </div>
+          ) : null}
+
+          {pricingReady && itemGroups.length ? (
+            <div className="divide-y divide-[color:var(--portal-border)]">
+              {itemGroups.map(([category, categoryItems]) => {
+                const categoryTotal = categoryItems.reduce((sum, item) => sum + lineAmount(item), 0)
+                return (
+                  <section key={category} className="p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
+                      <p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(categoryTotal)}</p>
+                    </div>
+                    <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40">
+                      {categoryItems.map((item, index) => {
+                        const status = statusFor(item)
+                        const amount = lineAmount(item)
+                        const isCustom = item.pricingRole === 'custom' || Boolean(item.id && customItemIds.has(item.id))
+                        const matchingService = !isCustom && item.pricingRole === 'add_on'
+                          ? allServices.find((service) => selectedServiceIdsSet.has(service.id) && serviceMatchesLineItem(service, item))
+                          : undefined
+                        const canRemoveAddOn = Boolean(matchingService)
+                        return (
+                          <div key={`${item.id || item.catalogId || item.description}-${index}`} className={`flex gap-3 px-3 py-3 sm:px-4 ${index ? 'border-t border-[color:var(--portal-border)]' : ''}`}>
+                            <div className="pt-0.5">
+                              {isCustom ? <Pencil size={14} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" /> : status.label === 'Add-on' ? <PackageCheck size={14} className="text-[#a8792f] dark:text-[#f1d27a]" aria-hidden="true" /> : <LockKeyhole size={14} className="text-[color:var(--portal-muted)]" aria-hidden="true" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                <p className="text-sm font-semibold leading-5">{item.description}{Number(item.quantity || 1) > 1 ? ` × ${item.quantity}` : ''}</p>
+                                <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{status.label === 'Included' && amount === 0 ? 'Included' : formatMoney(amount)}</p>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ${statusClass(status.tone)}`}>{status.label}</span>
+                                <span className="text-[10px] text-[color:var(--portal-muted)]">Qty {Math.max(1, Number(item.quantity) || 1)} · {formatMoney(item.unitPrice)} each</span>
+                              </div>
+                              {item.detail ? <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}
+                              {isCustom || canRemoveAddOn ? (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {isCustom && onUpdateCustomItem ? <button type="button" onClick={() => beginCustomItem(item)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-[#8c6529] transition hover:bg-[#caa24c]/10 dark:text-[#f1d27a]"><Pencil size={11} /> Edit</button> : null}
+                                  {isCustom && item.id && onRemoveCustomItem ? <button type="button" onClick={() => onRemoveCustomItem(item.id as string)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-rose-700 transition hover:bg-rose-500/10 dark:text-rose-300"><Trash2 size={11} /> Remove</button> : null}
+                                  {canRemoveAddOn && matchingService ? <button type="button" onClick={() => onToggleService(matchingService.id)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] font-black uppercase tracking-[0.09em] text-rose-700 transition hover:bg-rose-500/10 dark:text-rose-300"><X size={11} /> Remove add-on</button> : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-sm leading-6 text-[color:var(--portal-muted)]">Complete the event details and wait for pricing to load this package’s exact line items.</div>
+          )}
+
+          <div className="grid gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 sm:grid-cols-2 sm:p-5">
+            <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price treatment</p><p className="mt-1 text-xs font-semibold">Retail rates, except Gold’s all-inclusive rates.</p></div>
+            <div className="sm:text-right"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Refundable security deposit</p><p className="mt-1 font-mono text-sm font-black text-[color:var(--portal-text)]">{formatMoney(refundableSecurityDeposit ?? 750)}</p><p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Collected separately after the agreement is signed.</p></div>
+          </div>
+        </section>
+      </div>
     </div>
   )
 }

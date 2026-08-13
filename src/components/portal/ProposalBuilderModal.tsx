@@ -63,6 +63,8 @@ export type ProposalServiceOption = {
   detail?: string
   exclusiveGroup?: 'decor' | 'catering' | 'photo_booth' | 'bar'
   quantityLabel?: string
+  locked?: boolean
+  required?: boolean
 }
 
 type CalculatedPackage = {
@@ -200,6 +202,10 @@ const PACKAGE_UNAVAILABLE_ADD_ON_IDS: Record<ProposalPackageId, readonly string[
 }
 
 const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
+  { id: 'venue_rental', name: 'Venue rental', category: 'Venue & rental', detail: 'The selected date and rental period set this exact price.', locked: true, required: true },
+  { id: 'required_security', name: 'Security', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
+  { id: 'required_cleaning', name: 'Cleaning', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
+  { id: 'tables_chairs_setup', name: 'Tables & chairs setup', category: 'Setup & rentals', detail: 'Included or required according to the selected package.', locked: true, required: true },
   { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Decor package selected for the event.', exclusiveGroup: 'decor' },
   { id: 'full_decor', name: 'Full decor', category: 'Decor', detail: 'Full decor collection selected for the event.', exclusiveGroup: 'decor' },
   { id: 'buffet_catering', name: 'Buffet catering', category: 'Catering', detail: 'Calculated from the expected guest count.', exclusiveGroup: 'catering' },
@@ -374,7 +380,47 @@ function selectedServiceIdsFrom(context: ProposalBuilderContext, items: LuxorInv
       return candidate.filter((value): value is string => typeof value === 'string' && Boolean(value))
     }
   }
-  return items.map((item) => item.catalogId).filter((id): id is string => Boolean(id))
+  // Legacy saved line items do not reliably say whether a row came from the
+  // package or from an optional selection. Inferring every catalog row as an
+  // add-on would let a Rental package inherit Bronze/Silver inclusions and
+  // charge them again. Only an explicitly marked add-on is safe to carry
+  // forward; owners can deliberately re-add anything else from the library.
+  return items
+    .filter((item) => item.pricingRole === 'add_on')
+    .map((item) => item.catalogId)
+    .filter((id): id is string => Boolean(id))
+}
+
+/**
+ * Custom rows are an owner-only editing affordance, but a custom charge must
+ * be part of the same final-price calculation and client-facing breakdown as
+ * every other proposal line. Returning null (rather than []) preserves a
+ * pre-existing calculated custom row until the owner explicitly saves a list.
+ */
+function customItemsFrom(context: ProposalBuilderContext): LuxorInvoiceLineItem[] | null {
+  const selection = asRecord(context.pricing_selection)
+  if (!selection) return null
+  for (const candidate of [selection.customItems, selection.custom_items]) {
+    if (Array.isArray(candidate)) {
+      return candidate
+        .map(normalizeLineItem)
+        .filter((item): item is LuxorInvoiceLineItem => Boolean(item))
+        .map((item) => ({ ...item, pricingRole: 'custom' as const }))
+    }
+  }
+  return null
+}
+
+function customItemSelection(items: LuxorInvoiceLineItem[]) {
+  return items.map((item) => ({
+    id: item.id,
+    category: item.category || 'Custom items',
+    description: item.description,
+    quantity: Math.max(1, Number(item.quantity) || 1),
+    unitPrice: Math.max(0, Number(item.unitPrice) || 0),
+    paymentBucket: item.paymentBucket === 'venue' ? 'venue' as const : 'event' as const,
+    ...(item.detail ? { detail: item.detail } : {}),
+  }))
 }
 
 function getPaymentPlan(context: ProposalBuilderContext): LuxorProposalPaymentPlan | null {
@@ -485,6 +531,10 @@ export function ProposalBuilderModal({
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
+  const customItems = useMemo(() => (
+    customItemsFrom(effectiveContext)
+    ?? items.filter((item) => item.pricingRole === 'custom')
+  ), [effectiveContext, items])
   const selectedServiceIdSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
   const selectedPackageOption = PACKAGE_OPTIONS.find((option) => option.id === selectedPackage)
   const packageIncludedServiceIds = selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : []
@@ -510,6 +560,16 @@ export function ProposalBuilderModal({
     const next = { ...effectiveContext, ...patch }
     setLocalContext(next)
     onProposalContextChange?.(next)
+  }
+
+  const updateCustomItems = (nextItems: LuxorInvoiceLineItem[]) => {
+    updateProposalContext({
+      pricing_selection: {
+        ...(effectiveContext.pricing_selection || {}),
+        service_ids: selectedServiceIds,
+        customItems: customItemSelection(nextItems),
+      },
+    })
   }
 
   const setEventDate = (value: string) => {
@@ -602,6 +662,7 @@ export function ProposalBuilderModal({
       eventType: eventType || effectiveContext.event_type || null,
       rentalPeriod,
       addOns: selectedServiceIds,
+      customItems: customItemSelection(customItems),
       discountType,
       discountValue: Math.max(0, Number(adjustmentValue) || 0),
       discountApproved: Math.max(0, Number(adjustmentValue) || 0) <= 0 || discountApproved,
@@ -616,6 +677,7 @@ export function ProposalBuilderModal({
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
       service_ids: selectedServiceIds,
+      customItems: customItemSelection(customItems),
     },
     selected_services: selectedServiceIds,
     line_items: items.map((item) => ({
@@ -629,7 +691,7 @@ export function ProposalBuilderModal({
       value: Math.max(0, Number(adjustmentValue) || 0),
     },
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [adjustmentValue, discountApproved, discountType, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, rentalPeriod, selectedPackage, selectedServiceIds, taxRate])
+  }), [adjustmentValue, customItems, discountApproved, discountType, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, rentalPeriod, selectedPackage, selectedServiceIds, taxRate])
   const pricingRequestKey = JSON.stringify(pricingRequest)
 
   useEffect(() => {
@@ -680,6 +742,26 @@ export function ProposalBuilderModal({
     const calculated = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === option.id)
     return { ...option, ...(calculated || {}), id: calculated?.id || option.id }
   }), [calculatedPackages])
+  const servicePackageOptions = useMemo(() => PACKAGE_OPTIONS.map((option) => {
+    const calculated = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === option.id)
+    return {
+      ...option,
+      // Keep the UI's canonical package ID even though the calculator uses
+      // rental_only / bronze_essentials etc. internally.
+      id: option.id,
+      finalEventPrice: calculated?.finalEventPrice,
+    }
+  }), [calculatedPackages])
+  const servicePrices = useMemo(() => {
+    const result: Record<string, number | null> = {}
+    for (const value of arrayFromUnknown(calculation?.addOnQuotes)) {
+      const quote = asRecord(value)
+      const id = asString(quote?.id)
+      if (!id) continue
+      result[id] = quote?.total === null ? null : asNumber(quote?.total) ?? null
+    }
+    return result
+  }, [calculation])
   const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === normalizePackageId(selectedPackage))
   const selectedContext = calculation?.context || effectiveContext
   const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
@@ -1109,13 +1191,25 @@ export function ProposalBuilderModal({
 
               <ProposalPackageItemsPanel
                 packageName={selectedCalculatedPackage?.name || selectedPackageOption?.name || null}
+                packageOptions={servicePackageOptions}
+                selectedPackageId={selectedPackage}
+                onSelectPackage={selectPackage}
                 lineItems={finalLineItems}
+                customItems={customItems}
                 optionalServices={optionalServices}
+                catalogServices={availableServices}
+                addableServiceIds={optionalServices.map((service) => service.id)}
+                lockedServiceIds={[...packageIncludedServiceIds]}
+                unavailableServiceIds={[...packageUnavailableAddOnIds]}
                 selectedServiceIds={selectedServiceIds}
+                servicePrices={servicePrices}
                 pricingReady={pricingStatus === 'ready' && !pricingErrors.length}
                 finalEventPrice={finalEventPrice}
                 refundableSecurityDeposit={refundableSecurityDeposit}
                 onToggleService={updateServiceSelection}
+                onAddCustomItem={(item) => updateCustomItems([...customItems, item])}
+                onUpdateCustomItem={(item) => updateCustomItems(customItems.map((current) => current.id === item.id ? item : current))}
+                onRemoveCustomItem={(itemId) => updateCustomItems(customItems.filter((item) => item.id !== itemId))}
               />
 
               {pricingErrors.length ? (
