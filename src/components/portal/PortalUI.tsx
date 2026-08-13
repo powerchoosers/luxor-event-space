@@ -1489,13 +1489,13 @@ export function PortalTableSkeleton({
         <tr key={rowIndex} className="border-b border-[color:var(--portal-border)]">
           <td className="px-6 py-4" colSpan={cols}>
             <div className="flex items-center gap-4">
-              <div className="h-9 w-9 shrink-0 rounded-full luxor-skeleton" />
+              <PortalSkeleton className="h-9 w-9 shrink-0 rounded-full" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 w-48 rounded luxor-skeleton" />
-                <div className="h-3 w-32 rounded luxor-skeleton" />
+                <PortalSkeleton className="h-4 w-48 rounded" />
+                <PortalSkeleton className="h-3 w-32 rounded" />
               </div>
-              <div className="h-6 w-20 rounded-full luxor-skeleton" />
-              <div className="h-4 w-28 rounded luxor-skeleton" />
+              <PortalSkeleton className="h-6 w-20 rounded-full" />
+              <PortalSkeleton className="h-4 w-28 rounded" />
             </div>
           </td>
         </tr>
@@ -1513,11 +1513,51 @@ export function PortalCardSkeleton({ count = 4 }: { count?: number }) {
           className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-4 shadow-xl"
         >
           <div className="flex items-center justify-between">
-            <div className="h-5 w-24 rounded luxor-skeleton" />
-            <div className="h-6 w-6 rounded-full luxor-skeleton" />
+            <PortalSkeleton className="h-5 w-24 rounded" />
+            <PortalSkeleton className="h-6 w-6 rounded-full" />
           </div>
-          <div className="h-8 w-32 rounded luxor-skeleton" />
-          <div className="h-3 w-40 rounded luxor-skeleton" />
+          <PortalSkeleton className="h-8 w-32 rounded" />
+          <PortalSkeleton className="h-3 w-40 rounded" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The single visual primitive for portal loading placeholders. Keeping the
+ * animation here lets lists, cards, and calculated-price surfaces feel like
+ * one product in both portal themes.
+ */
+export function PortalSkeleton({ className = '' }: { className?: string }) {
+  return <span aria-hidden="true" className={`block luxor-skeleton ${className}`.trim()} />
+}
+
+/**
+ * A calm, structural placeholder for a calculation whose rows are about to
+ * resolve. It intentionally has no spinner so money, package, and schedule
+ * surfaces all use the same portal loading language.
+ */
+export function PortalCalculationSkeleton({
+  label = 'Calculating updated details',
+  rows = 3,
+  className = '',
+}: {
+  label?: string
+  rows?: number
+  className?: string
+}) {
+  return (
+    <div role="status" aria-live="polite" className={`overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 ${className}`.trim()}>
+      <span className="sr-only">{label}</span>
+      {Array.from({ length: Math.max(1, rows) }).map((_, index) => (
+        <div key={index} className={`flex items-center gap-3 px-3 py-3 sm:px-4 ${index ? 'border-t border-[color:var(--portal-border)]' : ''}`}>
+          <PortalSkeleton className="h-7 w-7 shrink-0 rounded-lg" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <PortalSkeleton className={index % 2 ? 'h-3.5 w-2/5 rounded' : 'h-3.5 w-3/5 rounded'} />
+            <PortalSkeleton className="h-2.5 w-1/3 rounded" />
+          </div>
+          <PortalSkeleton className="h-3.5 w-16 shrink-0 rounded" />
         </div>
       ))}
     </div>

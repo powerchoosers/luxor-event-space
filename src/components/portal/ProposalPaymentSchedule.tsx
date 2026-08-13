@@ -9,6 +9,7 @@ import {
   ReceiptText,
   ShieldCheck,
 } from 'lucide-react'
+import { PortalCalculationSkeleton, PortalSkeleton } from '@/components/portal/PortalUI'
 import type { LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 
 type DateValue = string | null | undefined
@@ -247,12 +248,14 @@ function FinancialStat({
   value,
   detail,
   highlighted = false,
+  loading = false,
 }: {
   icon: ReactNode
   label: string
   value: string
   detail: string
   highlighted?: boolean
+  loading?: boolean
 }) {
   return (
     <div className={`min-w-0 rounded-xl border p-4 ${highlighted ? 'border-[#caa24c]/35 bg-[#caa24c]/[0.07]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}`}>
@@ -260,7 +263,7 @@ function FinancialStat({
         <span className={`grid h-7 w-7 place-items-center rounded-lg ${highlighted ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)]'}`}>{icon}</span>
         <p className="text-[9px] font-black uppercase tracking-[0.12em]">{label}</p>
       </div>
-      <p className={`mt-3 font-mono text-xl font-black tabular-nums ${highlighted ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>{value}</p>
+      {loading ? <PortalSkeleton className="mt-3 h-6 w-24 rounded" /> : <p className={`mt-3 font-mono text-xl font-black tabular-nums ${highlighted ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>{value}</p>}
       <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
@@ -304,6 +307,7 @@ export function ProposalPaymentSchedule({
     : paymentPlan?.mode === 'deposit_and_balance'
       ? 'Initial contract payment + final balance'
       : 'Payment plan not set'
+  const isAwaitingFinalPrice = schedule.finalEventPrice === null
   const hasFinalEventBalance = typeof schedule.finalEventBalance === 'number' && schedule.finalEventBalance > 0
   const hasScheduledFinalBalance = hasFinalEventBalance && Boolean(schedule.finalPaymentDueDate)
   const finalBalanceTiming = hasScheduledFinalBalance
@@ -332,9 +336,9 @@ export function ProposalPaymentSchedule({
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <FinancialStat icon={<Building2 size={15} />} label="Venue Services" value={formatMoney(schedule.venueServicesTotal)} detail="Proposal pricing bucket" />
-        <FinancialStat icon={<CircleDollarSign size={15} />} label="Event Services" value={formatMoney(schedule.eventServicesTotal)} detail="Proposal pricing bucket" />
-        <FinancialStat icon={<ReceiptText size={15} />} label="Final Event Price" value={formatMoney(schedule.finalEventPrice)} detail="Used for this payment schedule" highlighted />
+        <FinancialStat icon={<Building2 size={15} />} label="Venue Services" value={formatMoney(schedule.venueServicesTotal)} detail="Proposal pricing bucket" loading={isAwaitingFinalPrice} />
+        <FinancialStat icon={<CircleDollarSign size={15} />} label="Event Services" value={formatMoney(schedule.eventServicesTotal)} detail="Proposal pricing bucket" loading={isAwaitingFinalPrice} />
+        <FinancialStat icon={<ReceiptText size={15} />} label="Final Event Price" value={formatMoney(schedule.finalEventPrice)} detail="Used for this payment schedule" highlighted loading={isAwaitingFinalPrice} />
       </div>
 
       <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.055] p-4">
@@ -367,15 +371,15 @@ export function ProposalPaymentSchedule({
         <div className="grid gap-px border-b border-[color:var(--portal-border)] bg-[color:var(--portal-border)] sm:grid-cols-3">
           <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
             <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final Event Price</p>
-            <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>
+            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>}
           </div>
           <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
             <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial contract payment</p>
-            <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.initialContractPayment)}</p>
+            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.initialContractPayment)}</p>}
           </div>
           <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
             <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final Event Price balance</p>
-            <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>
+            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>}
           </div>
         </div>
 
@@ -387,7 +391,9 @@ export function ProposalPaymentSchedule({
             </div>
           </div>
 
-          {schedule.rows.length > 0 ? (
+          {isAwaitingFinalPrice ? (
+            <PortalCalculationSkeleton label="Calculating the agreement payment schedule" rows={3} />
+          ) : schedule.rows.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-[color:var(--portal-border)]">
               <table className="w-full min-w-[620px] text-left">
                 <caption className="sr-only">Final Event Price payment schedule</caption>
@@ -442,7 +448,7 @@ export function ProposalPaymentSchedule({
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal service breakdown</p>
                 <h4 className="mt-0.5 text-base font-bold text-[color:var(--portal-text)]">Venue + Event Services</h4>
               </div>
-              <p className="font-mono text-xl font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="h-6 w-28 rounded" /> : <p className="font-mono text-xl font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>}
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{eventServicesPaymentNote?.trim() || 'Venue Services and Event Services are shown above so the proposal is easy to understand. The signed-agreement schedule is calculated from the Final Event Price, so neither display bucket changes the payment amounts by itself.'}</p>
           </div>
@@ -454,23 +460,23 @@ export function ProposalPaymentSchedule({
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Payment summary</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">
-              <span>{formatMoney(schedule.initialContractPayment)}</span>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-20 rounded" /> : <span>{formatMoney(schedule.initialContractPayment)}</span>}
               <span className="text-[color:var(--portal-muted)]">+</span>
-              <span>{formatMoney(schedule.finalEventBalance)}</span>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-20 rounded" /> : <span>{formatMoney(schedule.finalEventBalance)}</span>}
               <span className="text-[color:var(--portal-muted)]">=</span>
-              <span className="text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(schedule.finalEventPrice)}</span>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-24 rounded" /> : <span className="text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(schedule.finalEventPrice)}</span>}
             </div>
             <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Initial contract payment + final balance = Final Event Price</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[380px]">
             <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
               <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Due after agreement signature</p>
-              <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.amountDueAfterSignature)}</p>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.amountDueAfterSignature)}</p>}
               <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Initial payment + refundable deposit</p>
             </div>
             <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
               <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Final Event Price balance</p>
-              <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>
+              {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>}
               <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{finalBalanceTiming}</p>
             </div>
           </div>

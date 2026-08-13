@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalCalculationSkeleton, PortalSelect, PortalSkeleton } from '@/components/portal/PortalUI'
 
 export type ProposalPackageServiceOption = {
   id: string
@@ -249,7 +249,11 @@ export function ProposalPackageItemsPanel({
                 {selected ? <span className="inline-flex items-center gap-1 rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-[#8c6529] dark:text-[#f1d27a]"><Check size={10} /> Selected</span> : null}
               </div>
               <p className="mt-2 text-sm font-bold leading-5 text-[color:var(--portal-text)]">{pkg.name}</p>
-              <p className="mt-2 font-mono text-sm font-black text-[#8c6529] dark:text-[#f1d27a]">{pricingReady && typeof packagePrice === 'number' ? formatMoney(packagePrice) : 'Awaiting event facts'}</p>
+              {pricingReady && typeof packagePrice === 'number' ? (
+                <p className="mt-2 font-mono text-sm font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(packagePrice)}</p>
+              ) : (
+                <PortalSkeleton className="mt-2 h-4 w-24 rounded" />
+              )}
               {pkg.description ? <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">{pkg.description}</p> : null}
             </>
             return onSelectPackage ? (
@@ -296,7 +300,11 @@ export function ProposalPackageItemsPanel({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <p className="text-sm font-semibold leading-5">{service.name}</p>
-                            <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{pricingReady && price !== null ? formatMoney(price) : '—'}</p>
+                            {pricingReady && price !== null ? (
+                              <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(price)}</p>
+                            ) : (
+                              <PortalSkeleton className="mt-0.5 h-3.5 w-16 shrink-0 rounded" />
+                            )}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {service.detail ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
@@ -332,7 +340,9 @@ export function ProposalPackageItemsPanel({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Your proposal</p>
-                <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[9px] font-bold text-[color:var(--portal-muted)]">{proposalItems.length} {proposalItems.length === 1 ? 'item' : 'items'}</span>
+                {pricingReady ? (
+                  <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 text-[9px] font-bold text-[color:var(--portal-muted)]">{proposalItems.length} {proposalItems.length === 1 ? 'item' : 'items'}</span>
+                ) : <PortalSkeleton className="h-5 w-16 rounded-full" />}
               </div>
               <h4 className="mt-1 text-base font-bold">{packageName}</h4>
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Package and required rows are protected. Optional add-ons and owner items can be changed here.</p>
@@ -340,7 +350,9 @@ export function ProposalPackageItemsPanel({
             <div className="flex shrink-0 items-start gap-2">
               <div className="text-right">
                 <p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</p>
-                <p className="mt-1 font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{pricingReady ? formatMoney(finalEventPrice) : 'Calculating…'}</p>
+                {pricingReady ? (
+                  <p className="mt-1 font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p>
+                ) : <PortalSkeleton className="mt-2 ml-auto h-6 w-28 rounded" />}
               </div>
               {onAddCustomItem ? <button type="button" onClick={() => beginCustomItem()} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-[0.1em] text-[#8c6529] transition hover:bg-[#caa24c]/16 dark:text-[#f1d27a]"><Plus size={13} /> Custom item</button> : null}
             </div>
@@ -418,7 +430,10 @@ export function ProposalPackageItemsPanel({
               })}
             </div>
           ) : (
-            <div className="p-6 text-center text-sm leading-6 text-[color:var(--portal-muted)]">Complete the event details and wait for pricing to load this package’s exact line items.</div>
+            <div className="p-4 sm:p-5">
+              <PortalCalculationSkeleton label="Calculating the selected package items" rows={4} />
+              <p className="mt-3 text-center text-xs leading-5 text-[color:var(--portal-muted)]">Calculating the package’s exact items and final price…</p>
+            </div>
           )}
 
           <div className="grid gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 sm:grid-cols-2 sm:p-5">
