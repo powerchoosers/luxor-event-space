@@ -131,6 +131,7 @@ export const Footer = () => {
             &copy; {new Date().getFullYear()} Luxor Event Space. Built with Elegance in San Antonio.
           </p>
           <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/60 transition-colors hover:text-[#f7efe3]">
+            <Link href="/sms-signup">Text Preferences</Link>
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/terms">Terms of Service</Link>
           </div>

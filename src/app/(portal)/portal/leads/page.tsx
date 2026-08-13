@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Users,
   Plus,
@@ -35,7 +37,7 @@ import {
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
-  PortalModal,
+  PortalCloseButton,
   PortalSelect,
   PortalButton,
   PortalContactAvatar,
@@ -116,8 +118,8 @@ export default function LeadsPage() {
   const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
   const [currentPage, setCurrentPage] = useState<number>(1)
 
-  // New Lead Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  // New lead drawer state
+  const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false)
   const [newLeadName, setNewLeadName] = useState('')
   const [newLeadEmail, setNewLeadEmail] = useState('')
   const [newLeadPhone, setNewLeadPhone] = useState('')
@@ -223,7 +225,7 @@ export default function LeadsPage() {
         throw new Error(data.error || 'Failed to create lead.')
       }
 
-      setIsModalOpen(false)
+      setIsLeadDrawerOpen(false)
       // Reset form
       setNewLeadName('')
       setNewLeadEmail('')
@@ -539,7 +541,7 @@ export default function LeadsPage() {
 
               </>
             )}
-            <PortalButton variant="primary" onClick={() => setIsModalOpen(true)}>
+            <PortalButton variant="primary" onClick={() => setIsLeadDrawerOpen(true)}>
               <Plus size={14} /> New Lead
             </PortalButton>
           </div>
@@ -961,48 +963,48 @@ export default function LeadsPage() {
         )}
       </PortalTabTransition>
 
-      {/* Manual Lead Addition Modal */}
-      {isModalOpen && (
-        <PortalModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add New Client / Lead">
-          <form onSubmit={handleCreateLead} className="space-y-4">
+      <LeadEntryDrawer isOpen={isLeadDrawerOpen} onClose={() => setIsLeadDrawerOpen(false)}>
+          <form onSubmit={handleCreateLead} className="flex min-h-full flex-col space-y-5">
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Full Name</label>
+              <label htmlFor="new-lead-name" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Full name</label>
               <input
+                id="new-lead-name"
                 type="text"
                 required
+                data-autofocus="true"
                 value={newLeadName}
                 onChange={(e) => setNewLeadName(e.target.value)}
                 placeholder="Client name..."
-                className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Email Address</label>
+                <label htmlFor="new-lead-email" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Email address</label>
                 <input
+                  id="new-lead-email"
                   type="email"
                   value={newLeadEmail}
                   onChange={(e) => setNewLeadEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Phone Number</label>
+                <label htmlFor="new-lead-phone" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Phone number</label>
                 <input
+                  id="new-lead-phone"
                   type="text"
                   value={newLeadPhone}
                   onChange={(e) => setNewLeadPhone(e.target.value)}
                   placeholder="214-555-0199"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Event Type</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Event type</label>
                 <PortalSelect
                   value={newLeadEventType}
                   onChange={setNewLeadEventType}
@@ -1018,47 +1020,50 @@ export default function LeadsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Guest Count</label>
+                <label htmlFor="new-lead-guests" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Guest count</label>
                 <input
+                  id="new-lead-guests"
                   type="number"
                   value={newLeadGuestCount}
                   onChange={(e) => setNewLeadGuestCount(e.target.value)}
                   placeholder="200"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500 text-center"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-center text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Target Month/Date</label>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label htmlFor="new-lead-target-date" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Target month / date</label>
                 <input
+                  id="new-lead-target-date"
                   type="text"
                   value={newLeadTargetDate}
                   onChange={(e) => setNewLeadTargetDate(e.target.value)}
                   placeholder="Oct 2026"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Initial Inquiry Details / Message</label>
+              <label htmlFor="new-lead-message" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Initial inquiry details / message</label>
               <textarea
+                id="new-lead-message"
                 value={newLeadMessage}
                 onChange={(e) => setNewLeadMessage(e.target.value)}
                 placeholder="Include setup, package needs, or specific booking parameters..."
-                className="w-full h-20 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded p-2 outline-none focus:border-blue-500 leading-relaxed font-sans"
+                className="h-28 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
               />
             </div>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 disabled:opacity-40"
+              className="mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-xs font-bold uppercase tracking-widest !text-white shadow-lg shadow-[#8c6529]/20 transition-colors hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[#b98a3e]/45 disabled:!text-white/80"
             >
+              <Plus size={14} aria-hidden="true" />
               Add Client Lead
             </button>
           </form>
-        </PortalModal>
-      )}
+      </LeadEntryDrawer>
 
       <PortalBulkActionDeck
         selectedCount={bulkSelectedCount}
@@ -1127,6 +1132,141 @@ export default function LeadsPage() {
         onCompleted={handleLeadLifecycleCompleted}
       />
     </PortalPageFrame>
+  )
+}
+
+function LeadEntryDrawer({
+  isOpen,
+  onClose,
+  children,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  const [mounted, setMounted] = useState(false)
+  const drawerRef = useRef<HTMLElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  const titleId = React.useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const originalOverflow = document.body.style.overflow
+    const originalPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const primaryInput = drawerRef.current?.querySelector<HTMLElement>('[data-autofocus]')
+      const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      ;(primaryInput ?? firstFocusable ?? drawerRef.current)?.focus()
+    })
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (document.querySelector('[data-portal-popover="true"]')) return
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+
+      if (event.key !== 'Tab' || !drawerRef.current) return
+      const focusable = Array.from(
+        drawerRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      )
+      if (focusable.length === 0) {
+        event.preventDefault()
+        drawerRef.current.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPaddingRight
+      previouslyFocusedRef.current?.focus()
+    }
+  }, [isOpen])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-[100] flex"
+          exit={{ opacity: 0 }}
+        >
+          <motion.button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close add client lead panel"
+            className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            onClick={onClose}
+          />
+          <motion.aside
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            className="relative z-10 ml-auto flex h-full w-full max-w-[600px] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <h2 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">Add new client / lead</h2>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Capture the client details and the event information you have so far.</p>
+              </div>
+              <PortalCloseButton onClick={onClose} aria-label="Close add client lead panel" className="shrink-0" />
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 portal-scrollbar sm:p-6">
+              {children}
+            </div>
+          </motion.aside>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
   )
 }
 

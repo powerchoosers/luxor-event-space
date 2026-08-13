@@ -346,7 +346,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
     return NextResponse.json({ accepted: true, signingUrl })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'We could not record your proposal selection.'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // Keep implementation and database failures in the server logs. A prospect
+    // should never be asked to interpret a Postgres or provider error while
+    // accepting their proposal.
+    console.error('Public proposal acceptance failed:', error)
+    return NextResponse.json({
+      error: 'We couldn\'t complete your proposal selection just yet. Please try again in a moment, or contact Luxor if the issue continues.',
+    }, { status: 500 })
   }
 }

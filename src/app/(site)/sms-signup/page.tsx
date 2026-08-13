@@ -22,7 +22,6 @@ export default function SmsSignupPage() {
     const cleanPhone = phone.trim()
     if (!name.trim()) return setError('Please enter your name.')
     if (cleanPhone.replace(/\D/g, '').length < 10) return setError('Please enter a complete mobile number.')
-    if (!customerCareAgreed && !marketingAgreed) return setError('Please select at least one text-message preference.')
 
     setSubmitting(true)
     const payload: LuxorInquiryInput = {
@@ -63,14 +62,14 @@ export default function SmsSignupPage() {
           <div className="py-8 text-center" role="status">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c] text-[#050505]"><Check className="h-6 w-6" /></div>
             <h1 className="mt-5 font-serif text-4xl">Your text preference is saved.</h1>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#d7c29a]/75">Luxor will only text you as described in the consent you accepted. You can reply STOP at any time.</p>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#d7c29a]/75">Your preferences are saved. If you did not select a text-message option, Luxor will not enroll this number for texts.</p>
           </div>
         ) : (
           <>
             <MessageCircle className="h-6 w-6 text-[#d7b964]" />
             <p className="mt-5 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-[#d7b964]">Luxor text messages</p>
             <h1 className="mt-3 font-serif text-4xl leading-tight sm:text-5xl">Stay in touch about your Luxor plans.</h1>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-[#d7c29a]/75">Choose the kinds of texts you would like to receive from Luxor. Customer-care and promotional consent are separate choices.</p>
+            <p className="mt-4 max-w-xl text-sm leading-7 text-[#d7c29a]/75">Choose the kinds of texts you would like to receive from Luxor. Both choices are optional, and you can save this form without selecting either one.</p>
 
             <form onSubmit={submit} className="mt-8 space-y-5">
               <label className="block">
@@ -98,7 +97,7 @@ export default function SmsSignupPage() {
               {error ? <p role="alert" className="rounded-md border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</p> : null}
               <button type="submit" disabled={submitting} className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-[#050505] transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-70">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-                {submitting ? 'Saving preferences…' : 'Save text preferences'}
+                {submitting ? 'Saving preferences…' : 'Save preferences'}
               </button>
             </form>
           </>

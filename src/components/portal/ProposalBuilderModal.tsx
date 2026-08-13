@@ -927,7 +927,7 @@ export function ProposalBuilderModal({
                 <FileText size={19} />
               </span>
               <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Luxor Event Space</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Luxor at Las Palmas Events</p>
                 <h2 className="truncate font-serif text-xl font-semibold leading-6 sm:text-2xl">{isEditing ? 'Revise final proposal' : 'Build final proposal'}</h2>
               </div>
             </div>
@@ -1305,7 +1305,7 @@ export function ProposalBuilderModal({
                 <div className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                   <div className="border-b border-[#caa24c]/20 bg-[#1a140d] px-5 py-7 text-center text-white sm:px-8">
                     <p className="font-serif text-2xl tracking-[0.2em] text-[#f1d27a]">LUXOR</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/65">Event Space</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/65">At Las Palmas Events</p>
                   </div>
                   <div className="p-5 sm:p-7">
                     <div className="flex flex-col gap-5 border-b border-[color:var(--portal-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
@@ -1319,7 +1319,7 @@ export function ProposalBuilderModal({
 
                     <div className="mt-5 grid gap-2 border-y border-[color:var(--portal-border)] py-4 sm:grid-cols-2 lg:grid-cols-4">
                       {[
-                        ['Venue', 'Luxor Event Space'],
+                        ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
                         ['Access', eventAccess || (rentalPeriod === 'full_day' ? 'Full day · 11 AM–11 PM' : rentalPeriod === 'morning' ? 'Morning · 9 AM–4 PM' : 'Evening · 6 PM–1 AM')],
@@ -1463,7 +1463,7 @@ export function ProposalBuilderModal({
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
               <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
-              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>

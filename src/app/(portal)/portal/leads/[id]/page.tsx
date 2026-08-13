@@ -3426,10 +3426,12 @@ export default function LeadDetailPage({
                         </button>
                       ) : null}
                       {lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost' ? (
-                        <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
-                          <AlertCircle size={13} />
-                          <span>Mark deal lost</span>
-                        </button>
+                        <div className="mt-1 border-t border-[color:var(--portal-border)] pt-1.5">
+                          <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:border-red-500/45 hover:bg-red-500/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:text-red-300">
+                            <AlertCircle size={13} />
+                            <span>Mark deal lost</span>
+                          </button>
+                        </div>
                       ) : null}
                     </motion.div>
                   </>
