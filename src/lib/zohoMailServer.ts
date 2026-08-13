@@ -25,6 +25,13 @@ type ZohoCalendarEventResponse = {
   }>
 }
 
+type ZohoCalendarEventDetailsResponse = {
+  events?: Array<{
+    uid?: string
+    etag?: string | number
+  }>
+}
+
 type ZohoMessageSummary = {
   messageId?: string
   message_id?: string
@@ -505,6 +512,69 @@ export async function createLuxorZohoCalendarEvent(input: {
     eventUid: event.uid || null,
     viewEventUrl: event.viewEventURL || null,
   }
+}
+
+/**
+ * Remove a Luxor-created calendar invite and notify its attendees. The event
+ * UID is stored with the inquiry when a portal user schedules a tour, so this
+ * never searches or changes an unrelated calendar entry.
+ */
+export async function cancelLuxorZohoCalendarEvent(eventUid: string) {
+  const normalizedEventUid = eventUid.trim()
+  if (!normalizedEventUid) return { status: 'not_linked' as const }
+
+  const { calendarBaseUrl, calendarUid } = getZohoConfig()
+  const accessToken = await getZohoAccessToken()
+  const resolvedCalendarUid = await getZohoCalendarUid(accessToken, calendarBaseUrl, calendarUid)
+  const eventPath = `/calendars/${encodeURIComponent(resolvedCalendarUid)}/events/${encodeURIComponent(normalizedEventUid)}`
+
+  // Zoho requires the latest ETag when removing an event. Reading it first
+  // also lets a repeated owner action treat an already-removed invite as a
+  // successful, idempotent cancellation.
+  const detailsResponse = await fetch(`${calendarBaseUrl}${eventPath}`, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  })
+  const detailsText = await detailsResponse.text()
+
+  if (detailsResponse.status === 404) return { status: 'already_removed' as const }
+  if (!detailsResponse.ok) {
+    if (detailsResponse.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho calendar event lookup failed with ${detailsResponse.status}: ${detailsText}`)
+  }
+
+  const details = detailsText ? JSON.parse(detailsText) as ZohoCalendarEventDetailsResponse : {}
+  const event = details.events?.[0]
+  if (!event?.uid) return { status: 'already_removed' as const }
+  const eventData = {
+    uid: event.uid,
+    ...(event?.etag !== undefined && event?.etag !== null ? { etag: String(event.etag) } : {}),
+    // Notify both Luxor and the client that the event was cancelled.
+    notify_attendee: 2,
+  }
+  const response = await fetch(
+    `${calendarBaseUrl}${eventPath}?eventdata=${encodeURIComponent(JSON.stringify(eventData))}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    },
+  )
+  const resultText = await response.text()
+
+  if (response.status === 404) return { status: 'already_removed' as const }
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho calendar event cancellation failed with ${response.status}: ${resultText}`)
+  }
+
+  return { status: 'cancelled' as const }
 }
 
 async function getZohoCalendarUid(accessToken: string, calendarBaseUrl: string, configuredUid: string) {

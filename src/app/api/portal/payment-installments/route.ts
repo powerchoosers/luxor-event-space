@@ -2,6 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { getLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+
+class PaymentScheduleUnavailableError extends Error {
+  constructor(readonly status: 404 | 409, message: string) {
+    super(message)
+    this.name = 'PaymentScheduleUnavailableError'
+  }
+}
+
+async function assertPaymentScheduleIsActive(bookingId: string, fallbackInquiryId?: string | null) {
+  const booking = await getLuxorBooking(bookingId)
+  if (!booking) throw new PaymentScheduleUnavailableError(404, 'Booking record not found.')
+
+  const inquiryId = booking.inquiry_id || fallbackInquiryId || null
+  const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') {
+    throw new PaymentScheduleUnavailableError(409, 'This deal is closed lost or its booking is cancelled. Payment schedule entries cannot be added or changed.')
+  }
+}
 
 export async function GET(request: NextRequest) {
   const session = await getLuxorPortalSession()
@@ -17,11 +37,15 @@ export async function POST(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const body = await request.json() as Partial<LuxorPaymentInstallment>
     if (!body.booking_id || !body.label || Number(body.amount) < 0) return NextResponse.json({ error: 'Booking, label, and amount are required.' }, { status: 400 })
+    await assertPaymentScheduleIsActive(body.booking_id, body.inquiry_id)
     const allowedMethods = ['card', 'cash', 'check', 'ACH', 'Zelle']
     const method = body.payment_method && allowedMethods.includes(body.payment_method) ? body.payment_method : null
     const [installment] = await supabaseRest<LuxorPaymentInstallment[]>('luxor_payment_installments?select=*', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ booking_id: body.booking_id, invoice_id: body.invoice_id || null, inquiry_id: body.inquiry_id || null, label: String(body.label).trim().slice(0, 160), installment_order: Math.max(1, Number(body.installment_order) || 1), amount: Math.max(0, Number(body.amount) || 0), due_at: body.due_at || null, status: body.status || 'scheduled', payment_method: method, reference: body.reference || null, metadata: body.metadata || {} }) })
     return NextResponse.json(installment, { status: 201 })
   } catch (error) {
+    if (error instanceof PaymentScheduleUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Installment could not be saved.' }, { status: 500 })
   }
 }
@@ -32,12 +56,18 @@ export async function PATCH(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const body = await request.json() as Partial<LuxorPaymentInstallment> & { id?: string }
     if (!body.id) return NextResponse.json({ error: 'Installment id is required.' }, { status: 400 })
+    const [existing] = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=booking_id,inquiry_id&id=eq.${encodeURIComponent(body.id)}&limit=1`)
+    if (!existing?.booking_id) return NextResponse.json({ error: 'Payment schedule entry not found.' }, { status: 404 })
+    await assertPaymentScheduleIsActive(existing.booking_id, existing.inquiry_id)
     const updates: Record<string, unknown> = {}
     for (const field of ['label', 'amount', 'due_at', 'status', 'payment_method', 'reference', 'metadata', 'invoice_id']) if (body[field as keyof typeof body] !== undefined) updates[field] = body[field as keyof typeof body]
     if (body.status === 'paid') { updates.paid_at = new Date().toISOString() }
     const [installment] = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&id=eq.${encodeURIComponent(body.id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }) })
     return NextResponse.json(installment)
   } catch (error) {
+    if (error instanceof PaymentScheduleUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Installment could not be updated.' }, { status: 500 })
   }
 }

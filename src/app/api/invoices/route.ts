@@ -322,6 +322,12 @@ export async function POST(request: NextRequest) {
     if (!requestedInvoiceKind) {
       return NextResponse.json({ error: 'invoice_kind must be event, deposit, or final_balance.' }, { status: 400 })
     }
+    if (inquiryId) {
+      const inquiry = await getLuxorInquiry(inquiryId)
+      if (inquiry?.status === 'closed_lost') {
+        return NextResponse.json({ error: 'This lead is marked Deal Lost. Reopen the opportunity before creating a new proposal or payment record.' }, { status: 409 })
+      }
+    }
     if (leadEventId && (!inquiryId || !await getLuxorLeadEventForInquiry(leadEventId, inquiryId))) {
       return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
     }
@@ -483,6 +489,12 @@ export async function PATCH(request: NextRequest) {
     const existing = await getInvoice(id)
     if (!existing) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
     if (existing.status === 'paid') return NextResponse.json({ error: 'A paid invoice cannot be repriced.' }, { status: 409 })
+    if (existing.inquiry_id) {
+      const inquiry = await getLuxorInquiry(existing.inquiry_id)
+      if (inquiry?.status === 'closed_lost') {
+        return NextResponse.json({ error: 'This lead is marked Deal Lost. Its proposal and payment records cannot be changed here.' }, { status: 409 })
+      }
+    }
 
     const isEventInvoice = existing.invoice_kind === 'event'
     if (isEventInvoice && (existing.status === 'sent' || Boolean(existing.price_locked_at))) {

@@ -3,6 +3,7 @@ import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 import { getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
+import { formatLuxorDate } from './luxorDateFormatting'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const pageWidth = 612
@@ -11,8 +12,7 @@ const margin = 54
 const contentRight = pageWidth - margin
 
 function displayDate(value: string) {
-  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  return formatLuxorDate(value) || value
 }
 
 function displayQuantity(value: number) {
@@ -112,12 +112,14 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
 
   const drawTableHeader = () => {
     page.drawRectangle({ x: margin, y: y - 18, width: contentRight - margin, height: 18, color: rgb(0.88, 0.84, 0.76) })
-    text('CATEGORY', margin + 6, y - 12, 7, bold, muted)
-    text('SERVICE', 145, y - 12, 7, bold, muted)
-    rightText('QTY', 380, y - 12, 7, bold, muted)
-    rightText('UNIT PRICE', 459, y - 12, 7, bold, muted)
-    rightText('LINE TOTAL', contentRight - 6, y - 12, 7, bold, muted)
+    text('YOUR PACKAGE', margin + 6, y - 12, 7, bold, muted)
+    rightText('QTY', contentRight - 6, y - 12, 7, bold, muted)
     y -= 27
+  }
+
+  const drawCheckmark = (x: number, yPosition: number) => {
+    page.drawLine({ start: { x, y: yPosition }, end: { x: x + 3, y: yPosition - 3 }, thickness: 1.15, color: gold })
+    page.drawLine({ start: { x: x + 3, y: yPosition - 3 }, end: { x: x + 8, y: yPosition + 3 }, thickness: 1.15, color: gold })
   }
 
   const drawSummaryRow = (label: string, value: string, options: { accent?: boolean; strong?: boolean; topBorder?: boolean } = {}) => {
@@ -185,19 +187,17 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   }
 
   for (const item of summary.lines) {
-    const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, 80)
-    const serviceLines = wrap(item.service, regular, 9.2, 200)
-    const rowHeight = Math.max(categoryLines.length * 10, serviceLines.length * 12, 12) + 16
+    const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, 450)
+    const serviceLines = wrap(item.service, regular, 9.2, 450)
+    const rowHeight = categoryLines.length * 10 + serviceLines.length * 12 + 15
     if (y - rowHeight < 76) {
       startNewPage(true)
       drawTableHeader()
     }
-    drawLines(categoryLines, margin + 6, y - 11, 7.5, bold, muted, 10)
-    drawLines(serviceLines, 145, y - 11, 9.2, regular, ink, 12)
-    const included = item.included && item.lineTotal === 0
-    rightText(displayQuantity(item.quantity), 380, y - 11, 9, regular, muted)
-    rightText(included ? 'Included' : money(item.unitPrice), 459, y - 11, 8.6, included ? regular : bold, included ? gold : ink)
-    rightText(included ? 'Included' : money(item.lineTotal), contentRight - 6, y - 11, 9, bold, included ? gold : ink)
+    drawCheckmark(margin + 7, y - 14)
+    drawLines(categoryLines, margin + 24, y - 11, 7.5, bold, muted, 10)
+    drawLines(serviceLines, margin + 24, y - 11 - categoryLines.length * 10, 9.2, regular, ink, 12)
+    rightText(displayQuantity(item.quantity), contentRight - 6, y - 11, 9, regular, muted)
     page.drawLine({ start: { x: margin, y: y - rowHeight }, end: { x: contentRight, y: y - rowHeight }, thickness: 0.45, color: line })
     y -= rowHeight
   }

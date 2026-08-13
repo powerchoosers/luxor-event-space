@@ -89,6 +89,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
     const inquiry = await getLuxorInquiry(invoice.inquiry_id)
     if (!inquiry?.email) return NextResponse.json({ error: 'Luxor needs a client email before an agreement can be issued.' }, { status: 409 })
+    if (inquiry.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This proposal is no longer available. Please contact Luxor Event Space.' }, { status: 410 })
+    }
 
     const context = (invoice.proposal_context && typeof invoice.proposal_context === 'object'
       ? invoice.proposal_context

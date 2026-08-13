@@ -1,6 +1,7 @@
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorNote } from './luxorInquiryTypes'
 import { LUXOR_BOOKING_EMAIL, LUXOR_VENUE_ADDRESS, LUXOR_WEBSITE } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
+import { formatLuxorDate } from './luxorDateFormatting'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -173,34 +174,18 @@ function displayQuantity(value: number) {
 }
 
 function displayEventDate(value: string) {
-  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  return formatLuxorDate(value) || value
 }
 
 function proposalBreakdownHtml(summary: LuxorProposalPricingSummary) {
-  const rows = summary.lines.map((item) => {
-    const included = item.included && item.lineTotal === 0
-    const unitPrice = included ? 'Included' : money(item.unitPrice)
-    const lineTotal = included ? 'Included' : money(item.lineTotal)
-    return `<tr>
-      <td style="padding:12px 8px 12px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#a99878;font-size:9px;line-height:1.45;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</td>
-      <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45">${escapeHtml(item.service)}${included ? '<br /><span style="color:#caa24c;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase">Included</span>' : ''}</td>
-      <td align="center" style="padding:12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px">${displayQuantity(item.quantity)}</td>
-      <td align="right" style="padding:12px 4px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${unitPrice}</td>
-      <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:11px;font-weight:700;white-space:nowrap">${lineTotal}</td>
-    </tr>`
-  }).join('') || `<tr><td colspan="5" style="padding:18px 0;color:#b8aa9a;font-size:12px;line-height:1.6">Your finalized package details are included in the secure proposal.</td></tr>`
+  const rows = summary.lines.map((item) => `<tr>
+    <td style="padding:12px 8px 12px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#caa24c;font-size:15px;line-height:1.2">&#10003;</td>
+    <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45"><span style="display:block;color:#a99878;font-size:9px;line-height:1.35;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}</td>
+    <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${item.quantity > 1 ? `Qty ${displayQuantity(item.quantity)}` : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="3" style="padding:18px 0;color:#b8aa9a;font-size:12px;line-height:1.6">Your finalized package details are available in the secure proposal.</td></tr>`
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
-    <tr>
-      <td style="padding:0 8px 9px 0;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Category</td>
-      <td style="padding:0 8px 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Service</td>
-      <td align="center" style="padding:0 6px 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Qty</td>
-      <td align="right" style="padding:0 4px 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Unit</td>
-      <td align="right" style="padding:0 0 9px 6px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Total</td>
-    </tr>${rows}
+    <tr><td colspan="3" style="padding:0 0 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Your package</td></tr>${rows}
   </table>`
 }
 
@@ -277,7 +262,7 @@ export async function buildLuxorProposalContractEmail(input: {
   const packageName = summary.packageName || input.booking.package_name || input.inquiry.package_interest || 'Custom Luxor package'
   const offerDisclosure = offerDisclosureHtml(input.invoice, summary, 'accepted')
   const finalDueDate = input.booking.final_payment_due_date
-    ? new Date(`${input.booking.final_payment_due_date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    ? displayEventDate(input.booking.final_payment_due_date)
     : null
   const paymentScheduleCopy = finalDueDate
     ? `Your agreement includes the remaining-balance schedule, with the final event balance due ${finalDueDate}.`
@@ -351,7 +336,7 @@ export async function buildLuxorPaymentRequestEmail(input: {
   const remainingAfterPayment = Math.max(0, Math.round((balanceDue - paymentAmount) * 100) / 100)
   const personalizedIntroduction = await generateProposalIntroduction(input)
   const finalDueDate = booking.final_payment_due_date
-    ? new Date(`${booking.final_payment_due_date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    ? displayEventDate(booking.final_payment_due_date)
     : 'the due date in your Event Agreement'
   const paymentScheduleNote = invoice.invoice_kind === 'final_balance'
     ? `This payment covers the remaining event balance due ${finalDueDate}. The refundable security deposit was collected separately with the initial booking payment and remains held under the Event Agreement.`
@@ -417,7 +402,7 @@ export async function buildLuxorPaymentRequestEmail(input: {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td width="50%" style="vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);"><p class="luxor-gold" style="margin:0 0 8px;font-size:9px;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:#caa24c;">Event</p><p class="luxor-title" style="margin:0;font-size:14px;color:#f7efe3;">${escapeHtml(invoice.event_type || 'Private Event')}</p></td>
-              <td width="50%" style="vertical-align:top;padding-left:20px;"><p class="luxor-gold" style="margin:0 0 8px;font-size:9px;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:#caa24c;">Event Date</p><p class="luxor-title" style="margin:0;font-size:14px;color:#f7efe3;">${escapeHtml(inquiry.target_date || 'To be confirmed')}</p></td>
+              <td width="50%" style="vertical-align:top;padding-left:20px;"><p class="luxor-gold" style="margin:0 0 8px;font-size:9px;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:#caa24c;">Event Date</p><p class="luxor-title" style="margin:0;font-size:14px;color:#f7efe3;">${escapeHtml(inquiry.target_date ? displayEventDate(inquiry.target_date) : 'To be confirmed')}</p></td>
             </tr>
           </table>
         </td></tr>
@@ -525,12 +510,14 @@ export async function buildLuxorDateLockDepositEmail(input: {
   notes?: LuxorNote[]
 }) {
   const firstName = input.inquiry.full_name.split(/\s+/)[0] || input.inquiry.full_name
-  const eventDate = input.booking.event_date || input.inquiry.target_date || 'your requested date'
+  const eventDate = input.booking.event_date || input.inquiry.target_date
+  const eventDateLabel = eventDate ? displayEventDate(eventDate) : 'your requested date'
+  const finalPaymentDueDateLabel = input.finalPaymentDueDate ? displayEventDate(input.finalPaymentDueDate) : null
   const eventType = input.inquiry.event_type || 'event'
 
   const offerDisclosure = offerDisclosureHtml(input.invoice)
   return {
     subject: `Your Luxor booking package — reservation deposit and agreement`,
-    html: `<!doctype html><html><body style="margin:0;background:#050505;color:#f7efe3;font-family:Arial,sans-serif"><table role="presentation" width="100%"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.28)"><tr><td style="height:4px;background:#caa24c"></td></tr><tr><td align="center" style="padding:30px 40px;border-bottom:1px solid rgba(202,162,76,.18)"><div style="font-family:Georgia,serif;color:#caa24c;font-size:30px;letter-spacing:.18em">LUXOR</div><div style="margin-top:6px;color:#8c754f;font-size:8px;letter-spacing:.35em">AT LAS PALMAS EVENTS</div></td></tr><tr><td style="padding:44px 42px"><div style="color:#caa24c;font-size:10px;font-weight:700;letter-spacing:.25em;text-transform:uppercase">Booking Package</div><h1 style="font-family:Georgia,serif;font-size:34px;line-height:1.12;margin:14px 0 18px">Complete the two steps for ${escapeHtml(eventDate)}</h1><p style="font-size:15px;line-height:1.75;color:#d7c29a">Hi ${escapeHtml(firstName)}, we are thrilled to prepare your ${escapeHtml(eventType)} at Luxor Event Space. Your date is held while you complete the agreement and your negotiated reservation deposit. The reservation becomes official when both steps are complete.</p><div style="margin:26px 0;padding:20px;border:1px solid rgba(202,162,76,.18);background:#0d0b09"><p style="margin:0 0 8px;color:#caa24c;font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase">Reservation Deposit Due at Signing</p><p style="margin:0;font-family:Georgia,serif;font-size:32px;color:#f1d27a">${money(input.depositAmount)}</p><p style="margin:8px 0 0;color:#9f9079;font-size:12px">Deposit invoice, agreement, and Guest Guide are attached.${input.finalPaymentDueDate ? ` Remaining event balance and the ${money(input.securityDepositAmount || 750)} refundable security deposit are due ${escapeHtml(input.finalPaymentDueDate)}.` : ''}</p></div>${offerDisclosure}<p style="margin:28px 0 12px"><a href="${escapeHtml(input.reviewUrl)}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 28px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Pay Reservation Deposit</a></p><p style="margin:0 0 30px"><a href="${escapeHtml(input.signingUrl)}" style="display:inline-block;border:1px solid rgba(202,162,76,.55);color:#f1d27a;text-decoration:none;padding:15px 27px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Review & Sign Agreement</a></p><p style="font-size:12px;line-height:1.7;color:#9f9079">Questions or adjustments? Reply directly to this email and our team will assist you.</p></td></tr></table></td></tr></table></body></html>`,
+    html: `<!doctype html><html><body style="margin:0;background:#050505;color:#f7efe3;font-family:Arial,sans-serif"><table role="presentation" width="100%"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.28)"><tr><td style="height:4px;background:#caa24c"></td></tr><tr><td align="center" style="padding:30px 40px;border-bottom:1px solid rgba(202,162,76,.18)"><div style="font-family:Georgia,serif;color:#caa24c;font-size:30px;letter-spacing:.18em">LUXOR</div><div style="margin-top:6px;color:#8c754f;font-size:8px;letter-spacing:.35em">AT LAS PALMAS EVENTS</div></td></tr><tr><td style="padding:44px 42px"><div style="color:#caa24c;font-size:10px;font-weight:700;letter-spacing:.25em;text-transform:uppercase">Booking Package</div><h1 style="font-family:Georgia,serif;font-size:34px;line-height:1.12;margin:14px 0 18px">Complete the two steps for ${escapeHtml(eventDateLabel)}</h1><p style="font-size:15px;line-height:1.75;color:#d7c29a">Hi ${escapeHtml(firstName)}, we are thrilled to prepare your ${escapeHtml(eventType)} at Luxor Event Space. Your date is held while you complete the agreement and your negotiated reservation deposit. The reservation becomes official when both steps are complete.</p><div style="margin:26px 0;padding:20px;border:1px solid rgba(202,162,76,.18);background:#0d0b09"><p style="margin:0 0 8px;color:#caa24c;font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase">Reservation Deposit Due at Signing</p><p style="margin:0;font-family:Georgia,serif;font-size:32px;color:#f1d27a">${money(input.depositAmount)}</p><p style="margin:8px 0 0;color:#9f9079;font-size:12px">Deposit invoice, agreement, and Guest Guide are attached.${finalPaymentDueDateLabel ? ` Remaining event balance and the ${money(input.securityDepositAmount || 750)} refundable security deposit are due ${escapeHtml(finalPaymentDueDateLabel)}.` : ''}</p></div>${offerDisclosure}<p style="margin:28px 0 12px"><a href="${escapeHtml(input.reviewUrl)}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 28px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Pay Reservation Deposit</a></p><p style="margin:0 0 30px"><a href="${escapeHtml(input.signingUrl)}" style="display:inline-block;border:1px solid rgba(202,162,76,.55);color:#f1d27a;text-decoration:none;padding:15px 27px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Review & Sign Agreement</a></p><p style="font-size:12px;line-height:1.7;color:#9f9079">Questions or adjustments? Reply directly to this email and our team will assist you.</p></td></tr></table></td></tr></table></body></html>`,
   }
 }

@@ -56,6 +56,12 @@ export async function listInvoicesByInquiry(inquiryId: string) {
   )
 }
 
+export async function listInvoicesByBooking(bookingId: string) {
+  return supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=created_at.desc`,
+  )
+}
+
 export async function getInvoiceByBookingAndKind(bookingId: string, invoiceKind: Exclude<LuxorInvoiceKind, 'event'>) {
   const invoices = await supabaseRest<LuxorInvoice[]>(
     `luxor_invoices?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&invoice_kind=eq.${invoiceKind}&order=created_at.desc&limit=1`,

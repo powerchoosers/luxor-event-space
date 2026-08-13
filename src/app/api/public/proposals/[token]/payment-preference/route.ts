@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 
@@ -10,6 +11,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const { token } = await params
   const invoice = await getInvoiceByPublicToken(token)
   if (!invoice) return NextResponse.json({ error: 'Payment request not found.' }, { status: 404 })
+  const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+  if (invoice.status === 'cancelled' || inquiry?.status === 'closed_lost') {
+    return NextResponse.json({ error: 'This proposal is no longer available.' }, { status: 410 })
+  }
   const body = await request.json().catch(() => ({})) as { method?: string; amount?: string }
   if (!methods.includes(body.method as typeof methods[number]) || !amounts.includes(body.amount as typeof amounts[number])) return NextResponse.json({ error: 'Choose a payment method and amount.' }, { status: 400 })
   const booking = invoice.booking_id ? await getLuxorBooking(invoice.booking_id) : (invoice.inquiry_id ? (await listLuxorBookingsByInquiry(invoice.inquiry_id)).find((item) => item.invoice_id === invoice.id) : null)

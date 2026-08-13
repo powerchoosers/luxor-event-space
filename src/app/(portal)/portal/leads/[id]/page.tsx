@@ -71,6 +71,11 @@ import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
+import {
+  hasCancellableTour,
+  LeadLifecycleActionSheet,
+  type LeadLifecycleAction,
+} from '@/components/portal/LeadLifecycleActionSheet'
 
 type ZohoEmailMessage = {
   id: string
@@ -96,6 +101,7 @@ type ActivityEntry =
   | { kind: 'call'; id: string; createdAt: string; call: LuxorCall }
 
 function tourDisplayStatus(lead: LuxorInquiry) {
+  if (lead.tour_attendance_status === 'cancelled') return 'Cancelled'
   if (lead.tour_attendance_status === 'attended') return 'Completed'
   if (lead.tour_attendance_status === 'no_show') return 'No show'
   if (lead.status === 'tour_confirmed') return 'Confirmed'
@@ -352,6 +358,7 @@ export default function LeadDetailPage({
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
   const [showEventPicker, setShowEventPicker] = useState(false)
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false)
   const [newEventType, setNewEventType] = useState('')
@@ -1393,7 +1400,11 @@ export default function LeadDetailPage({
 
   const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
     if (!lead) return false
-    const eventScopedStatus = Boolean(selectedLeadEvent && ['proposal_sent', 'booked', 'closed_lost'].includes(newStatus))
+    if (newStatus === 'closed_lost') {
+      setLeadLifecycleAction('deal-lost')
+      return false
+    }
+    const eventScopedStatus = Boolean(selectedLeadEvent && ['proposal_sent', 'booked'].includes(newStatus))
     const previousStatus = eventScopedStatus ? selectedLeadEvent?.status || lead.status : lead.status
     try {
       setUpdatingStatus(true)
@@ -1404,9 +1415,7 @@ export default function LeadDetailPage({
           ? 'proposal'
           : newStatus === 'booked'
             ? 'contract'
-            : newStatus === 'closed_lost'
-              ? 'closed_lost'
-              : 'inquiry'
+            : 'inquiry'
       const res = await fetch(eventScopedStatus ? '/api/lead-events' : '/api/inquiries', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -2857,7 +2866,7 @@ export default function LeadDetailPage({
     pushRecommendedAction({
       icon: <ArrowLeft size={15} />,
       label: 'Re-open lead',
-      detail: 'Bring this inquiry back into the pipeline',
+      detail: 'Reopens the lead only; cancelled proposals and contracts stay cancelled',
       onClick: () => handleGuidedStatusChange('new'),
       disabled: updatingStatus,
       loading: updatingStatus,
@@ -3410,6 +3419,18 @@ export default function LeadDetailPage({
                         <FileText size={13} className="text-[#caa24c]" />
                         <span>View invoices & documents</span>
                       </button>
+                      {hasCancellableTour(lead) ? (
+                        <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('cancel-tour') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                          <Calendar size={13} className="text-[#caa24c]" />
+                          <span>Cancel scheduled tour</span>
+                        </button>
+                      ) : null}
+                      {lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost' ? (
+                        <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+                          <AlertCircle size={13} />
+                          <span>Mark deal lost</span>
+                        </button>
+                      ) : null}
                     </motion.div>
                   </>
                 ) : null}
@@ -3909,12 +3930,12 @@ export default function LeadDetailPage({
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
                             <span className="flex-1 min-w-[100px] py-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
                           ) : null}
-                          {tourDisplayStatus(lead) !== 'Completed' ? (
+                          {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
                             <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="flex-1 min-w-[90px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
                           ) : null}
                           <button type="button" onClick={openTourScheduleModal} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Reschedule</button>
                           {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Call</button> : null}
-                          {tourDisplayStatus(lead) !== 'No show' ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="flex-1 min-w-[80px] py-1.5 rounded border border-red-500/20 text-[9px] font-black uppercase text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer">No Show</button> : null}
+                          {!['No show', 'Cancelled'].includes(tourDisplayStatus(lead)) ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="flex-1 min-w-[80px] py-1.5 rounded border border-red-500/20 text-[9px] font-black uppercase text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer">No Show</button> : null}
                         </div>
                       </section>
                       
@@ -6452,6 +6473,32 @@ export default function LeadDetailPage({
         {textPopupOpen && lead.phone ? <LuxorThreadPopup inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} onClose={() => setTextPopupOpen(false)} /> : null}
       </AnimatePresence>
 
+      <LeadLifecycleActionSheet
+        lead={lead}
+        action={leadLifecycleAction}
+        onClose={() => setLeadLifecycleAction(null)}
+        onCompleted={({ lead: updatedLead, calendarWarning }) => {
+          setLead(updatedLead)
+          setLeadLifecycleAction(null)
+          notify({
+            title: leadLifecycleAction === 'deal-lost' ? 'Deal marked lost' : 'Tour cancelled',
+            description: leadLifecycleAction === 'deal-lost'
+              ? 'The active opportunity has been closed and its open work has been withdrawn.'
+              : 'The tour slot and pending reminders have been released.',
+            variant: 'success',
+          })
+          if (calendarWarning) {
+            notify({
+              title: 'Calendar invite still needs attention',
+              description: calendarWarning,
+              variant: 'warning',
+              durationMs: 0,
+            })
+          }
+          void fetchAllData(false)
+        }}
+      />
+
       <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
         <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-card)] text-[color:var(--portal-text)]">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
@@ -8304,7 +8351,7 @@ function formatTimelineDate(value: string | number) {
   if (!value) return 'No date'
   const numericValue = Number(value)
   const date = Number.isFinite(numericValue) ? new Date(numericValue) : new Date(value)
-  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString('en-US', { weekday: 'short' })
 }
 
 function compactActivityText(value: string | null | undefined, maxLength = 520) {
@@ -8331,6 +8378,7 @@ function formatDisplayDate(value: string | null | undefined): string {
     const day = Number(match[3])
     const date = new Date(year, month, day, 12, 0, 0)
     return date.toLocaleDateString('en-US', {
+      weekday: 'short',
       month: 'long',
       day: 'numeric',
       year: 'numeric',
@@ -8341,6 +8389,7 @@ function formatDisplayDate(value: string | null | undefined): string {
   if (Number.isNaN(parsed.getTime())) return value
 
   return parsed.toLocaleDateString('en-US', {
+    weekday: 'short',
     month: 'long',
     day: 'numeric',
     year: 'numeric',

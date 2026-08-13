@@ -1,4 +1,5 @@
 import type { LuxorInvoice, LuxorInvoiceLineItem } from './luxorInquiryTypes'
+import { formatLuxorDate } from './luxorDateFormatting'
 
 const MONEY_EPSILON = 0.005
 
@@ -64,12 +65,7 @@ export function isLuxorOfferExpired(invoice: Pick<LuxorInvoice, 'offer_expires_a
 }
 
 export function formatLuxorOfferExpiry(value: string | null | undefined) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(date)
+  return formatLuxorDate(value, { includeTime: true, includeTimeZone: true })
 }
 
 export function luxorOfferSnapshot(invoice: LuxorInvoice) {

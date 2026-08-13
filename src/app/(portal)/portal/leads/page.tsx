@@ -44,6 +44,11 @@ import {
   PortalFilterBar,
 } from '@/components/portal/PortalUI'
 import {
+  LeadLifecycleActionSheet,
+  LeadLifecycleActionsMenu,
+  type LeadLifecycleAction,
+} from '@/components/portal/LeadLifecycleActionSheet'
+import {
   PortalBulkActionDeck,
   PortalBulkChoiceDialog,
   PortalBulkConfirmDialog,
@@ -52,6 +57,7 @@ import {
   PortalBulkRowSelector,
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
+import { useToast } from '@/components/portal/ToastProvider'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -60,7 +66,6 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'tour_confirmed', label: 'Tour Confirmed' },
   { value: 'proposal_sent', label: 'Proposal Sent' },
   { value: 'booked', label: 'Booked' },
-  { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
 const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
@@ -89,13 +94,14 @@ const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
 ]
 
 export default function LeadsPage() {
+  const { notify } = useToast()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const boardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost'>('dashboard')
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
@@ -127,6 +133,8 @@ export default function LeadsPage() {
   const [bulkStatus, setBulkStatus] = useState<LuxorInquiryStatus>('contacted')
   const [bulkListMode, setBulkListMode] = useState<'add' | 'remove' | null>(null)
   const [marketingListNames, setMarketingListNames] = useState<string[]>([])
+  const [lifecycleLead, setLifecycleLead] = useState<LuxorInquiry | null>(null)
+  const [lifecycleAction, setLifecycleAction] = useState<LeadLifecycleAction | null>(null)
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -151,7 +159,7 @@ export default function LeadsPage() {
       const savedViewMode = localStorage.getItem('luxor_leads_view_mode')
       const savedPage = localStorage.getItem('luxor_leads_current_page')
       if (savedTab) {
-        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients')
+        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost')
       }
       if (savedViewMode) {
         setViewMode(savedViewMode as 'list' | 'board')
@@ -235,7 +243,36 @@ export default function LeadsPage() {
     }
   }
 
+  const openLeadLifecycleAction = (lead: LuxorInquiry, action: LeadLifecycleAction) => {
+    setLifecycleLead(lead)
+    setLifecycleAction(action)
+  }
+
+  const handleLeadLifecycleCompleted = ({ lead: updatedLead, calendarWarning }: { lead: LuxorInquiry; calendarWarning?: string }) => {
+    setLeads((current) => current.map((lead) => (
+      lead.id === updatedLead.id
+        ? { ...lead, ...updatedLead, metadata: { ...lead.metadata, ...updatedLead.metadata } }
+        : lead
+    )))
+    setLifecycleAction(null)
+    setLifecycleLead(null)
+    if (calendarWarning) {
+      notify({
+        title: 'Calendar invite still needs attention',
+        description: calendarWarning,
+        variant: 'warning',
+        durationMs: 0,
+      })
+    }
+    void fetchLeads()
+  }
+
   const handleMoveStatus = async (leadId: string, newStatus: LuxorInquiryStatus) => {
+    if (newStatus === 'closed_lost') {
+      const lead = leads.find((item) => item.id === leadId)
+      if (lead) openLeadLifecycleAction(lead, 'deal-lost')
+      return
+    }
     try {
       // Optimistically update status locally
       setLeads((prev) =>
@@ -256,6 +293,11 @@ export default function LeadsPage() {
   }
 
   const handleMovePipelineStage = async (leadId: string, newStage: LuxorPipelineStage) => {
+    if (newStage === 'closed_lost') {
+      const lead = leads.find((item) => item.id === leadId)
+      if (lead) openLeadLifecycleAction(lead, 'deal-lost')
+      return
+    }
     const column = PIPELINE_COLUMNS.find((item) => item.id === newStage)
     try {
       setLeads((prev) =>
@@ -327,6 +369,7 @@ export default function LeadsPage() {
   // Computed Metrics
   const totalCount = sortedLeads.length
   const newLeadsCount = useMemo(() => leads.filter((l) => l.status === 'new').length, [leads])
+  const closedLostCount = useMemo(() => leads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length, [leads])
 
   // Pagination Calculations
   const totalPages = Math.ceil(totalCount / 25)
@@ -512,10 +555,11 @@ export default function LeadsPage() {
           { id: 'tours', label: 'Tours', icon: <Calendar size={15} /> },
           { id: 'proposals', label: 'Proposals & Contracts', icon: <FileCheck size={15} /> },
           { id: 'clients', label: 'Booked Clients', icon: <UserCheck size={15} /> },
+          { id: 'lost', label: 'Closed Lost', icon: <X size={15} />, count: closedLostCount },
           ]}
           activeTab={activeTab}
           onTabChange={(tab) => {
-            const nextTab = tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients'
+            const nextTab = tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost'
             setActiveTab(nextTab)
             localStorage.setItem('luxor_leads_active_tab', nextTab)
           }}
@@ -524,9 +568,10 @@ export default function LeadsPage() {
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
-        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
-        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onMovePipelineStage={handleMovePipelineStage} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
           viewMode === 'list' ? (
@@ -553,7 +598,9 @@ export default function LeadsPage() {
                   options={[
                     { value: 'all', label: 'All pipeline steps' },
                     { value: 'grand_opening', label: 'Grand Opening RSVP' },
-                    ...PIPELINE_STAGE_OPTIONS,
+                    ...PIPELINE_STAGE_OPTIONS.map((option) => option.value === 'closed_lost'
+                      ? { ...option, label: `Closed Lost (${closedLostCount})` }
+                      : option),
                   ]}
                 />
                 <PortalSelect value={eventTypeFilter} onChange={setEventTypeFilter} className="w-full" options={eventTypeOptions} />
@@ -607,7 +654,7 @@ export default function LeadsPage() {
                 <th className="px-6 py-3.5">Event Parameters</th>
                 <th className="px-6 py-3.5">Intake Date</th>
                 <th className="px-6 py-3.5">Source Node</th>
-                <th className="px-8 py-3.5 text-right">Engagement</th>
+                <th className="px-8 py-3.5 text-right">Engagement & Actions</th>
               </tr>
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
@@ -692,7 +739,7 @@ export default function LeadsPage() {
                       </span>
                     </td>
                     <td className="px-8 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
+                      <div className="flex items-center justify-end gap-2 opacity-100 transition-all duration-300 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:translate-x-4 sm:group-hover:translate-x-0 sm:group-focus-within:translate-x-0">
                         {lead.phone ? (
                           <button
                             type="button"
@@ -715,6 +762,10 @@ export default function LeadsPage() {
                         >
                           <ExternalLink size={14} />
                         </Link>
+                        <LeadLifecycleActionsMenu
+                          lead={lead}
+                          onAction={(action) => openLeadLifecycleAction(lead, action)}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -836,16 +887,11 @@ export default function LeadsPage() {
                                 <ChevronRight size={12} />
                               </button>
                             )}
-                            {lead.status !== 'closed_lost' && (
-                              <button
-                                type="button"
-                                onClick={() => handleMoveStatus(lead.id, 'closed_lost')}
-                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-650 hover:text-red-400 hover:bg-red-500/5 transition-colors"
-                                title="Mark Lost"
-                              >
-                                <X size={12} />
-                              </button>
-                            )}
+                            <LeadLifecycleActionsMenu
+                              lead={lead}
+                              onAction={(action) => openLeadLifecycleAction(lead, action)}
+                              className="h-7 w-7 border-zinc-850 bg-zinc-900/60 [&>svg]:h-3.5 [&>svg]:w-3.5"
+                            />
                           </div>
                         </div>
                       </div>
@@ -864,17 +910,17 @@ export default function LeadsPage() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Closed Lost</span>
               </div>
               <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
-                {sortedLeads.filter(l => l.status === 'closed_lost').length}
+                {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length}
               </span>
             </div>
 
             <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
-              {sortedLeads.filter(l => l.status === 'closed_lost').length === 0 ? (
+              {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length === 0 ? (
                 <div className="border border-dashed border-zinc-900/40 rounded-xl py-8 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-700">
                   No lost leads
                 </div>
               ) : (
-                sortedLeads.filter(l => l.status === 'closed_lost').map((lead) => (
+                sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').map((lead) => (
                   <div key={lead.id} className="bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800/80 transition-all group">
                     <Link href={`/portal/leads/${lead.id}`} className="block">
                       <div className="flex items-center gap-3">
@@ -898,13 +944,12 @@ export default function LeadsPage() {
                     </Link>
 
                     <div className="flex justify-end pt-3 mt-3 border-t border-zinc-900/20">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveStatus(lead.id, 'new')}
-                        className="text-[9px] font-black uppercase tracking-wider text-blue-500/80 hover:text-blue-400"
+                      <Link
+                        href={`/portal/leads/${lead.id}`}
+                        className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]"
                       >
-                        Re-Open Lead
-                      </button>
+                        View dossier
+                      </Link>
                     </div>
                   </div>
                 ))
@@ -1047,7 +1092,11 @@ export default function LeadsPage() {
         confirmLabel="Update leads"
         busy={Boolean(bulkBusy)}
         onValueChange={(value) => setBulkStatus(value as LuxorInquiryStatus)}
-        onConfirm={() => { setBulkStatusOpen(false); void runLeadBulkAction('set_status', bulkStatus) }}
+        onConfirm={() => {
+          if (bulkStatus === 'closed_lost') return
+          setBulkStatusOpen(false)
+          void runLeadBulkAction('set_status', bulkStatus)
+        }}
         onClose={() => setBulkStatusOpen(false)}
       />
       <PortalBulkListDialog
@@ -1067,6 +1116,15 @@ export default function LeadsPage() {
         busy={bulkBusy === 'delete'}
         onClose={() => setConfirmBulkDelete(false)}
         onConfirm={() => void runLeadBulkAction('delete')}
+      />
+      <LeadLifecycleActionSheet
+        lead={lifecycleLead}
+        action={lifecycleAction}
+        onClose={() => {
+          setLifecycleAction(null)
+          setLifecycleLead(null)
+        }}
+        onCompleted={handleLeadLifecycleCompleted}
       />
     </PortalPageFrame>
   )
@@ -1131,11 +1189,14 @@ function formatSourceLabel(lead: LuxorInquiry) {
 }
 
 function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
+  // Older records can retain their former pipeline step after being marked
+  // closed lost. Treat the lead status as authoritative here so they never
+  // disappear from the Closed Lost tab, filter, or board column.
+  if (lead.status === 'closed_lost' || lead.pipeline_stage === 'closed_lost') return 'closed_lost'
   if (lead.pipeline_stage) return lead.pipeline_stage
   if (lead.status === 'tour_requested' || lead.status === 'tour_confirmed') return 'tour'
   if (lead.status === 'proposal_sent') return 'proposal'
   if (lead.status === 'booked') return 'contract'
-  if (lead.status === 'closed_lost') return 'closed_lost'
   return 'inquiry'
 }
 
@@ -1170,8 +1231,8 @@ function formatTourDate(value: string) {
 function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: boolean }) {
   const router = useRouter()
   const newInquiries = leads.filter(l => l.status === 'new').length
-  const toursScheduled = leads.filter(l => l.status === 'tour_requested').length
-  const toursCompleted = leads.filter(l => l.status === 'tour_confirmed' || l.tour_attendance_status === 'attended').length
+  const toursScheduled = leads.filter((lead) => lead.status === 'tour_requested' && lead.tour_attendance_status !== 'cancelled').length
+  const toursCompleted = leads.filter((lead) => (lead.status === 'tour_confirmed' || lead.tour_attendance_status === 'attended') && lead.tour_attendance_status !== 'cancelled').length
   const proposalsSent = leads.filter(l => l.status === 'proposal_sent').length
   const depositsReceived = leads.filter(l => l.status === 'booked').length
   const totalLeads = leads.length
@@ -1179,7 +1240,11 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
 
   // Upcoming tours
   const upcomingTours = leads
-    .filter(l => (l.status === 'tour_requested' || l.status === 'tour_confirmed') && l.preferred_tour_date)
+    .filter((lead) => (
+      (lead.status === 'tour_requested' || lead.status === 'tour_confirmed')
+      && lead.preferred_tour_date
+      && !['cancelled', 'attended', 'no_show'].includes(lead.tour_attendance_status || '')
+    ))
     .slice(0, 5)
 
   // Recent leads
@@ -1399,7 +1464,13 @@ function StatsCard({
   )
 }
 
-function LeadsClientsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
+function LeadsClientsTab({
+  leads,
+  onLifecycleAction,
+}: {
+  leads: LuxorInquiry[]
+  onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
+}) {
   const clients = leads.filter(l => l.status === 'booked')
   return (
     <PortalTableCard
@@ -1434,7 +1505,10 @@ function LeadsClientsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]
                   <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{c.guest_count || 'Flexible'} guests</td>
                   <td className="px-6 py-5 text-[#caa24c] font-bold font-mono">{c.target_date || 'TBD'}</td>
                   <td className="px-8 py-5 text-right">
+                    <div className="flex items-center justify-end gap-2">
                     <Link href={`/portal/leads/${c.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Dossier →</Link>
+                      <LeadLifecycleActionsMenu lead={c} onAction={(action) => onLifecycleAction(c, action)} />
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1446,8 +1520,112 @@ function LeadsClientsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]
   )
 }
 
-function LeadsToursTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
-  const tours = leads.filter(l => l.status === 'tour_requested' || l.status === 'tour_confirmed')
+function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
+  const lostLeads = useMemo(
+    () => leads
+      .filter((lead) => getPipelineStage(lead) === 'closed_lost')
+      .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()),
+    [leads],
+  )
+
+  return (
+    <PortalTableCard
+      controls={
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Closed Lost</h3>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">A clear record of opportunities that were closed, without reopening them by accident.</p>
+          </div>
+          <span className="w-fit rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 font-mono text-[10px] font-bold text-[color:var(--portal-muted)]">
+            {lostLeads.length} {lostLeads.length === 1 ? 'record' : 'records'}
+          </span>
+        </div>
+      }
+    >
+      <PortalStickyTable minWidth="880px">
+        <PortalStickyThead>
+          <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+            <th className="px-6 py-4">Client</th>
+            <th className="px-6 py-4">Event</th>
+            <th className="px-6 py-4">Closed</th>
+            <th className="px-6 py-4">Tour</th>
+            <th className="px-6 py-4 text-right">Record</th>
+          </tr>
+        </PortalStickyThead>
+        <tbody className="divide-y divide-[color:var(--portal-border)]">
+          {lostLeads.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="px-8 py-16 text-center">
+                <X size={22} className="mx-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
+                <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No closed-lost opportunities</p>
+                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">When an opportunity is closed, its reason and any tour cancellation will appear here.</p>
+              </td>
+            </tr>
+          ) : lostLeads.map((lead) => {
+            const dealLost = lead.metadata?.dealLost
+            const dealLostRecord = dealLost && typeof dealLost === 'object' && !Array.isArray(dealLost)
+              ? dealLost as Record<string, unknown>
+              : null
+            const lossReason = typeof dealLostRecord?.reason === 'string'
+              ? dealLostRecord.reason
+              : typeof lead.metadata?.deal_lost_reason === 'string'
+                ? lead.metadata.deal_lost_reason
+                : typeof lead.metadata?.loss_reason === 'string'
+                  ? lead.metadata.loss_reason
+                  : null
+            const tourStatus = lead.tour_attendance_status === 'cancelled'
+              ? 'Cancelled'
+              : lead.preferred_tour_date
+                ? 'Kept on record'
+                : 'Not scheduled'
+
+            return (
+              <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/[0.045]">
+                <td className="px-6 py-4">
+                  <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                    <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{lead.full_name}</span>
+                      <span className="mt-0.5 block truncate text-[10px] font-medium text-[color:var(--portal-muted)]">{lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}</span>
+                    </span>
+                  </Link>
+                </td>
+                <td className="px-6 py-4">
+                  <p className="text-xs font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Event'}</p>
+                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</p>
+                </td>
+                <td className="px-6 py-4">
+                  <p className="text-xs font-medium text-[color:var(--portal-text)]">{formatDate(lead.updated_at || lead.created_at)}</p>
+                  <p className="mt-1 max-w-[240px] truncate text-[10px] text-[color:var(--portal-muted)]" title={lossReason || undefined}>{lossReason || 'Reason saved in activity'}</p>
+                </td>
+                <td className="px-6 py-4 text-xs font-medium text-[color:var(--portal-muted)]">{tourStatus}</td>
+                <td className="px-6 py-4 text-right">
+                  <Link href={`/portal/leads/${lead.id}`} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
+                    View dossier <ExternalLink size={12} aria-hidden="true" />
+                  </Link>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </PortalStickyTable>
+    </PortalTableCard>
+  )
+}
+
+function LeadsToursTab({
+  leads,
+  onMovePipelineStage,
+  onLifecycleAction,
+}: {
+  leads: LuxorInquiry[]
+  onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void
+  onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
+}) {
+  const tours = leads.filter((lead) => (
+    (lead.status === 'tour_requested' || lead.status === 'tour_confirmed')
+    && !['cancelled', 'attended', 'no_show'].includes(lead.tour_attendance_status || '')
+  ))
   return (
     <PortalTableCard
       controls={
@@ -1490,7 +1668,10 @@ function LeadsToursTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; 
                     />
                   </td>
                   <td className="px-8 py-5 text-right">
+                    <div className="flex items-center justify-end gap-2">
                     <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
+                      <LeadLifecycleActionsMenu lead={t} onAction={(action) => onLifecycleAction(t, action)} />
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1502,7 +1683,13 @@ function LeadsToursTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; 
   )
 }
 
-function LeadsProposalsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry[]; onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void }) {
+function LeadsProposalsTab({
+  leads,
+  onLifecycleAction,
+}: {
+  leads: LuxorInquiry[]
+  onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
+}) {
   const proposals = leads.filter(l => l.status === 'proposal_sent')
   return (
     <PortalTableCard
@@ -1537,7 +1724,10 @@ function LeadsProposalsTab({ leads, onMovePipelineStage }: { leads: LuxorInquiry
                   <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{p.guest_count || 'Flexible'} guests</td>
                   <td className="px-6 py-5 font-mono font-bold uppercase tracking-widest text-[9px] text-[#caa24c]/85">{isGrandOpeningRsvp(p) ? 'RSVP' : p.source.replaceAll('_', ' ')}</td>
                   <td className="px-8 py-5 text-right">
+                    <div className="flex items-center justify-end gap-2">
                     <Link href={`/portal/leads/${p.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Review Proposal →</Link>
+                      <LeadLifecycleActionsMenu lead={p} onAction={(action) => onLifecycleAction(p, action)} />
+                    </div>
                   </td>
                 </tr>
               ))

@@ -1119,6 +1119,7 @@ export function PortalDatePicker({
 
   const formattedDisplay = value
     ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
+        weekday: 'short',
         month: 'short',
         day: 'numeric',
         year: 'numeric',

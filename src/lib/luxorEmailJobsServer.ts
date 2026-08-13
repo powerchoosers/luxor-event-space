@@ -550,6 +550,29 @@ export async function cancelQueuedLuxorEmailJobs(inquiryId: string, jobTypes: Lu
   )
 }
 
+/**
+ * Retires every email that has not started delivery for a lead. This is used
+ * when an opportunity is closed so an old proposal, contract, payment, or
+ * marketing follow-up cannot be sent later. Emails already sending or sent
+ * are deliberately left alone because they are historical delivery records.
+ */
+export async function cancelAllQueuedLuxorEmailJobs(inquiryId: string, reason = 'Lead was marked deal lost.') {
+  if (!inquiryId) return 0
+  const cancelled = await supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'cancelled',
+        last_error: reason,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  )
+  return cancelled.length
+}
+
 export async function listDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>(
     `luxor_email_jobs?select=*&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
@@ -639,6 +662,10 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
 
   const inquiryId = job.inquiry_id || invoice.inquiry_id || booking.inquiry_id || null
   const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+  if (inquiry?.status === 'closed_lost') {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'The lead was marked deal lost before this payment reminder could be sent.' })
+    return null
+  }
   if (!inquiry?.email) {
     await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Payment reminder has no valid recipient email.' })
     return null
@@ -694,6 +721,21 @@ export async function processLuxorEmailJobs(
         continue
       }
       job = preparedJob
+      // A worker may have claimed this job just before the owner marked the
+      // lead lost. Re-check immediately before delivery so queued and claimed
+      // emails cannot keep following up after close-out. Historical sent mail
+      // is never touched by this guard.
+      if (job.inquiry_id) {
+        const inquiry = await getLuxorInquiry(job.inquiry_id)
+        if (!inquiry || inquiry.status === 'closed_lost') {
+          await updateLuxorEmailJob(job.id, {
+            status: 'cancelled',
+            last_error: 'The lead was closed lost before this email could be delivered.',
+          })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+      }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
@@ -782,7 +824,7 @@ export async function queueUpcoming60DayInvoiceReminders() {
       if (balanceDue <= 0) continue
 
       const [inquiry] = await supabaseRest<LuxorInquiry[]>(`luxor_inquiries?select=*&id=eq.${encodeURIComponent(booking.inquiry_id)}&limit=1`)
-      if (!inquiry) continue
+      if (!inquiry || inquiry.status === 'closed_lost') continue
 
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })

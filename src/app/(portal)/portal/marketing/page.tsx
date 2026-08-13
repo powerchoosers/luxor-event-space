@@ -477,6 +477,22 @@ function MarketingPageContent() {
     }
   }
 
+  async function handleMarkDealLost(id: string, reason: string) {
+    try {
+      const res = await fetch(`/api/leads/${encodeURIComponent(id)}/deal-lost`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, cancelTour: true }),
+      })
+      const payload = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(payload.error || 'Failed to close this lead safely.')
+      await loadInquiries()
+    } catch (err) {
+      console.error('Failed marking lead deal lost:', err)
+      throw err
+    }
+  }
+
   async function handleAddNote(inquiryId: string, content: string) {
     try {
       const res = await fetch('/api/notes', {
@@ -693,6 +709,7 @@ function MarketingPageContent() {
                 inquiries={inquiries}
                 loading={loadingInquiries}
                 onUpdateInquiryStatus={handleUpdateInquiryStatus}
+                onMarkDealLost={handleMarkDealLost}
                 onAddNote={handleAddNote}
               />
             )}

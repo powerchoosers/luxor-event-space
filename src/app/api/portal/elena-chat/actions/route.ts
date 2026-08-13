@@ -31,6 +31,13 @@ export async function POST(request: NextRequest) {
       if (!inquiryId && !bookingId) {
         return NextResponse.json({ error: 'Inquiry ID or Booking ID is required for lead update' }, { status: 400 })
       }
+      if (updates.status === 'closed_lost' || updates.pipeline_stage === 'closed_lost') {
+        const targetInquiryId = inquiryId || (bookingId ? (await getLuxorBooking(bookingId))?.inquiry_id : null)
+        return NextResponse.json({
+          error: 'Use the Deal Lost action so open proposals, agreements, payment links, and reminders are withdrawn safely.',
+          ...(targetInquiryId ? { action: `/api/leads/${encodeURIComponent(targetInquiryId)}/deal-lost` } : {}),
+        }, { status: 409 })
+      }
 
       let updatedRecord: unknown = null
 

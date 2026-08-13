@@ -21,6 +21,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
 
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+    if (inquiry?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This lead is marked Deal Lost. Payment reminders and payment links cannot be sent.' }, { status: 409 })
+    }
     if (!inquiry?.email) {
       return NextResponse.json({ error: 'Lead email address missing. Add an email to send reminders.' }, { status: 400 })
     }

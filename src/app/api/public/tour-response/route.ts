@@ -11,6 +11,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tour response link not found.' }, { status: 404 })
     }
 
+    // A cancelled tour (or a closed-lost opportunity) must not be revived by
+    // an old confirmation/reschedule link in the client’s inbox.
+    if (inquiry.status === 'closed_lost' || inquiry.tour_attendance_status === 'cancelled') {
+      return NextResponse.json({ error: 'This tour is no longer available. Please contact Luxor Event Space if you need help.' }, { status: 410 })
+    }
+
     if (action === 'confirm') {
       const updated = await updateLuxorInquiry(inquiry.id, {
         status: 'tour_confirmed',

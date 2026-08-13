@@ -247,7 +247,7 @@ function formatEventDate(value?: string | null) {
   if (!normalized) return 'Not set'
   const parsed = new Date(`${normalized}T12:00:00`)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  return parsed.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 /** PortalDatePicker accepts calendar dates, not legacy display strings such as “February 14th”. */
@@ -771,6 +771,11 @@ export function ProposalBuilderModal({
     : calculation?.lineItems?.length
       ? calculation.lineItems
       : []
+  // Discounts and tax belong in the one concise financial summary, not in the
+  // client-facing checklist of package selections.
+  const proposalChecklistItems = finalLineItems.filter((item) => (
+    item.pricingRole !== 'discount' && item.pricingRole !== 'tax'
+  ))
   const proposalSubtotal = selectedCalculatedPackage?.subtotal ?? asNumber(selectedContext.subtotal)
   const proposalDiscountAmount = selectedCalculatedPackage?.discountAmount ?? asNumber(selectedContext.discount_amount, selectedContext.discountAmount)
   const proposalTaxAmount = selectedCalculatedPackage?.taxAmount ?? asNumber(selectedContext.tax_amount, selectedContext.taxAmount)
@@ -934,6 +939,7 @@ export function ProposalBuilderModal({
                     <label className="space-y-1.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event date</span>
                       <PortalDatePicker value={eventDateValue} onChange={setEventDate} className="w-full" placeholder="Select event date" />
+                      {eventDateValue ? <p className="text-[10px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{formatEventDate(eventDateValue)}</p> : null}
                     </label>
                     <label className="space-y-1.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Expected guest count</span>
@@ -995,6 +1001,7 @@ export function ProposalBuilderModal({
                         className="min-h-10 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12"
                       />
                     </div>
+                    {normalizeEventDateValue(dueDate) ? <p className="mt-2 text-[10px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{formatEventDate(dueDate)}</p> : null}
                   </div>
                   <div className="border-t border-[color:var(--portal-border)] pt-4">
                     <label className="block space-y-1.5">
@@ -1258,45 +1265,29 @@ export function ProposalBuilderModal({
                     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_290px]">
                       <div>
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">What’s included in this final proposal</p>
-                          <span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Exact calculated values</span>
+                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Your selected package &amp; services</p>
+                          <span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Final selection</span>
                         </div>
-                        {finalLineItems.length ? (
+                        {proposalChecklistItems.length ? (
                           <div className="mt-3 divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
-                            {finalLineItems.map((item, index) => {
-                              const itemStatus = item.included || item.pricingRole === 'included'
-                                ? 'Included'
-                                : item.required || item.pricingRole === 'required'
-                                  ? 'Required'
-                                  : item.pricingRole === 'add_on'
-                                    ? 'Add-on'
-                                    : item.pricingRole === 'discount'
-                                      ? 'Adjustment'
-                                      : 'Calculated'
-                              return (
-                                <div key={`${item.catalogId || item.description}-${index}`} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-                                  <div className="min-w-0"><p className="font-semibold">{item.description}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>{item.detail ? <p className="mt-0.5 text-xs leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}</div>
-                                  <div className="shrink-0 text-right"><p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(item.total)}</p><span className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ${itemStatus === 'Included' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : itemStatus === 'Required' ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : itemStatus === 'Add-on' ? 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{itemStatus}</span></div>
-                                </div>
-                              )
-                            })}
+                            {proposalChecklistItems.map((item, index) => (
+                              <div key={`${item.catalogId || item.description}-${index}`} className="flex items-start gap-3 px-4 py-3.5 text-sm">
+                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]"><Check size={12} strokeWidth={2.5} /></span>
+                                <div className="min-w-0"><p className="font-semibold">{item.description}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>{item.detail ? <p className="mt-0.5 text-xs leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}</div>
+                              </div>
+                            ))}
                           </div>
                         ) : <p className="mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-muted)]">The detailed itemization will appear when the pricing service returns the selected package snapshot.</p>}
                       </div>
                       <aside className="h-fit rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4">
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price summary</p>
                         <div className="mt-3 space-y-2.5 text-sm">
-                          {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
-                          {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
+                          {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Subtotal</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
+                          {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved discount</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                           {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
-                          <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
+                          <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final total</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
                         </div>
-                        <div className="mt-4 border-t border-[#caa24c]/20 pt-4">
-                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Separate refundable security deposit</p>
-                          <p className="mt-1 font-mono text-lg font-black">{formatMoney(refundableSecurityDeposit ?? 750)}</p>
-                          <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Held through the event and returned after the post-event inspection, subject to the Event Agreement.</p>
-                        </div>
-                        <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#8c6529] dark:text-[#f1d27a]">Payment process</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Proposal acceptance → Event Agreement → Stripe payment link after signature.</p></div>
+                        <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#8c6529] dark:text-[#f1d27a]">Payment process</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Proposal acceptance → Event Agreement → Stripe payment link after signature. The separate refundable security deposit is handled with the first payment.</p></div>
                       </aside>
                     </div>
                   </div>

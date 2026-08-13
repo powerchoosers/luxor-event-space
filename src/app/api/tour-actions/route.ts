@@ -15,6 +15,7 @@ import { LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAtt
 import { createLuxorZohoCalendarEvent } from '@/lib/zohoMailServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
 
     const inquiry = await getLuxorInquiry(inquiryId)
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
+    if (inquiry.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This opportunity is closed lost. Reopen it before scheduling or changing a tour.' }, { status: 409 })
+    }
 
     let selectedLeadEvent = null
     if (leadEventId) {
@@ -63,6 +67,40 @@ export async function POST(request: NextRequest) {
       const leadEvents = await listLuxorLeadEventsByInquiry(inquiryId)
       const primaryEvents = leadEvents.filter((event) => event.is_primary)
       selectedLeadEvent = primaryEvents.length === 1 ? primaryEvents[0] : null
+    }
+
+    if (action === 'cancel-tour' || (action === 'attendance' && body.attendance === 'cancelled')) {
+      if (['attended', 'no_show', 'cancelled'].includes(inquiry.tour_attendance_status || '')) {
+        return NextResponse.json({ error: 'Only a pending or upcoming tour can be cancelled.' }, { status: 409 })
+      }
+      if (!inquiry.preferred_tour_date && typeof inquiry.metadata?.zohoCalendarEventUid !== 'string') {
+        return NextResponse.json({ error: 'There is no scheduled tour to cancel.' }, { status: 409 })
+      }
+      const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
+      const cancellation = await cancelLuxorTourForInquiry({
+        inquiry,
+        reason,
+        requestedBy: session.email,
+      })
+      if (!cancellation.ok) {
+        throw new Error(cancellation.errors.join(' '))
+      }
+
+      const updated = await updateLuxorInquiry(inquiryId, {
+        tour_attendance_status: 'cancelled',
+        metadata: {
+          ...inquiry.metadata,
+          ...cancellation.metadataPatch,
+        },
+      })
+      await createNote(
+        inquiryId,
+        `Tour cancelled${reason ? `: ${reason}` : '.'} Queued tour email and text reminders were cancelled${cancellation.slotReleased ? '; the public tour time was released' : ''}${cancellation.calendar.status === 'cancelled' ? '; the Zoho calendar invite was cancelled' : cancellation.calendar.status === 'needs_reconnect' ? '; the Zoho calendar invite needs a reconnect to cancel' : ''}.`,
+        'status_change',
+        session.email,
+      )
+
+      return NextResponse.json({ inquiry: updated, cancellation })
     }
 
     if (action === 'attendance') {

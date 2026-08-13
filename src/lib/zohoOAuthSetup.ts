@@ -11,6 +11,7 @@ const DEFAULT_SCOPES = [
   'ZohoCalendar.calendar.READ',
   'ZohoCalendar.event.CREATE',
   'ZohoCalendar.event.UPDATE',
+  'ZohoCalendar.event.DELETE',
 ]
 
 export function getZohoRedirectUri(request: Request) {

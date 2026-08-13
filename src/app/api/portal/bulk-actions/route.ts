@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
 
     if (action === 'delete') return deleteRecords(resource, ids)
 
+    // A loss close-out has to withdraw documents, reminders, and any payable
+    // Checkout Session.  A bulk PATCH cannot safely perform that record-by-
+    // record workflow, so never let this generic endpoint turn a live lead
+    // into a bare `closed_lost` status.
+    if (resource === 'inquiries' && action === 'set_status' && body.value === 'closed_lost') {
+      return NextResponse.json({
+        error: 'Mark each deal lost from its lead actions menu so open proposals, agreements, payment links, and reminders are safely withdrawn.',
+      }, { status: 409 })
+    }
+
     const updates = getUpdates(resource, action, body.value)
     if (!updates) return NextResponse.json({ error: 'That bulk action is not allowed for these records.' }, { status: 400 })
 

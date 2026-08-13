@@ -148,7 +148,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'bookingId and paymentKind are required.' }, { status: 400 })
     }
 
+    // Check this before the helper can create a deposit/final invoice. A lost
+    // lead may retain historic paid records, but it must not gain a new manual
+    // receipt or a fresh payment document.
+    const requestedBooking = await getLuxorBooking(bookingId)
+    if (!requestedBooking) return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
+    const requestedInquiryId = requestedBooking.inquiry_id || null
+    const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
+    if (requestedBooking.status === 'cancelled' || requestedInquiry?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
+    }
+
     const { booking, masterInvoice, invoice } = await resolveManualPaymentInvoice(bookingId, kind)
+    const inquiryId = booking.inquiry_id || masterInvoice.inquiry_id || null
+    const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+    if (booking.status === 'cancelled' || masterInvoice.status === 'cancelled' || inquiry?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This deal was closed while the payment was being prepared. No manual payment was recorded.' }, { status: 409 })
+    }
     const existingPayments = await listPaidPaymentsByInvoice(invoice.id)
     const amount = invoiceBalance(invoice, existingPayments)
     const now = new Date().toISOString()
@@ -250,10 +266,8 @@ export async function POST(request: NextRequest) {
         },
       })
 
-    const inquiryId = booking.inquiry_id || masterInvoice.inquiry_id || null
     if (inquiryId) {
-      const inquiry = await getLuxorInquiry(inquiryId)
-      if (inquiry && inquiry.status !== 'closed_lost') {
+      if (inquiry) {
         await updateLuxorInquiry(inquiry.id, {
           status: 'booked',
           pipeline_stage: kind === 'deposit' ? 'planning' : 'event',
@@ -277,7 +291,6 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
       await queuePaymentConfirmationText(payment, {
         phone: inquiry?.phone || booking.phone,
         name: inquiry?.full_name || booking.client_name || 'there',

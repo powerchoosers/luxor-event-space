@@ -5,6 +5,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 
 export async function GET(request: NextRequest) {
@@ -54,6 +55,22 @@ export async function POST(request: NextRequest) {
     // immutable child invoice and protects the separate $750 security hold.
     if (booking_id || paymentKind === 'deposit' || paymentKind === 'final' || metadata.manual_entry === true) {
       return NextResponse.json({ error: 'Use the secure manual-payment workflow for booking payments.' }, { status: 409 })
+    }
+
+    // A generic ledger entry is still a payment record. Do not let it become
+    // an alternate way to revive a closed-lost proposal or invoice.
+    const requestedInvoice = typeof invoice_id === 'string' && invoice_id.trim()
+      ? await getInvoice(invoice_id)
+      : null
+    if (requestedInvoice?.status === 'cancelled') {
+      return NextResponse.json({ error: 'This invoice has been cancelled and cannot receive a new payment record.' }, { status: 409 })
+    }
+    const requestedInquiryId = typeof inquiry_id === 'string' && inquiry_id.trim()
+      ? inquiry_id
+      : requestedInvoice?.inquiry_id || null
+    const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
+    if (requestedInquiry?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This lead is marked Deal Lost. Do not add a new payment record.' }, { status: 409 })
     }
 
     const [created] = await supabaseRest<LuxorPayment[]>('luxor_payments?select=*', {

@@ -138,6 +138,13 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
   if (!booking.email) {
     throw new Error('Booking needs a client email before a contract can be sent.')
   }
+  const [inquiry, invoice] = await Promise.all([
+    booking.inquiry_id ? getLuxorInquiry(booking.inquiry_id) : Promise.resolve(null),
+    booking.invoice_id ? getInvoice(booking.invoice_id) : Promise.resolve(null),
+  ])
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost' || invoice?.status === 'cancelled') {
+    throw new Error('This opportunity is closed, so a new Event Agreement cannot be created.')
+  }
   const active = await supabaseRest<LuxorSignatureRequest[]>(
     `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(booking.id)}&status=in.(draft,sent,viewed)&order=created_at.desc&limit=20`,
   )
@@ -336,6 +343,18 @@ export async function getLatestLuxorSignatureRequestByBooking(bookingId: string)
   return signature ?? null
 }
 
+export async function listLuxorSignatureRequestsByBooking(bookingId: string) {
+  return supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=created_at.desc`,
+  )
+}
+
+export async function listLuxorSignatureRequestsByInquiry(inquiryId: string) {
+  return supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc`,
+  )
+}
+
 export async function listLuxorSignatureRequests(limit = 100) {
   const safeLimit = Math.min(Math.max(limit, 1), 250)
   return supabaseRest<LuxorSignatureRequest[]>(
@@ -353,6 +372,31 @@ export async function updateLuxorSignatureRequest(id: string, updates: Partial<L
     }),
   })
 
+  return updated ?? null
+}
+
+/**
+ * Retire only an agreement that is still open. The status predicate is
+ * important for close-out flows: an agreement that was signed in another tab
+ * must remain an immutable legal record instead of being overwritten as void.
+ */
+export async function voidOpenLuxorSignatureRequest(
+  id: string,
+  input: { expiresAt?: string; metadata: Record<string, unknown> },
+) {
+  const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(id)}&status=in.(draft,sent,viewed)`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'void',
+        expires_at: input.expiresAt || new Date().toISOString(),
+        metadata: input.metadata,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  )
   return updated ?? null
 }
 
@@ -582,6 +626,13 @@ export async function signLuxorSignatureRequest(input: {
 }) {
   const signature = await getLuxorSignatureRequestByToken(input.token)
   if (!signature) throw new Error('Signature request not found.')
+  const [booking, inquiry] = await Promise.all([
+    getLuxorBooking(signature.booking_id),
+    signature.inquiry_id ? getLuxorInquiry(signature.inquiry_id) : Promise.resolve(null),
+  ])
+  if (!booking || booking.status === 'cancelled' || inquiry?.status === 'closed_lost') {
+    throw new Error('This signing link is no longer active. Please contact Luxor Event Space for a new agreement.')
+  }
   // A client retry is a recovery action when we already recorded their legal
   // signature but an upload, PDF render, payment handoff, or email step did
   // not finish. Never create a second signing record for that situation.
@@ -632,7 +683,7 @@ export async function signLuxorSignatureRequest(input: {
       const depositPaid = Boolean(depositInvoice) && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
       let reconciledBooking = booking
       let finalPaymentScheduleMissing = false
-      if (booking && depositPaid) {
+      if (booking && depositPaid && inquiry?.status !== 'closed_lost' && booking.status !== 'cancelled') {
         const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
         const finalPaymentDueDate = configuredFinalPaymentDueDate(booking)
         // A historical booking may have a paid initial payment but no approved
@@ -813,8 +864,9 @@ export async function signLuxorSignatureRequest(input: {
     if (!booking || booking.contract_status !== 'signed') {
       throw new Error('The signed booking could not be verified before creating the payment request.')
     }
-    if (!inquiry) {
-      throw new Error('The signed booking needs its inquiry record before a payment request can be sent.')
+    if (!inquiry) throw new Error('The signed booking needs its inquiry record before a payment request can be sent.')
+    if (inquiry.status === 'closed_lost' || booking.status === 'cancelled') {
+      throw new Error('This deal was closed before its payment request could be created.')
     }
     const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
     if (!masterInvoice) {
@@ -854,43 +906,46 @@ export async function signLuxorSignatureRequest(input: {
   const paymentEmailSummary = checkoutUrl && paymentBreakdown
     ? `Your agreement is complete. Complete your secure payment of ${formatMoney(paymentBreakdown.total)}: ${formatMoney(paymentBreakdown.initialBookingPayment)} initial booking payment plus ${formatMoney(paymentBreakdown.securityDeposit)} refundable security deposit. ${checkoutUrl}`
     : 'Your agreement is complete. Your fully executed copy is attached. Luxor will follow up with secure payment instructions.'
-  const clientJob = await createUniqueLuxorEmailJob({
-    inquiryId: signature.inquiry_id,
-    bookingId: signature.booking_id,
-    signatureRequestId: signature.id,
-    jobType: 'contract_signature',
-    recipientEmail: signature.client_email,
-    subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
-    body: paymentEmailSummary,
-    scheduledFor: ownerSignedAt,
-    automationKey: `contract_completed_payment:${signature.id}:${paymentInvoice?.id || 'unavailable'}`,
-    metadata: {
-      automated: true,
-      flow_stage: 'contract_completed',
-      includes_executed_contract: true,
-      includes_payment_link: Boolean(checkoutUrl),
-      payment_invoice_id: paymentInvoice?.id || null,
-      payment_amount: paymentBreakdown?.total || null,
-    },
-  })
-  if (clientJob.status !== 'sent') {
-    try {
-      await sendLuxorZohoEmail({
-        to: signature.client_email,
-        subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
-        content: completionHtml,
-        from: 'booking@luxoratlaspalmas.com',
-        fromName: 'Luxor Event Space',
-        attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executedCustomerPdf, contentType: 'application/pdf' }],
-      })
-      await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
-    } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
-      await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
-      if (signature.inquiry_id) {
-        await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
+  const latestInquiry = signature.inquiry_id ? await getLuxorInquiry(signature.inquiry_id) : null
+  if (latestInquiry?.status !== 'closed_lost') {
+    const clientJob = await createUniqueLuxorEmailJob({
+      inquiryId: signature.inquiry_id,
+      bookingId: signature.booking_id,
+      signatureRequestId: signature.id,
+      jobType: 'contract_signature',
+      recipientEmail: signature.client_email,
+      subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
+      body: paymentEmailSummary,
+      scheduledFor: ownerSignedAt,
+      automationKey: `contract_completed_payment:${signature.id}:${paymentInvoice?.id || 'unavailable'}`,
+      metadata: {
+        automated: true,
+        flow_stage: 'contract_completed',
+        includes_executed_contract: true,
+        includes_payment_link: Boolean(checkoutUrl),
+        payment_invoice_id: paymentInvoice?.id || null,
+        payment_amount: paymentBreakdown?.total || null,
+      },
+    })
+    if (clientJob.status !== 'sent') {
+      try {
+        await sendLuxorZohoEmail({
+          to: signature.client_email,
+          subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
+          content: completionHtml,
+          from: 'booking@luxoratlaspalmas.com',
+          fromName: 'Luxor Event Space',
+          attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executedCustomerPdf, contentType: 'application/pdf' }],
+        })
+        await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
+      } catch (sendError) {
+        const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
+        await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
+        if (signature.inquiry_id) {
+          await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
+        }
+        console.error('Agreement completed, but the client completion and payment email failed:', message)
       }
-      console.error('Agreement completed, but the client completion and payment email failed:', message)
     }
   }
   const ownerNoticeAlreadySent = Boolean(signature.metadata?.ownerExecutionNoticeSentAt)

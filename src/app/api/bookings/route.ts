@@ -85,6 +85,10 @@ export async function POST(request: NextRequest) {
     if (!proposal.inquiry_id || proposal.inquiry_id !== body.inquiry_id) {
       return NextResponse.json({ error: 'The final proposal must belong to the booking lead.' }, { status: 409 })
     }
+    const inquiryBeforeBooking = await getLuxorInquiry(proposal.inquiry_id)
+    if (inquiryBeforeBooking?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This lead is marked Deal Lost. A new booking cannot be created from a withdrawn proposal.' }, { status: 409 })
+    }
 
     const existingBooking = (await listLuxorBookingsByInquiry(proposal.inquiry_id)).find((item) => item.invoice_id === proposal.id)
     if (existingBooking) return NextResponse.json(existingBooking)
@@ -213,6 +217,12 @@ export async function PATCH(request: NextRequest) {
 
     const existing = await getLuxorBooking(id)
     if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    if (existing.inquiry_id) {
+      const inquiry = await getLuxorInquiry(existing.inquiry_id)
+      if (inquiry?.status === 'closed_lost') {
+        return NextResponse.json({ error: 'This lead is marked Deal Lost. Update the close-out record instead of changing this booking.' }, { status: 409 })
+      }
+    }
 
     // Signing is recorded only by the signature workflow. That workflow
     // captures the signer audit trail, locks the agreement, and then opens

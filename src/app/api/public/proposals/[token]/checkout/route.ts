@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   }
 
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
-  if (!inquiry) return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
+  if (!inquiry || inquiry.status === 'closed_lost') return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
 
   const origin = new URL(_request.url).origin
   const checkout = await createLuxorPostContractCheckout({

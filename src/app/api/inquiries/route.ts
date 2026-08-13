@@ -150,9 +150,22 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     }
 
+    if (updates.pipeline_stage === 'closed_lost') {
+      return NextResponse.json({
+        error: 'Use the Deal Lost action so open proposals, contracts, payment links, and reminders are safely withdrawn together.',
+        action: `/api/leads/${encodeURIComponent(id)}/deal-lost`,
+      }, { status: 409 })
+    }
+
     if (status !== undefined) {
       if (!VALID_INQUIRY_STATUSES.includes(status)) {
         return NextResponse.json({ error: 'Invalid inquiry status.' }, { status: 400 })
+      }
+      if (status === 'closed_lost') {
+        return NextResponse.json({
+          error: 'Use the Deal Lost action so open proposals, contracts, payment links, and reminders are safely withdrawn together.',
+          action: `/api/leads/${encodeURIComponent(id)}/deal-lost`,
+        }, { status: 409 })
       }
       updates.status = status
       updates.pipeline_stage = updates.pipeline_stage || stageForStatus(status)

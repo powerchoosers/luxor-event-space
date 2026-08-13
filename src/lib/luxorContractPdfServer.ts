@@ -8,6 +8,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFFont, type PDFP
 import type { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import type { LuxorContractSignaturePlacement } from './luxorSignaturePlacement'
+import { formatLuxorDate } from './luxorDateFormatting'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -26,19 +27,13 @@ function money(value: number) {
 
 function displayDate(value?: string | null) {
   if (!value) return 'To be confirmed'
-  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  return formatLuxorDate(value) || value
 }
 
 function displaySignatureDate(value: string) {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) throw new Error('A valid signature timestamp is required.')
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(parsed)
+  const formatted = formatLuxorDate(value)
+  if (!formatted) throw new Error('A valid signature timestamp is required.')
+  return formatted
 }
 
 function displayTime(value?: string | null) {

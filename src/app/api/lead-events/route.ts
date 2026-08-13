@@ -73,6 +73,12 @@ export async function PATCH(request: NextRequest) {
     if (body.package_interest !== undefined) updates.package_interest = body.package_interest || null
     if (body.notes !== undefined) updates.notes = body.notes || null
     if (body.metadata !== undefined && body.metadata && typeof body.metadata === 'object') updates.metadata = body.metadata
+    if (body.status === 'closed_lost' || body.pipeline_stage === 'closed_lost') {
+      return NextResponse.json({
+        error: 'Use the lead Deal Lost action so all open proposal, agreement, payment, and reminder work is withdrawn safely.',
+        action: `/api/leads/${encodeURIComponent(existing.inquiry_id)}/deal-lost`,
+      }, { status: 409 })
+    }
     if (body.status !== undefined && statuses.has(body.status)) updates.status = body.status
     if (body.pipeline_stage !== undefined && pipelineStages.has(body.pipeline_stage)) updates.pipeline_stage = body.pipeline_stage
     if (body.is_primary !== undefined) updates.is_primary = Boolean(body.is_primary)

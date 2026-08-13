@@ -4,7 +4,7 @@ import { ensureLuxorFinalBalanceInvoice, getInvoice, listPaidPaymentsByInvoice, 
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
-import { createNote } from '@/lib/luxorNotesServer'
+import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 import type { LuxorBooking, LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
@@ -61,6 +61,21 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   const bookingId = session.metadata?.booking_id || invoice.booking_id || null
   const booking = bookingId ? await getLuxorBooking(bookingId) : null
   const inquiryId = invoice.inquiry_id || session.metadata?.inquiry_id || booking?.inquiry_id || null
+
+  // A payment can race with a close-out in the few seconds between a client
+  // loading Checkout and Stripe receiving the expiry request. Do not apply a
+  // later Stripe payment to a deal that is already closed lost; leave the
+  // payment untouched for an owner to review/refund manually.
+  const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+  if (inquiry?.status === 'closed_lost') {
+    const noteContent = `Stripe reported a payment for a deal already marked lost. It was not applied to the booking or invoice automatically; review the Stripe payment and decide whether a refund is needed.`
+    const existingNotes = await listNotesByInquiry(inquiry.id).catch(() => [])
+    if (!existingNotes.some((note) => note.content === noteContent)) {
+      await createNote(inquiry.id, noteContent, 'note', 'Stripe Safety Guard').catch(() => null)
+    }
+    console.error(`Blocked Stripe payment ${session.id} because inquiry ${inquiry.id} is closed lost.`)
+    return
+  }
 
   // Stripe can still complete a Checkout Session that was created by the
   // former flow. Do not record or apply that payment if its booking has not
@@ -126,19 +141,19 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
 
   let paymentContact: { phone?: string | null; name: string; inquiryId?: string | null } | null = null
   if (inquiryId) {
-    const inquiry = await getLuxorInquiry(inquiryId)
-    if (inquiry) {
-      paymentContact = { phone: inquiry.phone, name: inquiry.full_name, inquiryId: inquiry.id }
-      await updateLuxorInquiry(inquiry.id, {
-        status: ['booked', 'closed_lost'].includes(inquiry.status) ? inquiry.status : 'proposal_sent',
-        pipeline_stage: ['booked', 'closed_lost'].includes(inquiry.status) ? inquiry.pipeline_stage : 'proposal',
+    const linkedInquiry = inquiry || await getLuxorInquiry(inquiryId)
+    if (linkedInquiry) {
+      paymentContact = { phone: linkedInquiry.phone, name: linkedInquiry.full_name, inquiryId: linkedInquiry.id }
+      await updateLuxorInquiry(linkedInquiry.id, {
+        status: linkedInquiry.status === 'booked' ? linkedInquiry.status : 'proposal_sent',
+        pipeline_stage: linkedInquiry.status === 'booked' ? linkedInquiry.pipeline_stage : 'proposal',
         metadata: {
-          ...inquiry.metadata,
+          ...linkedInquiry.metadata,
           latest_payment_at: paidAt,
           latest_paid_invoice_id: invoice.id,
         },
       })
-      await cancelQueuedLuxorEmailJobs(inquiry.id, [
+      await cancelQueuedLuxorEmailJobs(linkedInquiry.id, [
         'proposal_view_reminder',
         'proposal_payment_reminder',
         ...(kind === 'final' || isFullyPaid ? ['final_payment_reminder' as const] : []),

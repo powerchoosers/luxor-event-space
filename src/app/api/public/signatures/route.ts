@@ -5,6 +5,7 @@ import { getLuxorBooking, markLuxorBookingContractViewed } from '@/lib/luxorBook
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getInvoice, getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
@@ -35,6 +36,8 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
   invoice ||= masterInvoice
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
+  const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return {}
   // The signature flow creates this Checkout session only after it has
   // verified the booking's signed agreement. Return the direct Stripe URL;
   // never send the client back to a page with a pre-contract payment chooser.

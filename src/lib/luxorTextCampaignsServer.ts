@@ -373,6 +373,43 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
 }
 
+/**
+ * A tour can be cancelled after its confirmation text has been queued. Only
+ * untouched jobs are changed: messages already handed to Twilio remain part
+ * of the delivery history and cannot be recalled.
+ */
+export async function cancelQueuedTourTextJobs(inquiryId: string) {
+  if (!inquiryId) return
+  await supabaseRest(
+    `luxor_text_jobs?inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&job_type=in.(tour_confirmation,tour_reminder)`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'cancelled', updated_at: new Date().toISOString() }),
+    },
+  )
+}
+
+/**
+ * Stops untouched text automation for a lead that has closed. Texts already
+ * handed to Twilio remain immutable delivery history and are not recalled.
+ */
+export async function cancelAllQueuedLuxorTextJobs(inquiryId: string, reason = 'Lead was marked deal lost.') {
+  if (!inquiryId) return 0
+  const cancelled = await supabaseRest<LuxorTextJob[]>(
+    `luxor_text_jobs?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'cancelled',
+        last_error: reason,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  )
+  return cancelled.length
+}
+
 export async function queueBookingTextJobs(booking: LuxorBooking) {
   if (!booking.phone || !booking.event_date || booking.status === 'cancelled') return []
   const eventDate = new Date(`${booking.event_date}T15:00:00Z`)
@@ -573,6 +610,14 @@ async function processTextJob(job: LuxorTextJob) {
 }
 
 async function getTextJobSkipReason(job: LuxorTextJob) {
+  if (job.inquiry_id) {
+    const [inquiry] = await supabaseRest<Array<{ status: string }>>(
+      `luxor_inquiries?select=status&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
+    )
+    if (!inquiry || inquiry.status === 'closed_lost') {
+      return 'Lead is closed lost; the scheduled text was not sent.'
+    }
+  }
   if (job.invoice_id && (job.job_type === 'invoice_due_reminder' || job.job_type === 'invoice_overdue_reminder')) {
     const [invoice] = await supabaseRest<Array<{ status: string; due_date: string | null }>>(
       `luxor_invoices?select=status,due_date&id=eq.${encodeURIComponent(job.invoice_id)}&limit=1`,

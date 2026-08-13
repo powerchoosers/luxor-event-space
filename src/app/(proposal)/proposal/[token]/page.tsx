@@ -8,6 +8,8 @@ import { AcceptProposalButton } from '@/components/proposal/AcceptEstimateButton
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,10 +23,7 @@ function money(value: number | null | undefined) {
 }
 
 function dateLabel(value: unknown) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-  })
+  return typeof value === 'string' ? formatLuxorDate(value) : null
 }
 
 export default async function ClientProposalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -44,19 +43,12 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const isPublished = invoice.status === 'sent' && Boolean(invoice.price_locked_at)
   const isAccepted = Boolean(invoice.proposal_accepted_at) || Boolean(booking)
   const contractSigned = booking?.contract_status === 'signed'
-  const finalPrice = Number(context.final_event_price ?? invoice.total ?? 0)
+  const pricingSummary = getLuxorProposalPricingSummary(invoice)
+  const finalPrice = pricingSummary.finalEventPrice
   const refundableSecurityDeposit = Number(context.refundable_security_deposit ?? booking?.security_deposit_amount ?? LUXOR_DEFAULT_SECURITY_DEPOSIT)
   const eventDate = dateLabel(context.event_date)
   const expectedGuestCount = Number(context.expected_guest_count || 0)
-  const serviceItems = invoice.line_items.filter((item) =>
-    item.category !== 'Security Deposit' && !/refundable security deposit/i.test(item.description),
-  )
-  const itemTotal = (item: typeof serviceItems[number]) => Number(item.total ?? Number(item.quantity || 1) * Number(item.unitPrice || 0))
-  // Package detail rows are genuine inclusions, not $0 services the client
-  // needs to interpret as a price. Keep them in a clear inclusion list while
-  // the financial section shows only priced components and adjustments.
-  const pricedServiceItems = serviceItems.filter((item) => !(item.pricingRole === 'included' && Math.abs(itemTotal(item)) < 0.005))
-  const includedServiceItems = serviceItems.filter((item) => item.pricingRole === 'included' && Math.abs(itemTotal(item)) < 0.005)
+  const packageItems = pricingSummary.lines
 
   // A portal preview must never look like a client engagement event. Validate
   // the signed portal session rather than trusting the mere presence of a
@@ -110,18 +102,12 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           {!isPublished ? <section className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Awaiting final review</p><p className="mt-2 text-sm leading-6 text-amber-100/85">Luxor has not published a final, price-locked proposal at this link yet. Please contact the team if you expected one.</p></section> : null}
 
-          <section className="mt-8 grid gap-3 sm:grid-cols-3">
+          <section className="mt-8 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Event</p>
               <p className="mt-2 text-sm font-bold text-white">{typeof context.event_type === 'string' ? context.event_type : invoice.event_type || 'Private event'}</p>
               {eventDate ? <p className="mt-1 text-xs text-zinc-400">{eventDate}</p> : null}
               {expectedGuestCount > 0 ? <p className="mt-1 text-xs text-zinc-500">Expected guest count: {expectedGuestCount}</p> : null}
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Final Event Price</p>
-              {offer.active ? <p className="mt-2 font-mono text-xs text-zinc-500 line-through">{money(offer.originalTotal)}</p> : null}
-              <p className="mt-2 font-mono text-sm font-bold text-[#f1d27a]">{money(finalPrice)}</p>
-              <p className="mt-1 text-[10px] text-zinc-500">Price locked when published</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Refundable Security Deposit</p>
@@ -135,18 +121,19 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
           {offerExpired ? <section className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">Proposal expired</p><p className="mt-2 text-sm leading-6 text-amber-100/85">This proposal is no longer available at the previous price. Please contact Luxor for a refreshed final proposal.</p></section> : null}
 
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
-            <div className="flex items-center gap-3 border-b border-white/10 pb-4"><FileText size={17} className="text-[#caa24c]" /><h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">Package breakdown</h2></div>
-            <div className="mt-2 divide-y divide-white/[0.06]">
-              {pricedServiceItems.map((item, index) => {
-                const amount = itemTotal(item)
-                const isIncluded = item.pricingRole === 'included'
-                return <div key={`${item.description}-${index}`} className="flex items-start gap-3 py-3.5"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/12 text-[#f1d27a]"><Check size={11} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1"><p className="text-sm font-semibold text-zinc-200">{item.description}</p><p className="font-mono text-sm text-zinc-300">{money(amount)}</p></div><p className="mt-1 text-[10px] text-zinc-500">{isIncluded ? 'Included in your package' : item.required ? 'Required for this event' : Number(item.quantity) > 1 ? `Quantity ${item.quantity}` : item.category || 'Selected service'}</p></div></div>
-              })}
-            </div>
-            <div className="mt-4 border-t border-white/10 pt-4 text-right"><p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Final Event Price</p><p className="mt-1 font-mono text-xl font-black text-[#f1d27a]">{money(finalPrice)}</p></div>
+            <div className="flex items-center gap-3 border-b border-white/10 pb-4"><FileText size={17} className="text-[#caa24c]" /><h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">Your package</h2></div>
+            {packageItems.length ? <ul className="mt-4 grid gap-3 sm:grid-cols-2">{packageItems.map((item, index) => <li key={`${item.service}-${index}`} className="flex gap-2.5 text-sm leading-5 text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">{item.category}</span>{item.service}{item.quantity > 1 ? <span className="ml-1.5 text-xs text-zinc-500">× {item.quantity}</span> : null}</span></li>)}</ul> : <p className="mt-4 text-sm leading-6 text-zinc-400">Your finalized package details are available in the attached proposal.</p>}
           </section>
 
-          {includedServiceItems.length ? <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><div className="flex items-center gap-3 border-b border-white/10 pb-4"><Check size={17} className="text-[#caa24c]" /><h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">What&apos;s included</h2></div><ul className="mt-4 grid gap-2.5 sm:grid-cols-2">{includedServiceItems.map((item, index) => <li key={`${item.description}-${index}`} className="flex gap-2 text-sm leading-5 text-zinc-300"><Check size={14} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span>{item.description}</span></li>)}</ul></section> : null}
+          <section className="mt-5 overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.05]">
+            <div className="border-b border-[#caa24c]/15 px-5 py-4 sm:px-6"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Final price</p><p className="mt-1 text-xs text-zinc-400">The package total below is the only service price shown to your guests.</p></div>
+            <dl className="divide-y divide-white/[0.07] px-5 py-1 text-sm sm:px-6">
+              <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Package subtotal</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.subtotal)}</dd></div>
+              {pricingSummary.approvedDiscount > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Approved discount</dt><dd className="font-mono text-zinc-200">-{money(pricingSummary.approvedDiscount)}</dd></div> : null}
+              {pricingSummary.tax > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Sales tax</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.tax)}</dd></div> : null}
+              <div className="flex items-end justify-between gap-5 py-4"><dt className="text-xs font-black uppercase tracking-[0.16em] text-[#f1d27a]">Final Event Price</dt><dd className="font-mono text-2xl font-black text-[#f1d27a]">{money(finalPrice)}</dd></div>
+            </dl>
+          </section>
 
           <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[#f1d27a]" size={18} /><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Refundable Security Deposit</p><p className="mt-2 text-sm leading-6 text-zinc-200">Separate refundable security deposit required for all bookings. Deposit is held throughout the event period and is returned following the post-event inspection, subject to the terms of the Event Agreement.</p></div></div></section>
 

@@ -7,6 +7,7 @@ import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, g
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,6 +65,10 @@ export async function POST(request: NextRequest) {
     const booking = await getLuxorBooking(bookingId)
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    }
+    const bookingInquiry = booking.inquiry_id ? await getLuxorInquiry(booking.inquiry_id) : null
+    if (booking.status === 'cancelled' || bookingInquiry?.status === 'closed_lost') {
+      return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. A new Event Agreement cannot be created.' }, { status: 409 })
     }
 
     // The normal agreement path begins only after the prospect has accepted
@@ -170,6 +175,17 @@ export async function PATCH(request: NextRequest) {
     let signature = await getActiveLuxorSignatureRequestByBooking(bookingId)
     if (!signature) {
       return NextResponse.json({ error: 'No active contract was found for this booking.' }, { status: 404 })
+    }
+
+    // Voiding a stale agreement remains harmless and useful, but a resend is
+    // a client-facing side effect. Check the current lead state before it can
+    // reactivate a token or queue another contract email.
+    if (action === 'resend') {
+      const booking = await getLuxorBooking(bookingId)
+      const inquiry = booking?.inquiry_id ? await getLuxorInquiry(booking.inquiry_id) : null
+      if (!booking || booking.status === 'cancelled' || inquiry?.status === 'closed_lost') {
+        return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. The Event Agreement cannot be resent.' }, { status: 409 })
+      }
     }
 
     if (action === 'cancel') {

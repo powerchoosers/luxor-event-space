@@ -21,6 +21,7 @@ interface CallCenterTabProps {
   inquiries: LuxorInquiry[]
   loading?: boolean
   onUpdateInquiryStatus: (id: string, status: LuxorInquiryStatus, updates?: Partial<LuxorInquiry>) => Promise<void>
+  onMarkDealLost: (id: string, reason: string) => Promise<void>
   onAddNote: (id: string, noteText: string) => Promise<void>
 }
 
@@ -41,6 +42,7 @@ export function CallCenterTab({
   inquiries,
   loading = false,
   onUpdateInquiryStatus,
+  onMarkDealLost,
   onAddNote
 }: CallCenterTabProps) {
   const { notify } = useToast()
@@ -118,9 +120,17 @@ export function CallCenterTab({
       else if (activeOutcome === 'not_interested' || activeOutcome === 'wrong_number') nextStatus = 'closed_lost'
       else nextStatus = 'contacted' // Defaults (voicemail, interested, etc.)
 
-      // 1. Update Inquiry Status
       const outcomeLabel = outcomesList.find(o => o.value === activeOutcome)?.label || activeOutcome
-      await onUpdateInquiryStatus(selectedLead.id, nextStatus)
+      const marksDealLost = activeOutcome === 'not_interested' || activeOutcome === 'wrong_number'
+
+      // A loss outcome has to run the dedicated close-out, not a raw status
+      // PATCH. That is what withdraws any proposal/agreement and prevents a
+      // stored Stripe link from remaining payable.
+      if (marksDealLost) {
+        await onMarkDealLost(selectedLead.id, outcomeLabel)
+      } else {
+        await onUpdateInquiryStatus(selectedLead.id, nextStatus)
+      }
 
       // 2. Add Outcome Note
       let noteText = `Call outcome logged: ${outcomeLabel}.`
@@ -134,7 +144,9 @@ export function CallCenterTab({
 
       notify({
         title: 'Outcome Logged',
-        description: `Lead status updated to ${nextStatus.replace('_', ' ')}.`,
+        description: marksDealLost
+          ? 'Lead marked Deal Lost and any open client work was safely withdrawn.'
+          : `Lead status updated to ${nextStatus.replace('_', ' ')}.`,
         variant: 'success'
       })
 
