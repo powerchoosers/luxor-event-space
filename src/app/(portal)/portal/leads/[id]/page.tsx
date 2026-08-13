@@ -70,6 +70,7 @@ import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/port
 import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
+import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
 
 type ZohoEmailMessage = {
   id: string
@@ -303,6 +304,7 @@ export default function LeadDetailPage({
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
   const [documentPreview, setDocumentPreview] = useState<{ title: string; url: string } | null>(null)
   const [emailPreview, setEmailPreview] = useState<{ subject: string; html: string } | null>(null)
+  const [proposalDeliveryPreview, setProposalDeliveryPreview] = useState<{ invoice: LuxorInvoice; initialTab: 'email' | 'pdf' } | null>(null)
   const [invoiceToDelete, setInvoiceToDelete] = useState<LuxorInvoice | null>(null)
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
@@ -1919,6 +1921,7 @@ export default function LeadDetailPage({
         variant: 'success',
       })
       if (action === 'email') await handleSendFinalProposal(invoice)
+      if (action === 'save') setProposalDeliveryPreview({ invoice, initialTab: 'email' })
       if (createRevision) void fetchAllData(false)
     } catch (err) {
       console.error(err)
@@ -2298,6 +2301,10 @@ export default function LeadDetailPage({
     }
   }
 
+  const openProposalDeliveryPreview = (invoice: LuxorInvoice, initialTab: 'email' | 'pdf' = 'email') => {
+    setProposalDeliveryPreview({ invoice, initialTab })
+  }
+
   const handleSendFinalProposal = async (invoice: LuxorInvoice) => {
     try {
       setSendingInvoiceId(invoice.id)
@@ -2642,11 +2649,43 @@ export default function LeadDetailPage({
   ) * 100) / 100
   const proposalBalance = Math.max(0, Math.round((Number(proposalInvoice?.total || latestBooking?.contract_total || 0) - proposalPaidTotal) * 100) / 100)
   const proposalAmount = proposalInvoice?.total || latestBooking?.contract_total || 0
-  const proposalSentAt = proposalInvoice?.proposal_sent_at || (
-    proposalInvoice && (proposalInvoice.status === 'sent' || proposalInvoice.status === 'paid')
-      ? proposalInvoice.updated_at
-      : null
-  ) || notes.find((note) => (
+  const proposalPublicationErrors = Array.isArray(proposalInvoice?.proposal_context?.publication_errors)
+    ? proposalInvoice.proposal_context.publication_errors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim()))
+    : []
+  const proposalHasCompletePaymentPlan = (() => {
+    const plan = proposalInvoice?.proposal_context?.payment_plan
+    if (!plan) return false
+    return (plan.mode === 'deposit_and_balance' || plan.mode === 'pay_in_full') &&
+      Number.isFinite(Number(plan.booking_payment_percent)) &&
+      Number(plan.booking_payment_percent) >= 0 &&
+      Number(plan.booking_payment_percent) <= 100 &&
+      Number.isInteger(Number(plan.final_payment_due_days_before_event)) &&
+      Number(plan.final_payment_due_days_before_event) >= 0 &&
+      (plan.mode !== 'deposit_and_balance' || Number(plan.booking_payment_percent) > 0)
+  })()
+  const proposalLegacyPaymentPlanRequired = Boolean(
+    !proposalHasCompletePaymentPlan &&
+    proposalInvoice?.proposal_context?.calculation_errors?.length === 1 &&
+    proposalInvoice.proposal_context.calculation_errors[0] === 'Pricing configuration required — administrator review.',
+  )
+  const proposalPublicationBlocker = proposalPublicationErrors[0]
+    || (proposalLegacyPaymentPlanRequired ? 'Set the payment plan in Step 5 before publishing this final proposal.' : null)
+  const proposalDelivery = proposalInvoice?.proposal_context?.delivery_snapshot
+  const proposalDeliveryEmail = proposalDelivery && typeof proposalDelivery === 'object' && !Array.isArray(proposalDelivery)
+    ? (proposalDelivery as Record<string, unknown>).proposal_email
+    : null
+  const proposalDeliveryState = proposalDeliveryEmail && typeof proposalDeliveryEmail === 'object' && !Array.isArray(proposalDeliveryEmail)
+    ? (proposalDeliveryEmail as Record<string, unknown>).delivery_state
+    : null
+  const proposalDeliveryConfirmed = proposalDeliveryState === 'delivered'
+  const proposalDeliveryPrepared = proposalDeliveryState === 'prepared'
+  const proposalSentAt = proposalInvoice?.proposal_sent_at || (proposalDeliveryConfirmed ? (
+    proposalDeliveryEmail && typeof proposalDeliveryEmail === 'object' && !Array.isArray(proposalDeliveryEmail)
+      ? typeof (proposalDeliveryEmail as Record<string, unknown>).delivery_sent_at === 'string'
+        ? (proposalDeliveryEmail as Record<string, unknown>).delivery_sent_at as string
+        : proposalInvoice?.updated_at || null
+      : proposalInvoice?.updated_at || null
+  ) : null) || notes.find((note) => (
     note.note_type === 'status_change' &&
     note.content.toLowerCase().includes('proposal')
   ))?.created_at || (activeEventForDisplay?.status === 'proposal_sent' ? activeEventForDisplay.updated_at : null)
@@ -4405,21 +4444,26 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : latestBooking?.contract_status !== 'signed' ? 'Await agreement signature' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : latestBooking?.contract_status !== 'signed' ? 'Await agreement signature' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : latestBooking?.contract_status !== 'signed' ? 'Acceptance automatically sends the Event Agreement. Stripe is not available until it is signed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
+                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : latestBooking?.contract_status !== 'signed' ? 'Acceptance automatically sends the Event Agreement. Stripe is not available until it is signed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
                             </p>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           {proposalInvoice ? (
+                            <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={14} /> Preview delivery</button>
+                          ) : null}
+                          {proposalInvoice ? (
                             <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/15 cursor-pointer">Edit Proposal</button>
                           ) : null}
                           {!proposalInvoice ? (
                             <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                          ) : !proposalSentAt && proposalPublicationBlocker ? (
+                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Set payment plan</button>
                           ) : !proposalSentAt ? (
-                            <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Send final proposal'}</button>
+                            <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}</button>
                           ) : !proposalAcceptedAt ? (
                             <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Awaiting client acceptance</span>
                           ) : latestBooking?.contract_status !== 'signed' ? (
@@ -4438,15 +4482,15 @@ export default function LeadDetailPage({
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Delivery Status</span>
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                            proposalSentAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            proposalSentAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalDeliveryPrepared ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
                           }`}>
                             <Send size={10} />
-                            {proposalSentAt ? 'Sent' : 'Draft'}
+                            {proposalSentAt ? 'Sent' : proposalDeliveryPrepared ? 'Delivery pending' : 'Draft'}
                           </span>
                         </div>
                         <div className="mt-3">
-                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : 'Not Sent Yet'}</p>
-                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? 'Client delivery completed' : 'Send proposal to advance lead'}</p>
+                          <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : proposalDeliveryPrepared ? 'Retry required' : 'Not Sent Yet'}</p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? 'Client delivery completed' : proposalDeliveryPrepared ? 'Private link is saved; email delivery was not confirmed' : 'Send proposal to advance lead'}</p>
                         </div>
                       </div>
 
@@ -4515,7 +4559,7 @@ export default function LeadDetailPage({
                         {proposalInvoice ? (
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] hover:bg-[#caa24c]/15 transition-all cursor-pointer">Edit Proposal</button>
-                            <button type="button" onClick={() => setPdfPreviewInvoice(proposalInvoice)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/30 transition-all cursor-pointer">View PDF</button>
+                            <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={12} /> Preview delivery</button>
                           </div>
                         ) : null}
                       </div>
@@ -6268,10 +6312,10 @@ export default function LeadDetailPage({
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => proposalInvoice ? setPdfPreviewInvoice(proposalInvoice) : openProposalBuilder()}
+                        onClick={() => proposalInvoice ? openProposalDeliveryPreview(proposalInvoice, 'pdf') : openProposalBuilder()}
                         className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer"
                       >
-                        {proposalInvoice ? 'View Locked Proposal' : 'Build Final Proposal'}
+                        {proposalInvoice ? 'Preview Locked Proposal' : 'Build Final Proposal'}
                       </button>
                     </div>
                   </div>
@@ -6332,9 +6376,15 @@ export default function LeadDetailPage({
                       <button type="button" onClick={() => setPdfPreviewInvoice(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <Eye size={12} /> View PDF
                       </button>
-                      <button type="button" onClick={() => void previewInvoiceEmail(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
-                        <Mail size={12} /> Preview email
-                      </button>
+                      {inv.invoice_kind === 'event' ? (
+                        <button type="button" onClick={() => openProposalDeliveryPreview(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a]">
+                          <Eye size={12} /> Preview delivery
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => void previewInvoiceEmail(inv)} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
+                          <Mail size={12} /> Preview email
+                        </button>
+                      )}
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
                       </a>
@@ -6697,6 +6747,13 @@ export default function LeadDetailPage({
         </div>
       </PortalModal>
 
+      <ProposalDeliveryPreview
+        invoice={proposalDeliveryPreview?.invoice || null}
+        initialTab={proposalDeliveryPreview?.initialTab || 'email'}
+        clientEmail={lead.email}
+        onClose={() => setProposalDeliveryPreview(null)}
+      />
+
       <PortalModal isOpen={Boolean(pdfPreviewInvoice)} onClose={() => setPdfPreviewInvoice(null)} maxWidth="max-w-6xl">
         {pdfPreviewInvoice ? (
           <div className="flex h-[min(82vh,860px)] min-h-[520px] flex-col overflow-hidden bg-[color:var(--portal-bg)]">
@@ -6736,7 +6793,7 @@ export default function LeadDetailPage({
               <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#caa24c]">Email preview</p><h3 className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{emailPreview.subject}</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">This is a preview only. Nothing is sent from this window.</p></div>
               <PortalCloseButton onClick={() => setEmailPreview(null)} aria-label="Close email preview" />
             </div>
-            <iframe title="Email preview" srcDoc={emailPreview.html} className="min-h-0 flex-1 bg-white" sandbox="allow-same-origin" />
+            <iframe title="Email preview" srcDoc={emailPreview.html} className="min-h-0 flex-1 bg-white" sandbox="" />
           </div>
         ) : null}
       </PortalModal>

@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
+  Eye,
   FileText,
   Handshake,
   Mail,
@@ -54,6 +55,11 @@ export type ProposalPricingCalculation = {
   packages?: CalculatedPackage[]
   lineItems?: LuxorInvoiceLineItem[]
   warnings?: string[]
+  calculationErrors?: string[]
+  publicationErrors?: string[]
+  requirements?: {
+    paymentPlan?: boolean
+  }
   errors?: string[]
   [key: string]: unknown
 }
@@ -204,6 +210,10 @@ function arrayFromUnknown(value: unknown) {
   if (Array.isArray(value)) return value
   const record = asRecord(value)
   return record ? Object.values(record) : []
+}
+
+function uniqueMessages(values: unknown[]) {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())))]
 }
 
 function normalizeLineItem(value: unknown): LuxorInvoiceLineItem | null {
@@ -546,18 +556,32 @@ export function ProposalBuilderModal({
     : calculation?.lineItems?.length
       ? calculation.lineItems
       : []
-  const pricingWarnings = [
+  const pricingWarnings = uniqueMessages([
     ...(calculation?.warnings || []),
     ...(selectedCalculatedPackage?.warnings || []),
     ...(selectedContext.calculation_warnings || []),
-  ]
-  const pricingErrors = [
+  ])
+  const allPricingErrors = uniqueMessages([
     ...(calculation?.errors || []),
     ...(selectedCalculatedPackage?.errors || []),
     ...(selectedContext.calculation_errors || []),
-  ]
+  ])
+  // The server separates missing payment terms from broken rate rules. This
+  // preserves a useful package comparison while keeping publication blocked
+  // until Step 5 has explicit, owner-approved payment terms.
+  const structuredCalculationErrors = Array.isArray(calculation?.calculationErrors)
+    ? uniqueMessages(calculation.calculationErrors)
+    : null
+  const structuredPublicationErrors = Array.isArray(calculation?.publicationErrors)
+    ? uniqueMessages(calculation.publicationErrors)
+    : null
+  const pricingErrors = structuredCalculationErrors ?? allPricingErrors
+  const savedPublicationErrors = uniqueMessages(selectedContext.publication_errors || [])
+  const publicationErrors = structuredPublicationErrors ?? savedPublicationErrors
+  const pricingRequirements = asRecord(calculation?.requirements)
+  const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.length > 0
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0)
+  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
   const amountDueNow = typeof amountDueToBook === 'number' ? amountDueToBook : undefined
 
   const advance = () => {
@@ -589,7 +613,9 @@ export function ProposalBuilderModal({
 
   const headerStatus = pricingStatus === 'loading'
     ? 'Updating final price'
-    : pricingStatus === 'ready' && !pricingErrors.length
+    : pricingStatus === 'ready' && !pricingErrors.length && paymentPlanRequired
+      ? 'Payment plan needed'
+      : pricingStatus === 'ready' && !pricingErrors.length
       ? 'Final price verified'
       : 'Pricing needs event details'
 
@@ -877,9 +903,9 @@ export function ProposalBuilderModal({
                   <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare the packages at the actual event price.</h3>
                   <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">All four options use the same date, guest count, required services, and approved adjustment. Pick the one the client will receive.</p>
                 </div>
-                <div className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold ${pricingStatus === 'ready' ? 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
+                <div className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold ${pricingStatus === 'ready' && !pricingErrors.length ? paymentPlanRequired ? 'border-amber-500/25 bg-amber-500/8 text-amber-800 dark:text-amber-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
                   {pricingStatus === 'loading' ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ReceiptText size={14} />}
-                  {pricingStatus === 'loading' ? 'Calculating final prices' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}
+                  {pricingStatus === 'loading' ? 'Calculating final prices' : pricingStatus === 'ready' && paymentPlanRequired && !pricingErrors.length ? 'Final prices calculated — set payment plan' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}
                 </div>
               </div>
 
@@ -925,6 +951,17 @@ export function ProposalBuilderModal({
                     {pricingWarnings.map((warning, index) => <li key={`${warning}-${index}`} className="flex gap-2"><span aria-hidden="true">•</span><span>{warning}</span></li>)}
                   </ul>
                 </div>
+              ) : null}
+
+              {paymentPlanRequired && !pricingErrors.length ? (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100">
+                  <p className="font-bold">Package prices are ready.</p>
+                  <p className="mt-1">Set the owner-approved payment plan in Step 5 before publishing. It does not change the final event price.</p>
+                </div>
+              ) : null}
+
+              {pricingErrors.length ? (
+                <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200"><p className="font-bold">This package needs a pricing rule before it can be published.</p>{pricingErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1">{error}</p>)}</div>
               ) : null}
             </section>
           ) : null}
@@ -997,7 +1034,7 @@ export function ProposalBuilderModal({
               <div className="grid gap-4 lg:grid-cols-[1.05fr_.95fr]">
                 <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
                   <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Set the payment plan for this final proposal</p>
-                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">These are owner-entered agreement terms, saved with this specific proposal. Nothing is assumed automatically.</p>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">These are owner-entered agreement terms, saved with this specific proposal. Nothing is assumed automatically. Saving a draft opens the exact client email and attached-PDF preview; no message is sent.</p>
                   <div className="mt-4 grid gap-3">
                     <PortalSelect
                       value={paymentPlan?.mode || ''}
@@ -1054,7 +1091,7 @@ export function ProposalBuilderModal({
                   {hasFinalPrice ? (
                     <div className="mt-4 space-y-3 text-sm">
                       <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono font-bold">{formatMoney(finalEventPrice)}</span></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{paymentPlan?.mode === 'pay_in_full' ? 'Event price due after signing' : paymentPlan ? `Booking payment (${paymentPlan.booking_payment_percent}%)` : 'Booking payment'}</span><span className="font-mono font-bold">{typeof amountDueNow === 'number' ? formatMoney(amountDueNow) : 'Pricing configuration required'}</span></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{paymentPlan?.mode === 'pay_in_full' ? 'Event price due after signing' : paymentPlan ? `Booking payment (${paymentPlan.booking_payment_percent}%)` : 'Booking payment'}</span><span className="font-mono font-bold">{typeof amountDueNow === 'number' ? formatMoney(amountDueNow) : 'Set payment terms above'}</span></div>
                       <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{typeof refundableSecurityDeposit === 'number' ? formatMoney(refundableSecurityDeposit) : '$750'}</span></div>
                       <div className="border-t border-[#caa24c]/20 pt-3"><div className="flex items-end justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Due after contract signature</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{typeof amountDueNow === 'number' ? formatMoney(amountDueNow + (refundableSecurityDeposit ?? 750)) : 'Calculated after selection'}</span></div></div>
                     </div>
@@ -1063,8 +1100,12 @@ export function ProposalBuilderModal({
                 </aside>
               </div>
 
+              {paymentPlanRequired ? (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100"><p className="font-bold">Payment plan required before publishing.</p><p className="mt-1">Choose the payment plan and enter the owner-approved terms above. The event price is already calculated; these terms determine what is due after the agreement is signed.</p>{publicationErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1 text-xs">{error}</p>)}</div>
+              ) : null}
+
               {pricingErrors.length ? (
-                <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200"><p className="font-bold">Pricing configuration required — administrator review.</p>{pricingErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1">{error}</p>)}</div>
+                <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200"><p className="font-bold">This package needs a pricing rule before it can be published.</p>{pricingErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1">{error}</p>)}</div>
               ) : null}
             </section>
           ) : null}
@@ -1077,8 +1118,8 @@ export function ProposalBuilderModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">Continue <ArrowRight size={14} /></button> : <>
-              <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><FileText size={14} /> Save draft</button>
-              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
+              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>

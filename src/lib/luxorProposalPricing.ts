@@ -60,7 +60,17 @@ type PackageCalculation = {
 }
 
 export type LuxorProposalCalculation = {
+  /** True when the package itself has enough approved rate data to calculate. */
   valid: boolean
+  /** True only when the calculated package is ready to become a final proposal. */
+  publishable: boolean
+  /** Errors in the actual rate calculation (missing pricing rule, invalid event facts, etc.). */
+  calculationErrors: string[]
+  /** Requirements that prevent publication but do not change the calculated event price. */
+  publicationErrors: string[]
+  requirements: {
+    paymentPlan: boolean
+  }
   errors: string[]
   warnings: string[]
   packages: PackageCalculation[]
@@ -87,6 +97,7 @@ export type LuxorProposalCalculation = {
 }
 
 const CONFIGURATION_ERROR = 'Pricing configuration required — administrator review.'
+const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
 /**
  * The code fallback mirrors the approved rate schedule. It intentionally has
@@ -334,10 +345,21 @@ function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaym
 }
 
 function configTaxRate(config: LuxorProposalPricingConfig) {
+  const taxSettings = readRecord(config, 'taxes_and_processing_fees')
   const configured = readNumber(config, 'taxes_and_processing_fees', 'sales_tax_rate')
     ?? readNumber(config, 'taxes_and_processing_fees', 'tax_rate')
-  if (configured === undefined || configured < 0 || configured > 100) return undefined
-  return configured > 1 ? configured / 100 : configured
+  if (configured !== undefined) {
+    if (configured < 0 || configured > 100) return null
+    return configured > 1 ? configured / 100 : configured
+  }
+
+  // A tax is an optional, separately configured component. An absent rate
+  // means no tax has been turned on; it must not make an otherwise complete
+  // package look unpriceable. If an owner explicitly enables tax without a
+  // rate, that is the genuinely incomplete configuration we must block.
+  if (taxSettings?.sales_tax_enabled === true || taxSettings?.tax_enabled === true) return null
+  if (taxSettings?.sales_tax_enabled === false || taxSettings?.tax_enabled === false || !taxSettings) return 0
+  return 0
 }
 
 function selectedTaxRate(selection: LuxorProposalSelection) {
@@ -641,7 +663,6 @@ function calculatePackage(input: {
   const amountDueToBook = paymentPlan
     ? paymentPlan.mode === 'pay_in_full' ? total : rounded(total * paymentPlan.booking_payment_percent / 100)
     : null
-  if (!paymentPlan) errors.push(CONFIGURATION_ERROR)
 
   return {
     id: packageId,
@@ -715,8 +736,16 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
     }
   })
   const selected = packages.find((item) => item.id === safePackage) || packages[0]
-  const errors = selected.errors
-  const warnings = selected.warnings
+  const calculationErrors = selected.errors
+  // Terms decide what is due after the agreement is signed. They do not make
+  // an otherwise complete package price unknown, so keep this message precise
+  // and outside the actual pricing-error bucket.
+  const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
+  const errors = [...new Set([...calculationErrors, ...publicationErrors])]
+  const warnings = [...new Set([
+    ...selected.warnings,
+    ...(paymentPlan ? [] : ['Set the payment plan in Step 5 before publishing this final proposal.']),
+  ])]
   const packageName = selected.name
   const finalContext: LuxorProposalContext = {
     version: 1,
@@ -749,7 +778,8 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
       ...(paymentPlan ? { paymentPlan } : {}),
     },
     calculation_warnings: warnings,
-    calculation_errors: errors,
+    calculation_errors: calculationErrors,
+    publication_errors: publicationErrors,
   }
   const snapshot = {
     schema_version: 1,
@@ -769,7 +799,11 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
     },
   }
   return {
-    valid: errors.length === 0,
+    valid: calculationErrors.length === 0,
+    publishable: errors.length === 0,
+    calculationErrors,
+    publicationErrors,
+    requirements: { paymentPlan: !paymentPlan },
     errors,
     warnings,
     packages,

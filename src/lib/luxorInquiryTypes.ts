@@ -241,6 +241,8 @@ export type LuxorProposalContext = {
   pricing_selection?: Record<string, unknown>
   calculation_warnings?: string[]
   calculation_errors?: string[]
+  /** Items that must be completed before a calculated draft can be published. */
+  publication_errors?: string[]
   [key: string]: unknown
 }
 

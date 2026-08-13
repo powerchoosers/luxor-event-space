@@ -50,8 +50,8 @@ export async function buildAiOfferReminderEmail(input: {
   const offer = luxorOfferSnapshot(input.invoice)
   const expiry = formatLuxorOfferExpiry(input.invoice.offer_expires_at) || 'the stated deadline'
   const fallback = hasLuxorOffer(input.invoice)
-    ? `Your ${offer.percent}% limited-time offer is still available for your ${input.inquiry.event_type || 'event'}. Review the agreement and complete the required payment by ${expiry} to secure the discounted price and your date.`
-    : `Your Luxor proposal is still available for your ${input.inquiry.event_type || 'event'}. Review the agreement and complete the required payment by ${expiry} to secure your date.`
+    ? `Your ${offer.percent}% approved adjustment is still available for your ${input.inquiry.event_type || 'event'}. Review and accept the final proposal by ${expiry}; Luxor will send the Event Agreement next.`
+    : `Your Luxor proposal is still available for your ${input.inquiry.event_type || 'event'}. Review and accept it by ${expiry}; Luxor will send the Event Agreement next.`
   const apiKey = process.env.OPEN_ROUTER_API_KEY
   let copy = fallback
   let aiGenerated = false
@@ -64,7 +64,7 @@ export async function buildAiOfferReminderEmail(input: {
           model: 'google/gemini-2.5-flash',
           temperature: 0.3,
           messages: [
-            { role: 'system', content: 'Write exactly two warm, concise sentences for a Luxor Event Space limited-time proposal reminder. Encourage the client to review, sign, and complete the required payment before the supplied deadline to secure their date. Use only the supplied facts. Never invent availability, urgency, pricing, amenities, promises, or terms. Do not repeat dollar amounts or percentages because the approved detail card supplies them. Return only the two sentences, maximum 55 words.' },
+            { role: 'system', content: 'Write exactly two warm, concise sentences for a Luxor Event Space final-proposal reminder. Encourage the client to review and accept the proposal before the supplied deadline. State that Luxor sends the Event Agreement next and the secure payment link only after signature. Use only the supplied facts. Never invent availability, urgency, pricing, amenities, promises, or terms. Do not repeat dollar amounts or percentages because the approved detail card supplies them. Return only the two sentences, maximum 55 words.' },
             { role: 'user', content: JSON.stringify({
               clientName: input.inquiry.full_name,
               eventType: input.inquiry.event_type,

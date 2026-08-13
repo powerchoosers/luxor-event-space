@@ -113,9 +113,18 @@ export function verifyLuxorPortalSessionCookie(value: string | undefined) {
   return session
 }
 
-export async function getLuxorPortalSession() {
+/**
+ * The strict session reader for public routes that need to distinguish an
+ * owner preview from a real client visit. Unlike `getLuxorPortalSession`, it
+ * intentionally never applies the development convenience session.
+ */
+export async function getVerifiedLuxorPortalSession() {
   const cookieStore = await cookies()
-  const session = verifyLuxorPortalSessionCookie(cookieStore.get(LUXOR_PORTAL_SESSION_COOKIE)?.value)
+  return verifyLuxorPortalSessionCookie(cookieStore.get(LUXOR_PORTAL_SESSION_COOKIE)?.value)
+}
+
+export async function getLuxorPortalSession() {
+  const session = await getVerifiedLuxorPortalSession()
   if (!session && process.env.NODE_ENV === 'development') {
     return {
       email: 'booking@luxoratlaspalmas.com',

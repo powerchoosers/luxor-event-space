@@ -18,6 +18,8 @@ export type LuxorProposalDisplayLine = {
 
 export type LuxorProposalPricingSummary = {
   packageName: string | null
+  /** The date frozen with the proposal, which can differ from a lead's old request. */
+  eventDate: string | null
   expectedGuestCount: number | null
   eventAccess: string | null
   lines: LuxorProposalDisplayLine[]
@@ -149,6 +151,7 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
 
   return {
     packageName: asText(context.package_name),
+    eventDate: asText(context.event_date),
     expectedGuestCount: asMoney(context.expected_guest_count),
     eventAccess: asText(context.event_access),
     lines: serviceItems.map(({ category, service, quantity, unitPrice, lineTotal, included }) => ({ category, service, quantity, unitPrice, lineTotal, included })),
@@ -167,6 +170,13 @@ function escapeHtml(value: string) {
 
 function displayQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+function displayEventDate(value: string) {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 function proposalBreakdownHtml(summary: LuxorProposalPricingSummary) {
@@ -217,15 +227,22 @@ function proposalFinancialSummaryHtml(summary: LuxorProposalPricingSummary, opti
   <p style="margin:13px 2px 0;color:#a99878;font-size:11px;line-height:1.65">${paymentCopy}</p>`
 }
 
-function offerDisclosureHtml(invoice: LuxorInvoice, summary?: LuxorProposalPricingSummary) {
+function offerDisclosureHtml(
+  invoice: LuxorInvoice,
+  summary?: LuxorProposalPricingSummary,
+  stage: 'proposal' | 'accepted' = 'proposal',
+) {
   const expiresAt = formatLuxorOfferExpiry(invoice.offer_expires_at)
   if (hasLuxorOffer(invoice)) {
     const offer = luxorOfferSnapshot(invoice)
     const finalPrice = summary?.finalEventPrice ?? offer.discountedTotal
     const originalPrice = summary ? roundMoney(finalPrice + offer.savings) : offer.originalTotal
-    return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 8px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Limited-time offer applied</p><p style="margin:0;color:#f7efe3;font-size:14px"><span style="color:#b8aa9a;text-decoration:line-through">${money(originalPrice)}</span> &nbsp; <strong>${money(finalPrice)}</strong></p><p style="margin:8px 0 0;color:#d2efd9;font-size:12px;line-height:1.6">${offer.percent}% off saves ${money(offer.savings)}. Sign your agreement and complete the required payment by ${escapeHtml(expiresAt || 'the offer deadline')} to secure this price.</p></div>`
+    const timingCopy = stage === 'accepted'
+      ? `The approved ${offer.percent}% adjustment saves ${money(offer.savings)} and is already reflected in the locked Final Event Price.`
+      : `The approved ${offer.percent}% adjustment saves ${money(offer.savings)}. ${expiresAt ? `Accept this final proposal by ${escapeHtml(expiresAt)} to lock its Final Event Price.` : 'Accept this final proposal to lock its Final Event Price.'}`
+    return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 8px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Approved adjustment</p><p style="margin:0;color:#f7efe3;font-size:14px"><span style="color:#b8aa9a;text-decoration:line-through">${money(originalPrice)}</span> &nbsp; <strong>${money(finalPrice)}</strong></p><p style="margin:8px 0 0;color:#d2efd9;font-size:12px;line-height:1.6">${timingCopy}</p></div>`
   }
-  if (expiresAt) return `<div style="margin:22px 0;padding:16px 18px;border:1px solid rgba(202,162,76,.25);background:#0d0b09;color:#e7d4aa;font-size:12px;line-height:1.6">This proposal is available until ${escapeHtml(expiresAt)}. Complete the agreement and required payment by then to secure your date.</div>`
+  if (expiresAt && stage === 'proposal') return `<div style="margin:22px 0;padding:16px 18px;border:1px solid rgba(202,162,76,.25);background:#0d0b09;color:#e7d4aa;font-size:12px;line-height:1.6">Accept this final proposal by ${escapeHtml(expiresAt)} to lock the Final Event Price. Luxor will then send the Event Agreement; the secure Stripe link follows after signature.</div>`
   return ''
 }
 
@@ -234,8 +251,9 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const firstName = input.inquiry.full_name.split(/\s+/)[0] || input.inquiry.full_name
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || 'Custom Luxor package'
+  const proposalEventDate = summary.eventDate || input.inquiry.target_date || null
   const eventDetails = [
-    input.inquiry.target_date || null,
+    proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
     summary.eventAccess,
   ].filter(Boolean).join(' | ')
@@ -245,9 +263,6 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
     aiGenerated: false,
   }
 }
-
-/** @deprecated Kept for the existing send and preview routes. It now renders a final proposal. */
-export const buildLuxorEstimateEmail = buildLuxorProposalEmail
 
 export async function buildLuxorProposalContractEmail(input: {
   invoice: LuxorInvoice
@@ -260,7 +275,7 @@ export async function buildLuxorProposalContractEmail(input: {
   const introduction = await generateProposalContractIntroduction(input)
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || input.booking.package_name || input.inquiry.package_interest || 'Custom Luxor package'
-  const offerDisclosure = offerDisclosureHtml(input.invoice, summary)
+  const offerDisclosure = offerDisclosureHtml(input.invoice, summary, 'accepted')
   const finalDueDate = input.booking.final_payment_due_date
     ? new Date(`${input.booking.final_payment_due_date}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null

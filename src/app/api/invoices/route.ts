@@ -15,6 +15,7 @@ import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
 import type { LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
 
 const PRICING_CONFIGURATION_REQUIRED = 'Pricing configuration required — administrator review.'
+const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -61,6 +62,10 @@ function declaredInvoiceKind(value: unknown): 'event' | 'deposit' | 'final_balan
 }
 
 function calculationHasErrors(calculation: UnknownRecord) {
+  // New proposal calculations distinguish a missing payment plan (which only
+  // prevents publishing) from missing rate data (which prevents an accurate
+  // draft). Keep the older all-errors behavior for historical calculators.
+  if (Array.isArray(calculation.calculationErrors)) return calculation.calculationErrors.length > 0
   return calculation.valid === false || (Array.isArray(calculation.errors) && calculation.errors.length > 0)
 }
 
@@ -131,7 +136,10 @@ function paymentPlanSelection(selection: LuxorProposalSelection) {
   if (!mode || bookingPaymentPercent === null || bookingPaymentPercent > 100 || finalPaymentDueDays === null ||
     !Number.isInteger(finalPaymentDueDays) || finalPaymentDueDays < 0 ||
     (mode === 'deposit_and_balance' && bookingPaymentPercent <= 0)) {
-    throw new ProposalPricingConfigurationError()
+    // A partially entered Step 5 plan is allowed in a draft. The calculator
+    // records the publication requirement; the send route blocks the final
+    // proposal until the owner completes these terms.
+    return undefined
   }
   return {
     mode,
@@ -193,15 +201,29 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
   const refundableSecurityDeposit = nonNegativeMoney(rawContext.refundable_security_deposit)
   if (refundableSecurityDeposit === null) throw new ProposalPricingConfigurationError()
 
+  const submittedPaymentPlan = paymentPlanSelection(selection)
+  const calculatedPublicationErrors = Array.isArray(record.publicationErrors)
+    ? record.publicationErrors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim()))
+    : []
+  const paymentPlanRequired = recordFrom(record.requirements)?.paymentPlan === true || calculatedPublicationErrors.length > 0
   const proposalContext: LuxorProposalContext = {
     ...rawContext,
     version: Math.max(1, Math.floor(numberValue(rawContext.version) ?? 1)),
     pricing_config_version: Math.max(1, Math.floor(Number(pricingRecord.version || 1))),
     pricing_selection: selection as unknown as Record<string, unknown>,
-    ...(rawContext.payment_plan ? {} : { payment_plan: paymentPlanSelection(selection) }),
+    ...(submittedPaymentPlan ? { payment_plan: submittedPaymentPlan } : {}),
     final_event_price: total,
     refundable_security_deposit: refundableSecurityDeposit,
+    // Drafts can safely retain the exact calculated package before the owner
+    // chooses payment terms. The final-send route reads this requirement and
+    // refuses to publish until those terms are supplied.
+    // A payment plan is a publishing requirement, not a missing package
+    // price. Keeping it separate means a valid draft can be reviewed and
+    // previewed without incorrectly claiming its pricing needs admin review.
     calculation_errors: [],
+    publication_errors: paymentPlanRequired && !submittedPaymentPlan
+      ? [PAYMENT_PLAN_REQUIRED]
+      : [],
     pricing_snapshot: {
       ...(recordFrom(record.snapshot) || {}),
       line_items: lineItems,
@@ -369,7 +391,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A proposal selection is required before a final event proposal can be created.' }, { status: 400 })
     }
 
-    const { event_type, description, line_items, tax_rate, due_date, notes, discount_percent, offer_expires_at } = body
+    const { event_type, description, line_items, tax_rate, due_date, notes, discount_percent } = body
     if (!Array.isArray(line_items)) {
       return NextResponse.json({ error: 'line_items are required for a non-event invoice.' }, { status: 400 })
     }

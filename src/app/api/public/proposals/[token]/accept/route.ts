@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
-import { createLuxorBooking, getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { createOrGetLuxorBookingForInvoice, getLuxorBooking, getLuxorBookingByInvoice, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import {
   createLuxorSignatureRequest,
+  claimLuxorSignatureAgreementDelivery,
   getActiveLuxorSignatureRequestByBooking,
   getLatestLuxorSignatureRequestByBooking,
+  hasLuxorSignatureDeliveryDocuments,
+  markLuxorSignatureAgreementDelivery,
   recordLuxorSignatureEvent,
-  updateLuxorSignatureRequest,
 } from '@/lib/luxorSignaturesServer'
 import { isLuxorOfferExpired, roundLuxorMoney } from '@/lib/luxorOffer'
 import { createNote } from '@/lib/luxorNotesServer'
@@ -102,13 +104,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (!terms || !Number.isFinite(refundableSecurityDeposit) || refundableSecurityDeposit !== 750) {
       return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
     }
-    const bookings = await listLuxorBookingsByInquiry(inquiry.id)
-    let booking = invoice.booking_id
-      ? await getLuxorBooking(invoice.booking_id)
-      : bookings.find((item) => item.invoice_id === invoice.id) || null
+    const now = new Date().toISOString()
+    // Preserve the first acceptance audit record even if the prospect clicks in
+    // two tabs. A losing request continues the same booking/agreement recovery.
+    const acceptanceClaim = await claimLuxorProposalAcceptance(invoice.id, {
+      acceptedAt: now,
+      ip: requestIp(request),
+      userAgent: requestUserAgent(request),
+    })
+    const acceptedInvoice = acceptanceClaim || await getInvoice(invoice.id)
+    if (!acceptedInvoice || !acceptedInvoice.proposal_accepted_at || acceptedInvoice.status !== 'sent') {
+      return NextResponse.json({ error: 'This proposal is no longer available for acceptance.' }, { status: 409 })
+    }
+
+    let booking = await getLuxorBookingByInvoice(invoice.id)
+    if (!booking && invoice.booking_id) {
+      const linkedBooking = await getLuxorBooking(invoice.booking_id)
+      if (linkedBooking && linkedBooking.invoice_id === invoice.id) booking = linkedBooking
+    }
 
     if (!booking) {
-      booking = await createLuxorBooking({
+      const claimedBooking = await createOrGetLuxorBookingForInvoice({
         inquiry_id: inquiry.id,
         invoice_id: invoice.id,
         lead_event_id: invoice.lead_event_id || null,
@@ -138,6 +154,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
           reservation_state: 'proposal_accepted_awaiting_contract',
         },
       })
+      booking = claimedBooking.booking
       await updateInvoice(invoice.id, { booking_id: booking.id })
     } else if (booking.contract_status === 'signed') {
       return NextResponse.json({ accepted: true, alreadySigned: true })
@@ -176,33 +193,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       if (!invoice.booking_id) await updateInvoice(invoice.id, { booking_id: booking.id })
     }
 
-    const now = new Date().toISOString()
-    const acceptedAlready = Boolean(invoice.proposal_accepted_at)
-    const acceptedInvoice = acceptedAlready
-      ? invoice
-      : await updateInvoice(invoice.id, {
-          proposal_accepted_at: now,
-          proposal_accepted_ip: requestIp(request),
-          proposal_accepted_user_agent: requestUserAgent(request),
-          offer_status: 'active',
-        }) || invoice
-
-    // A previous attempt may have created the agreement but failed before the
-    // email or booking transition completed. Reuse that exact agreement on a
-    // retry; its sent email job is the delivery receipt.
+    // Replays and parallel tabs must continue one agreement. In particular, a
+    // fresh draft is still building its PDFs and must never be voided just
+    // because another request reaches this point first.
     let signature: LuxorSignatureRequest | null = await getActiveLuxorSignatureRequestByBooking(booking.id)
-    if (!signature) {
-      const latestSignature = await getLatestLuxorSignatureRequestByBooking(booking.id)
-      signature = latestSignature?.status === 'draft' ? latestSignature : null
+    const latestSignature = await getLatestLuxorSignatureRequestByBooking(booking.id)
+    if (latestSignature?.status === 'signed') {
+      return NextResponse.json({
+        accepted: true,
+        alreadyAccepted: true,
+        alreadySigned: true,
+        signingUrl: `${publicOrigin(request)}/secure-portal/sign/${latestSignature.token}`,
+      })
     }
+    if (!signature && latestSignature?.status === 'draft' && hasLuxorSignatureDeliveryDocuments(latestSignature)) {
+      signature = latestSignature
+    }
+    if (!signature || !hasLuxorSignatureDeliveryDocuments(signature)) {
+      signature = await createLuxorSignatureRequest(booking, {
+        status: 'draft',
+        allowInFlightDraft: true,
+        reuseExisting: true,
+      })
+    }
+    if (!hasLuxorSignatureDeliveryDocuments(signature)) {
+      return NextResponse.json({
+        accepted: true,
+        alreadyAccepted: !acceptanceClaim,
+        agreementPreparing: true,
+      }, { status: 202 })
+    }
+
     const agreementJobs = await listLuxorEmailJobsForInquiry(inquiry.id, 200)
     const existingSignatureId = signature?.id || null
     let agreementJob = existingSignatureId
       ? agreementJobs.find((job) => job.signature_request_id === existingSignatureId && job.job_type === 'contract_signature') || null
       : null
-    const agreementDeliveryRecorded = Boolean(signature && (
+    let agreementDeliveryRecorded = Boolean(signature && (
       agreementJob?.status === 'sent' ||
       signature.status === 'viewed' ||
+      signature.metadata?.agreementDeliveryState === 'delivered' ||
       (booking.metadata?.latest_signature_request_id === signature.id && booking.metadata?.reservation_state === 'awaiting_signature')
     ))
     const agreementLifecycleComplete = Boolean(signature && agreementDeliveryRecorded &&
@@ -216,22 +246,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     }
 
-    let activatedDraftSignature = false
-    if (!signature) {
-      // Keep a newly created agreement inactive until this route has prepared
-      // it. This avoids marking the booking as sent before delivery succeeds.
-      signature = await createLuxorSignatureRequest(booking, { status: 'draft' })
-      agreementJob = null
-    }
-    if (signature.status === 'draft') {
-      const activated = await updateLuxorSignatureRequest(signature.id, { status: 'sent' })
-      if (!activated) throw new Error('The agreement could not be activated for signing.')
-      signature = activated
-      activatedDraftSignature = true
+    let agreementDeliveryClaimed = false
+    if (!agreementDeliveryRecorded) {
+      const deliveryClaim = await claimLuxorSignatureAgreementDelivery(signature, now)
+      signature = deliveryClaim.signature
+      if (deliveryClaim.state === 'in_flight') {
+        return NextResponse.json({
+          accepted: true,
+          alreadyAccepted: !acceptanceClaim,
+          agreementPreparing: true,
+        }, { status: 202 })
+      }
+      agreementDeliveryRecorded = deliveryClaim.state === 'delivered'
+      agreementDeliveryClaimed = deliveryClaim.state === 'claimed'
     }
     const signingUrl = `${publicOrigin(request)}/secure-portal/sign/${signature.token}`
 
-    if (!agreementDeliveryRecorded) {
+    let agreementSentByThisRequest = false
+    if (!agreementDeliveryRecorded && agreementDeliveryClaimed) {
       // The proposal PDF was frozen at publish time. A fallback exists only for
       // legacy sent proposals that predate the document record.
       const proposalDocument = await getLuxorDocumentByInvoice(acceptedInvoice.id, 'proposal')
@@ -279,13 +311,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
           ],
         })
         await updateLuxorEmailJob(agreementJob.id, { status: 'sent', sent_at: now, last_error: null })
+        signature = await markLuxorSignatureAgreementDelivery(signature, 'delivered', now).catch((error) => {
+          console.error('Agreement email was sent, but its delivery marker could not be updated:', error)
+          return signature
+        }) || signature
+        agreementSentByThisRequest = true
       } catch (error) {
         await updateLuxorEmailJob(agreementJob.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Agreement email failed.' })
+        await markLuxorSignatureAgreementDelivery(signature, 'failed', new Date().toISOString()).catch((markError) => {
+          console.error('Agreement email failed, but its retry marker could not be updated:', markError)
+        })
         throw error
       }
     }
 
-    if (activatedDraftSignature) {
+    if (agreementSentByThisRequest) {
       await recordLuxorSignatureEvent({ signatureRequestId: signature.id, eventType: 'sent', metadata: { delivery: 'proposal_acceptance' } }).catch(() => null)
     }
 

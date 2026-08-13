@@ -42,8 +42,6 @@ export async function createLuxorPostContractCheckout(input: {
   origin: string
   paymentAmount?: number
   paymentLabel?: string
-  /** @deprecated This flag is ignored. Stripe is never available before signing. */
-  allowPreContract?: boolean
   masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
@@ -186,6 +184,9 @@ export async function createLuxorPostContractCheckout(input: {
       },
     }],
     metadata: {
+      // A non-sensitive, human-readable Stripe Dashboard marker. The invoice
+      // and booking IDs remain in metadata for server-side reconciliation.
+      workflow: 'luxor_post_contract_booking_payment',
       invoice_id: invoice.id,
       master_invoice_id: input.masterInvoiceId || invoice.parent_invoice_id || invoice.id,
       inquiry_id: inquiry.id,

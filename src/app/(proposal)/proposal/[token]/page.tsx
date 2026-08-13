@@ -1,12 +1,13 @@
 import { Check, FileCheck2, FileText, ShieldCheck } from 'lucide-react'
-import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
-import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoiceByPublicToken, markLuxorProposalViewed } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { formatLuxorOfferExpiry, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 import { AcceptProposalButton } from '@/components/proposal/AcceptEstimateButton'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
+import { createNote } from '@/lib/luxorNotesServer'
+import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,11 +58,26 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const pricedServiceItems = serviceItems.filter((item) => !(item.pricingRole === 'included' && Math.abs(itemTotal(item)) < 0.005))
   const includedServiceItems = serviceItems.filter((item) => item.pricingRole === 'included' && Math.abs(itemTotal(item)) < 0.005)
 
-  const cookieStore = await cookies()
-  const isInternalOwner = Boolean(cookieStore.get('luxor_portal_session'))
+  // A portal preview must never look like a client engagement event. Validate
+  // the signed portal session rather than trusting the mere presence of a
+  // cookie with that name.
+  const isInternalOwner = Boolean(await getVerifiedLuxorPortalSession())
   if (isPublished && !invoice.proposal_viewed_at && !isInternalOwner) {
-    await updateInvoice(invoice.id, { proposal_viewed_at: new Date().toISOString() })
-    if (invoice.inquiry_id) await cancelQueuedLuxorEmailJobs(invoice.inquiry_id, ['proposal_view_reminder'])
+    const firstView = await markLuxorProposalViewed(invoice.id)
+    if (firstView && invoice.inquiry_id) {
+      const results = await Promise.allSettled([
+        cancelQueuedLuxorEmailJobs(invoice.inquiry_id, ['proposal_view_reminder']),
+        createNote(
+          invoice.inquiry_id,
+          `Final proposal opened by ${invoice.client_name} in the secure proposal portal.`,
+          'status_change',
+          'Proposal Portal',
+        ),
+      ])
+      results.filter((result) => result.status === 'rejected').forEach((result) => {
+        console.error('Proposal view was recorded, but a follow-up activity action failed:', result.reason)
+      })
+    }
   }
 
   const status = offerExpired

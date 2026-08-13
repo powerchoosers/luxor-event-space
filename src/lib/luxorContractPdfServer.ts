@@ -280,9 +280,9 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', 'With initial booking payment')
   if (hasOffer) {
     w.fieldPair('Original contract price', money(Number(proposalOffer?.originalTotal || 0)), 'Limited-time savings', `${Number(proposalOffer?.percent || 0)}% (${money(Number(proposalOffer?.savings || 0))})`)
-    w.paragraph(`Limited-time offer: the discounted contract price above is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer?.expiresAt || null)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request at the regular price.`)
+    w.paragraph(`Approved adjustment: the discount shown above is already reflected in the locked Final Event Price for this Agreement. The secure booking-payment link is sent only after this Agreement is signed.`)
   } else if (proposalOffer?.expiresAt) {
-    w.paragraph(`This proposal is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer.expiresAt)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request.`)
+    w.paragraph('The final proposal was accepted before its stated availability deadline. The Final Event Price above is locked for this Agreement; the secure booking-payment link is sent only after signature.')
   }
   w.paragraph(`The event date is not reserved until the initial booking payment and separate refundable security deposit have been received after this Agreement has been fully executed. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`)
   w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Returned checks are subject to a $35.00 fee.')

@@ -3,7 +3,7 @@ import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildSignatureEmail, buildSignatureEmailHtml, cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildContractReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequestByBooking, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequestByBooking, hasLuxorSignatureDeliveryDocuments, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
@@ -167,7 +167,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'bookingId and a valid action are required.' }, { status: 400 })
     }
 
-    const signature = await getActiveLuxorSignatureRequestByBooking(bookingId)
+    let signature = await getActiveLuxorSignatureRequestByBooking(bookingId)
     if (!signature) {
       return NextResponse.json({ error: 'No active contract was found for this booking.' }, { status: 404 })
     }
@@ -195,16 +195,50 @@ export async function PATCH(request: NextRequest) {
     }
 
     const resentAt = new Date().toISOString()
-    const renewed = await updateLuxorSignatureRequest(signature.id, {
-      status: 'sent',
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
-      metadata: {
-        ...signature.metadata,
-        lastResentAt: resentAt,
-        lastResentBy: session.email,
-        resendCount: Number(signature.metadata?.resendCount || 0) + 1,
-      },
-    }) || signature
+    let rebuiltIncompleteAgreement = false
+    if (!hasLuxorSignatureDeliveryDocuments(signature)) {
+      // Historical/interrupted rows may say "sent" even though their contract
+      // PDFs never reached storage. Retire that unusable token and rebuild a
+      // fresh complete agreement before the owner resend delivers anything.
+      const retired = await updateLuxorSignatureRequest(signature.id, {
+        status: 'void',
+        expires_at: resentAt,
+        metadata: {
+          ...signature.metadata,
+          voidedAt: resentAt,
+          voidReason: 'agreement_documents_unavailable',
+          repairedBy: session.email,
+        },
+      })
+      if (!retired) {
+        return NextResponse.json({ error: 'The incomplete agreement could not be safely retired. Please try the resend once more.' }, { status: 409 })
+      }
+      await recordLuxorSignatureEvent({
+        signatureRequestId: signature.id,
+        eventType: 'voided',
+        metadata: { reason: 'agreement_documents_unavailable', recovery: true, repairedBy: session.email },
+      }).catch(() => null)
+
+      const booking = await getLuxorBooking(bookingId)
+      if (!booking) return NextResponse.json({ error: 'Booking not found while rebuilding the agreement.' }, { status: 404 })
+      signature = await createLuxorSignatureRequest(booking, {
+        status: 'sent',
+        signingMode: signature.metadata?.signingMode === 'in_person' ? 'in_person' : 'email',
+      })
+      rebuiltIncompleteAgreement = true
+    }
+    const renewed = rebuiltIncompleteAgreement
+      ? signature
+      : await updateLuxorSignatureRequest(signature.id, {
+          status: 'sent',
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+          metadata: {
+            ...signature.metadata,
+            lastResentAt: resentAt,
+            lastResentBy: session.email,
+            resendCount: Number(signature.metadata?.resendCount || 0) + 1,
+          },
+        }) || signature
     const email = buildSignatureEmail(renewed)
     const job = await createLuxorEmailJob({
       inquiryId: renewed.inquiry_id,
@@ -240,7 +274,7 @@ export async function PATCH(request: NextRequest) {
       eventType: 'resent',
       metadata: { resentBy: session.email },
     })
-    return NextResponse.json({ signature: renewed, job, action: 'resent' })
+    return NextResponse.json({ signature: renewed, job, action: rebuiltIncompleteAgreement ? 'rebuilt_and_resent' : 'resent' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update the contract request.'
     return NextResponse.json({ error: message }, { status: 500 })

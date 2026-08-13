@@ -215,6 +215,55 @@ export async function updateInvoice(
   return updated ?? null
 }
 
+/**
+ * Records the first real client opening of a published proposal. The
+ * `proposal_viewed_at=is.null` condition makes this safe if a browser opens
+ * the private link in more than one tab at the same time: exactly one request
+ * wins and can create the matching owner activity notification.
+ */
+export async function markLuxorProposalViewed(id: string, viewedAt = new Date().toISOString()) {
+  const [updated] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&proposal_viewed_at=is.null`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        proposal_viewed_at: viewedAt,
+        updated_at: viewedAt,
+      }),
+    },
+  )
+
+  return updated ?? null
+}
+
+/**
+ * Claims the first public acceptance without replacing the original IP or
+ * browser audit trail when the prospect retries in another tab.
+ */
+export async function claimLuxorProposalAcceptance(
+  id: string,
+  input: { acceptedAt?: string; ip?: string | null; userAgent?: string | null },
+) {
+  const acceptedAt = input.acceptedAt || new Date().toISOString()
+  const [updated] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&proposal_accepted_at=is.null&status=eq.sent`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        proposal_accepted_at: acceptedAt,
+        proposal_accepted_ip: input.ip || null,
+        proposal_accepted_user_agent: input.userAgent || null,
+        offer_status: 'active',
+        updated_at: acceptedAt,
+      }),
+    },
+  )
+
+  return updated ?? null
+}
+
 export async function deleteInvoice(id: string) {
   await supabaseRest<null>(`luxor_payments?invoice_id=eq.${encodeURIComponent(id)}&status=neq.paid`, {
     method: 'DELETE',

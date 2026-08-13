@@ -137,7 +137,10 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   text(isFinalProposal ? 'Your Luxor Event Proposal' : 'Your Luxor Payment Invoice', margin, y, 28, serifBold, ink)
   y -= 25
   const preparedFor = safePdfText(invoice.client_name || inquiry?.full_name || 'Luxor client')
-  const eventLine = [invoice.event_type, inquiry?.target_date ? displayDate(inquiry.target_date) : null].filter(Boolean).join(' - ') || 'Private event at Luxor Event Space'
+  // The proposal snapshot wins over the lead's original requested date. This
+  // keeps the PDF, portal preview, contract, and locked proposal consistent
+  // when the owner changes the event date during proposal building.
+  const eventLine = [invoice.event_type, summary.eventDate ? displayDate(summary.eventDate) : inquiry?.target_date ? displayDate(inquiry.target_date) : null].filter(Boolean).join(' - ') || 'Private event at Luxor Event Space'
   const leftDetails = [
     { label: 'PREPARED FOR', value: preparedFor },
     { label: 'EVENT', value: eventLine },
@@ -253,7 +256,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     text(`Original ${money(originalOfferPrice)} | Final ${money(offerFinalPrice)} | Savings ${money(offer.savings)}`, margin, y, 8.5, regular, muted)
     y -= 15
     if (offer.expiresAt) {
-      drawLines(wrap(`This final proposal price is secured when the agreement and required payment are complete by ${formatLuxorOfferExpiry(offer.expiresAt) || offer.expiresAt}.`, regular, 8.2, contentRight - margin), margin, y, 8.2, regular, muted, 10)
+      drawLines(wrap(`Accept this final proposal by ${formatLuxorOfferExpiry(offer.expiresAt) || offer.expiresAt} to lock the Final Event Price. Luxor will then send the Event Agreement; the secure payment link follows after signature.`, regular, 8.2, contentRight - margin), margin, y, 8.2, regular, muted, 10)
       y -= 24
     }
   }

@@ -373,16 +373,34 @@ export default async function PortalOverview() {
     if (!n.created_at) return;
     const createdAt = new Date(n.created_at);
     const matchedLead = n.inquiry_id ? leads.find((l) => l.id === n.inquiry_id) : null;
-    const title = matchedLead
+    const activityText = n.content.trim();
+    let title = matchedLead
       ? `Note added for ${matchedLead.full_name}`
-      : `Note: ${n.content.slice(0, 35)}${n.content.length > 35 ? '...' : ''}`;
+      : `Note: ${activityText.slice(0, 35)}${activityText.length > 35 ? '...' : ''}`;
+    let subtitle: string | undefined;
+    let icon = FileText;
+
+    if (n.author === 'Proposal Portal' && /^Final proposal opened by /i.test(activityText)) {
+      title = matchedLead ? `Proposal opened: ${matchedLead.full_name}` : 'Client opened a final proposal';
+      subtitle = 'Secure proposal portal';
+      icon = Eye;
+    } else if (n.author === 'Signature Portal' && /^Event Agreement opened by /i.test(activityText)) {
+      title = matchedLead ? `Agreement opened: ${matchedLead.full_name}` : 'Client opened an Event Agreement';
+      subtitle = 'Secure signing portal';
+      icon = Eye;
+    } else if (n.author === 'Signature Portal' && /^Event Agreement signed by /i.test(activityText)) {
+      title = matchedLead ? `Agreement signed: ${matchedLead.full_name}` : 'Client signed an Event Agreement';
+      subtitle = 'Secure signing portal';
+      icon = CheckCircle2;
+    }
     const href = n.inquiry_id ? `/portal/leads/${n.inquiry_id}` : '/portal/leads';
 
     rawActivities.push({
       id: `note-${n.id}`,
       title,
+      subtitle,
       rawDate: createdAt,
-      icon: FileText,
+      icon,
       href,
     });
   });

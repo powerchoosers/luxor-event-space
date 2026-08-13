@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorSignatureRequestByToken, recordLuxorSignatureEvent, signLuxorSignatureRequest, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { getLuxorSignatureRequestByToken, markLuxorSignatureViewed, recordLuxorSignatureEvent, signLuxorSignatureRequest, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
-import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, markLuxorBookingContractViewed } from '@/lib/luxorBookingsServer'
 import { getLuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getInvoice, getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
+import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -62,28 +63,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'This signing link has expired. Please contact Luxor Event Space for a new agreement.' }, { status: 410 })
     }
 
-    const isInternalOwner = Boolean(request.cookies.get('luxor_portal_session'))
+    // Owner PDF previews do not count as a client engagement. This must be a
+    // validated session, not merely a cookie name a visitor could provide.
+    const isInternalOwner = Boolean(await getVerifiedLuxorPortalSession())
+    let responseSignature = signature
 
     if (signature.status === 'sent' && !isInternalOwner) {
-      await Promise.all([
-        updateLuxorSignatureRequest(signature.id, { status: 'viewed' }),
-        updateLuxorBooking(signature.booking_id, { contract_status: 'viewed' }),
-      ])
-      if (signature.inquiry_id) {
-        void createNote(signature.inquiry_id, `Contract viewed by ${signature.client_name} in the secure signing portal.`, 'status_change', 'Signature Portal').catch((error) => {
-          console.error('Contract viewed, but the activity note could not be recorded:', error)
-        })
+      try {
+        // This conditional update is the event gate. A second browser tab or
+        // an aggressive refresh cannot generate duplicate owner alerts.
+        const firstView = await markLuxorSignatureViewed(signature.id)
+        if (firstView) {
+          responseSignature = firstView
+          const results = await Promise.allSettled([
+            markLuxorBookingContractViewed(signature.booking_id),
+            ...(signature.inquiry_id
+              ? [
+                  createNote(signature.inquiry_id, `Event Agreement opened by ${signature.client_name} in the secure signing portal.`, 'status_change', 'Signature Portal'),
+                  cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder']),
+                ]
+              : []),
+            recordLuxorSignatureEvent({
+              signatureRequestId: signature.id,
+              eventType: 'viewed',
+              ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
+              userAgent: request.headers.get('user-agent'),
+            }),
+          ])
+          results.filter((result) => result.status === 'rejected').forEach((result) => {
+            console.error('Agreement view was recorded, but a follow-up activity action failed:', result.reason)
+          })
+        } else {
+          // A concurrent view or signature may already have progressed this
+          // agreement. Return the current state instead of a stale "sent" one.
+          responseSignature = await getLuxorSignatureRequestByToken(token) || signature
+        }
+      } catch (viewError) {
+        // The agreement itself remains readable even if a non-critical
+        // analytics/activity write is temporarily unavailable.
+        console.error('Unable to record agreement view activity:', viewError)
       }
-      if (signature.inquiry_id) await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder'])
-      await recordLuxorSignatureEvent({
-        signatureRequestId: signature.id,
-        eventType: 'viewed',
-        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
-        userAgent: request.headers.get('user-agent'),
-      })
     }
 
-    return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature), status: signature.status === 'sent' && !isInternalOwner ? 'viewed' : signature.status })
+    return NextResponse.json({ ...publicSignature(responseSignature), ...await publicPayment(responseSignature), status: responseSignature.status })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load signature request.'
     return NextResponse.json({ error: message }, { status: 500 })

@@ -17,6 +17,8 @@ import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing } from
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
+const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
+
 function offerReminderTimes(expiresAt?: string | null) {
   if (!expiresAt) return []
   const expiry = new Date(expiresAt).getTime()
@@ -145,7 +147,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         origin,
         paymentAmount: depositAmount,
         paymentLabel,
-        allowPreContract: true,
         masterInvoiceId: invoice.id,
       })
 
@@ -273,7 +274,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (invoice.invoice_kind !== 'event') return NextResponse.json({ error: 'Only a final event proposal can be published from this action.' }, { status: 409 })
       const proposalContext = invoice.proposal_context && typeof invoice.proposal_context === 'object' ? invoice.proposal_context : null
       const calculationErrors = Array.isArray(proposalContext?.calculation_errors) ? proposalContext.calculation_errors.filter(Boolean) : []
-      if (!proposalContext || calculationErrors.length) {
+      const publicationErrors = Array.isArray(proposalContext?.publication_errors) ? proposalContext.publication_errors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim())) : []
+      const plan = proposalContext?.payment_plan
+      const hasCompletePaymentPlan = Boolean(
+        plan &&
+        (plan.mode === 'deposit_and_balance' || plan.mode === 'pay_in_full') &&
+        Number.isFinite(Number(plan.booking_payment_percent)) &&
+        Number(plan.booking_payment_percent) >= 0 &&
+        Number(plan.booking_payment_percent) <= 100 &&
+        Number.isInteger(Number(plan.final_payment_due_days_before_event)) &&
+        Number(plan.final_payment_due_days_before_event) >= 0 &&
+        (plan.mode !== 'deposit_and_balance' || Number(plan.booking_payment_percent) > 0),
+      )
+      // Drafts made before publication errors were stored separately used the
+      // generic configuration message for this one missing decision. Keep
+      // their publish action useful too instead of treating package rates as
+      // unknown.
+      const onlyLegacyPaymentPlanError = !hasCompletePaymentPlan && calculationErrors.length === 1 && calculationErrors[0] === 'Pricing configuration required — administrator review.'
+      if (!proposalContext) {
+        return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
+      }
+      if (publicationErrors.length) {
+        return NextResponse.json({ error: publicationErrors[0] }, { status: 409 })
+      }
+      if (onlyLegacyPaymentPlanError) {
+        return NextResponse.json({ error: PAYMENT_PLAN_REQUIRED }, { status: 409 })
+      }
+      if (calculationErrors.length) {
         return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
       }
       if (Math.abs(Number(proposalContext.final_event_price || 0) - Number(invoice.total || 0)) >= 0.005) {
@@ -289,7 +316,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const now = new Date().toISOString()
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       const publicToken = invoice.public_token || crypto.randomUUID()
-      const reviewUrl = `${origin}/proposal/${publicToken}`
       // An older workflow could have attached a Checkout Session directly to
       // the event invoice. A final proposal must never leave an old payment
       // link usable, because payment is now issued only after signature.
@@ -314,27 +340,130 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const frozenInvoice = invoice.price_locked_at
         ? invoice
         : await updateInvoice(invoice.id, { price_locked_at: now, proposal_version: Math.max(1, Number(invoice.proposal_version || 1)) }) || invoice
+      const persistedPublicToken = frozenInvoice.public_token || publicToken
+      const persistedReviewUrl = `${origin}/proposal/${persistedPublicToken}`
       const existingPdf = await getLuxorDocumentByInvoice(frozenInvoice.id, 'proposal')
-      if (invoice.status === 'sent' && invoice.price_locked_at && !existingPdf) {
+      const frozenDeliverySnapshot = frozenInvoice.proposal_context?.delivery_snapshot
+      const frozenProposalEmail = frozenDeliverySnapshot && typeof frozenDeliverySnapshot === 'object' && !Array.isArray(frozenDeliverySnapshot)
+        ? (frozenDeliverySnapshot as Record<string, unknown>).proposal_email
+        : null
+      const frozenDeliveryConfirmed = frozenProposalEmail && typeof frozenProposalEmail === 'object' && !Array.isArray(frozenProposalEmail)
+        && (frozenProposalEmail as Record<string, unknown>).delivery_state === 'delivered'
+      if (frozenDeliveryConfirmed && !existingPdf) {
         return NextResponse.json({ error: 'The frozen proposal PDF is unavailable. Create a revised proposal; do not regenerate this published version.' }, { status: 409 })
       }
       const pdf = existingPdf
         ? await downloadLuxorDocument(existingPdf)
         : await buildLuxorInvoicePdf(frozenInvoice, inquiry)
       if (!existingPdf) await saveLuxorProposalPdf({ invoice: frozenInvoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
-      const email = buildLuxorProposalEmail({ invoice: frozenInvoice, inquiry, reviewUrl })
-      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor final proposal is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: frozenInvoice.proposal_version || 1, price_locked_at: frozenInvoice.price_locked_at } })
+      const attachmentFileName = `Luxor-Final-Proposal-${frozenInvoice.id.slice(0, 8)}.pdf`
+      const priorDeliverySnapshot = frozenInvoice.proposal_context?.delivery_snapshot
+      const priorProposalEmail = priorDeliverySnapshot && typeof priorDeliverySnapshot === 'object' && !Array.isArray(priorDeliverySnapshot)
+        ? (priorDeliverySnapshot as Record<string, unknown>).proposal_email
+        : null
+      const storedProposalEmail = priorProposalEmail && typeof priorProposalEmail === 'object' && !Array.isArray(priorProposalEmail)
+        ? priorProposalEmail as Record<string, unknown>
+        : null
+      const snapshotSubject = typeof storedProposalEmail?.subject === 'string' ? storedProposalEmail.subject : null
+      const snapshotHtml = typeof storedProposalEmail?.html === 'string' ? storedProposalEmail.html : null
+      const snapshotRecipient = typeof storedProposalEmail?.recipient_email === 'string' ? storedProposalEmail.recipient_email : null
+      const snapshotRecipientName = typeof storedProposalEmail?.recipient_name === 'string' ? storedProposalEmail.recipient_name : null
+      const snapshotReviewUrl = typeof storedProposalEmail?.review_url === 'string' ? storedProposalEmail.review_url : null
+      const snapshotDeliveryState = typeof storedProposalEmail?.delivery_state === 'string' ? storedProposalEmail.delivery_state : null
+      const snapshotDeliverySentAt = typeof storedProposalEmail?.delivery_sent_at === 'string' ? storedProposalEmail.delivery_sent_at : null
+      // Once Zoho has confirmed delivery, this snapshot is an audit artifact.
+      // Before that point a corrected client name/email should replace the
+      // prepared payload on retry rather than sending to stale contact data.
+      const hasConfirmedDelivery = snapshotDeliveryState === 'delivered' && Boolean(snapshotDeliverySentAt)
+      const hasStoredDeliverySnapshot = hasConfirmedDelivery && Boolean(snapshotSubject && snapshotHtml && snapshotRecipient && snapshotReviewUrl)
+      const generatedEmail = hasStoredDeliverySnapshot
+        ? null
+        : buildLuxorProposalEmail({ invoice: frozenInvoice, inquiry, reviewUrl: persistedReviewUrl })
+      const email = {
+        subject: hasStoredDeliverySnapshot ? snapshotSubject! : generatedEmail!.subject,
+        html: hasStoredDeliverySnapshot ? snapshotHtml! : generatedEmail!.html,
+        recipient: hasStoredDeliverySnapshot ? snapshotRecipient! : inquiry.email,
+        recipientName: hasStoredDeliverySnapshot ? (snapshotRecipientName || inquiry.full_name) : inquiry.full_name,
+        reviewUrl: hasStoredDeliverySnapshot ? snapshotReviewUrl! : persistedReviewUrl,
+      }
+      const deliverySnapshot = {
+        ...(priorDeliverySnapshot && typeof priorDeliverySnapshot === 'object' && !Array.isArray(priorDeliverySnapshot)
+          ? priorDeliverySnapshot as Record<string, unknown>
+          : {}),
+        proposal_email: {
+          recipient_email: email.recipient,
+          recipient_name: email.recipientName,
+          subject: email.subject,
+          html: email.html,
+          attachment_filename: hasConfirmedDelivery && typeof storedProposalEmail?.attachment_filename === 'string'
+            ? storedProposalEmail.attachment_filename
+            : attachmentFileName,
+          review_url: email.reviewUrl,
+          rendered_at: hasConfirmedDelivery && typeof storedProposalEmail?.rendered_at === 'string'
+            ? storedProposalEmail.rendered_at
+            : now,
+          delivery_state: hasConfirmedDelivery ? 'delivered' : 'prepared',
+          delivery_sent_at: hasConfirmedDelivery ? snapshotDeliverySentAt : null,
+        },
+      }
+      // The private link and exact email payload must be durable before Zoho
+      // receives anything. A mail failure then retries the same immutable
+      // proposal version instead of sending a link the client cannot open.
+      const preparedInvoice = await updateInvoice(frozenInvoice.id, {
+        public_token: persistedPublicToken,
+        price_locked_at: frozenInvoice.price_locked_at || now,
+        proposal_version: Math.max(1, Number(frozenInvoice.proposal_version || 1)),
+        // Once the durable private URL and frozen PDF exist, the proposal is
+        // safe for its recipient to open even if the process dies after Zoho
+        // accepts the message. `proposal_sent_at` remains the actual delivery
+        // receipt and is intentionally written only after Zoho succeeds.
+        status: 'sent',
+        proposal_context: {
+          ...(frozenInvoice.proposal_context || {}),
+          version: Number(frozenInvoice.proposal_context?.version || 1),
+          delivery_snapshot: deliverySnapshot,
+        },
+      })
+      if (!preparedInvoice || preparedInvoice.public_token !== persistedPublicToken) {
+        throw new Error('The final proposal could not be prepared with its private delivery link. Nothing was emailed; please try again.')
+      }
+      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: email.recipient, subject: email.subject, body: `Your Luxor final proposal is ready: ${email.reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: preparedInvoice.proposal_version || 1, price_locked_at: preparedInvoice.price_locked_at, review_url: email.reviewUrl, attachment_filename: deliverySnapshot.proposal_email.attachment_filename, rendered_at: deliverySnapshot.proposal_email.rendered_at } })
+      const deliveredSnapshot = {
+        ...deliverySnapshot,
+        proposal_email: {
+          ...deliverySnapshot.proposal_email,
+          delivery_state: 'delivered',
+          delivery_sent_at: now,
+        },
+      }
+      let updated = preparedInvoice
       try {
-        await sendLuxorZohoEmail({ to: inquiry.email, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: `Luxor-Final-Proposal-${frozenInvoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] })
-        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
+        await sendLuxorZohoEmail({ to: email.recipient, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: deliverySnapshot.proposal_email.attachment_filename, content: pdf, contentType: 'application/pdf' }] })
+        // Persist the actual delivery receipt before the non-critical job
+        // bookkeeping. If that later write fails, the owner sees the proposal
+        // as delivered instead of being encouraged to send a duplicate.
+        updated = await updateInvoice(preparedInvoice.id, {
+          status: 'sent',
+          proposal_sent_at: now,
+          proposal_context: {
+            ...(preparedInvoice.proposal_context || {}),
+            version: Number(preparedInvoice.proposal_context?.version || 1),
+            delivery_snapshot: deliveredSnapshot,
+          },
+        })
+        if (!updated) throw new Error('The final proposal email was accepted, but its delivery receipt could not be saved. Refresh before retrying.')
       } catch (error) {
         await updateLuxorEmailJob(job.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Email send failed.' })
         throw error
       }
+      // The invoice receipt is the client-facing source of truth. A mail-job
+      // ledger hiccup must not turn a confirmed delivery into a retry prompt.
+      await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now }).catch((error) => {
+        console.error('Final proposal was delivered, but the email-job receipt could not be updated:', error)
+      })
       if (booking) {
         booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, proposal_sent_at: now, reservation_state: 'awaiting_proposal_selection', proposalLineItems: frozenInvoice.line_items, proposalInvoiceId: frozenInvoice.id } }) || booking
       }
-      const updated = await updateInvoice(frozenInvoice.id, { public_token: publicToken, status: 'sent', proposal_sent_at: now })
       if (updated?.supersedes_invoice_id) {
         const prior = await getInvoice(updated.supersedes_invoice_id)
         if (prior && prior.status !== 'cancelled') {
@@ -343,7 +472,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const updatedInquiry = await updateLuxorInquiry(inquiry.id, { status: 'proposal_sent', pipeline_stage: 'proposal', metadata: { ...inquiry.metadata, proposal_sent_at: now, latest_proposal_invoice_id: invoice.id } }) || inquiry
       await createNote(inquiry.id, 'Final proposal sent. The price is locked; the client must select it before the Event Agreement is issued.', 'status_change', session.email)
-      return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, reviewUrl, mode: 'proposal' })
+      return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, reviewUrl: email.reviewUrl, mode: 'proposal' })
     }
 
     if ((body.mode as string) === 'proposal_contract') {
