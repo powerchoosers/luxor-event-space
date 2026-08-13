@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 }
 
 const sections = [
-  ['Information we collect', 'When you request a tour, RSVP, ask a question, or begin planning an event, we may collect your name, email address, phone number, event type, preferred dates, guest-count estimate, package interest, and any notes you choose to provide.'],
+  ['Information we collect', 'When you request a tour, RSVP, ask a question, or begin planning an event, we may collect your name, email address, phone number, event type, preferred dates, expected guest count, package interest, and any notes you choose to provide.'],
   ['How we use it', 'We use submitted information to respond to your request, discuss availability, plan tours, prepare event proposals, manage bookings, send requested updates, and maintain customer-service records.'],
   ['Service providers', 'We may use service providers for website hosting, customer relationship management, email and text delivery, scheduling, payment processing, and other business operations. They receive only the information needed to provide those services.'],
   ['Mobile information and sharing', 'We do not sell, rent, or share mobile phone numbers, text-message opt-in data, or SMS consent with third parties or affiliates for marketing or promotional purposes. Mobile information may be disclosed only to service providers that help Luxor Event Space deliver requested messages and operate the service, or when required by law.'],

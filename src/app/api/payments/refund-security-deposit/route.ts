@@ -7,6 +7,18 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
+import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
+
+const MONEY_EPSILON = 0.005
+
+function securityDepositAmount(invoice: { line_items: Array<{ paymentBucket?: string; category?: string; description?: string; total?: number }> } | null) {
+  const line = invoice?.line_items.find((item) =>
+    item.paymentBucket === 'security_deposit' ||
+    item.category === 'Security Deposit' ||
+    /refundable\s+security\s+deposit/i.test(item.description || ''),
+  )
+  return Math.round(Number(line?.total || 0) * 100) / 100
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => ({})) as { bookingId?: string; invoiceId?: string; refundAmount?: number }
+    const body = await request.json().catch(() => ({})) as { bookingId?: string }
     const bookingId = body.bookingId
     if (!bookingId) {
       return NextResponse.json({ error: 'bookingId is required.' }, { status: 400 })
@@ -25,12 +37,17 @@ export async function POST(request: NextRequest) {
     if (!booking) {
       return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
     }
+    if (booking.security_deposit_status === 'refunded') {
+      return NextResponse.json({ error: 'This security deposit has already been refunded.' }, { status: 409 })
+    }
+    if (booking.security_deposit_status !== 'held') {
+      return NextResponse.json({ error: 'The refundable security deposit must be held before it can be refunded.' }, { status: 409 })
+    }
 
-    const finalInvoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
-    const securityDepositLine = finalInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))
-    const refundAmount = Math.round(Number(securityDepositLine?.total || 0) * 100) / 100
-    if (refundAmount <= 0) {
-      return NextResponse.json({ error: 'No refundable security-deposit line item was found on this booking’s final invoice.' }, { status: 409 })
+    const depositInvoice = await getInvoiceByBookingAndKind(booking.id, 'deposit')
+    const refundAmount = securityDepositAmount(depositInvoice)
+    if (Math.abs(refundAmount - LUXOR_DEFAULT_SECURITY_DEPOSIT) >= MONEY_EPSILON) {
+      return NextResponse.json({ error: 'The paid initial booking invoice does not contain the required $750 refundable security deposit.' }, { status: 409 })
     }
 
     const secretKey = process.env.STRIPE_SECRET_KEY
@@ -42,13 +59,21 @@ export async function POST(request: NextRequest) {
       `luxor_payments?booking_id=eq.${encodeURIComponent(booking.id)}&status=eq.paid&order=created_at.desc`,
     ).catch(() => [])
 
-    const invoicePayments = finalInvoice
-      ? await supabaseRest<LuxorPayment[]>(`luxor_payments?invoice_id=eq.${encodeURIComponent(finalInvoice.id)}&status=eq.paid&order=created_at.desc`).catch(() => [])
+    const invoicePayments = depositInvoice
+      ? await supabaseRest<LuxorPayment[]>(`luxor_payments?invoice_id=eq.${encodeURIComponent(depositInvoice.id)}&status=eq.paid&order=created_at.desc`).catch(() => [])
       : []
+
+    const depositPaidTotal = invoicePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    if (!depositInvoice || depositPaidTotal + MONEY_EPSILON < Number(depositInvoice.total || 0)) {
+      return NextResponse.json({ error: 'The initial booking payment is not fully paid, so the refundable security deposit cannot be returned.' }, { status: 409 })
+    }
 
     const allPayments = [...invoicePayments, ...payments]
     const stripePayment = allPayments.find(
-      (p) => p.processor === 'stripe' || p.payment_method === 'stripe_checkout' || Boolean(p.processor_reference),
+      (p) => (
+        p.invoice_id === depositInvoice?.id &&
+        (p.processor === 'stripe' || p.payment_method === 'stripe_checkout')
+      ),
     )
 
     const stripe = new Stripe(secretKey)
@@ -85,19 +110,21 @@ export async function POST(request: NextRequest) {
           security_deposit_refund: 'true',
           refunded_by: session.email,
         },
+      }, {
+        idempotencyKey: 'luxor-security-deposit-refund-' + booking.id + '-' + (depositInvoice?.id || 'deposit'),
       })
     } else {
-      return NextResponse.json({ error: 'The final invoice payment cannot be matched to Stripe, so no refund was issued.' }, { status: 409 })
+      return NextResponse.json({ error: 'The initial booking payment cannot be matched to Stripe, so no refund was issued.' }, { status: 409 })
     }
 
     const now = new Date().toISOString()
 
-    await supabaseRest('luxor_payments', {
+    await supabaseRest('luxor_payments?on_conflict=processor,processor_reference&select=*', {
       method: 'POST',
-      headers: { Prefer: 'return=representation' },
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify({
         booking_id: booking.id,
-        invoice_id: finalInvoice?.id || null,
+        invoice_id: depositInvoice?.id || null,
         inquiry_id: booking.inquiry_id || null,
         amount: -refundAmount,
         status: 'refunded',

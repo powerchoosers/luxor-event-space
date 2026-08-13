@@ -238,6 +238,12 @@ async function createWriter(documentLabel: string) {
 }
 
 export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: string, agreementDate = new Date().toISOString()) {
+  const finalPaymentDueDate = typeof booking.final_payment_due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(booking.final_payment_due_date)
+    ? booking.final_payment_due_date
+    : null
+  if (!finalPaymentDueDate) {
+    throw new Error('Configure the final payment due date in the approved payment plan before generating an Event Agreement.')
+  }
   const names = parseClientName(booking.client_name)
   const balance = Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0))
   const proposalOffer = booking.metadata?.proposalOffer as { originalTotal?: number; discountedTotal?: number; percent?: number; savings?: number; expiresAt?: string | null } | undefined
@@ -258,7 +264,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.fieldPair('Agreement date', displayDate(agreementDate), 'Event date', displayDate(booking.event_date))
   w.fieldPair('Event type', booking.event_type || 'Private event', 'Email', booking.email || 'Not provided')
   w.y -= 10
-  w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Estimated guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`) 
+  w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Expected guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`)
   w.y -= 10
   w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Event purpose', booking.event_type || 'Private celebration')
   w.y -= 14
@@ -269,21 +275,21 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.addPage()
   w.title('Package, pricing & payment', 'Financial terms')
   w.heading('3. Contract price')
-  w.fieldPair('Total contract price', money(booking.contract_total), 'Reservation payment', money(booking.deposit_required))
-  w.fieldPair('Remaining balance', money(balance), 'Final payment due', displayDate(booking.final_payment_due_date))
-  w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', displayDate(booking.final_payment_due_date))
+  w.fieldPair('Final Event Price', money(booking.contract_total), 'Initial booking payment', money(booking.deposit_required))
+  w.fieldPair('Remaining balance', money(balance), 'Final payment due', displayDate(finalPaymentDueDate))
+  w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', 'With initial booking payment')
   if (hasOffer) {
     w.fieldPair('Original contract price', money(Number(proposalOffer?.originalTotal || 0)), 'Limited-time savings', `${Number(proposalOffer?.percent || 0)}% (${money(Number(proposalOffer?.savings || 0))})`)
     w.paragraph(`Limited-time offer: the discounted contract price above is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer?.expiresAt || null)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request at the regular price.`)
   } else if (proposalOffer?.expiresAt) {
     w.paragraph(`This proposal is valid only when this Agreement is signed and the required reservation payment is completed by ${displayDate(proposalOffer.expiresAt)}. If either step is completed after that deadline, Luxor may issue an updated agreement and payment request.`)
   }
-  w.paragraph('The event date is not reserved until the negotiated reservation payment has been received and this Agreement has been fully executed. Unless otherwise stated in writing, the remaining event balance and refundable security deposit are due no later than sixty (60) days before the Event.')
-  w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Card payments may be subject to a disclosed processing fee. Returned checks are subject to a $35.00 fee.')
+  w.paragraph(`The event date is not reserved until the initial booking payment and separate refundable security deposit have been received after this Agreement has been fully executed. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`)
+  w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Returned checks are subject to a $35.00 fee.')
   w.paragraph('Payments not received by the due date may incur a late fee equal to five percent (5%) of the overdue amount or $50.00, whichever is greater. Nonpayment may suspend planning services or result in cancellation of the Event.')
   w.paragraph('The Client agrees not to initiate a chargeback for amounts properly due under this Agreement. An unauthorized chargeback is a material breach, and the Client remains responsible for unpaid balances, chargeback fees, and reasonable collection costs to the extent permitted by Texas law.')
   w.heading('Security deposit')
-  w.paragraph(`Client shall pay the ${money(securityDeposit)} security deposit no later than sixty (60) days before the Event. The security deposit secures Client obligations under this Agreement and may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`)
+  w.paragraph(`Client shall pay the separate ${money(securityDeposit)} refundable security deposit with the initial booking payment after this Agreement is signed. The security deposit is held throughout the event period and secures Client obligations under this Agreement. It may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`)
   w.paragraph('Luxor may inspect and document the Premises and Venue property before, during, and after the Event. If deductions are necessary, Luxor may provide Client with an itemized statement. Any undisputed remaining security-deposit balance will be returned within fourteen (14) business days following the Event, subject to any pending damage, repair, insurance, or other authorized claim that reasonably requires additional time to determine. If authorized charges exceed the security deposit, Client remains responsible for the full remaining balance; the security deposit does not limit Client liability.')
   w.heading('Overtime and additional charges')
   w.paragraph('Overtime is not guaranteed and depends on venue availability. If approved or incurred because the Client, guests, vendors, equipment, or property remain after the contracted rental period, overtime is billed at $150.00 per 30-minute increment and is due upon invoice.')
@@ -294,7 +300,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.addPage()
   w.title('Cancellation, liability & insurance', 'Client responsibilities')
   w.heading('4. Cancellation and rescheduling')
-  w.paragraph('All payments made under this Agreement, including the reservation payment, are non-refundable. Luxor reserves the event date exclusively for the Client and may decline other booking opportunities for that date.')
+  w.paragraph('All payments applied to the Event Price under this Agreement, including the initial booking payment, are non-refundable. The separate refundable security deposit is governed by the Security deposit section above. Luxor reserves the event date exclusively for the Client and may decline other booking opportunities for that date.')
   w.y -= 8
   w.paragraph('Rescheduling requests must be submitted in writing and are subject to Luxor approval and date availability. An approved reschedule is subject to a $250.00 administrative fee, and the Client is responsible for any increase in pricing for the new date. Approval is not guaranteed.')
   w.y -= 8
@@ -498,10 +504,10 @@ export async function buildLuxorGuestGuidePdf(booking: LuxorBooking) {
   w.note('This Guide is incorporated into the Luxor Booking Agreement. By signing the Agreement, the Client acknowledges receipt of this Guide and accepts responsibility for ensuring that guests, vendors, contractors, entertainers, and invitees comply with it.')
   w.heading('Your event at a glance')
   w.fieldPair('Client', names.fullName, 'Event date', displayDate(booking.event_date))
-  w.fieldPair('Event type', booking.event_type || 'Private event', 'Estimated guests', booking.guest_count ? String(booking.guest_count) : 'To be confirmed')
+  w.fieldPair('Event type', booking.event_type || 'Private event', 'Expected guests', booking.guest_count ? String(booking.guest_count) : 'To be confirmed')
   w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Package', booking.package_name || 'Custom venue booking')
-  w.fieldPair('Refundable security deposit', money(Number(booking.security_deposit_amount ?? 750)), 'Due date', displayDate(booking.final_payment_due_date))
-  w.note(`The refundable security deposit is due with the remaining event balance 60 days before the Event. Luxor may inspect and document the Premises before, during, and after the Event. Authorized deductions may include damage, excessive cleaning, overtime, missing property, emergency-response costs, prohibited materials, and policy violations. Luxor may provide an itemized statement; any undisputed remaining balance is returned within fourteen (14) business days after the Event.`)
+  w.fieldPair('Refundable security deposit', money(Number(booking.security_deposit_amount ?? 750)), 'Due date', 'With initial booking payment')
+  w.note(`Separate refundable security deposit required for all bookings. Deposit is held throughout the event period and is returned following the post-event inspection, subject to the terms of the Event Agreement. Luxor may inspect and document the Premises before, during, and after the Event. Authorized deductions may include damage, excessive cleaning, overtime, missing property, emergency-response costs, prohibited materials, and policy violations. Luxor may provide an itemized statement; any undisputed remaining balance is returned within fourteen (14) business days after the Event.`)
   w.heading('How to use this guide')
   w.paragraph('Share the relevant sections with your planner, family, vendors, bartender, DJ, decorator, and rental companies before the Event. Clear timing and expectations are the best way to prevent delays, policy issues, and unexpected charges.')
   w.paragraph('If you are unsure whether a decoration, vendor setup, special effect, entertainment plan, or service is permitted, contact Luxor before purchasing or scheduling it. Written approval protects both the Client and the Venue.')

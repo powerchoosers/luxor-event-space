@@ -150,8 +150,8 @@ export function buildFinalPaymentReminderEmail(input: { inquiry: LuxorInquiry; i
       eyebrow: 'Final payment',
       title: 'Your remaining balance',
       greeting: `Hi ${firstName(input.inquiry.full_name)},`,
-      copy: `Your remaining event balance and refundable security deposit can be reviewed and paid securely from your event page.`,
-      detail: `${money(input.balance)} remaining event balance and refundable security deposit${input.dueDate ? ` · due ${input.dueDate}` : ''}`,
+      copy: `Your remaining Final Event Price balance can be reviewed and paid securely from your event page. The separate refundable security deposit was collected with the initial booking payment and remains held under your Event Agreement.`,
+      detail: `${money(input.balance)} remaining Final Event Price balance${input.dueDate ? ` · due ${input.dueDate}` : ''}`,
       buttonLabel: 'Review balance & pay',
       buttonUrl: input.reviewUrl,
     }),
@@ -191,12 +191,11 @@ export async function generateAiInvoiceReminderCopy(input: {
   invoice: LuxorInvoice
   booking?: LuxorBooking | null
   balanceDue: number
-  daysUntil60Days?: number | null
   notes?: LuxorNote[]
-  kind?: 'unpaid_invoice' | 'sixty_day_deadline' | 'final_payment'
+  kind?: 'unpaid_invoice' | 'final_payment'
 }): Promise<{ copy: string; aiGenerated: boolean }> {
-  const fallback = input.kind === 'sixty_day_deadline'
-    ? `As your event date approaches, we wanted to remind you that your remaining balance and refundable security deposit are due 60 days before your celebration. Please review your invoice and submit payment to ensure everything remains seamlessly reserved.`
+  const fallback = input.kind === 'final_payment'
+    ? `This is a reminder that your remaining Final Event Price balance is due on the date set out in your Event Agreement. The separate refundable security deposit was collected with your initial booking payment and remains held under the Event Agreement.`
     : `We are reaching out to provide a quick update regarding your invoice for ${input.inquiry.event_type || 'your upcoming event'}. Please review the payment details below and let us know if you have any questions.`
 
   const apiKey = process.env.OPEN_ROUTER_API_KEY
@@ -218,7 +217,7 @@ export async function generateAiInvoiceReminderCopy(input: {
           {
             role: 'system',
             content:
-              'Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, upcoming 60-day balance deadline, deposit mode, and recent notes. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).',
+              'Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, the configured payment due date, deposit mode, and recent notes. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).',
           },
           {
             role: 'user',
@@ -230,7 +229,6 @@ export async function generateAiInvoiceReminderCopy(input: {
               packageName: input.booking?.package_name || input.inquiry.package_interest,
               balanceDue: input.balanceDue,
               invoiceTotal: input.invoice.total,
-              daysUntil60Days: input.daysUntil60Days,
               reminderKind: input.kind || 'unpaid_invoice',
               inquiryMessage: input.inquiry.message,
               recentNotes: (input.notes || []).slice(-5).map((n) => n.content),
@@ -259,16 +257,16 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
   balanceDue: number
   dueDate?: string | null
   notes?: LuxorNote[]
-  kind?: 'unpaid_invoice' | 'sixty_day_deadline' | 'final_payment'
+  kind?: 'unpaid_invoice' | 'final_payment'
 }) {
   const { copy, aiGenerated } = await generateAiInvoiceReminderCopy(input)
-  const is60Day = input.kind === 'sixty_day_deadline'
   const eventDate = input.booking?.event_date || input.inquiry.target_date
 
-  const eyebrow = is60Day ? '60-Day Deadline Reminder' : 'Invoice Payment Reminder'
-  const title = is60Day ? 'Your 60-day balance deadline is approaching' : 'Reminder: payment pending'
-  const subject = is60Day
-    ? `Upcoming: 60-day balance payment for your Luxor event (${money(input.balanceDue)})`
+  const finalPayment = input.kind === 'final_payment'
+  const eyebrow = finalPayment ? 'Final Payment Reminder' : 'Invoice Payment Reminder'
+  const title = finalPayment ? 'Your Final Event Price balance is due soon' : 'Reminder: payment pending'
+  const subject = finalPayment
+    ? `Upcoming final payment for your Luxor event (${money(input.balanceDue)})`
     : `Payment reminder: ${money(input.balanceDue)} remaining for your Luxor event`
 
   const securityDepositAmount = input.invoice.line_items
@@ -279,7 +277,7 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
     `Balance due: ${money(input.balanceDue)}`,
     input.dueDate ? `Due date: ${input.dueDate}` : null,
     eventDate ? `Event date: ${eventDate}` : null,
-    securityDepositAmount > 0 ? `Includes ${money(securityDepositAmount)} refundable security deposit` : null,
+    input.invoice.invoice_kind === 'final_balance' ? 'Refundable security deposit held separately' : securityDepositAmount > 0 ? `Includes ${money(securityDepositAmount)} refundable security deposit` : null,
   ]
     .filter(Boolean)
     .join(' · ')

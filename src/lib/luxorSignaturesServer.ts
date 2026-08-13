@@ -1,8 +1,8 @@
 import 'server-only'
 
-import { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
+import { LuxorBooking, LuxorInvoice, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
-import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createPublicToken, updateLuxorEmailJob } from './luxorEmailJobsServer'
+import { cancelQueuedLuxorEmailJobs, createPublicToken, createUniqueLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
 import { getLuxorBooking, updateLuxorBooking } from './luxorBookingsServer'
 import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuidePdf, parseClientName } from './luxorContractPdfServer'
 import { getLuxorContractSignaturePlacement, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
@@ -10,8 +10,9 @@ import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsSe
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
-import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from './luxorInvoicesServer'
+import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
 import { createNote } from './luxorNotesServer'
+import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 
 const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
 
@@ -21,6 +22,31 @@ function resolveOwnerSignerName(value?: string | null) {
     return DEFAULT_OWNER_SIGNER_NAME
   }
   return configuredName
+}
+
+function formatMoney(value: number | null | undefined) {
+  return Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function getInitialPaymentBreakdown(invoice: LuxorInvoice) {
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : []
+  const securityDeposit = Math.max(0, Number(lineItems.find((item) =>
+    item.paymentBucket === 'security_deposit' || /refundable security deposit/i.test(item.description || ''),
+  )?.total || 0))
+  const initialBookingPayment = Math.max(0, Number(lineItems.find((item) =>
+    item.paymentBucket === 'venue' || /initial booking payment/i.test(item.description || ''),
+  )?.total || Number(invoice.total || 0) - securityDeposit))
+
+  return {
+    initialBookingPayment,
+    securityDeposit,
+    total: Number(invoice.total || initialBookingPayment + securityDeposit),
+  }
+}
+
+function configuredFinalPaymentDueDate(booking: LuxorBooking) {
+  const dueDate = booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date)
+  return typeof dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null
 }
 
 function defaultContractBody(booking: LuxorBooking) {
@@ -34,12 +60,12 @@ function defaultContractBody(booking: LuxorBooking) {
     `This agreement reserves Luxor Event Space for ${booking.client_name}.`,
     `Event type: ${booking.event_type || 'Private event'}.`,
     `Event date: ${booking.event_date || 'To be confirmed'}.`,
-    booking.guest_count ? `Estimated guest count: ${booking.guest_count}.` : '',
+    booking.guest_count ? `Expected guest count: ${booking.guest_count}.` : '',
     `Contract total: $${Number(booking.contract_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     `Deposit required: $${Number(booking.deposit_required || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     `Refundable security deposit: $${Number(booking.security_deposit_amount ?? 750).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     Number((booking.metadata?.proposalOffer as { percent?: number } | undefined)?.percent || 0) > 0
-      ? `Limited-time offer: ${(booking.metadata?.proposalOffer as { percent?: number; savings?: number; expiresAt?: string | null }).percent}% off, saving $${Number((booking.metadata?.proposalOffer as { savings?: number }).savings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, secured only when the agreement and required payment are complete by ${(booking.metadata?.proposalOffer as { expiresAt?: string | null }).expiresAt || 'the stated deadline'}.`
+      ? `Approved adjustment: ${(booking.metadata?.proposalOffer as { percent?: number }).percent}% off, saving $${Number((booking.metadata?.proposalOffer as { savings?: number }).savings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, already reflected in the locked Final Event Price.`
       : '',
     serviceSummary,
     'By signing, the client confirms the reservation details and agrees to continue with Luxor Event Space booking requirements. Final legal language should be reviewed by the business owner.',
@@ -262,12 +288,19 @@ export async function signLuxorSignatureRequest(input: {
       const depositPayments = depositInvoice ? await listPaidPaymentsByInvoice(depositInvoice.id) : []
       const depositPaid = Boolean(depositInvoice) && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
       let reconciledBooking = booking
+      let finalPaymentScheduleMissing = false
       if (booking && depositPaid) {
         const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
-        const finalInvoice = masterInvoice ? await ensureLuxorFinalBalanceInvoice({
+        const finalPaymentDueDate = configuredFinalPaymentDueDate(booking)
+        // A historical booking may have a paid initial payment but no approved
+        // final-payment date. The agreement is already signed at this point,
+        // so preserve it and flag the missing schedule instead of throwing
+        // after the client has completed their side of the contract.
+        finalPaymentScheduleMissing = Boolean(masterInvoice) && !finalPaymentDueDate
+        const finalInvoice = masterInvoice && finalPaymentDueDate ? await ensureLuxorFinalBalanceInvoice({
           masterInvoice,
           bookingId: booking.id,
-          dueDate: booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date),
+          dueDate: finalPaymentDueDate,
           depositPaid: Number(booking.deposit_required || 0),
           securityDepositAmount: booking.security_deposit_amount,
         }) : null
@@ -279,6 +312,9 @@ export async function signLuxorSignatureRequest(input: {
             reservation_confirmed_at: booking.metadata?.reservation_confirmed_at || signedAt,
             reservation_state: 'confirmed',
             ...(finalInvoice ? { final_balance_invoice_id: finalInvoice.id } : {}),
+            ...(finalPaymentScheduleMissing ? {
+              final_payment_schedule_configuration_required_at: booking.metadata?.final_payment_schedule_configuration_required_at || signedAt,
+            } : {}),
           },
         }) || booking
       }
@@ -290,7 +326,14 @@ export async function signLuxorSignatureRequest(input: {
         })
       }
       if (depositPaid && reconciledBooking) {
-        await createNote(signature.inquiry_id, 'Agreement signed and the reservation deposit confirmed. The event date is officially reserved and the booking moved to Planning.', 'status_change', 'Booking Automation').catch(() => null)
+        await createNote(
+          signature.inquiry_id,
+          finalPaymentScheduleMissing
+            ? 'Agreement signed and the reservation deposit confirmed. The event date is reserved, but the approved proposal is missing its final payment due date. Configure that date before sending the final balance request.'
+            : 'Agreement signed and the reservation deposit confirmed. The event date is officially reserved and the booking moved to Planning.',
+          'status_change',
+          'Booking Automation',
+        ).catch(() => null)
       }
       await cancelQueuedLuxorEmailJobs(signature.inquiry_id, ['contract_view_reminder', 'contract_signature_reminder'])
     }
@@ -348,67 +391,95 @@ export async function signLuxorSignatureRequest(input: {
   })
   await recordLuxorSignatureEvent({ signatureRequestId: signature.id, eventType: 'completed' })
 
-  let paymentReviewUrl: string | null = null
+  let checkoutUrl: string | null = null
+  let paymentInvoice: LuxorInvoice | null = null
   try {
     const [booking, inquiry] = await Promise.all([
       getLuxorBooking(signature.booking_id),
       signature.inquiry_id ? getLuxorInquiry(signature.inquiry_id) : Promise.resolve(null),
     ])
-    const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
-    const existingDepositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
-    const depositInvoice = booking && masterInvoice
-      ? await ensureLuxorDepositInvoice({
-          masterInvoice,
-          bookingId: booking.id,
-          dueDate: signedAt.slice(0, 10),
-          reservationDepositAmount: booking.deposit_required,
-        })
-      : existingDepositInvoice
-    let paymentInvoice = depositInvoice || masterInvoice
-    if (booking && inquiry && paymentInvoice) {
-      // The client chooses payment method first; do not create a Stripe session just because the agreement was signed.
-      if (!paymentInvoice.public_token) {
-        paymentInvoice = await updateInvoice(paymentInvoice.id, { public_token: createPublicToken() }) || paymentInvoice
-      }
-      if (paymentInvoice.public_token) {
-        const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-        paymentReviewUrl = `${origin}/proposal/${paymentInvoice.public_token}`
-      }
+    if (!booking || booking.contract_status !== 'signed') {
+      throw new Error('The signed booking could not be verified before creating the payment request.')
+    }
+    if (!inquiry) {
+      throw new Error('The signed booking needs its inquiry record before a payment request can be sent.')
+    }
+    const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+    if (!masterInvoice) {
+      throw new Error('The signed booking needs its finalized proposal before a payment request can be created.')
+    }
+
+    // The booking status is verified as signed above before either the child
+    // invoice or Stripe Checkout can be created. `ensure…` reuses the same
+    // deposit record if this completion path is retried.
+    paymentInvoice = await ensureLuxorDepositInvoice({
+      masterInvoice,
+      bookingId: booking.id,
+      dueDate: signedAt.slice(0, 10),
+      reservationDepositAmount: booking.deposit_required,
+    })
+    const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+    const checkout = await createLuxorPostContractCheckout({
+      invoice: paymentInvoice,
+      inquiry,
+      booking,
+      origin,
+      paymentAmount: Number(paymentInvoice.total || 0),
+      paymentLabel: 'Initial Booking Payment + Refundable Security Deposit',
+      masterInvoiceId: masterInvoice.id,
+    })
+    checkoutUrl = checkout?.checkoutUrl || null
+    if (!checkoutUrl) {
+      throw new Error('Stripe did not return a secure payment link for the signed booking.')
     }
   } catch (paymentError) {
-    console.error('Contract was signed, but the post-sign Stripe request could not be created:', paymentError)
+    console.error('Contract was signed, but the post-sign Stripe payment request could not be created:', paymentError)
   }
 
-  const paymentSection = paymentReviewUrl ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: choose payment</p><p style="margin:0 0 18px">Choose card, cash, Zelle, or check, then choose the reservation deposit or full event balance.</p><a href="${paymentReviewUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Choose payment method</a></div>` : '<p style="color:#756755">Luxor will follow up separately with payment instructions.</p>'
+  const paymentBreakdown = paymentInvoice ? getInitialPaymentBreakdown(paymentInvoice) : null
+  const paymentSection = checkoutUrl && paymentBreakdown ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: complete your booking payment</p><p style="margin:0 0 12px">Your secure payment due now is <strong>${formatMoney(paymentBreakdown.total)}</strong>: an initial booking payment of ${formatMoney(paymentBreakdown.initialBookingPayment)} plus a separate refundable security deposit of ${formatMoney(paymentBreakdown.securityDeposit)}.</p><p style="margin:0 0 18px">The refundable security deposit is held throughout the event period and returned following the post-event inspection, subject to the Event Agreement.</p><a href="${checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Complete secure payment</a></div>` : '<p style="color:#756755">Luxor will follow up separately with secure payment instructions.</p>'
   const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
-  const clientJob = await createLuxorEmailJob({
+  const paymentEmailSummary = checkoutUrl && paymentBreakdown
+    ? `Your agreement is complete. Complete your secure payment of ${formatMoney(paymentBreakdown.total)}: ${formatMoney(paymentBreakdown.initialBookingPayment)} initial booking payment plus ${formatMoney(paymentBreakdown.securityDeposit)} refundable security deposit. ${checkoutUrl}`
+    : 'Your agreement is complete. Your fully executed copy is attached. Luxor will follow up with secure payment instructions.'
+  const clientJob = await createUniqueLuxorEmailJob({
     inquiryId: signature.inquiry_id,
     bookingId: signature.booking_id,
     signatureRequestId: signature.id,
     jobType: 'contract_signature',
     recipientEmail: signature.client_email,
-    subject: paymentReviewUrl ? 'Agreement complete — choose your payment method' : 'Your Luxor Event Space agreement is complete',
-    body: paymentReviewUrl ? `Your agreement is complete. Choose your payment method: ${paymentReviewUrl}` : 'Your agreement is complete. Your executed copy is attached.',
+    subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
+    body: paymentEmailSummary,
     scheduledFor: ownerSignedAt,
-    metadata: { automated: true, flow_stage: 'contract_completed', includes_executed_contract: true, includes_payment_link: Boolean(paymentReviewUrl) },
+    automationKey: `contract_completed_payment:${signature.id}:${paymentInvoice?.id || 'unavailable'}`,
+    metadata: {
+      automated: true,
+      flow_stage: 'contract_completed',
+      includes_executed_contract: true,
+      includes_payment_link: Boolean(checkoutUrl),
+      payment_invoice_id: paymentInvoice?.id || null,
+      payment_amount: paymentBreakdown?.total || null,
+    },
   })
-  try {
-    await sendLuxorZohoEmail({
-      to: signature.client_email,
-      subject: paymentReviewUrl ? 'Agreement complete — choose your payment method' : 'Your Luxor Event Space agreement is complete',
-      content: completionHtml,
-      from: 'booking@luxoratlaspalmas.com',
-      fromName: 'Luxor Event Space',
-      attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executed.customer.bytes, contentType: 'application/pdf' }],
-    })
-    await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
-  } catch (sendError) {
-    const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
-    await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
-    if (signature.inquiry_id) {
-      await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
+  if (clientJob.status !== 'sent') {
+    try {
+      await sendLuxorZohoEmail({
+        to: signature.client_email,
+        subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
+        content: completionHtml,
+        from: 'booking@luxoratlaspalmas.com',
+        fromName: 'Luxor Event Space',
+        attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executed.customer.bytes, contentType: 'application/pdf' }],
+      })
+      await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
+      await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
+      if (signature.inquiry_id) {
+        await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
+      }
+      console.error('Agreement completed, but the client completion and payment email failed:', message)
     }
-    console.error('Agreement completed, but the client completion and payment email failed:', message)
   }
   await Promise.allSettled([
     sendLuxorZohoEmail({

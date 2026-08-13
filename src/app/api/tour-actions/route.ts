@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         description: [
           `Private appointment for ${inquiry.full_name}.`,
           `Event: ${inquiry.event_type || 'Private event'}`,
-          inquiry.guest_count ? `Estimated guests: ${inquiry.guest_count}` : '',
+          inquiry.guest_count ? `Expected guests: ${inquiry.guest_count}` : '',
           clientFacingNotes ? `Details: ${clientFacingNotes}` : '',
           `Confirm or reschedule: ${links.rescheduleUrl}`,
         ].filter(Boolean).join('\n'),

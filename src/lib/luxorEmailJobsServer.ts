@@ -7,8 +7,11 @@ import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPaym
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
-import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from './luxorInvoicesServer'
+import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { isLuxorOfferExpired } from './luxorOffer'
+import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
+import { getLuxorBooking } from './luxorBookingsServer'
+import { getLuxorInquiry } from './luxorInquiriesServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -188,7 +191,7 @@ export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: 
                   <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${escapeHtml(eventLine)}</td>
                 </tr>
                 <tr>
-                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;">Estimated Guests</td>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;">Expected Guests</td>
                   <td class="luxor-muted" style="color:#d7c29a;">${escapeHtml(guestsLine)}</td>
                 </tr>
               </table>
@@ -600,6 +603,82 @@ export async function updateLuxorEmailJob(id: string, updates: Partial<LuxorEmai
   return updated ?? null
 }
 
+const POST_CONTRACT_PAYMENT_REMINDER_TYPES = new Set<LuxorEmailJobKind>([
+  'proposal_payment_reminder',
+  'unpaid_invoice_reminder',
+  'final_payment_request',
+  'final_payment_reminder',
+  'sixty_day_payment_reminder',
+])
+
+/**
+ * Refresh payment-reminder emails immediately before delivery. Checkout links
+ * expire quickly, so storing an old URL in a queued job is not enough. This
+ * also prevents any legacy queued payment reminder from bypassing the signed
+ * agreement gate.
+ */
+async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<LuxorEmailJob | null> {
+  if (!POST_CONTRACT_PAYMENT_REMINDER_TYPES.has(job.job_type)) return job
+  const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+  const invoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
+  if (!invoiceId) return job
+
+  const invoice = await getInvoice(invoiceId)
+  if (!invoice || (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance')) return job
+
+  const bookingId = job.booking_id || invoice.booking_id || null
+  const booking = bookingId ? await getLuxorBooking(bookingId) : null
+  if (!booking || booking.contract_status !== 'signed') {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'A payment reminder cannot be delivered before the Event Agreement is signed.' })
+    return null
+  }
+  if (invoice.invoice_kind === 'final_balance' && !booking.final_payment_due_date) {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Final payment due date is not configured in the approved payment plan.' })
+    return null
+  }
+
+  const inquiryId = job.inquiry_id || invoice.inquiry_id || booking.inquiry_id || null
+  const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+  if (!inquiry?.email) {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Payment reminder has no valid recipient email.' })
+    return null
+  }
+
+  const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
+  const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  const balanceDue = Math.max(0, Math.round((Number(invoice.total || 0) - paidTotal) * 100) / 100)
+  if (balanceDue <= 0) {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Payment invoice is already fully paid.' })
+    return null
+  }
+
+  const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+  const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })
+  if (!checkout) {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Payment invoice no longer has a balance due.' })
+    return null
+  }
+
+  const finalBalance = invoice.invoice_kind === 'final_balance'
+  const email = await buildAiTailoredInvoiceReminderEmail({
+    inquiry,
+    invoice,
+    booking,
+    reviewUrl: checkout.checkoutUrl,
+    balanceDue: checkout.paymentAmount,
+    dueDate: finalBalance ? booking.final_payment_due_date : invoice.due_date || null,
+    kind: finalBalance ? 'final_payment' : 'unpaid_invoice',
+  })
+  const refreshedMetadata = {
+    ...metadata,
+    checkout_session_id: checkout.checkoutId,
+    flow_stage: 'post_signature_payment',
+    balance_due: checkout.paymentAmount,
+  }
+  await updateLuxorEmailJob(job.id, { subject: email.subject, body: email.body, metadata: refreshedMetadata })
+  return { ...job, subject: email.subject, body: email.body, metadata: refreshedMetadata }
+}
+
 export async function processLuxorEmailJobs(
   jobs: LuxorEmailJob[],
   options: { markSending?: boolean } = {},
@@ -607,8 +686,14 @@ export async function processLuxorEmailJobs(
   const { markSending = true } = options
   const results: { id: string; status: 'sent' | 'failed' | 'skipped'; error?: string }[] = []
 
-  for (const job of jobs) {
+  for (let job of jobs) {
     try {
+      const preparedJob = await preparePostContractPaymentReminder(job)
+      if (!preparedJob) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      job = preparedJob
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
@@ -652,6 +737,9 @@ export async function processLuxorEmailJobs(
   return results
 }
 
+// The exported name is retained for the existing cron integration. New
+// bookings are scheduled from their approved final payment date, never from a
+// hard-coded number of days before the event.
 export async function queueUpcoming60DayInvoiceReminders() {
   try {
     const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)')
@@ -661,23 +749,30 @@ export async function queueUpcoming60DayInvoiceReminders() {
     const nowMs = Date.now()
 
     for (const booking of activeBookings) {
-      if (!booking.event_date || !booking.inquiry_id || !booking.email) continue
-      const eventTime = new Date(`${booking.event_date}T12:00:00-05:00`).getTime()
-      const daysUntilEvent = Math.round((eventTime - nowMs) / (24 * 60 * 60_000))
+      if (!booking.inquiry_id || !booking.email) continue
+      const dueDate = booking.final_payment_due_date
+      if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+        console.warn(`Skipping final-payment reminder for booking ${booking.id}: no configured final payment due date.`)
+        continue
+      }
+      const dueTime = new Date(`${dueDate}T12:00:00-06:00`).getTime()
+      if (!Number.isFinite(dueTime)) {
+        console.warn(`Skipping final-payment reminder for booking ${booking.id}: configured final payment due date is invalid.`)
+        continue
+      }
+      const daysUntilDue = Math.round((dueTime - nowMs) / (24 * 60 * 60_000))
 
       let milestone: string | null = null
-      if (daysUntilEvent <= 67 && daysUntilEvent > 60) milestone = 'invoice_issued'
-      else if (daysUntilEvent <= 60 && daysUntilEvent > 45) milestone = '60_days'
-      else if (daysUntilEvent <= 30 && daysUntilEvent > 20) milestone = '30_days'
-      else if (daysUntilEvent <= 14 && daysUntilEvent > 7) milestone = '14_days'
-      else if (daysUntilEvent <= 7 && daysUntilEvent >= 0) milestone = '7_days'
+      if (daysUntilDue <= 30 && daysUntilDue > 14) milestone = 'payment_request'
+      else if (daysUntilDue <= 14 && daysUntilDue > 7) milestone = '14_days'
+      else if (daysUntilDue <= 7 && daysUntilDue > 2) milestone = '7_days'
+      else if (daysUntilDue <= 2 && daysUntilDue >= -7) milestone = 'due_date'
 
       if (!milestone) continue
       if (booking.contract_status !== 'signed' || !booking.metadata?.deposit_paid_at) continue
 
       const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
       if (!masterInvoice) continue
-      const dueDate = booking.final_payment_due_date || luxorFinalPaymentDueDate(booking.event_date)
       let invoice = await getInvoiceByBookingAndKind(booking.id, 'final_balance')
       invoice ||= await ensureLuxorFinalBalanceInvoice({ masterInvoice, bookingId: booking.id, dueDate, depositPaid: Number(booking.deposit_required || 0), securityDepositAmount: booking.security_deposit_amount })
 
@@ -690,27 +785,31 @@ export async function queueUpcoming60DayInvoiceReminders() {
       if (!inquiry) continue
 
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+      const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })
+      if (!checkout) continue
       invoice = await updateInvoice(invoice.id, {
         status: 'sent',
         proposal_sent_at: invoice.proposal_sent_at || new Date().toISOString(),
         due_date: dueDate,
         payment_requested_at: new Date().toISOString(),
-        payment_requested_amount: balanceDue,
-        payment_requested_label: 'Final event balance',
+        payment_requested_amount: checkout.paymentAmount,
+        payment_requested_label: checkout.paymentLabel,
+        stripe_checkout_session_id: checkout.checkoutId,
+        stripe_checkout_url: checkout.checkoutUrl,
       }) || invoice
-      const reviewUrl = `${origin}/proposal/${invoice.public_token || invoice.id}`
+      const reviewUrl = checkout.checkoutUrl
 
       const email = await buildAiTailoredInvoiceReminderEmail({
         inquiry,
         invoice,
         booking,
         reviewUrl,
-        balanceDue,
-        dueDate: dueDate || invoice.due_date,
-        kind: 'sixty_day_deadline',
+        balanceDue: checkout.paymentAmount,
+        dueDate,
+        kind: 'final_payment',
       })
 
-      const jobType: LuxorEmailJobKind = milestone === 'invoice_issued' ? 'final_payment_request' : 'sixty_day_payment_reminder'
+      const jobType: LuxorEmailJobKind = milestone === 'payment_request' ? 'final_payment_request' : 'final_payment_reminder'
       const automationKey = `${jobType}:${booking.id}:${milestone}`
       await createUniqueLuxorEmailJob({
         inquiryId: inquiry.id,
@@ -723,9 +822,11 @@ export async function queueUpcoming60DayInvoiceReminders() {
         automationKey,
         metadata: {
           milestone,
-          days_until_event: daysUntilEvent,
-          balance_due: balanceDue,
+          days_until_due: daysUntilDue,
+          balance_due: checkout.paymentAmount,
           invoice_id: invoice.id,
+          checkout_session_id: checkout.checkoutId,
+          flow_stage: 'post_signature_payment',
           ai_generated: email.aiGenerated,
         },
       })
@@ -738,7 +839,7 @@ export async function queueUpcoming60DayInvoiceReminders() {
 // Supabase Cron runs this worker every minute. Keeping the default at one job
 // makes a due-time collision harmless: one scheduled minute equals one send.
 export async function processDueLuxorEmailJobs(limit = 1) {
-  await queueUpcoming60DayInvoiceReminders().catch((err) => console.warn('60-day invoice scan skipped:', err))
+  await queueUpcoming60DayInvoiceReminders().catch((err) => console.warn('final-payment reminder scan skipped:', err))
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
     return processLuxorEmailJobs(jobs, { markSending: false })

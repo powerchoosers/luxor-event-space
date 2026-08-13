@@ -43,9 +43,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { booking_id, invoice_id, inquiry_id, amount, status, payment_method, notes, processor, processor_reference } = body
     const metadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {}
+    const numericAmount = Number(amount)
+    const paymentKind = typeof metadata.payment_kind === 'string' ? metadata.payment_kind : null
 
-    if (!amount) {
-      return NextResponse.json({ error: 'Amount is required.' }, { status: 400 })
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return NextResponse.json({ error: 'A positive payment amount is required.' }, { status: 400 })
+    }
+    // This generic endpoint must not record booking money. Booking payments
+    // use the dedicated workflow, which resolves the signed booking to its
+    // immutable child invoice and protects the separate $750 security hold.
+    if (booking_id || paymentKind === 'deposit' || paymentKind === 'final' || metadata.manual_entry === true) {
+      return NextResponse.json({ error: 'Use the secure manual-payment workflow for booking payments.' }, { status: 409 })
     }
 
     const [created] = await supabaseRest<LuxorPayment[]>('luxor_payments?select=*', {
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest) {
         booking_id: booking_id || null,
         invoice_id: invoice_id || null,
         inquiry_id: inquiry_id || null,
-        amount: Number(amount),
+        amount: numericAmount,
         status: status || 'paid',
         payment_method: payment_method || 'Stripe',
         paid_at: new Date().toISOString(),

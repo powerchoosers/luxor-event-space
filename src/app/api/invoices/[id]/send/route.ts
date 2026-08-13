@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
-import { buildLuxorDateLockDepositEmail, buildLuxorEstimateEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
-import { downloadLuxorPrivatePdf, saveLuxorInvoicePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
+import { buildLuxorDateLockDepositEmail, buildLuxorProposalEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { downloadLuxorDocument, downloadLuxorPrivatePdf, getLuxorDocumentByInvoice, saveLuxorInvoicePdf, saveLuxorProposalPdf } from '@/lib/luxorDocumentsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildAiOfferReminderEmail, buildContractReminderEmail, buildFinalPaymentReminderEmail, buildPaymentReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
-import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
@@ -38,17 +38,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     const invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
-    const expectedPricing = calculateLuxorOfferPricing({ lineItems: invoice.line_items, taxRate: Number(invoice.tax_rate) || 0, discountPercent: Number(invoice.discount_percent) || 0 })
-    if (Math.abs(expectedPricing.subtotal - Number(invoice.subtotal)) >= 0.005 || Math.abs(expectedPricing.total - Number(invoice.total)) >= 0.005 || Math.abs(expectedPricing.originalTotal - Number(invoice.original_total ?? invoice.total)) >= 0.005) {
-      return NextResponse.json({ error: 'The invoice totals no longer match its line items. Recreate the proposal before sending it.' }, { status: 409 })
+    const finalProposalContext = invoice.invoice_kind === 'event' && invoice.proposal_context && typeof invoice.proposal_context === 'object'
+      ? invoice.proposal_context
+      : null
+    // Final proposals are calculated by the dedicated pricing engine and can
+    // include an approved fixed-dollar adjustment. The older generic invoice
+    // calculator cannot safely validate that snapshot, so it remains only for
+    // legacy and payment invoices.
+    if (!finalProposalContext) {
+      const expectedPricing = calculateLuxorOfferPricing({ lineItems: invoice.line_items, taxRate: Number(invoice.tax_rate) || 0, discountPercent: Number(invoice.discount_percent) || 0 })
+      if (Math.abs(expectedPricing.subtotal - Number(invoice.subtotal)) >= 0.005 || Math.abs(expectedPricing.total - Number(invoice.total)) >= 0.005 || Math.abs(expectedPricing.originalTotal - Number(invoice.original_total ?? invoice.total)) >= 0.005) {
+        return NextResponse.json({ error: 'The invoice totals no longer match its line items. Recreate the proposal before sending it.' }, { status: 409 })
+      }
     }
     if (isLuxorOfferExpired(invoice)) {
-      await updateInvoice(invoice.id, { offer_status: 'expired', stripe_checkout_session_id: null, stripe_checkout_url: null })
+      if (invoice.stripe_checkout_session_id) await expireLuxorCheckoutForRepricing(invoice)
+      await updateInvoice(invoice.id, {
+        offer_status: 'expired',
+        stripe_checkout_session_id: null,
+        stripe_checkout_url: null,
+        stripe_checkout_opened_at: null,
+        payment_requested_at: null,
+        payment_requested_amount: null,
+        payment_requested_label: null,
+      })
       return NextResponse.json({ error: 'This proposal offer has expired. Create a new offer before sending or collecting payment.' }, { status: 410 })
     }
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
     const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string }
+
+    // A final proposal is selected first. It is deliberately a distinct event
+    // from contract signature, and neither legacy route is allowed to create
+    // a payment session before that agreement has been signed.
+    if (body.mode === 'date_lock_deposit') {
+      return NextResponse.json({ error: 'Stripe payment links are issued only after the Event Agreement is signed. Send the final proposal first.' }, { status: 409 })
+    }
+    if (body.mode === 'proposal_contract') {
+      return NextResponse.json({ error: 'The client receives the Event Agreement only after selecting the final proposal from their private page.' }, { status: 409 })
+    }
     const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
     const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
@@ -57,7 +85,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ? await getLuxorBooking(invoice.booking_id)
       : bookings.find((item) => item.invoice_id === invoice.id) || null
 
-    if (body.mode === 'date_lock_deposit' && process.env.LUXOR_ENABLE_LEGACY_PRE_SIGN_DEPOSIT_FLOW === 'true') {
+    if ((body.mode as string) === 'date_lock_deposit' && process.env.LUXOR_ENABLE_LEGACY_PRE_SIGN_DEPOSIT_FLOW === 'true') {
       // Legacy pre-sign payment flow retained below temporarily for source
       // history. New requests are rejected after this block.
       if (!booking) {
@@ -73,7 +101,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       const depositAmount = Number(booking.deposit_required || 0)
-      const finalPaymentDueDate = luxorFinalPaymentDueDate(booking.event_date)
+      const finalPaymentDueDate = booking.final_payment_due_date
+      if (!finalPaymentDueDate) {
+        return NextResponse.json({ error: 'Configure the final payment due date in the approved payment plan before sending a booking package.' }, { status: 409 })
+      }
       const paymentLabel = 'Non-refundable reservation deposit'
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -238,44 +269,84 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
     }
 
-    if (body.mode === 'date_lock_deposit') {
-      return NextResponse.json({ error: 'Reservation deposits are issued only after the agreement is signed. Send the estimate first; the agreement follows client acceptance.' }, { status: 409 })
-    }
-
-    if ((body.mode as string) === 'proposal_contract') {
-      return NextResponse.json({ error: 'Send the estimate first. The booking agreement is issued only after the client accepts the estimate.' }, { status: 409 })
-    }
-
     if (body.mode === 'proposal') {
-      // An estimate is intentionally sent before a booking exists. The booking
-      // record is created after the client accepts the estimate, before the
-      // agreement package is issued.
-      if (booking && Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The booking total does not match the estimate. Update the booking amount before sending.' }, { status: 409 })
+      if (invoice.invoice_kind !== 'event') return NextResponse.json({ error: 'Only a final event proposal can be published from this action.' }, { status: 409 })
+      const proposalContext = invoice.proposal_context && typeof invoice.proposal_context === 'object' ? invoice.proposal_context : null
+      const calculationErrors = Array.isArray(proposalContext?.calculation_errors) ? proposalContext.calculation_errors.filter(Boolean) : []
+      if (!proposalContext || calculationErrors.length) {
+        return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
+      }
+      if (Math.abs(Number(proposalContext.final_event_price || 0) - Number(invoice.total || 0)) >= 0.005) {
+        return NextResponse.json({ error: 'The final proposal total no longer matches its immutable pricing snapshot. Create a revised proposal.' }, { status: 409 })
+      }
+      if (booking && Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The linked booking total does not match the final proposal. Create a revised proposal instead of changing a sent price.' }, { status: 409 })
+      if (invoice.supersedes_invoice_id) {
+        const prior = await getInvoice(invoice.supersedes_invoice_id)
+        if (prior?.proposal_accepted_at || prior?.booking_id) {
+          return NextResponse.json({ error: 'A proposal that has been accepted cannot be replaced. Contact Luxor to prepare an amendment.' }, { status: 409 })
+        }
+      }
       const now = new Date().toISOString()
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       const publicToken = invoice.public_token || crypto.randomUUID()
       const reviewUrl = `${origin}/proposal/${publicToken}`
-      const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
-      await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
-      const email = buildLuxorEstimateEmail({ invoice, inquiry, reviewUrl })
-      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor estimate is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'estimate' } })
+      // An older workflow could have attached a Checkout Session directly to
+      // the event invoice. A final proposal must never leave an old payment
+      // link usable, because payment is now issued only after signature.
+      if (invoice.stripe_checkout_session_id) {
+        await expireLuxorCheckoutForRepricing(invoice)
+        await updateInvoice(invoice.id, {
+          stripe_checkout_opened_at: null,
+          payment_requested_at: null,
+          payment_requested_amount: null,
+          payment_requested_label: null,
+        })
+      }
+      if (invoice.supersedes_invoice_id) {
+        const prior = await getInvoice(invoice.supersedes_invoice_id)
+        if (prior?.proposal_accepted_at || prior?.booking_id) {
+          return NextResponse.json({ error: 'A proposal that has been accepted cannot be replaced. Contact Luxor to prepare an amendment.' }, { status: 409 })
+        }
+        if (prior && prior.status !== 'cancelled') {
+          await expireLuxorCheckoutForRepricing(prior)
+        }
+      }
+      const frozenInvoice = invoice.price_locked_at
+        ? invoice
+        : await updateInvoice(invoice.id, { price_locked_at: now, proposal_version: Math.max(1, Number(invoice.proposal_version || 1)) }) || invoice
+      const existingPdf = await getLuxorDocumentByInvoice(frozenInvoice.id, 'proposal')
+      if (invoice.status === 'sent' && invoice.price_locked_at && !existingPdf) {
+        return NextResponse.json({ error: 'The frozen proposal PDF is unavailable. Create a revised proposal; do not regenerate this published version.' }, { status: 409 })
+      }
+      const pdf = existingPdf
+        ? await downloadLuxorDocument(existingPdf)
+        : await buildLuxorInvoicePdf(frozenInvoice, inquiry)
+      if (!existingPdf) await saveLuxorProposalPdf({ invoice: frozenInvoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
+      const email = buildLuxorProposalEmail({ invoice: frozenInvoice, inquiry, reviewUrl })
+      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: inquiry.email, subject: email.subject, body: `Your Luxor final proposal is ready: ${reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: frozenInvoice.proposal_version || 1, price_locked_at: frozenInvoice.price_locked_at } })
       try {
-        await sendLuxorZohoEmail({ to: inquiry.email, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: `Luxor-Estimate-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] })
+        await sendLuxorZohoEmail({ to: inquiry.email, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: `Luxor-Final-Proposal-${frozenInvoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] })
         await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now })
       } catch (error) {
         await updateLuxorEmailJob(job.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Email send failed.' })
         throw error
       }
       if (booking) {
-        booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, estimate_sent_at: now, reservation_state: 'awaiting_estimate_acceptance', proposalLineItems: invoice.line_items, proposalInvoiceId: invoice.id } }) || booking
+        booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, proposal_sent_at: now, reservation_state: 'awaiting_proposal_selection', proposalLineItems: frozenInvoice.line_items, proposalInvoiceId: frozenInvoice.id } }) || booking
       }
-      const updated = await updateInvoice(invoice.id, { public_token: publicToken, status: 'sent', proposal_sent_at: now })
+      const updated = await updateInvoice(frozenInvoice.id, { public_token: publicToken, status: 'sent', proposal_sent_at: now })
+      if (updated?.supersedes_invoice_id) {
+        const prior = await getInvoice(updated.supersedes_invoice_id)
+        if (prior && prior.status !== 'cancelled') {
+          await updateInvoice(prior.id, { status: 'cancelled', offer_status: 'withdrawn', stripe_checkout_session_id: null, stripe_checkout_url: null, stripe_checkout_opened_at: null, payment_requested_at: null, payment_requested_amount: null, payment_requested_label: null })
+        }
+      }
       const updatedInquiry = await updateLuxorInquiry(inquiry.id, { status: 'proposal_sent', pipeline_stage: 'proposal', metadata: { ...inquiry.metadata, proposal_sent_at: now, latest_proposal_invoice_id: invoice.id } }) || inquiry
-      await createNote(inquiry.id, 'Estimate sent. Client must accept it before the booking agreement is issued.', 'status_change', session.email)
+      await createNote(inquiry.id, 'Final proposal sent. The price is locked; the client must select it before the Event Agreement is issued.', 'status_change', session.email)
       return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, reviewUrl, mode: 'proposal' })
     }
 
-    if (body.mode === 'proposal_contract') {
+    if ((body.mode as string) === 'proposal_contract') {
       if (!booking) {
         return NextResponse.json({ error: 'Create the booking record first so the agreement uses the confirmed event fields, pricing, and notes.' }, { status: 409 })
       }
@@ -423,6 +494,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, signature, signingUrl, mode: 'proposal_contract' })
     }
 
+    if (body.mode !== 'payment') {
+      return NextResponse.json({ error: 'Choose a supported final-proposal or post-signature payment action.' }, { status: 400 })
+    }
+    if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+      return NextResponse.json({ error: 'Create the scheduled booking-payment invoice from the signed agreement before sending a Stripe link.' }, { status: 409 })
+    }
     if (!booking || booking.contract_status !== 'signed') {
       return NextResponse.json({ error: 'The client must sign the agreement before a Stripe payment link can be created or sent.' }, { status: 409 })
     }
@@ -439,7 +516,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
     const now = new Date().toISOString()
     const publicToken = invoice.public_token || crypto.randomUUID()
-    const reviewUrl = `${origin}/proposal/${publicToken}`
+    const paymentUrl = checkout.checkoutUrl
     await updateInvoice(invoice.id, {
       public_token: publicToken,
       payment_requested_at: now,
@@ -449,7 +526,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       stripe_checkout_url: checkout.checkoutUrl,
     })
     const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
-    const email = await buildLuxorPaymentRequestEmail({ invoice, inquiry, booking, notes, reviewUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
+    const email = await buildLuxorPaymentRequestEmail({ invoice, inquiry, booking, notes, paymentUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
     await sendLuxorZohoEmail({
       to: inquiry.email,
       subject: email.subject,
@@ -486,7 +563,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const reminder = buildFinalPaymentReminderEmail({
           inquiry,
           invoice,
-          reviewUrl,
+          reviewUrl: paymentUrl,
           balance: paymentAmount,
           dueDate: booking?.final_payment_due_date,
         })
@@ -502,7 +579,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           metadata: { invoice_id: invoice.id, checkout_session_id: checkout.checkoutId, reminder_sequence: 1 },
         })
       } else {
-        const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl, paymentAmount, paymentLabel })
+        const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: paymentUrl, paymentAmount, paymentLabel })
         await createUniqueLuxorEmailJob({
           inquiryId: inquiry.id,
           bookingId: booking.id,
@@ -530,7 +607,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           invoiceId: invoice.id,
           scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
           automationKey: `invoice_payment_request:${invoice.id}:${checkout.checkoutId}`,
-          body: `Luxor Event Space: Hi ${inquiry.full_name.split(/\s+/)[0] || 'there'}, this is a reminder that your ${paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} payment request is still open. Review it securely here: ${reviewUrl} Reply STOP to opt out.`,
+          body: `Luxor Event Space: Hi ${inquiry.full_name.split(/\s+/)[0] || 'there'}, this is a reminder that your ${paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} payment request is still open. Pay securely here: ${paymentUrl} Reply STOP to opt out.`,
           requiredScope: 'invoice',
           metadata: { checkout_session_id: checkout.checkoutId, due_date: invoice.due_date },
         })

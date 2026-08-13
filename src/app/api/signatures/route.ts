@@ -6,6 +6,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequestByBooking, listLuxorSignatureRequests, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { downloadLuxorPrivatePdf } from '@/lib/luxorDocumentsServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+import { getInvoice } from '@/lib/luxorInvoicesServer'
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,6 +64,15 @@ export async function POST(request: NextRequest) {
     const booking = await getLuxorBooking(bookingId)
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    }
+
+    // The normal agreement path begins only after the prospect has accepted
+    // the sent, price-locked proposal. This route remains useful for creating
+    // an in-person signing draft, but it may never become a shortcut around
+    // final proposal acceptance.
+    const proposal = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+    if (!proposal || proposal.invoice_kind !== 'event' || proposal.status !== 'sent' || !proposal.price_locked_at || !proposal.proposal_accepted_at || proposal.offer_status === 'withdrawn') {
+      return NextResponse.json({ error: 'A sent, price-locked final proposal must be accepted before an Event Agreement can be created.' }, { status: 409 })
     }
 
     const sendEmail = body.sendEmail !== false && body.signingMode !== 'in_person'

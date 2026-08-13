@@ -34,11 +34,14 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
   invoice ||= masterInvoice
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+  // The signature flow creates this Checkout session only after it has
+  // verified the booking's signed agreement. Return the direct Stripe URL;
+  // never send the client back to a page with a pre-contract payment chooser.
+  if (!invoice.stripe_checkout_url) return {}
   return {
-    payment_url: invoice.public_token ? `${siteUrl}/proposal/${invoice.public_token}` : invoice.stripe_checkout_url,
+    payment_url: invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
-    payment_label: invoice.payment_requested_label || 'Choose payment method',
+    payment_label: invoice.payment_requested_label || 'Initial Booking Payment + Refundable Security Deposit',
   }
 }
 

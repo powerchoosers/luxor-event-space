@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getInvoice, getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
@@ -22,25 +22,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const booking = invoice.booking_id
     ? await getLuxorBooking(invoice.booking_id)
     : bookings.find((item) => item.invoice_id === invoice.id)
-  const allowPreContract = invoice.invoice_kind === 'deposit'
-  if (!booking || (!allowPreContract && booking.contract_status !== 'signed')) {
+  if (!booking || booking.contract_status !== 'signed') {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
+  }
+  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+    return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=payment-link-required`, _request.url))
   }
 
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
   if (!inquiry) return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
 
-  const payFull = new URL(_request.url).searchParams.get('pay') === 'full'
-  const paymentInvoice = payFull && booking.invoice_id ? (await getInvoice(booking.invoice_id).catch(() => invoice)) || invoice : invoice
   const origin = new URL(_request.url).origin
   const checkout = await createLuxorPostContractCheckout({
-    invoice: paymentInvoice,
+    invoice,
     inquiry,
     booking,
     origin,
-    paymentAmount: payFull ? Math.max(0, Number(booking.contract_total || paymentInvoice.total)) : (invoice.invoice_kind === 'deposit' ? Number(invoice.payment_requested_amount || invoice.total) : undefined),
-    paymentLabel: payFull ? 'Full event payment (security deposit due separately)' : (invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Non-refundable reservation deposit' : 'Final event balance and refundable security deposit')),
-    allowPreContract,
+    paymentAmount: Number(invoice.payment_requested_amount || invoice.total),
+    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Reservation payment and refundable security deposit' : 'Final event balance'),
     masterInvoiceId: invoice.parent_invoice_id || booking.invoice_id || undefined,
   })
   if (!checkout) return NextResponse.redirect(new URL('/payment/success', _request.url))

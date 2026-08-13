@@ -4,7 +4,7 @@ import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getLatestLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
-import { buildLuxorEstimateEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
+import { buildLuxorProposalEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getLuxorPortalSession()
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const mode = request.nextUrl.searchParams.get('mode') === 'proposal_contract' ? 'proposal_contract' : 'proposal'
     if (mode === 'proposal') {
       const reviewUrl = `${origin}/proposal/${invoice.public_token || `preview-${invoice.id}`}`
-      return NextResponse.json({ mode, ...buildLuxorEstimateEmail({ invoice, inquiry, reviewUrl }) })
+      return NextResponse.json({ mode, ...buildLuxorProposalEmail({ invoice, inquiry, reviewUrl }) })
     }
     const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
     const booking = invoice.booking_id ? await getLuxorBooking(invoice.booking_id) : bookings.find((item) => item.invoice_id === invoice.id) || null

@@ -49,8 +49,8 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorBookingStatus, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
-import { defaultLuxorReservationDeposit, formatLuxorCurrency, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -61,10 +61,14 @@ import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
-import { ProposalBuilderModal } from '@/components/portal/ProposalBuilderModal'
+import {
+  ProposalBuilderModal,
+  type ProposalBuilderContext,
+  type ProposalPricingCalculation,
+} from '@/components/portal/ProposalBuilderModal'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
-import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_PACKAGE_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
+import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 
 type ZohoEmailMessage = {
@@ -136,6 +140,42 @@ type LeadMarketingEngagement = {
   subscribed: boolean
   campaigns: LeadMarketingCampaign[]
   recent_events: LeadMarketingEvent[]
+}
+
+function asProposalRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function asProposalNumber(...values: unknown[]) {
+  for (const value of values) {
+    const numberValue = typeof value === 'number' ? value : Number(value)
+    if (Number.isFinite(numberValue)) return numberValue
+  }
+  return undefined
+}
+
+function normalizeProposalPackageId(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z]/g, '')
+  if (normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
+  if (normalized.startsWith('bronze') || normalized === 'essentials') return 'bronze'
+  if (normalized.startsWith('silver') || normalized === 'premier') return 'silver'
+  if (normalized.startsWith('gold') || normalized === 'allinclusive') return 'gold'
+  return ''
+}
+
+function engineProposalPackageId(value: unknown) {
+  const packageId = normalizeProposalPackageId(value)
+  return packageId === 'rent_only' ? 'rental_only' : packageId
+}
+
+function proposalServiceIds(value: unknown) {
+  const record = asProposalRecord(value)
+  const source = record?.service_ids || record?.services || record?.add_ons || record?.addOns
+  return Array.isArray(source)
+    ? source.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    : []
 }
 
 function EventTypeIcon({ eventType }: { eventType: string | null }) {
@@ -247,9 +287,15 @@ export default function LeadDetailPage({
     { description: '', quantity: 1, unitPrice: 0, total: 0 },
   ])
   const [invoiceNotes, setInvoiceNotes] = useState('')
-  const [invoiceTaxRate, setInvoiceTaxRate] = useState('8.25')
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState('')
   const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState('0')
+  const [invoiceDiscountType, setInvoiceDiscountType] = useState<'percent' | 'fixed'>('percent')
+  const [invoiceDiscountValue, setInvoiceDiscountValue] = useState('0')
   const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState('23:59')
+  const [proposalContext, setProposalContext] = useState<ProposalBuilderContext | null>(null)
+  const [selectedProposalPackageId, setSelectedProposalPackageId] = useState<string | null>(null)
+  const [proposalGuestCount, setProposalGuestCount] = useState('')
+  const [proposalCalculation, setProposalCalculation] = useState<ProposalPricingCalculation | null>(null)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
@@ -266,24 +312,9 @@ export default function LeadDetailPage({
     proposalEditorOpenRef.current = isInvoiceModalOpen
   }, [isInvoiceModalOpen])
 
-  // Booking creation state
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
-  const [bookingEventDate, setBookingEventDate] = useState('')
-  const [bookingStartTime, setBookingStartTime] = useState('')
-  const [bookingEndTime, setBookingEndTime] = useState('')
-  const [bookingPackageName, setBookingPackageName] = useState('')
-  const [bookingContractTotal, setBookingContractTotal] = useState('')
-  const [bookingDepositRequired, setBookingDepositRequired] = useState('')
-  const [bookingSecurityDepositAmount, setBookingSecurityDepositAmount] = useState(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
-  const [bookingPaymentMethod, setBookingPaymentMethod] = useState<'card' | 'zelle' | 'cash' | 'check'>('card')
-  const [bookingPaymentAmount, setBookingPaymentAmount] = useState<'deposit' | 'full'>('deposit')
-  const [bookingFinalPaymentDueDate, setBookingFinalPaymentDueDate] = useState('')
-  const [bookingNotes, setBookingNotes] = useState('')
-  const [bookingStatus, setBookingStatus] = useState<LuxorBookingStatus>('tentative')
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [refundingDeposit, setRefundingDeposit] = useState(false)
   const [confirmRefundModalOpen, setConfirmRefundModalOpen] = useState(false)
-  const [submittingBooking, setSubmittingBooking] = useState(false)
 
   // Tour scheduling + Zoho invite state
   const [isTourScheduleModalOpen, setIsTourScheduleModalOpen] = useState(false)
@@ -715,7 +746,7 @@ export default function LeadDetailPage({
       : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
     setInvoiceTaxRate(typeof selectedLeadEvent.metadata?.proposalTaxRate === 'number'
       ? String(Number(selectedLeadEvent.metadata.proposalTaxRate) * 100)
-      : '8.25')
+      : '')
   }, [selectedLeadEvent?.id])
 
   useEffect(() => {
@@ -1640,11 +1671,41 @@ export default function LeadDetailPage({
   const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
+    setProposalCalculation(null)
+
+    const savedContext = invoice?.proposal_context || null
+    const eventDate = String(savedContext?.event_date || activeEventForDisplay?.target_date || lead?.target_date || '')
+    const guestCount = asProposalNumber(savedContext?.expected_guest_count, activeEventForDisplay?.guest_count, lead?.guest_count)
+    const requestedRentalPeriod = String(savedContext?.rental_period || activeEventForDisplay?.metadata?.rental_period || 'evening')
+    const rentalPeriod = requestedRentalPeriod === 'morning' || requestedRentalPeriod === 'full_day'
+      ? requestedRentalPeriod
+      : 'evening'
+    const packageId = normalizeProposalPackageId(
+      savedContext?.package_id
+      || invoice?.proposal_context?.package_name
+      || activeEventForDisplay?.package_interest
+      || lead?.package_interest,
+    ) || 'rent_only'
+    const savedSelection = asProposalRecord(savedContext?.pricing_selection) || {}
+    const nextContext: ProposalBuilderContext = {
+      version: asProposalNumber(savedContext?.version, 1) || 1,
+      event_type: String(savedContext?.event_type || activeEventForDisplay?.event_type || lead?.event_type || 'Event Booking'),
+      ...(eventDate ? { event_date: eventDate } : {}),
+      ...(guestCount ? { expected_guest_count: guestCount } : {}),
+      rental_period: rentalPeriod,
+      package_id: packageId,
+      package_name: String(savedContext?.package_name || packageId.replace('_', ' ')),
+      ...savedContext,
+      pricing_selection: { ...savedSelection },
+    }
+    setProposalContext(nextContext)
+    setSelectedProposalPackageId(packageId)
+    setProposalGuestCount(guestCount ? String(guestCount) : '')
 
     if (invoice) {
       const expiry = invoice.offer_expires_at ? new Date(invoice.offer_expires_at) : null
       const expiryTime = expiry && !Number.isNaN(expiry.getTime())
-        ? `${String(expiry.getHours()).padStart(2, '0')}:${String(expiry.getMinutes()).padStart(2, '0')}`
+        ? String(expiry.getHours()).padStart(2, '0') + ':' + String(expiry.getMinutes()).padStart(2, '0')
         : '23:59'
       const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
         ? invoice.line_items.map((item) => ({
@@ -1658,13 +1719,132 @@ export default function LeadDetailPage({
       setInvoiceDesc(invoice.description || '')
       setInvoiceDueDate(invoice.due_date || expiry?.toISOString().slice(0, 10) || '')
       setInvoiceOfferExpiryTime(expiryTime)
-      setInvoiceDiscountPercent(String(Number(invoice.discount_percent || 0)))
+      const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
+      const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
+      setInvoiceDiscountType(discountType)
+      setInvoiceDiscountValue(String(discountValue))
+      setInvoiceDiscountPercent(String(discountType === 'percent' ? discountValue : 0))
       setInvoiceItems(lineItems)
       setInvoiceNotes(invoice.notes || '')
       setInvoiceTaxRate(String(Number(invoice.tax_rate || 0) * 100))
+    } else {
+      const savedItems = activeEventForDisplay?.metadata?.proposalLineItems
+      setInvoiceDesc(String(activeEventForDisplay?.event_type || lead?.event_type || 'Event') + ' at Luxor')
+      setInvoiceDueDate('')
+      setInvoiceOfferExpiryTime('23:59')
+      setInvoiceDiscountType('percent')
+      setInvoiceDiscountValue('0')
+      setInvoiceDiscountPercent('0')
+      setInvoiceItems(Array.isArray(savedItems) && savedItems.length
+        ? savedItems as LuxorInvoiceLineItem[]
+        : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
+      setInvoiceNotes('')
+      setInvoiceTaxRate('')
     }
 
     setIsInvoiceModalOpen(true)
+  }
+
+  const handleProposalCalculationChange = (calculation: ProposalPricingCalculation | null) => {
+    setProposalCalculation(calculation)
+    if (!calculation) return
+
+    const activePackageId = normalizeProposalPackageId(selectedProposalPackageId || proposalContext?.package_id)
+    const selectedPackage = calculation.packages?.find((candidate) => normalizeProposalPackageId(candidate.id) === activePackageId)
+    const calculationRecord = calculation as Record<string, unknown>
+    const calculationContext = calculation.context || {}
+    const calculationContextRecord = calculationContext as Record<string, unknown>
+    const selectedPackageRecord = asProposalRecord(selectedPackage)
+    const calculatedItems = selectedPackage?.lineItems?.length
+      ? selectedPackage.lineItems
+      : calculation.lineItems || []
+
+    if (calculatedItems.length) {
+      setInvoiceItems(calculatedItems.map((item) => ({
+        ...item,
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        // The server calculator owns pricing. Preserve an approved negative
+        // adjustment here so the owner-facing review remains reconciled with
+        // the immutable final proposal rather than turning a discount into $0.
+        unitPrice: Math.round((Number(item.unitPrice) || 0) * 100) / 100,
+        total: Math.round((Number(item.total ?? ((Number(item.quantity) || 1) * (Number(item.unitPrice) || 0))) || 0) * 100) / 100,
+      })))
+    }
+
+    const calculatedTaxRate = asProposalNumber(
+      selectedPackageRecord?.tax_rate,
+      selectedPackageRecord?.taxRate,
+      calculationContextRecord.tax_rate,
+      calculationRecord.tax_rate,
+    )
+    if (calculatedTaxRate !== undefined) {
+      setInvoiceTaxRate(String(calculatedTaxRate <= 1 ? calculatedTaxRate * 100 : calculatedTaxRate))
+    }
+
+    const calculationDiscount = asProposalRecord(calculationRecord.discount)
+    const contextDiscount = asProposalRecord(calculationContextRecord.discount)
+    const calculatedDiscountType = calculationDiscount?.type === 'fixed' || contextDiscount?.type === 'fixed' || calculationContextRecord.discount_type === 'fixed'
+      ? 'fixed'
+      : 'percent'
+    const calculatedDiscountValue = asProposalNumber(
+      calculationDiscount?.value,
+      contextDiscount?.value,
+      calculationContextRecord.discount_value,
+      calculationContextRecord.discount_percent,
+    )
+    if (calculatedDiscountValue !== undefined) {
+      setInvoiceDiscountType(calculatedDiscountType)
+      setInvoiceDiscountValue(String(calculatedDiscountValue))
+      setInvoiceDiscountPercent(String(calculatedDiscountType === 'percent' ? calculatedDiscountValue : 0))
+    }
+
+    setProposalContext((current) => {
+      const currentSelection = asProposalRecord(current?.pricing_selection) || {}
+      const calculatedSelection = asProposalRecord(calculationContext.pricing_selection) || {}
+      return {
+        ...current,
+        ...calculationContext,
+        package_id: activePackageId || normalizeProposalPackageId(calculationContext.package_id) || current?.package_id,
+        pricing_selection: { ...currentSelection, ...calculatedSelection },
+      }
+    })
+  }
+
+  const buildProposalSelection = () => {
+    const calculationContext = proposalCalculation?.context || {}
+    const context = proposalContext || calculationContext
+    const contextSelection = asProposalRecord(context.pricing_selection)
+    const calculationSelection = asProposalRecord(calculationContext.pricing_selection)
+    const packageId = engineProposalPackageId(selectedProposalPackageId || context.package_id || calculationContext.package_id)
+    const eventDate = String(context.event_date || calculationContext.event_date || activeEventForDisplay?.target_date || lead?.target_date || '')
+    const guestCount = asProposalNumber(context.expected_guest_count, calculationContext.expected_guest_count, proposalGuestCount)
+    const rentalPeriod = context.rental_period || calculationContext.rental_period || 'evening'
+    const addOns = proposalServiceIds(contextSelection).length
+      ? proposalServiceIds(contextSelection)
+      : proposalServiceIds(calculationSelection)
+    const paymentPlan = asProposalRecord(context.payment_plan || calculationContext.payment_plan)
+
+    return {
+      packageId,
+      eventDate,
+      guestCount,
+      eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
+      rentalPeriod,
+      addOns,
+      discountType: invoiceDiscountType,
+      discountValue: Math.max(0, Number(invoiceDiscountValue) || 0),
+      discountApproved: Math.max(0, Number(invoiceDiscountValue) || 0) <= 0
+        || contextSelection?.discount_approved === true
+        || contextSelection?.discountApproved === true
+        || calculationSelection?.discount_approved === true
+        || calculationSelection?.discountApproved === true,
+      taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
+      discount: {
+        type: invoiceDiscountType,
+        value: Math.max(0, Number(invoiceDiscountValue) || 0),
+      },
+      ...(paymentPlan ? { paymentPlan } : {}),
+    }
   }
 
   const handleCreateInvoice = async (action: 'save' | 'email') => {
@@ -1675,28 +1855,44 @@ export default function LeadDetailPage({
         throw new Error('Choose when this proposal offer expires before saving it.')
       }
       setSubmittingInvoice(true)
-      const subtotal = getInvoiceSubtotal()
-      const taxRate = Math.max(0, Number(invoiceTaxRate) || 0) / 100
-      const total = getInvoiceTotal()
+      const taxRate = invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0) / 100
       const offerExpiresAt = invoiceDueDate
-        ? new Date(`${invoiceDueDate}T${invoiceOfferExpiryTime || '23:59'}:00`).toISOString()
+        ? new Date(invoiceDueDate + 'T' + (invoiceOfferExpiryTime || '23:59') + ':00').toISOString()
         : null
+      const editingInvoice = editingInvoiceId ? invoices.find((invoice) => invoice.id === editingInvoiceId) || null : null
+      const createRevision = Boolean(editingInvoice && (
+        editingInvoice.price_locked_at
+        || editingInvoice.proposal_sent_at
+        || editingInvoice.status === 'sent'
+      ))
+      const updateExistingDraft = Boolean(editingInvoice && !createRevision)
+      const proposalSelection = buildProposalSelection()
+      const selectedPackage = proposalCalculation?.packages?.find((candidate) => (
+        normalizeProposalPackageId(candidate.id) === normalizeProposalPackageId(selectedProposalPackageId || proposalContext?.package_id)
+      ))
+      const displayedFinalPrice = asProposalNumber(
+        selectedPackage?.finalEventPrice,
+        proposalCalculation?.context?.final_event_price,
+        proposalContext?.final_event_price,
+      )
 
       const res = await fetch('/api/invoices', {
-        method: editingInvoiceId ? 'PATCH' : 'POST',
+        method: updateExistingDraft ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(editingInvoiceId ? { id: editingInvoiceId } : {}),
+          ...(updateExistingDraft && editingInvoiceId ? { id: editingInvoiceId } : {}),
+          ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
-          description: invoiceDesc || `${activeEventForDisplay?.event_type || lead.event_type || 'Event'} Booking fee`,
+          description: invoiceDesc || String(activeEventForDisplay?.event_type || lead.event_type || 'Event') + ' at Luxor',
           line_items: invoiceItems,
-          subtotal,
           tax_rate: taxRate,
-          total,
           due_date: invoiceDueDate || null,
           offer_expires_at: offerExpiresAt,
-          discount_percent: invoiceDiscountPercent,
+          discount_percent: invoiceDiscountType === 'percent' ? invoiceDiscountValue : 0,
+          discount_type: invoiceDiscountType,
+          discount_value: invoiceDiscountValue,
+          proposal_selection: proposalSelection,
           inquiry_id: id,
           lead_event_id: selectedLeadEvent?.id || null,
           notes: invoiceNotes || null,
@@ -1704,21 +1900,29 @@ export default function LeadDetailPage({
       })
 
       const responseBody = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(responseBody.error || `Failed to ${editingInvoiceId ? 'update' : 'create'} proposal.`)
+      if (!res.ok) throw new Error(responseBody.error || ('Failed to ' + (updateExistingDraft ? 'update' : 'create') + ' final proposal.'))
       const invoice = responseBody as LuxorInvoice
-      setInvoices((prev) => editingInvoiceId
+      setInvoices((prev) => updateExistingDraft
         ? prev.map((item) => item.id === invoice.id ? invoice : item)
         : [invoice, ...prev])
       await (selectedLeadEvent
-        ? handleEventMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate })
-        : handleMetadataUpdate({ proposalLineItems: invoiceItems, proposalTaxRate: taxRate }))
+        ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
+        : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
       setIsInvoiceModalOpen(false)
       setEditingInvoiceId(null)
-      notify({ title: editingInvoiceId ? 'Proposal updated' : 'Proposal saved', description: `${formatMoney(total)} ${editingInvoiceId ? 'is ready to review or send again.' : 'was added to this lead.'}`, variant: 'success' })
-      if (action === 'email') await handleSendEstimate(invoice)
+      const displayedPriceLabel = displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)
+      notify({
+        title: createRevision ? 'Final proposal revision saved' : updateExistingDraft ? 'Final proposal updated' : 'Final proposal saved',
+        description: createRevision
+          ? displayedPriceLabel + ' was saved as a new revision; the previous final proposal remains in the audit history.'
+          : displayedPriceLabel + ' is ready to review or publish.',
+        variant: 'success',
+      })
+      if (action === 'email') await handleSendFinalProposal(invoice)
+      if (createRevision) void fetchAllData(false)
     } catch (err) {
       console.error(err)
-      notify({ title: 'Proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
+      notify({ title: 'Final proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
     } finally {
       setSubmittingInvoice(false)
     }
@@ -1754,43 +1958,6 @@ export default function LeadDetailPage({
     return await res.json() as LuxorTask
   }
 
-  const handleTrackContractStatus = async (booking: LuxorBooking, status: NonNullable<LuxorBooking['contract_status']>) => {
-    try {
-      setUpdatingStatus(true)
-      const now = new Date().toISOString()
-      const res = await fetch('/api/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: booking.id,
-          contract_status: status,
-          contract_sent_at: status === 'sent' ? now : booking.contract_sent_at,
-          contract_signed_at: status === 'signed' ? now : booking.contract_signed_at,
-          status: status === 'signed' && Boolean(booking.metadata?.deposit_paid_at || booking.metadata?.deposit_paid_before_booking) ? 'confirmed' : booking.status,
-          metadata: {
-            ...booking.metadata,
-            manual_contract_tracking: true,
-          },
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to update contract tracking.')
-      await createFlowNote(
-        status === 'signed'
-          ? 'Contract marked signed manually. No signature portal or contract email was generated from this action.'
-          : 'Contract marked sent manually. No signature portal or contract email was generated from this action.',
-        'status_change',
-      )
-      await fetchAllData(false)
-      notify({ title: status === 'signed' ? 'Contract marked signed' : 'Contract marked sent', variant: 'success' })
-    } catch (err) {
-      console.error(err)
-      notify({ title: 'Contract status not updated', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
-    } finally {
-      setUpdatingStatus(false)
-    }
-  }
-
   const handleGuidedStatusChange = async (newStatus: LuxorInquiry['status']) => {
     const statusUpdated = await handleStatusChange(newStatus)
     if (!statusUpdated) return
@@ -1818,9 +1985,11 @@ export default function LeadDetailPage({
   const getInvoiceBalance = (invoice: LuxorInvoice) => Math.max(0, Math.round((Number(invoice.total) - getInvoicePaidTotal(invoice.id)) * 100) / 100)
 
   const getSuggestedInvoiceDeposit = (invoice: LuxorInvoice) => {
+    if (invoice.invoice_kind === 'deposit') return getInvoiceBalance(invoice)
+    if (invoice.invoice_kind === 'final_balance') return getInvoiceBalance(invoice)
     const booking = bookings.find((item) => item.invoice_id === invoice.id) || latestBooking
     const balance = getInvoiceBalance(invoice)
-    const amount = booking?.deposit_required ? Number(booking.deposit_required) : Math.round(Number(invoice.total) * 0.3 * 100) / 100
+    const amount = booking?.deposit_required ? Number(booking.deposit_required) : balance
     return Math.min(amount, balance)
   }
 
@@ -1829,19 +1998,19 @@ export default function LeadDetailPage({
       setSendingContractBookingId(booking.id)
       setUpdatingStatus(true)
       const invoice = invoices.find((item) => item.id === booking.invoice_id) || invoices[0]
-      if (!invoice) throw new Error('Build the proposal before sending the agreement package.')
+      if (!invoice) throw new Error('Build the final proposal before publishing it.')
       const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'proposal' }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
+      if (!res.ok) throw new Error(data.error || 'The final proposal could not be published.')
       await fetchAllData(false)
-      notify({ title: 'Proposal and agreement sent', description: 'The client received the proposal PDF, Guest Guide, and secure contract link.', variant: 'success' })
+      notify({ title: 'Final proposal published', description: 'The client received the locked proposal PDF and private selection link. The Event Agreement is sent automatically after they accept.', variant: 'success' })
     } catch (err) {
       console.error(err)
-      notify({ title: 'Proposal and agreement not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Final proposal not published', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingContractBookingId(null)
       setUpdatingStatus(false)
@@ -1853,23 +2022,23 @@ export default function LeadDetailPage({
       setSendingContractBookingId(booking.id)
       setUpdatingStatus(true)
       const invoice = invoices.find((item) => item.id === booking.invoice_id) || invoices[0]
-      if (!invoice) throw new Error('Create or draft the invoice record first.')
+      if (!invoice) throw new Error('Create the final proposal first.')
       const res = await fetch(`/api/invoices/${invoice.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'proposal' }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'The proposal and agreement package could not be sent.')
+      if (!res.ok) throw new Error(data.error || 'The final proposal could not be published.')
       await fetchAllData(false)
       notify({
-        title: 'Proposal and Agreement Sent',
-        description: `Sent the proposal, agreement, and Guest Guide to ${lead?.email}. The negotiated reservation-deposit link is sent automatically after signature.`,
+        title: 'Final Proposal Published',
+        description: `Sent the locked proposal and private selection link to ${lead?.email}. The Event Agreement is sent after acceptance, and Stripe is sent after signature.`,
         variant: 'success',
       })
     } catch (err) {
       console.error(err)
-      notify({ title: 'Proposal and agreement not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Final proposal not published', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingContractBookingId(null)
       setUpdatingStatus(false)
@@ -2007,10 +2176,9 @@ export default function LeadDetailPage({
       ? invoices.find((item) => item.booking_id === booking.id && item.invoice_kind === 'deposit') || invoice
       : invoice
     const balance = getInvoiceBalance(paymentInvoice)
-    const suggestedDeposit = getSuggestedInvoiceDeposit(paymentInvoice)
     setPaymentRequestInvoice(paymentInvoice)
-    setPaymentRequestKind(getInvoicePaidTotal(paymentInvoice.id) > 0 ? 'balance' : 'deposit')
-    setCustomPaymentAmount(String(suggestedDeposit || balance))
+    setPaymentRequestKind(paymentInvoice.invoice_kind === 'final_balance' ? 'balance' : 'deposit')
+    setCustomPaymentAmount(String(balance))
   }
 
   const handleSendInvoice = async (event: React.FormEvent) => {
@@ -2019,18 +2187,29 @@ export default function LeadDetailPage({
     const invoiceId = paymentRequestInvoice.id
     const balance = getInvoiceBalance(paymentRequestInvoice)
     const suggestedDeposit = getSuggestedInvoiceDeposit(paymentRequestInvoice)
-    const paymentAmount = paymentRequestKind === 'balance'
+    const isScheduledPayment = paymentRequestInvoice.invoice_kind === 'deposit' || paymentRequestInvoice.invoice_kind === 'final_balance'
+    const paymentAmount = isScheduledPayment
       ? balance
-      : paymentRequestKind === 'deposit'
-        ? Math.min(suggestedDeposit, balance)
-        : Number(customPaymentAmount)
-    const paymentLabel = paymentRequestKind === 'deposit' ? 'Non-refundable reservation deposit' : paymentRequestKind === 'balance' ? 'Remaining event balance and refundable security deposit' : 'Custom event payment installment'
+      : paymentRequestKind === 'balance'
+        ? balance
+        : paymentRequestKind === 'deposit'
+          ? Math.min(suggestedDeposit, balance)
+          : Number(customPaymentAmount)
+    const paymentLabel = paymentRequestInvoice.invoice_kind === 'deposit'
+      ? 'Initial Booking Payment + Refundable Security Deposit'
+      : paymentRequestInvoice.invoice_kind === 'final_balance'
+        ? 'Remaining Final Event Price Balance'
+        : paymentRequestKind === 'deposit'
+          ? 'Initial Booking Payment + Refundable Security Deposit'
+          : paymentRequestKind === 'balance'
+            ? 'Remaining Final Event Price Balance'
+            : 'Custom post-signature payment installment'
     try {
       setSendingInvoiceId(invoiceId)
       const response = await fetch(`/api/invoices/${invoiceId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentAmount, paymentLabel }),
+        body: JSON.stringify({ mode: 'payment', paymentAmount, paymentLabel }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'The proposal could not be sent.')
@@ -2039,9 +2218,9 @@ export default function LeadDetailPage({
       setPaymentRequestInvoice(null)
       setSelectedStageOverride(null)
       await fetchAllData(false)
-      notify({ title: 'Payment request sent', description: `${formatMoney(paymentAmount)} and the proposal PDF were emailed to the client.`, variant: 'success' })
+      notify({ title: 'Payment request sent', description: `${formatMoney(paymentAmount)} was emailed to the client with a secure Stripe link.`, variant: 'success' })
     } catch (err) {
-      notify({ title: 'Proposal not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Payment request not sent', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingInvoiceId(null)
     }
@@ -2119,16 +2298,20 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleSendEstimate = async (invoice: LuxorInvoice) => {
+  const handleSendFinalProposal = async (invoice: LuxorInvoice) => {
     try {
       setSendingInvoiceId(invoice.id)
       const response = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'proposal' }) })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'The estimate could not be sent.')
+      if (!response.ok) throw new Error(payload.error || 'The final proposal could not be sent.')
       await fetchAllData(false)
-      notify({ title: 'Estimate sent', description: 'The client received the estimate only. They can accept it before moving to the booking agreement.', variant: 'success' })
+      notify({
+        title: 'Final proposal sent',
+        description: 'The client can accept the final proposal. Acceptance automatically sends the Event Agreement; Stripe is emailed only after signature.',
+        variant: 'success',
+      })
     } catch (error) {
-      notify({ title: 'Estimate not sent', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Final proposal not sent', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingInvoiceId(null)
     }
@@ -2218,134 +2401,49 @@ export default function LeadDetailPage({
 
   const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final') => {
     const preferredMethod = ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
-    const relatedInvoice = paymentKind === 'deposit'
-      ? invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'deposit')
-      : invoices.find((invoice) => invoice.booking_id === booking.id && invoice.invoice_kind === 'final_balance')
-    const fallbackAmount = paymentKind === 'deposit'
-      ? Math.max(0, Number(booking.deposit_required || 0) - getPaidTotal(payments, 'deposit'))
-      : Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0) + Number(booking.security_deposit_amount || 0) - getPaidTotal(payments, 'final'))
-    const amount = relatedInvoice ? getInvoiceBalance(relatedInvoice) : fallbackAmount
-
-    if (amount <= 0) {
-      try {
-        setUpdatingStatus(true)
-        const now = new Date().toISOString()
-        const bookingRes = await fetch('/api/bookings', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: booking.id,
-            status: paymentKind === 'deposit' ? 'tentative' : booking.status,
-            security_deposit_status: paymentKind === 'final' ? 'collected' : booking.security_deposit_status,
-            metadata: {
-              ...booking.metadata,
-              ...(paymentKind === 'deposit' ? { deposit_paid_at: now } : {}),
-              [`${paymentKind}_payment_recorded_manually_at`]: now,
-            },
-          }),
-        })
-        const bookingPayload = await bookingRes.json().catch(() => ({}))
-        if (!bookingRes.ok) throw new Error(bookingPayload.error || 'Failed to sync the paid status.')
-        await fetchAllData(false)
-        notify({ title: paymentKind === 'deposit' ? 'Deposit already covered' : 'Balance already paid', description: 'Lifecycle updated.', variant: 'success' })
-      } catch (err) {
-        console.error(err)
-        notify({ title: 'Paid status not synced', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
-      } finally {
-        setUpdatingStatus(false)
-      }
-      return
-    }
-
     try {
       setUpdatingStatus(true)
-      const paymentRes = await fetch('/api/payments', {
+      const paymentRes = await fetch('/api/payments/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inquiry_id: id,
-          booking_id: booking.id,
-          invoice_id: relatedInvoice?.id || null,
-          amount,
-          status: 'paid',
-          payment_method: preferredMethod === 'zelle' ? 'Zelle' : preferredMethod === 'cash' ? 'Cash' : preferredMethod === 'check' ? 'Check' : 'Manual record',
-          notes: paymentKind === 'deposit' ? `Reservation deposit recorded manually in owner portal${preferredMethod !== 'manual' ? ` (${preferredMethod})` : ''}.` : `Final event balance and refundable security deposit recorded manually in owner portal${preferredMethod !== 'manual' ? ` (${preferredMethod})` : ''}.`,
-          metadata: {
-            payment_kind: paymentKind,
-            manual_entry: true,
-            payment_method_selected: preferredMethod,
-          },
+          bookingId: booking.id,
+          paymentKind,
+          paymentMethod: preferredMethod,
         }),
       })
-      const paymentPayload = await paymentRes.json().catch(() => ({}))
-      if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
-
-      if (relatedInvoice) {
-        const invoiceRes = await fetch('/api/invoices', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: relatedInvoice.id, status: 'paid', paid_at: new Date().toISOString() }),
-        })
-        const invoicePayload = await invoiceRes.json().catch(() => ({}))
-        if (!invoiceRes.ok) throw new Error(invoicePayload.error || 'Payment was recorded, but the invoice could not be marked paid.')
+      const paymentPayload = await paymentRes.json().catch(() => ({})) as {
+        error?: string
+        alreadyPaid?: boolean
+        payment?: { amount?: number }
+        invoice?: LuxorInvoice
       }
-
-      const nextStatus: LuxorBookingStatus = paymentKind === 'deposit' ? 'tentative' : booking.status
-      const bookingRes = await fetch('/api/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: booking.id,
-          status: nextStatus,
-          security_deposit_status: paymentKind === 'final' ? 'collected' : booking.security_deposit_status,
-          metadata: {
-            ...booking.metadata,
-            ...(paymentKind === 'deposit' ? { deposit_paid_at: new Date().toISOString() } : {}),
-            [`${paymentKind}_payment_recorded_manually_at`]: new Date().toISOString(),
-          },
-        }),
-      })
-      const bookingPayload = await bookingRes.json().catch(() => ({}))
-      if (!bookingRes.ok) throw new Error(bookingPayload.error || 'Failed to update booking after payment.')
-
-      await createFlowNote(
-        `${paymentKind === 'deposit' ? 'Reservation deposit' : 'Final event balance and refundable security deposit'} recorded manually for ${formatMoney(amount)}.`,
-        'status_change',
-      )
+      if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
       await fetchAllData(false)
-      notify({ title: paymentKind === 'deposit' ? 'Deposit recorded' : 'Final payment recorded', description: formatMoney(amount), variant: 'success' })
+      if (paymentPayload.alreadyPaid) {
+        notify({
+          title: paymentKind === 'deposit' ? 'Initial payment already recorded' : 'Final balance already recorded',
+          description: paymentKind === 'deposit'
+            ? 'The initial booking payment is complete and the $750 refundable security deposit is held.'
+            : 'The final event balance is already paid. The $750 refundable security deposit remains held separately.',
+          variant: 'success',
+        })
+        return
+      }
+      const amount = Number(paymentPayload.payment?.amount || paymentPayload.invoice?.total || 0)
+      notify({
+        title: paymentKind === 'deposit' ? 'Initial payment recorded' : 'Final event balance recorded',
+        description: paymentKind === 'deposit'
+          ? formatMoney(amount) + ' recorded. This includes the initial booking payment and the separate $750 refundable security deposit, now held.'
+          : formatMoney(amount) + ' recorded for the final event balance. The $750 refundable security deposit remains held separately.',
+        variant: 'success',
+      })
     } catch (err) {
       console.error(err)
       notify({ title: 'Payment not recorded', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setUpdatingStatus(false)
     }
-  }
-
-  const openBookingModal = () => {
-    const suggestedContractTotal = eventInvoices[0]?.total ? Number(eventInvoices[0].total) : 0
-    const eventDate = activeEventForDisplay?.target_date || lead?.target_date || ''
-    const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(eventDate) ? eventDate : ''
-
-    setBookingEventDate(targetDate)
-    setBookingStartTime('')
-    setBookingEndTime('')
-    setBookingPackageName(activeEventForDisplay?.package_interest || lead?.package_interest || '')
-    setBookingContractTotal(suggestedContractTotal > 0 ? suggestedContractTotal.toFixed(2) : '')
-    setBookingDepositRequired(suggestedContractTotal > 0 ? defaultLuxorReservationDeposit(suggestedContractTotal).toFixed(2) : '')
-    setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
-    if (targetDate) {
-      const dueDate = new Date(`${targetDate}T12:00:00-05:00`)
-      dueDate.setDate(dueDate.getDate() - 60)
-      setBookingFinalPaymentDueDate(dueDate.toISOString().slice(0, 10))
-    } else {
-      setBookingFinalPaymentDueDate('')
-    }
-    setBookingNotes(activeEventForDisplay?.notes || lead?.message || '')
-    setBookingPaymentMethod('card')
-    setBookingPaymentAmount('deposit')
-    setBookingStatus('tentative')
-    setIsBookingModalOpen(true)
   }
 
   const handleSendAiInvoiceReminder = async (invoice: LuxorInvoice) => {
@@ -2374,78 +2472,6 @@ export default function LeadDetailPage({
       })
     } finally {
       setSendingReminderId(null)
-    }
-  }
-
-  const handleCreateBooking = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!lead) return
-
-    const contractTotal = parseLuxorCurrency(bookingContractTotal)
-    const depositRequired = parseLuxorCurrency(bookingDepositRequired) || defaultLuxorReservationDeposit(contractTotal)
-    const securityDepositAmount = parseLuxorCurrency(bookingSecurityDepositAmount) || LUXOR_DEFAULT_SECURITY_DEPOSIT
-
-    try {
-      setSubmittingBooking(true)
-
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiry_id: lead.id,
-          client_name: lead.full_name,
-          email: lead.email,
-          phone: lead.phone,
-          event_type: activeEventForDisplay?.event_type || lead.event_type,
-          lead_event_id: selectedLeadEvent?.id || null,
-          event_date: bookingEventDate || null,
-          start_time: bookingStartTime || null,
-          end_time: bookingEndTime || null,
-          package_name: bookingPackageName || null,
-          invoice_id: eventInvoices[0]?.id || null,
-          guest_count: activeEventForDisplay?.guest_count ?? lead.guest_count,
-          status: bookingStatus,
-          contract_total: contractTotal,
-          deposit_required: depositRequired,
-          security_deposit_amount: securityDepositAmount,
-          final_payment_due_date: bookingFinalPaymentDueDate || null,
-          notes: bookingNotes.trim() || lead.message,
-          metadata: {
-            proposalLineItems: invoiceItems,
-            proposalTaxRate: Math.max(0, Number(invoiceTaxRate) || 0) / 100,
-            payment_schedule: 'negotiated_reservation_deposit_then_60_day_balance',
-            client_payment_preference: { method: bookingPaymentMethod, amount: bookingPaymentAmount, setBy: 'owner', selectedAt: new Date().toISOString() },
-          },
-        }),
-      })
-
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to create booking.')
-
-      const booking = data as LuxorBooking
-      setBookings((prev) => [booking, ...prev])
-      setIsBookingModalOpen(false)
-      setBookingEventDate('')
-      setBookingStartTime('')
-      setBookingEndTime('')
-      setBookingPackageName('')
-      setBookingContractTotal('')
-      setBookingDepositRequired('')
-      setBookingSecurityDepositAmount(LUXOR_DEFAULT_SECURITY_DEPOSIT.toFixed(2))
-      setBookingPaymentMethod('card')
-      setBookingPaymentAmount('deposit')
-      setBookingFinalPaymentDueDate('')
-      setBookingNotes('')
-      setBookingStatus('tentative')
-
-      setSelectedStageOverride(null)
-      await fetchAllData(false)
-      notify({ title: 'Booking created', description: `${bookingEventDate ? formatDisplayDate(bookingEventDate) : 'Event date still to be confirmed.'} Contract is now the active stage.`, variant: 'success' })
-    } catch (err) {
-      console.error(err)
-      notify({ title: 'Booking not created', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
-    } finally {
-      setSubmittingBooking(false)
     }
   }
 
@@ -2589,23 +2615,31 @@ export default function LeadDetailPage({
     sortedPayments,
   } = leadDerivedData
   const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
-  const depositPaidTotal = getPaidTotal(sortedPayments, 'deposit')
   const bookingContractAmount = Number(latestBooking?.contract_total || 0)
   const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
-  const depositBalance = Math.max(0, bookingDepositAmount - depositPaidTotal)
   const proposalInvoice = sortedInvoices.find((invoice) => invoice.id === latestBooking?.invoice_id)
     || sortedInvoices.find((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
     || latestInvoice
   const depositInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'deposit')
   const finalBalanceInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
-  const refundableSecurityDepositAmount = Number(finalBalanceInvoice?.line_items.find((item) => item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || latestBooking?.security_deposit_amount || 0)
-  const finalPaymentTotal = Number(finalBalanceInvoice?.total || (Math.max(0, bookingContractAmount - bookingDepositAmount) + refundableSecurityDepositAmount))
+  const refundableSecurityDepositAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'security_deposit' || item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || latestBooking?.security_deposit_amount || LUXOR_DEFAULT_SECURITY_DEPOSIT)
+  const initialBookingPaymentAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'venue' || /initial booking payment/i.test(item.description))?.total || bookingDepositAmount)
+  const initialPaymentInvoiceTotal = Number(depositInvoice?.total || (initialBookingPaymentAmount + refundableSecurityDepositAmount))
+  const depositPaidTotal = depositInvoice ? getInvoicePaidTotal(depositInvoice.id) : getPaidTotal(sortedPayments, 'deposit')
+  const depositBalance = Math.max(0, initialPaymentInvoiceTotal - depositPaidTotal)
+  const finalPaymentTotal = Number(finalBalanceInvoice?.total || Math.max(0, bookingContractAmount - initialBookingPaymentAmount))
   const finalPaymentBalance = finalBalanceInvoice
     ? getInvoiceBalance(finalBalanceInvoice)
     : Math.max(0, finalPaymentTotal - getPaidTotal(sortedPayments, 'final'))
-  const proposalPaidTotal = latestBooking
-    ? sortedPayments.filter((payment) => payment.booking_id === latestBooking.id && payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-    : 0
+  // Event-price progress deliberately excludes the separate $750 security
+  // hold. The deposit child invoice contains both amounts, so count only its
+  // initial-booking-payment portion here and show the security deposit in its
+  // own status/card instead of making the Event Price balance look smaller.
+  const proposalPaidTotal = Math.round((
+    (proposalInvoice ? getInvoicePaidTotal(proposalInvoice.id) : 0) +
+    Math.min(initialBookingPaymentAmount, depositPaidTotal) +
+    (finalBalanceInvoice ? getInvoicePaidTotal(finalBalanceInvoice.id) : getPaidTotal(sortedPayments, 'final'))
+  ) * 100) / 100
   const proposalBalance = Math.max(0, Math.round((Number(proposalInvoice?.total || latestBooking?.contract_total || 0) - proposalPaidTotal) * 100) / 100)
   const proposalAmount = proposalInvoice?.total || latestBooking?.contract_total || 0
   const proposalSentAt = proposalInvoice?.proposal_sent_at || (
@@ -2616,6 +2650,7 @@ export default function LeadDetailPage({
     note.note_type === 'status_change' &&
     note.content.toLowerCase().includes('proposal')
   ))?.created_at || (activeEventForDisplay?.status === 'proposal_sent' ? activeEventForDisplay.updated_at : null)
+  const proposalAcceptedAt = proposalInvoice?.proposal_accepted_at || null
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
   const proposalReminderJobs = tourEmailJobs.filter((job) => job.job_type === 'proposal_view_reminder' || job.job_type === 'proposal_payment_reminder')
   const queuedProposalReminders = proposalReminderJobs.filter((job) => job.status === 'queued')
@@ -2799,21 +2834,21 @@ export default function LeadDetailPage({
   } else if (lead.status === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : latestBooking.contract_status === 'not_sent' ? 'Send agreement + guide' : 'Review contract status') : 'Create booking record',
+      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : latestBooking.contract_status === 'not_sent' ? 'Publish final proposal' : 'Review contract status') : 'Build final proposal',
       detail: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? 'Contract is already signed'
           : latestBooking.contract_status === 'not_sent'
-            ? 'Email the branded package and secure signing link'
+            ? 'Publish the locked package for the client to select'
             : 'Open the contract record and review progress'
-        : 'Create the booking record first',
+        : 'The client acceptance creates the matching booking automatically',
       onClick: latestBooking
         ? latestBooking.contract_status === 'signed'
           ? () => scrollToSection('lead-booking')
           : latestBooking.contract_status === 'not_sent'
             ? () => handleSendContractPackage(latestBooking)
             : () => scrollToSection('lead-booking')
-        : openBookingModal,
+        : () => openProposalBuilder(),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -2849,9 +2884,9 @@ export default function LeadDetailPage({
   if (lead.status !== 'booked' && lead.status !== 'closed_lost') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: 'Create booking record',
-      detail: 'Add the event date and contract details',
-      onClick: openBookingModal,
+      label: 'Build final proposal',
+      detail: 'Calculate the exact package price for client selection',
+      onClick: () => openProposalBuilder(),
     })
   }
 
@@ -3545,7 +3580,7 @@ export default function LeadDetailPage({
                         <div className="space-y-4 text-left">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Estimated Budget</label>
+                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Target Budget</label>
                               <input
                                 type="text"
                                 value={tourBudget}
@@ -3615,7 +3650,7 @@ export default function LeadDetailPage({
                           <div className="space-y-3.5">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
+                                <p className="text-[9px] uppercase font-bold text-zinc-500">Target Budget</p>
                                 <p className="font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
                               </div>
                               <div>
@@ -3861,7 +3896,7 @@ export default function LeadDetailPage({
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
-                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Estimated Budget</label>
+                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Target Budget</label>
                                     <input
                                       type="text"
                                       value={tourBudget}
@@ -3939,7 +3974,7 @@ export default function LeadDetailPage({
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
-                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Estimated Budget</p>
+                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Target Budget</p>
                                     <p className="text-xs font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
                                   </div>
                                   <div>
@@ -4198,7 +4233,7 @@ export default function LeadDetailPage({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
-                                <span className="font-bold text-white">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Guests (Estimated)` : 'Guest count not captured'}</span>
+                                <span className="font-bold text-white">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Expected Guests` : 'Guest count not captured'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
@@ -4370,10 +4405,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build the estimate' : !proposalSentAt ? 'Send estimate' : !latestBooking ? 'Create the booking record' : latestBooking.contract_status !== 'signed' ? 'Await estimate acceptance and signature' : depositPaidTotal <= 0 ? 'Agreement signed — payment choice pending' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : latestBooking?.contract_status !== 'signed' ? 'Await agreement signature' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Add the agreed services and pricing.' : !proposalSentAt ? 'Send the estimate alone. A booking record is created after the client accepts it.' : !latestBooking ? 'Create the booking record after the client accepts the estimate.' : latestBooking.contract_status !== 'signed' ? 'The date remains pending until the estimate is accepted and the agreement is signed.' : depositPaidTotal <= 0 ? 'The client chooses card, cash, Zelle, or check after signing; the date stays pending until payment is confirmed.' : 'The signed agreement and paid deposit are both recorded.'}
+                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : latestBooking?.contract_status !== 'signed' ? 'Acceptance automatically sends the Event Agreement. Stripe is not available until it is signed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -4384,15 +4419,13 @@ export default function LeadDetailPage({
                           {!proposalInvoice ? (
                             <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
                           ) : !proposalSentAt ? (
-                            <button type="button" onClick={() => handleSendEstimate(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Send Estimate'}</button>
-                          ) : !latestBooking ? (
-                            <button type="button" onClick={openBookingModal} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Create Booking</button>
-                          ) : latestBooking.contract_status !== 'signed' ? (
-                            <button type="button" onClick={() => handleSendEstimate(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">
-                              {sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Resend Estimate'}
-                            </button>
+                            <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : 'Send final proposal'}</button>
+                          ) : !proposalAcceptedAt ? (
+                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Awaiting client acceptance</span>
+                          ) : latestBooking?.contract_status !== 'signed' ? (
+                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Agreement awaiting signature</span>
                           ) : (
-                            <button type="button" onClick={() => openPaymentRequest(proposalInvoice)} disabled={proposalBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
+                            <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                           )}
                         </div>
                       </div>
@@ -4437,7 +4470,7 @@ export default function LeadDetailPage({
                       {/* Card 3: Financial Summary / Total & Balance */}
                       <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
                         <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Proposal Total</span>
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Final Event Price</span>
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                             proposalBalance <= 0 && proposalAmount > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalPaidTotal > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20'
                           }`}>
@@ -4476,7 +4509,7 @@ export default function LeadDetailPage({
                     <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Proposal line items</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Final proposal line items</p>
                           <p className="mt-1 text-xs text-[color:var(--portal-muted)]">The exact services and numbers stored on the latest sent proposal.</p>
                         </div>
                         {proposalInvoice ? (
@@ -4540,10 +4573,10 @@ export default function LeadDetailPage({
                                 transition={{ duration: 0.25 }}
                               >
                                 <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                                  {!latestBooking ? 'Create booking record to start contract' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'viewed' ? 'Contract viewed by client' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Review and send agreement'}
+                                  {!latestBooking ? 'Build the final proposal first' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'viewed' ? 'Contract viewed by client' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Publish final proposal'}
                                 </h4>
                                 <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                                  {!latestBooking ? 'A booking record is required before agreement package generation.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to deposit / planning.' : 'Send agreement + venue guide to client for digital signoff.'}
+                                  {!latestBooking ? 'The client accepts the locked proposal first; that acceptance creates the matching booking and sends the Event Agreement.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to the signed-agreement payment step or planning.' : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? 'The Event Agreement was sent after proposal acceptance. Track the client signature here.' : 'Publish the locked final proposal for client selection.'}
                                 </p>
                               </motion.div>
                             </AnimatePresence>
@@ -4607,7 +4640,7 @@ export default function LeadDetailPage({
                                     className="inline-flex items-center gap-2"
                                   >
                                     <Send size={12} className="text-amber-100" />
-                                    Send Agreement + Guide
+                                    Publish Final Proposal
                                   </motion.span>
                                 )}
                               </AnimatePresence>
@@ -4615,10 +4648,10 @@ export default function LeadDetailPage({
                           ) : (
                             <button
                               type="button"
-                              onClick={openBookingModal}
+                              onClick={() => openProposalBuilder()}
                               className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
                             >
-                              Create Booking
+                              Build Proposal
                             </button>
                           )}
                         </div>
@@ -4720,7 +4753,7 @@ export default function LeadDetailPage({
                                     </motion.span>
                                   ) : (
                                     <motion.span key="not_sent" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                                      Send Agreement + Guide
+                                      Publish Final Proposal
                                     </motion.span>
                                   )}
                                 </AnimatePresence>
@@ -4730,7 +4763,7 @@ export default function LeadDetailPage({
                                   <button
                                     type="button"
                                     disabled={updatingStatus}
-                                    onClick={() => handleSendContractPackage(latestBooking)}
+                                    onClick={() => handleContractRequestAction(latestBooking, 'resend')}
                                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                                   >
                                     <RefreshCw size={11} className={contractActionKey === `resend-${latestBooking.id}` ? 'animate-spin' : ''} /> Resend
@@ -4747,7 +4780,7 @@ export default function LeadDetailPage({
                               ) : null}
                             </>
                           ) : (
-                            <button type="button" onClick={openBookingModal} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Create Booking</button>
+                            <button type="button" onClick={() => openProposalBuilder()} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Build Proposal</button>
                           )}
                         </div>
                       </motion.section>
@@ -4847,18 +4880,18 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {depositBalance <= 0 ? 'Reservation deposit received' : 'Collect reservation deposit'}
+                              {depositBalance <= 0 ? 'Initial booking payment received' : 'Collect initial booking payment'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {depositBalance <= 0 ? 'The reservation deposit is received. The remaining event balance and refundable security deposit are due 60 days before the event.' : 'The Stripe link was emailed after signature. Resend it here if the client needs it again.'}
+                              {depositBalance <= 0 ? 'The initial booking payment is received and the separate $750 refundable security deposit is held. The remaining event balance is due on the agreed date.' : 'The Stripe link was emailed after signature. It collects the initial booking payment and separate $750 refundable security deposit together.'}
                             </p>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {latestInvoice && proposalBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Resend Payment Link</button> : null}
+                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Resend Payment Link</button> : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
-                              Mark Deposit Paid
+                              Mark Initial Payment Paid
                             </button>
                           ) : null}
                         </div>
@@ -4882,12 +4915,12 @@ export default function LeadDetailPage({
                               <span className="font-bold text-white">Due with agreement signature</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Amount</span>
-                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(bookingDepositAmount)}</span>
+                              <span className="text-[10px] uppercase font-bold text-zinc-500">Initial Payment + Security</span>
+                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Paid Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && bookingDepositAmount > 0 ? 'collected' : 'pending'}</span>
+                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'paid / held' : 'pending'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
@@ -4896,9 +4929,9 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          {latestInvoice && proposalBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Resend Payment Link</button> : null}
+                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Resend Payment Link</button> : null}
                           {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Deposit Paid</button>
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Initial Payment Paid</button>
                           ) : null}
                         </div>
                       </section>
@@ -4910,17 +4943,17 @@ export default function LeadDetailPage({
                           <div className="space-y-3 text-xs">
                             <div className="flex justify-between py-1 border-b border-zinc-850">
                               <div>
-                                <p className="font-bold text-white">1. Reservation Deposit</p>
+                                <p className="font-bold text-white">1. Initial Booking Payment + Security Deposit</p>
                                 <p className="text-[9px] text-zinc-500">Due with agreement signature</p>
                               </div>
-                              <span className="font-mono font-bold text-[#caa24c]">{formatMoney(bookingDepositAmount)}</span>
+                              <span className="font-mono font-bold text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
                             <div className="flex justify-between py-1">
                               <div>
-                                <p className="font-bold text-zinc-400">2. Remaining Event Balance + Refundable Security Deposit</p>
+                                <p className="font-bold text-zinc-400">2. Remaining Final Event Price Balance</p>
                                 <p className="text-[9px] text-zinc-500">{latestBooking?.final_payment_due_date ? `Due ${formatDisplayDate(latestBooking.final_payment_due_date)}` : 'Due date not set'}</p>
                               </div>
-                              <span className="font-mono font-bold text-zinc-400">{formatMoney(finalBalanceInvoice?.total || (Math.max(0, bookingContractAmount - bookingDepositAmount) + refundableSecurityDepositAmount))}</span>
+                              <span className="font-mono font-bold text-zinc-400">{formatMoney(finalPaymentTotal)}</span>
                             </div>
                           </div>
                         </div>
@@ -4946,13 +4979,13 @@ export default function LeadDetailPage({
                               {finalPaymentBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. Ready for event day operations.' : `${formatMoney(finalPaymentBalance)} balance remaining, including the refundable security deposit. Send payment link or record manual payment.`}
+                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} final event balance remaining. The separate $750 refundable security deposit was collected with the initial booking payment and remains held.`}
                             </p>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {latestInvoice && proposalBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                          {finalBalanceInvoice && finalPaymentBalance > 0 ? (
+                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
                               Send Secure Payment Link
                             </button>
                           ) : null}
@@ -4987,7 +5020,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
-                              <span className="font-bold text-white">{latestInvoice ? latestInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                              <span className="font-bold text-white">{finalBalanceInvoice ? finalBalanceInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
@@ -4996,8 +5029,8 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          {latestInvoice && proposalBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(latestInvoice)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
+                          {finalBalanceInvoice && finalPaymentBalance > 0 ? (
+                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
                           ) : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
@@ -5154,7 +5187,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          {latestBooking?.security_deposit_status === 'collected' ? (
+                          {latestBooking?.security_deposit_status === 'held' ? (
                             <button
                               type="button"
                               onClick={() => setConfirmRefundModalOpen(true)}
@@ -5437,10 +5470,10 @@ export default function LeadDetailPage({
               let nextStepAction = () => setActiveLeadTab('documents')
               
               if (currentStage === 'proposal') {
-                nextStepTitle = 'Create booking record'
-                nextStepDetail = 'Capture event date, package, total, and deposit'
-                nextStepButton = 'Create Booking'
-                nextStepAction = openBookingModal
+                nextStepTitle = 'Publish the final proposal'
+                nextStepDetail = 'The client selects the locked package; Luxor then creates the matching booking automatically.'
+                nextStepButton = 'Build Final Proposal'
+                nextStepAction = () => openProposalBuilder()
               } else if (currentStage === 'contract') {
                 nextStepTitle = 'Track contract'
                 nextStepDetail = 'Mark sent or signed manually once handled outside the portal'
@@ -5449,28 +5482,28 @@ export default function LeadDetailPage({
               } else if (currentStage === 'deposit') {
                 nextStepTitle = 'Record deposit'
                 nextStepDetail = 'Manually mark deposit paid after payment is confirmed'
-                nextStepButton = latestBooking ? 'Mark Deposit Paid' : 'Create Booking'
-                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'deposit') : openBookingModal
+                nextStepButton = latestBooking ? 'Mark Initial Payment Paid' : 'Build Final Proposal'
+                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'deposit') : () => openProposalBuilder()
               } else if (currentStage === 'planning') {
                 nextStepTitle = 'Confirm planning details'
                 nextStepDetail = 'Fill any missing event details before final balance'
-                nextStepButton = latestBooking ? 'Confirm Planning' : 'Create Booking'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'planning') : openBookingModal
+                nextStepButton = latestBooking ? 'Confirm Planning' : 'Build Final Proposal'
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'planning') : () => openProposalBuilder()
               } else if (currentStage === 'final_payment') {
                 nextStepTitle = 'Collect final payment'
-                nextStepDetail = latestInvoice ? 'Send the secure balance link; Stripe advances the stage after payment' : 'Create an invoice before collecting the balance'
-                nextStepButton = latestInvoice ? 'Send Secure Payment Link' : 'Create Invoice'
-                nextStepAction = latestInvoice ? () => openPaymentRequest(latestInvoice) : () => setIsInvoiceModalOpen(true)
+                nextStepDetail = finalBalanceInvoice ? 'Send the secure balance link; Stripe advances the stage after payment' : 'Create an invoice before collecting the balance'
+                nextStepButton = finalBalanceInvoice ? 'Send Secure Payment Link' : 'Create Invoice'
+                nextStepAction = finalBalanceInvoice ? () => openPaymentRequest(finalBalanceInvoice) : () => setIsInvoiceModalOpen(true)
               } else if (currentStage === 'event') {
                 nextStepTitle = 'Close out event'
                 nextStepDetail = 'Finish inspection, deposit return, and review readiness'
                 nextStepButton = 'Close Out Event'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'event') : openBookingModal
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'event') : () => openProposalBuilder()
               } else if (currentStage === 'closing') {
                 nextStepTitle = 'Finish closeout'
                 nextStepDetail = 'Confirm the event inspection and security-deposit decision, then move the booking to its separate completion step'
                 nextStepButton = 'Finish Closeout'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'closing') : openBookingModal
+                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'closing') : () => openProposalBuilder()
               }
 
               return (
@@ -6114,16 +6147,16 @@ export default function LeadDetailPage({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> PDF library</h3>
-                <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Preview the exact estimate, agreement, and signed contract saved for this lead. These files are private to the owner portal.</p>
+                <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Preview the final proposal, agreement, and signed contract saved for this lead. These files are private to the owner portal.</p>
               </div>
               <span className="font-mono text-xs text-[color:var(--portal-muted)]">{documents.length + signatureRequests.length} files</span>
             </div>
             {documents.length === 0 && signatureRequests.length === 0 ? (
-              <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">PDFs will appear here after an estimate or agreement is generated.</div>
+              <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">PDFs will appear here after a final proposal or agreement is generated.</div>
             ) : (
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 {documents.map((document) => {
-                  const label = document.document_type === 'proposal' ? 'Estimate PDF' : document.document_type.replaceAll('_', ' ')
+                  const label = document.document_type === 'proposal' ? 'Final Proposal PDF' : document.document_type.replaceAll('_', ' ')
                   const url = `/api/documents/${encodeURIComponent(document.id)}/pdf`
                   return <div key={document.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                     <div className="min-w-0"><p className="truncate text-xs font-bold capitalize text-[color:var(--portal-text)]">{label}</p><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{document.file_name}</p></div>
@@ -6157,13 +6190,13 @@ export default function LeadDetailPage({
             {sortedBookings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
                 <p className="font-semibold text-[color:var(--portal-text)]">No booking record is linked yet.</p>
-                <p className="mt-1 text-[color:var(--portal-muted)]">Create the booking record first. The agreement uses its event date, package, guest count, and payment details.</p>
+                <p className="mt-1 text-[color:var(--portal-muted)]">The booking is created automatically once the client accepts the locked final proposal. That keeps the agreement and payment schedule aligned with the selected package.</p>
                 <button
                   type="button"
-                  onClick={openBookingModal}
+                  onClick={() => openProposalBuilder()}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 cursor-pointer"
                 >
-                  Create booking record
+                  Build final proposal
                 </button>
               </div>
             ) : (
@@ -6207,17 +6240,17 @@ export default function LeadDetailPage({
                       </button>
                       <button
                         type="button"
-                        onClick={() => !booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? handleSendContractPackage(booking) : handleTrackContractStatus(booking, 'signed')}
+                        onClick={() => !booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? handleSendContractPackage(booking) : void openContractReview(booking)}
                         disabled={booking.contract_status === 'signed' || updatingStatus}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-45 cursor-pointer"
                       >
-                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Mark Signed Manually' : 'Send Agreement + Guide'}
+                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Review Signing Status' : 'Publish Final Proposal'}
                       </button>
                       {booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? (
                         <>
                           <button
                             type="button"
-                            onClick={() => handleSendContractPackage(booking)}
+                            onClick={() => handleContractRequestAction(booking, 'resend')}
                             disabled={updatingStatus}
                             className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                           >
@@ -6235,10 +6268,10 @@ export default function LeadDetailPage({
                       ) : null}
                       <button
                         type="button"
-                        onClick={openBookingModal}
+                        onClick={() => proposalInvoice ? setPdfPreviewInvoice(proposalInvoice) : openProposalBuilder()}
                         className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer"
                       >
-                        Update Booking
+                        {proposalInvoice ? 'View Locked Proposal' : 'Build Final Proposal'}
                       </button>
                     </div>
                   </div>
@@ -6305,7 +6338,7 @@ export default function LeadDetailPage({
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
                       </a>
-                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
+                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || (inv.invoice_kind !== 'deposit' && inv.invoice_kind !== 'final_balance') || latestBooking?.contract_status !== 'signed'} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
                         <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
                       </button>
                       <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
@@ -6548,14 +6581,18 @@ export default function LeadDetailPage({
                 <PortalSelect
                   value={paymentRequestKind}
                   onChange={(value) => setPaymentRequestKind(value as typeof paymentRequestKind)}
-                  options={[
-                    { value: 'deposit', label: `Reservation deposit — ${formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice))}` },
-                    { value: 'balance', label: `Pay invoice in full — ${formatMoney(getInvoiceBalance(paymentRequestInvoice))}` },
-                    { value: 'custom', label: 'Custom installment — choose an amount' },
-                  ]}
+                  options={paymentRequestInvoice.invoice_kind === 'deposit'
+                    ? [{ value: 'deposit', label: 'Initial booking payment + refundable security deposit — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) }]
+                    : paymentRequestInvoice.invoice_kind === 'final_balance'
+                      ? [{ value: 'balance', label: 'Remaining Final Event Price balance — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) }]
+                      : [
+                        { value: 'deposit', label: 'Initial booking payment + refundable security deposit — ' + formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice)) },
+                        { value: 'balance', label: 'Pay invoice in full — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) },
+                        { value: 'custom', label: 'Custom installment — choose an amount' },
+                      ]}
                 />
               </div>
-              {paymentRequestKind === 'custom' ? (
+              {paymentRequestKind === 'custom' && paymentRequestInvoice.invoice_kind !== 'deposit' && paymentRequestInvoice.invoice_kind !== 'final_balance' ? (
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Custom amount</label>
                   <input type="number" min="0.50" max={getInvoiceBalance(paymentRequestInvoice)} step="0.01" required value={customPaymentAmount} onChange={(event) => setCustomPaymentAmount(event.target.value)} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 font-mono text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
@@ -6675,7 +6712,7 @@ export default function LeadDetailPage({
                 <PortalCloseButton onClick={() => setPdfPreviewInvoice(null)} aria-label="Close PDF preview window" />
               </div>
             </div>
-            <PortalPdfViewer url={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`} title={pdfPreviewInvoice.status === 'draft' ? 'estimate' : 'invoice'} />
+            <PortalPdfViewer url={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`} title={pdfPreviewInvoice.status === 'draft' ? 'final proposal draft' : 'invoice'} />
           </div>
         ) : null}
       </PortalModal>
@@ -6755,6 +6792,14 @@ export default function LeadDetailPage({
         clientEmail={lead.email}
         eventType={activeEventForDisplay?.event_type || lead.event_type}
         eventDate={activeEventForDisplay?.target_date || lead.target_date}
+        onEventDateChange={(value) => {
+          setProposalContext((current) => ({ ...current, event_date: value }))
+        }}
+        eventGuestCount={proposalGuestCount}
+        onEventGuestCountChange={(value) => {
+          setProposalGuestCount(value)
+          setProposalContext((current) => ({ ...current, expected_guest_count: Number(value) || undefined }))
+        }}
         description={invoiceDesc}
         onDescriptionChange={setInvoiceDesc}
         dueDate={invoiceDueDate}
@@ -6763,8 +6808,24 @@ export default function LeadDetailPage({
         onOfferExpiryTimeChange={setInvoiceOfferExpiryTime}
         discountPercent={invoiceDiscountPercent}
         onDiscountPercentChange={setInvoiceDiscountPercent}
+        discountType={invoiceDiscountType}
+        onDiscountTypeChange={setInvoiceDiscountType}
+        discountValue={invoiceDiscountValue}
+        onDiscountValueChange={setInvoiceDiscountValue}
         items={invoiceItems}
         onItemsChange={setInvoiceItems}
+        proposalContext={proposalContext}
+        onProposalContextChange={(context) => {
+          setProposalContext(context)
+          if (context.expected_guest_count !== undefined) setProposalGuestCount(String(context.expected_guest_count))
+        }}
+        selectedPackageId={selectedProposalPackageId}
+        onSelectedPackageIdChange={(packageId) => {
+          setSelectedProposalPackageId(packageId)
+          setProposalContext((current) => ({ ...current, package_id: packageId }))
+        }}
+        onCalculationChange={handleProposalCalculationChange}
+        pricingEndpoint="/api/proposal-pricing"
         notes={invoiceNotes}
         onNotesChange={setInvoiceNotes}
         taxRate={invoiceTaxRate}
@@ -6946,151 +7007,6 @@ export default function LeadDetailPage({
             </form>
       </PortalModal>
 
-      {/* Booking creation modal */}
-      <PortalModal isOpen={isBookingModalOpen} onClose={() => setIsBookingModalOpen(false)} maxWidth="max-w-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Create Booking Record</h3>
-                <p className="mt-1 text-[11px] text-zinc-500">This keeps the calendar, contract, and deposit details tied to the lead.</p>
-              </div>
-              <PortalCloseButton onClick={() => setIsBookingModalOpen(false)} aria-label="Close booking creator modal" />
-            </div>
-
-            <form onSubmit={handleCreateBooking} className="flex-1 overflow-y-auto bg-[#080706] p-6 space-y-5 portal-scrollbar">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Event Date</label>
-                  <PortalDatePicker
-                    value={bookingEventDate}
-                    onChange={setBookingEventDate}
-                    className="w-full"
-                    placeholder="Select event date"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Booking Status</label>
-                  <PortalSelect
-                    value={bookingStatus}
-                    onChange={(value) => setBookingStatus(value as LuxorBookingStatus)}
-                    className="w-full"
-                    options={[
-                      { value: 'tentative', label: 'Tentative' },
-                      { value: 'confirmed', label: 'Confirmed' },
-                      { value: 'draft', label: 'Draft' },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Start Time</label>
-                  <PortalSelect
-                    value={bookingStartTime}
-                    onChange={setBookingStartTime}
-                    options={EVENT_TIME_OPTIONS}
-                    placeholder="Select start time"
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">End Time</label>
-                  <PortalSelect
-                    value={bookingEndTime}
-                    onChange={setBookingEndTime}
-                    options={EVENT_TIME_OPTIONS}
-                    placeholder="Select end time"
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.04] p-4 text-[11px] leading-5 text-zinc-400">
-                <p className="font-semibold uppercase tracking-widest text-[#f1d27a]">Payment schedule</p>
-                <p className="mt-1">The negotiated reservation deposit is due when the agreement is signed. The remaining event balance and refundable security deposit are automatically due 60 days before the event.</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Package Name</label>
-                <PortalSelect
-                  value={bookingPackageName}
-                  onChange={setBookingPackageName}
-                  placeholder="Select the agreed package"
-                  options={LUXOR_PACKAGE_OPTIONS}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contract Total</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    required
-                    value={bookingContractTotal}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^0-9.]/g, '')
-                      setBookingContractTotal(value)
-                      if (!bookingDepositRequired.trim()) setBookingDepositRequired(defaultLuxorReservationDeposit(value).toFixed(2))
-                    }}
-                    placeholder="2500"
-                    className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 outline-none focus:border-blue-500"
-                  />
-                  <p className="text-[10px] leading-4 text-zinc-600">If there is already an invoice, this starts from that total.</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Reservation Deposit Due at Signing</label>
-                  <div className="flex overflow-hidden rounded border border-zinc-800 bg-zinc-950 focus-within:border-blue-500">
-                    <span className="flex items-center border-r border-zinc-800 px-3 text-xs font-bold text-[#caa24c]">$</span>
-                    <input type="text" inputMode="decimal" value={bookingDepositRequired} onChange={(e) => setBookingDepositRequired(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => setBookingDepositRequired(parseLuxorCurrency(bookingDepositRequired).toFixed(2))} placeholder="625.00" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs text-zinc-300 outline-none" />
-                  </div>
-                  <p className="text-[10px] leading-4 text-zinc-600">Negotiable. Defaults to 30%: {formatLuxorCurrency(defaultLuxorReservationDeposit(bookingContractTotal))}.</p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Refundable Security Deposit</label>
-                <div className="flex overflow-hidden rounded border border-zinc-800 bg-zinc-950 focus-within:border-blue-500">
-                  <span className="flex items-center border-r border-zinc-800 px-3 text-xs font-bold text-[#caa24c]">$</span>
-                  <input type="text" inputMode="decimal" value={bookingSecurityDepositAmount} onChange={(e) => setBookingSecurityDepositAmount(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => setBookingSecurityDepositAmount(parseLuxorCurrency(bookingSecurityDepositAmount).toFixed(2))} className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs text-zinc-300 outline-none" />
-                </div>
-                <p className="text-[10px] leading-4 text-zinc-600">Due with the remaining balance 60 days before the event. Any undisputed remainder is returned within 14 business days after the event.</p>
-              </div>
-
-              <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Client payment preference</p>
-                <p className="mt-1 text-[10px] leading-4 text-zinc-500">This pre-fills the client’s payment-choice page after they sign. They can still choose differently.</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1.5"><label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preferred method</label><PortalSelect value={bookingPaymentMethod} onChange={(value) => setBookingPaymentMethod(value as 'card' | 'zelle' | 'cash' | 'check')} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Preferred amount</label><PortalSelect value={bookingPaymentAmount} onChange={(value) => setBookingPaymentAmount(value as 'deposit' | 'full')} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Booking Notes</label>
-                <textarea
-                  value={bookingNotes}
-                  onChange={(e) => setBookingNotes(e.target.value)}
-                  placeholder="Include venue timing, package notes, setup details, or anything contract-related."
-                  className="w-full h-24 rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-300 outline-none focus:border-blue-500 font-sans"
-                />
-              </div>
-
-              <div className="rounded-xl border border-zinc-900 bg-zinc-950/50 p-4 text-[11px] leading-5 text-zinc-500">
-                <p className="font-semibold text-zinc-300">What happens next</p>
-                <p className="mt-1">We save the booking and prepare the reservation-deposit invoice, agreement, and Guest Guide package. The date becomes official after both payment and signature.</p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submittingBooking || !bookingEventDate || !bookingStartTime || !bookingEndTime || !bookingContractTotal.trim()}
-                className="w-full rounded-lg bg-blue-600 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-xl shadow-blue-600/20 transition-colors hover:bg-blue-500 disabled:opacity-40"
-              >
-                {submittingBooking ? 'Saving Booking...' : 'Save Booking Record'}
-              </button>
-            </form>
-      </PortalModal>
     </PortalPageFrame>
   )
 }
@@ -7283,7 +7199,7 @@ function ClientSummaryCard({
     { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
     { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
     { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
-    { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Guests (Estimated)` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
+    { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
     { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'select', options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
   ]
 
@@ -8156,8 +8072,8 @@ function getLeadNextStep(lead: LuxorInquiry, latestBooking: LuxorBooking | null,
   if (lead.status === 'booked') {
     if (!latestBooking) {
       return {
-        title: 'Create booking',
-        detail: 'The lead is booked, but the booking record is missing',
+        title: 'Review final proposal acceptance',
+        detail: 'A booking is created automatically when the client accepts the locked final proposal',
       }
     }
 

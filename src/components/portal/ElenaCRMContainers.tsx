@@ -256,7 +256,7 @@ export function ElenaContractCard({
       }
       setSent(true)
       if (onSuccess) {
-        onSuccess(`Sent the proposal and agreement package to **${payload.clientEmail}**. Payment will follow after signature. 📄✍️`)
+        onSuccess(`Sent the Event Agreement to **${payload.clientEmail}**. Payment will follow after signature. 📄✍️`)
       }
     } catch (err) {
       console.error(err)
@@ -341,7 +341,7 @@ export function ElenaContractCard({
               className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              <span>Send Proposal + Agreement</span>
+              <span>Resend Event Agreement</span>
             </button>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-400">

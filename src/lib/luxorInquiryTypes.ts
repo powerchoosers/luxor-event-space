@@ -198,10 +198,50 @@ export type LuxorInvoiceLineItem = {
   catalogId?: string
   category?: string
   included?: boolean
+  /** How this line reached the proposal. Keeps the owner audit trail clear. */
+  pricingRole?: 'required' | 'included' | 'add_on' | 'discount' | 'tax' | 'custom'
+  /** The pricing rule/version that produced this exact, locked line. */
+  pricingRuleId?: string
+  /** Used for the clear three-bucket payment summary. */
+  paymentBucket?: 'venue' | 'event' | 'security_deposit'
+  /** Required lines cannot be removed by a prospect or normal staff editing. */
+  required?: boolean
+  /** Client-safe supporting copy for a service or package inclusion. */
+  detail?: string
   description: string
   quantity: number
   unitPrice: number
   total: number
+}
+
+export type LuxorProposalPaymentPlan = {
+  mode: 'deposit_and_balance' | 'pay_in_full'
+  booking_payment_percent: number
+  final_payment_due_days_before_event: number
+}
+
+export type LuxorProposalContext = {
+  version: number
+  pricing_config_version?: number
+  package_id?: string
+  package_name?: string
+  event_type?: string
+  event_date?: string
+  start_time?: string
+  end_time?: string
+  expected_guest_count?: number
+  rental_period?: 'morning' | 'evening' | 'full_day'
+  event_access?: string
+  venue_services_total?: number
+  event_services_total?: number
+  final_event_price?: number
+  refundable_security_deposit?: number
+  amount_due_to_book?: number | null
+  payment_plan?: LuxorProposalPaymentPlan
+  pricing_selection?: Record<string, unknown>
+  calculation_warnings?: string[]
+  calculation_errors?: string[]
+  [key: string]: unknown
 }
 
 export type LuxorInvoice = {
@@ -220,6 +260,8 @@ export type LuxorInvoice = {
   original_total?: number | null
   discount_percent?: number | null
   discount_amount?: number | null
+  discount_type?: 'percent' | 'fixed' | null
+  discount_value?: number | null
   offer_expires_at?: string | null
   offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn' | null
   offer_redeemed_at?: string | null
@@ -243,6 +285,14 @@ export type LuxorInvoice = {
   stripe_checkout_url?: string | null
   stripe_checkout_opened_at?: string | null
   stripe_invoice_id?: string | null
+  /** Immutable pricing and payment snapshot used by the email, PDF, client page, and contract. */
+  proposal_context?: LuxorProposalContext | null
+  proposal_accepted_at?: string | null
+  proposal_accepted_ip?: string | null
+  proposal_accepted_user_agent?: string | null
+  price_locked_at?: string | null
+  supersedes_invoice_id?: string | null
+  proposal_version?: number | null
 }
 
 export type LuxorDocumentType = 'proposal' | 'invoice' | 'contract' | 'guest_guide' | 'executed_contract' | 'contract_audit'

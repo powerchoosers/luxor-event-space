@@ -50,8 +50,14 @@ export function hasLuxorOffer(invoice: Pick<LuxorInvoice, 'discount_percent' | '
   return Number(invoice.discount_percent || 0) > 0 && Number(invoice.original_total || invoice.total || 0) > Number(invoice.total || 0) + MONEY_EPSILON
 }
 
-export function isLuxorOfferExpired(invoice: Pick<LuxorInvoice, 'offer_expires_at' | 'offer_status'>, now = new Date()) {
+export function isLuxorOfferExpired(invoice: Pick<LuxorInvoice, 'offer_expires_at' | 'offer_status' | 'proposal_accepted_at'>, now = new Date()) {
   if (invoice.offer_status === 'withdrawn' || invoice.offer_status === 'expired') return true
+  // An acceptance freezes this exact proposal before its stated availability
+  // deadline. It must remain available for the already-created Event
+  // Agreement even if that original deadline passes while the client is
+  // reviewing or signing it. Explicitly withdrawn or expired records above
+  // still remain unavailable.
+  if (invoice.proposal_accepted_at) return false
   if (!invoice.offer_expires_at) return false
   const expiry = new Date(invoice.offer_expires_at)
   return Number.isNaN(expiry.getTime()) || expiry.getTime() <= now.getTime()

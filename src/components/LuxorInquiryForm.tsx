@@ -256,7 +256,7 @@ export function LuxorInquiryForm({
                 <FieldLabel label="Target event date">
                   <PortalDatePicker value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
-                <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Estimated guests" placeholder="For example, 120" inputMode="numeric" />
+                <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />
                 <FieldLabel label="Which package fits best?">
                   <PortalSelect value={packageInterest} onChange={setPackageInterest} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a package" options={LUXOR_PACKAGE_INTEREST_OPTIONS} />
                 </FieldLabel>

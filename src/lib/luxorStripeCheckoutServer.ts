@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot, roundLuxorMoney } from './luxorOffer'
+import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -41,6 +42,7 @@ export async function createLuxorPostContractCheckout(input: {
   origin: string
   paymentAmount?: number
   paymentLabel?: string
+  /** @deprecated This flag is ignored. Stripe is never available before signing. */
   allowPreContract?: boolean
   masterInvoiceId?: string
 }) {
@@ -54,29 +56,67 @@ export async function createLuxorPostContractCheckout(input: {
   const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
   if (balanceDue <= 0) return null
 
-  if (!input.allowPreContract && booking.contract_status !== 'signed') {
+  // This is intentionally unconditional. A caller must never be able to open
+  // Stripe before a completed Event Agreement, including a reservation payment.
+  if (booking.contract_status !== 'signed') {
     throw new Error('The agreement must be signed before Stripe checkout can be created.')
   }
 
-  const requestedDeposit = invoice.invoice_kind === 'final_balance'
-    ? 0
-    : Math.max(0, Number(booking.deposit_required || 0) - paidTotal)
+  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+    throw new Error('Stripe checkout can be created only for a scheduled booking-payment invoice.')
+  }
+
+  // Both scheduled invoices are exact, locked amounts. The deposit child
+  // invoice includes the initial booking payment plus the separate $750
+  // security hold; the final invoice contains only the remaining Event Price.
+  // Never let a UI caller create an ad hoc partial payment from either one.
+  const isInitialBookingPayment = invoice.invoice_kind === 'deposit'
+  if (isInitialBookingPayment) {
+    const securityDeposit = Number(invoice.line_items.find((item) =>
+      item.paymentBucket === 'security_deposit' ||
+      item.category === 'Security Deposit' ||
+      /refundable\s+security\s+deposit/i.test(item.description || ''),
+    )?.total || 0)
+    if (Math.abs(securityDeposit - LUXOR_DEFAULT_SECURITY_DEPOSIT) > 0.01) {
+      throw new Error('The initial booking invoice must include the separate $750 refundable security deposit.')
+    }
+  } else if (invoice.line_items.some((item) =>
+    item.paymentBucket === 'security_deposit' ||
+    item.category === 'Security Deposit' ||
+    /refundable\s+security\s+deposit/i.test(item.description || ''),
+  )) {
+    throw new Error('The final event balance cannot include the refundable security deposit.')
+  }
   const requestedAmount = Number(input.paymentAmount)
-  const paymentAmount = Number.isFinite(requestedAmount)
+  const explicitPaymentAmount = Number.isFinite(requestedAmount)
     ? Math.round(requestedAmount * 100) / 100
-    : Math.min(balanceDue, requestedDeposit > 0 ? requestedDeposit : balanceDue)
+    : undefined
+  if (explicitPaymentAmount !== undefined && Math.abs(explicitPaymentAmount - balanceDue) > 0.01) {
+    throw new Error(isInitialBookingPayment
+      ? 'The initial booking payment must include the separate refundable security deposit in full.'
+      : 'The Stripe payment must equal the remaining Final Event Price balance.')
+  }
+  const paymentAmount = balanceDue
   if (paymentAmount < 0.5 || paymentAmount > balanceDue) {
     throw new Error(`Payment must be between $0.50 and $${balanceDue.toFixed(2)}.`)
   }
 
-  const paymentLabel = String(input.paymentLabel || (requestedDeposit > 0 ? 'Event deposit' : 'Remaining event balance')).trim().slice(0, 80)
+  const paymentLabel = isInitialBookingPayment
+    ? 'Initial Booking Payment + Refundable Security Deposit'
+    : 'Remaining Final Event Price Balance'
   const secretKey = process.env.STRIPE_SECRET_KEY
   if (!secretKey) throw new Error('Stripe is not connected. Add STRIPE_SECRET_KEY before contract payment links can be delivered.')
 
   const stripe = new Stripe(secretKey)
   const origin = input.origin.replace(/\/$/, '')
   const offer = luxorOfferSnapshot(invoice)
-  const appliesStripeDiscount = offer.active && invoice.invoice_kind !== 'final_balance'
+  // Proposal totals are already final and price-locked before child payment
+  // invoices are made. Applying an offer in Stripe here would discount them a
+  // second time.
+  // Checkout is restricted to deposit/final-balance child invoices above.
+  // Their totals already reflect the locked final proposal, so applying an
+  // offer in Stripe here would discount the customer a second time.
+  const appliesStripeDiscount = false
   const discountFactor = 1 - (offer.percent / 100)
   const undiscountedPaymentAmount = appliesStripeDiscount && discountFactor > 0
     ? roundLuxorMoney(paymentAmount / discountFactor)

@@ -3,16 +3,44 @@ import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLux
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
-import { supabaseRest } from '@/lib/supabaseRestServer'
-import { calculateLuxorOfferPricing, luxorOfferSnapshot } from '@/lib/luxorOffer'
-import { defaultLuxorReservationDeposit, LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
+import { LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
 import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+
+function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
+  return Boolean(
+    proposal
+    && proposal.invoice_kind === 'event'
+    && (proposal.price_locked_at || proposal.status === 'sent' || proposal.proposal_accepted_at),
+  )
+}
+
+function changesLockedAgreementTerms(updates: Record<string, unknown>) {
+  return [
+    'invoice_id',
+    'lead_event_id',
+    'client_name',
+    'email',
+    'phone',
+    'event_type',
+    'event_date',
+    'start_time',
+    'end_time',
+    'guest_count',
+    'package_name',
+    'contract_total',
+    'deposit_required',
+    'security_deposit_amount',
+    'final_payment_due_date',
+    'notes',
+    'contract_status',
+  ].some((key) => updates[key] !== undefined)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,83 +73,82 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    if (!body.client_name) {
-      return NextResponse.json({ error: 'client_name is required.' }, { status: 400 })
+    const proposalId = typeof body.invoice_id === 'string' ? body.invoice_id.trim() : ''
+    if (!proposalId) {
+      return NextResponse.json({ error: 'Bookings are created automatically after the client accepts a published final proposal. Publish the proposal instead of creating a standalone booking.' }, { status: 409 })
     }
 
-    const leadEventId = body.lead_event_id ? String(body.lead_event_id) : null
-    if (leadEventId && (!body.inquiry_id || !await getLuxorLeadEventForInquiry(leadEventId, String(body.inquiry_id)))) {
+    const proposal = await getInvoice(proposalId)
+    if (!proposal || proposal.invoice_kind !== 'event' || proposal.status !== 'sent' || !proposal.price_locked_at || !proposal.proposal_accepted_at || proposal.offer_status === 'withdrawn') {
+      return NextResponse.json({ error: 'A client-accepted, price-locked final proposal is required before a booking can be created.' }, { status: 409 })
+    }
+    if (!proposal.inquiry_id || proposal.inquiry_id !== body.inquiry_id) {
+      return NextResponse.json({ error: 'The final proposal must belong to the booking lead.' }, { status: 409 })
+    }
+
+    const existingBooking = (await listLuxorBookingsByInquiry(proposal.inquiry_id)).find((item) => item.invoice_id === proposal.id)
+    if (existingBooking) return NextResponse.json(existingBooking)
+
+    const context = proposal.proposal_context && typeof proposal.proposal_context === 'object'
+      ? proposal.proposal_context as Record<string, unknown>
+      : null
+    const eventDate = typeof context?.event_date === 'string' ? context.event_date : null
+    const paymentPlan = context?.payment_plan && typeof context.payment_plan === 'object'
+      ? context.payment_plan as Record<string, unknown>
+      : null
+    const paymentMode = paymentPlan?.mode === 'deposit_and_balance' || paymentPlan?.mode === 'pay_in_full'
+      ? paymentPlan.mode
+      : null
+    const bookingPaymentPercent = Number(paymentPlan?.booking_payment_percent)
+    const finalPaymentDays = Number(paymentPlan?.final_payment_due_days_before_event)
+    if (!context || !eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !paymentMode || !Number.isFinite(bookingPaymentPercent) || bookingPaymentPercent < 0 || bookingPaymentPercent > 100 || !Number.isInteger(finalPaymentDays) || finalPaymentDays < 0) {
+      return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
+    }
+
+    const leadEventId = proposal.lead_event_id || (body.lead_event_id ? String(body.lead_event_id) : null)
+    if (leadEventId && !await getLuxorLeadEventForInquiry(leadEventId, proposal.inquiry_id)) {
       return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
     }
-
-    if (body.event_date && (body.status === 'tentative' || body.status === 'confirmed')) {
-      const conflicts = await findLuxorBookingConflicts(body.event_date)
-      if (conflicts.length > 0) {
-        return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
-      }
+    const conflicts = await findLuxorBookingConflicts(eventDate)
+    if (conflicts.length > 0) {
+      return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
     }
 
-    let contractTotal = Number(body.contract_total || 0)
-    let eventTotalForDeposit = contractTotal
-    let proposalOffer: ReturnType<typeof luxorOfferSnapshot> | null = null
-    if (body.invoice_id) {
-      const proposal = await getInvoice(body.invoice_id)
-      if (proposal && proposal.status !== 'paid') {
-        const lineItems = proposal.line_items.filter((item) => item.category !== 'Security Deposit' && !/refundable security deposit/i.test(item.description))
-        const pricing = calculateLuxorOfferPricing({ lineItems, taxRate: Number(proposal.tax_rate || 0), discountPercent: Number(proposal.discount_percent || 0) })
-        const updatedProposal = await updateInvoice(proposal.id, {
-          line_items: lineItems,
-          subtotal: pricing.subtotal,
-          total: pricing.total,
-          original_subtotal: pricing.originalSubtotal,
-          original_total: pricing.originalTotal,
-          discount_amount: pricing.discountAmount,
-        })
-        if (updatedProposal) {
-          contractTotal = Number(updatedProposal.total || 0)
-          proposalOffer = luxorOfferSnapshot(updatedProposal)
-          const securityDeposit = lineItems.find((item) => item.category === 'Security Deposit')
-          eventTotalForDeposit = Math.max(0, contractTotal - Number(securityDeposit?.total || 0))
-        }
-      }
-    }
-
-    const requestedDeposit = parseLuxorCurrency(body.deposit_required)
-    const securityDepositAmount = parseLuxorCurrency(body.security_deposit_amount) || LUXOR_DEFAULT_SECURITY_DEPOSIT
+    const dueDate = new Date(`${eventDate}T12:00:00`)
+    dueDate.setDate(dueDate.getDate() - finalPaymentDays)
+    const contractTotal = Number(proposal.total || 0)
+    const reservationPayment = paymentMode === 'pay_in_full'
+      ? contractTotal
+      : Math.round(contractTotal * bookingPaymentPercent) / 100
     const normalizedBody = {
       ...body,
+      inquiry_id: proposal.inquiry_id,
+      invoice_id: proposal.id,
+      lead_event_id: leadEventId,
+      client_name: proposal.client_name || body.client_name,
+      event_type: typeof context.event_type === 'string' ? context.event_type : proposal.event_type || body.event_type,
+      event_date: eventDate,
+      start_time: typeof context.start_time === 'string' ? context.start_time : null,
+      end_time: typeof context.end_time === 'string' ? context.end_time : null,
+      guest_count: Number(context.expected_guest_count || body.guest_count || 0) || null,
+      package_name: typeof context.package_name === 'string' ? context.package_name : body.package_name || null,
+      status: 'tentative',
       contract_total: contractTotal,
+      deposit_required: reservationPayment,
+      security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
+      security_deposit_status: 'due',
+      final_payment_due_date: dueDate.toISOString().slice(0, 10),
       metadata: {
         ...(body.metadata || {}),
-        ...(proposalOffer ? { proposalOffer } : {}),
+        proposal_invoice_id: proposal.id,
+        proposal_version: proposal.proposal_version || 1,
+        final_proposal_context: context,
+        reservation_payment_mode: paymentMode,
+        reservation_payment_percent: paymentMode === 'pay_in_full' ? 100 : bookingPaymentPercent,
+        reservation_state: 'proposal_accepted_awaiting_contract',
       },
-      final_payment_due_date: luxorFinalPaymentDueDate(body.event_date),
-      deposit_required: Math.min(eventTotalForDeposit, requestedDeposit || defaultLuxorReservationDeposit(eventTotalForDeposit)),
-      security_deposit_amount: securityDepositAmount,
     }
-    let booking = await createLuxorBooking(normalizedBody)
-    if (booking.invoice_id && Number(booking.deposit_required || 0) > 0) {
-      const bookingInvoiceId = booking.invoice_id
-      const paidPayments = await listPaidPaymentsByInvoice(bookingInvoiceId)
-      const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-      if (paidTotal + 0.005 >= Number(booking.deposit_required)) {
-        const fullyPaid = Number(booking.contract_total || 0) > 0 && paidTotal + 0.005 >= Number(booking.contract_total)
-        const latestPaidAt = paidPayments.find((payment) => payment.paid_at)?.paid_at || new Date().toISOString()
-        booking = await updateLuxorBooking(booking.id, {
-          security_deposit_status: fullyPaid ? 'collected' : booking.security_deposit_status,
-          metadata: {
-            ...booking.metadata,
-            deposit_paid_before_booking: true,
-            deposit_paid_at: latestPaidAt,
-            ...(fullyPaid ? { final_payment_paid_at: latestPaidAt, final_payment_paid_before_booking: true } : {}),
-          },
-        }) || booking
-      }
-      await supabaseRest<null>(`luxor_payments?invoice_id=eq.${encodeURIComponent(bookingInvoiceId)}&booking_id=is.null`, {
-        method: 'PATCH',
-        body: JSON.stringify({ booking_id: booking.id }),
-      })
-    }
+    const booking = await createLuxorBooking(normalizedBody)
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
       if (inquiry && inquiry.status !== 'closed_lost') {
@@ -187,6 +214,25 @@ export async function PATCH(request: NextRequest) {
     const existing = await getLuxorBooking(id)
     if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
+    // Signing is recorded only by the signature workflow. That workflow
+    // captures the signer audit trail, locks the agreement, and then opens
+    // the payment step. A portal PATCH must not be able to skip it.
+    if (updates.contract_status === 'signed') {
+      return NextResponse.json({ error: 'A contract can be marked signed only by the secure signature workflow.' }, { status: 409 })
+    }
+
+    const linkedProposal = existing.invoice_id ? await getInvoice(existing.invoice_id) : null
+    if (isFinalProposalLocked(linkedProposal) && changesLockedAgreementTerms(updates)) {
+      return NextResponse.json({ error: 'This booking is tied to a locked final proposal. Create a revised proposal before changing agreement or pricing terms.' }, { status: 409 })
+    }
+
+    if (updates.invoice_id && updates.invoice_id !== existing.invoice_id) {
+      const replacementProposal = await getInvoice(String(updates.invoice_id))
+      if (isFinalProposalLocked(replacementProposal)) {
+        return NextResponse.json({ error: 'A locked final proposal can only create its booking through client acceptance.' }, { status: 409 })
+      }
+    }
+
     const leadEventId = updates.lead_event_id || existing.lead_event_id || null
     if (leadEventId && (!existing.inquiry_id || !await getLuxorLeadEventForInquiry(String(leadEventId), existing.inquiry_id))) {
       return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
@@ -204,8 +250,7 @@ export async function PATCH(request: NextRequest) {
     const normalizedUpdates = {
       ...updates,
       ...(updates.deposit_required === undefined ? {} : { deposit_required: parseLuxorCurrency(updates.deposit_required) }),
-      ...(updates.security_deposit_amount === undefined ? {} : { security_deposit_amount: parseLuxorCurrency(updates.security_deposit_amount) }),
-      ...(updates.event_date === undefined ? {} : { final_payment_due_date: luxorFinalPaymentDueDate(updates.event_date) }),
+      ...(updates.security_deposit_amount === undefined ? {} : { security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT }),
     }
     let booking = await updateLuxorBooking(id, normalizedUpdates)
     if (booking) {
@@ -275,7 +320,7 @@ function pipelineStageForBooking(booking: NonNullable<Awaited<ReturnType<typeof 
   if (metadata.closeout_completed_at) return 'closing'
   if (metadata.event_completed_at) return 'closing'
   if (booking.contract_status !== 'signed') return 'contract'
-  if (!metadata.deposit_paid_at && !metadata.deposit_paid_before_booking && booking.security_deposit_status !== 'collected') return 'deposit'
+  if (!metadata.deposit_paid_at && !metadata.deposit_paid_before_booking && booking.security_deposit_status !== 'held' && booking.security_deposit_status !== 'collected') return 'deposit'
   if (!metadata.planning_completed_at) return 'planning'
   if (!(metadata.final_payment_recorded_manually_at || metadata.final_payment_paid_at)) return 'final_payment'
   return 'event'

@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { updateLuxorBooking, getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
-import { createLuxorSignatureRequest, listLuxorSignatureRequests } from '@/lib/luxorSignaturesServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
-import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +37,18 @@ export async function POST(request: NextRequest) {
       if (inquiryId) {
         updatedRecord = await updateLuxorInquiry(inquiryId, updates)
       } else if (bookingId) {
-        updatedRecord = await updateLuxorBooking(bookingId, updates)
+        // Reuse the protected booking endpoint so Elena cannot sidestep the
+        // locked-proposal, contract-signing, conflict, and audit safeguards.
+        const bookingResponse = await fetch(`${request.nextUrl.origin}/api/bookings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Cookie: request.headers.get('cookie') || '' },
+          body: JSON.stringify({ id: bookingId, ...updates }),
+        })
+        const bookingBody = await bookingResponse.json().catch(() => ({}))
+        if (!bookingResponse.ok) {
+          return NextResponse.json({ error: bookingBody.error || 'Unable to update the booking.' }, { status: bookingResponse.status })
+        }
+        updatedRecord = bookingBody
       }
 
       return NextResponse.json({ success: true, updatedRecord })
@@ -68,47 +78,45 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Booking record not found' }, { status: 404 })
       }
 
-      if (body.sendEmail) {
-        if (!existingBooking.invoice_id) {
-          return NextResponse.json({ error: 'Build and link the proposal before sending the agreement package.' }, { status: 409 })
+      const proposal = existingBooking.invoice_id ? await getInvoice(existingBooking.invoice_id) : null
+      if (!proposal || proposal.invoice_kind !== 'event' || proposal.status !== 'sent' || !proposal.price_locked_at || !proposal.proposal_accepted_at || proposal.offer_status === 'withdrawn') {
+        return NextResponse.json({ error: 'The client must first accept a sent, price-locked final proposal. That acceptance automatically starts the Event Agreement.' }, { status: 409 })
+      }
+
+      const activeSignature = await getActiveLuxorSignatureRequestByBooking(existingBooking.id)
+      if (!body.sendEmail) {
+        if (!activeSignature) {
+          return NextResponse.json({ error: 'No active Event Agreement is available yet. Ask the client to accept the final proposal first.' }, { status: 409 })
         }
-        const sendRes = await fetch(`${request.nextUrl.origin}/api/invoices/${existingBooking.invoice_id}/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Cookie: request.headers.get('cookie') || '' },
-          body: JSON.stringify({ mode: 'proposal_contract' }),
-        })
-        const sendData = await sendRes.json().catch(() => ({}))
-        if (!sendRes.ok) return NextResponse.json({ error: sendData.error || 'Failed to deliver the proposal and agreement.' }, { status: sendRes.status })
-        return NextResponse.json({ success: true, signatureRequestId: sendData.signature?.id, signingUrl: sendData.signingUrl, sentEmail: true })
-      }
-
-      const activeSigs = await listLuxorSignatureRequests(10)
-      const existingSig = activeSigs.find((s) => s.booking_id === targetBookingId && s.status !== 'void')
-
-      let signatureReq = existingSig || null
-
-      if (!signatureReq) {
-        signatureReq = await createLuxorSignatureRequest(existingBooking)
-      }
-
-      const PUBLIC_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
-      const signingUrl = `${PUBLIC_BASE.replace(/\/$/, '')}/secure-portal/sign/${signatureReq.token}`
-
-      // Send confirmation email with direct signing link if requested
-      if (body.sendEmail && signatureReq.client_email) {
-        await sendLuxorZohoEmail({
-          to: signatureReq.client_email,
-          subject: `Luxor Event Space Contract Signature Request - ${existingBooking.event_type || 'Event'}`,
-          content: `Hi ${signatureReq.client_name},\n\nYour digital event agreement for Luxor Event Space is ready for signature.\n\nPlease review and sign your contract here:\n${signingUrl}\n\nThank you,\nArianna Patterson\nLuxor Event Space`,
-          fromName: 'Arianna Patterson',
+        const publicBase = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
+        return NextResponse.json({
+          success: true,
+          signatureRequestId: activeSignature.id,
+          signingUrl: `${publicBase.replace(/\/$/, '')}/secure-portal/sign/${activeSignature.token}`,
+          sentEmail: false,
         })
       }
 
+      // Acceptance creates the first agreement email. This assistant may only
+      // resend that agreement; it cannot create a contract before acceptance.
+      const signatureRes = await fetch(`${request.nextUrl.origin}/api/signatures`, {
+        method: activeSignature ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: request.headers.get('cookie') || '' },
+        body: JSON.stringify(activeSignature
+          ? { bookingId: existingBooking.id, action: 'resend' }
+          : { bookingId: existingBooking.id, sendEmail: true }),
+      })
+      const signatureData = await signatureRes.json().catch(() => ({}))
+      if (!signatureRes.ok) return NextResponse.json({ error: signatureData.error || 'Failed to resend the Event Agreement.' }, { status: signatureRes.status })
+      const signature = signatureData.signature
+      const publicBase = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
       return NextResponse.json({
         success: true,
-        signatureRequestId: signatureReq.id,
-        signingUrl,
-        sentEmail: Boolean(body.sendEmail),
+        signatureRequestId: signature?.id || activeSignature?.id,
+        signingUrl: signature?.token
+          ? `${publicBase.replace(/\/$/, '')}/secure-portal/sign/${signature.token}`
+          : activeSignature ? `${publicBase.replace(/\/$/, '')}/secure-portal/sign/${activeSignature.token}` : null,
+        sentEmail: true,
       })
     }
 
@@ -136,9 +144,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
       }
 
-      const PUBLIC_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com'
-      const publicToken = invoice.public_token || invoice.id
-      let checkoutUrl = invoice.stripe_checkout_url || `${PUBLIC_BASE.replace(/\/$/, '')}/proposal/${publicToken}`
+      const invoiceBookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
+      const booking = invoice.booking_id
+        ? await getLuxorBooking(invoice.booking_id)
+        : invoiceBookings.find((candidate) => candidate.invoice_id === invoice.id) || null
+      if ((invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') || booking?.contract_status !== 'signed') {
+        return NextResponse.json({ error: 'A signed Event Agreement and a scheduled booking-payment invoice are required before a Stripe link can be sent or copied.' }, { status: 409 })
+      }
+
+      let checkoutUrl = invoice.stripe_checkout_url || ''
 
       // Trigger standard send if email requested
       if (body.sendEmail) {
@@ -164,7 +178,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         invoiceId: invoice.id,
-        checkoutUrl,
+        checkoutUrl: checkoutUrl || null,
         sentEmail: Boolean(body.sendEmail),
       })
     }

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { listNotesByInquiry, createNote } from '@/lib/luxorNotesServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
+import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -26,36 +27,59 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
     const paidTotal = paidPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
+    let balanceDue = Math.max(0, Math.round((Number(invoice.total) - paidTotal) * 100) / 100)
 
     if (balanceDue <= 0) {
       return NextResponse.json({ error: 'Invoice is already fully paid.' }, { status: 400 })
     }
 
-    const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'sixty_day_deadline' | 'final_payment' }
+    const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'final_payment' }
     const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-    const booking = bookings.find((b) => b.invoice_id === invoice.id) || bookings[0] || null
+    const booking = invoice.booking_id
+      ? await getLuxorBooking(invoice.booking_id)
+      : bookings.find((b) => b.invoice_id === invoice.id) || bookings[0] || null
+    const isPaymentInvoice = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance'
+
+    // A payment reminder is never a way around the signed-agreement gate.
+    // In particular, do not forward an old stored Stripe URL for a booking
+    // whose contract is still pending.
+    if (isPaymentInvoice && booking?.contract_status !== 'signed') {
+      return NextResponse.json({ error: 'The Event Agreement must be signed before a payment reminder or Stripe link can be sent.' }, { status: 409 })
+    }
+    if (invoice.invoice_kind === 'final_balance' && !booking?.final_payment_due_date) {
+      return NextResponse.json({ error: 'Configure the final payment due date in the approved payment plan before sending a final-balance reminder.' }, { status: 409 })
+    }
 
     const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
 
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-    const publicToken = invoice.public_token || crypto.randomUUID()
-    if (!invoice.public_token) {
-      await updateInvoice(invoice.id, { public_token: publicToken })
+    let reviewUrl: string
+    let checkoutId: string | null = null
+    if (isPaymentInvoice && booking) {
+      // Never reuse a stored URL blindly: Checkout Sessions expire. Creating
+      // through the post-contract helper either reuses a valid session or
+      // safely replaces it, and guarantees that the email CTA is Stripe.
+      const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })
+      if (!checkout) return NextResponse.json({ error: 'This payment invoice no longer has a balance due.' }, { status: 409 })
+      reviewUrl = checkout.checkoutUrl
+      checkoutId = checkout.checkoutId
+      balanceDue = checkout.paymentAmount
+    } else {
+      const publicToken = invoice.public_token || crypto.randomUUID()
+      if (!invoice.public_token) {
+        await updateInvoice(invoice.id, { public_token: publicToken })
+      }
+      reviewUrl = `${origin}/proposal/${publicToken}`
     }
-
-    const reviewUrl = invoice.stripe_checkout_url || `${origin}/proposal/${publicToken}`
     const now = new Date().toISOString()
-
-    let daysUntil60Days: number | null = null
-    const targetEventDate = booking?.event_date || inquiry.target_date
-    if (targetEventDate) {
-      const eventTime = new Date(`${targetEventDate}T12:00:00-05:00`).getTime()
-      const sixtyDaysBefore = eventTime - 60 * 24 * 60 * 60_000
-      daysUntil60Days = Math.round((sixtyDaysBefore - Date.now()) / (24 * 60 * 60_000))
-    }
-
-    const reminderKind = body.kind || (daysUntil60Days !== null && daysUntil60Days <= 14 ? 'sixty_day_deadline' : 'unpaid_invoice')
+    const reminderKind = invoice.invoice_kind === 'final_balance'
+      ? 'final_payment'
+      : body.kind === 'unpaid_invoice'
+        ? 'unpaid_invoice'
+        : 'unpaid_invoice'
+    const dueDate = invoice.invoice_kind === 'final_balance'
+      ? booking?.final_payment_due_date || null
+      : invoice.due_date || null
 
     const email = await buildAiTailoredInvoiceReminderEmail({
       inquiry,
@@ -63,7 +87,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       booking,
       reviewUrl,
       balanceDue,
-      dueDate: invoice.due_date || booking?.final_payment_due_date,
+      dueDate,
       notes,
       kind: reminderKind,
     })
@@ -71,7 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const job = await createLuxorEmailJob({
       inquiryId: inquiry.id,
       bookingId: booking?.id || null,
-      jobType: reminderKind === 'sixty_day_deadline' ? 'sixty_day_payment_reminder' : 'unpaid_invoice_reminder',
+      jobType: reminderKind === 'final_payment' ? 'final_payment_reminder' : 'unpaid_invoice_reminder',
       recipientEmail: inquiry.email,
       subject: email.subject,
       body: email.body,
@@ -80,6 +104,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         manual: true,
         requestedBy: session.email,
         balance_due: balanceDue,
+        ...(checkoutId ? { checkout_session_id: checkoutId, flow_stage: 'post_signature_payment' } : {}),
         ai_generated: email.aiGenerated,
       },
     })
@@ -106,6 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         subject: email.subject,
         aiGenerated: email.aiGenerated,
         balanceDue,
+        ...(checkoutId ? { checkoutUrl: reviewUrl } : {}),
         recipient: inquiry.email,
       })
     } catch (sendError) {
