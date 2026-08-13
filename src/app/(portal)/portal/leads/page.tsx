@@ -1144,7 +1144,6 @@ function LeadEntryDrawer({
   onClose: () => void
   children: React.ReactNode
 }) {
-  const [mounted, setMounted] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
@@ -1153,11 +1152,6 @@ function LeadEntryDrawer({
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
-
-  useEffect(() => {
-    setMounted(true)
-    return () => setMounted(false)
-  }, [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -1220,7 +1214,7 @@ function LeadEntryDrawer({
     }
   }, [isOpen])
 
-  if (!mounted) return null
+  if (typeof document === 'undefined') return null
 
   return createPortal(
     <AnimatePresence>
