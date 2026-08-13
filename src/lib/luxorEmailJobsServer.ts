@@ -750,6 +750,53 @@ export async function processLuxorEmailJobs(
         }
       }
 
+      if (job.job_type === 'contract_signature' && metadata.agreement_delivery === true) {
+        // The normal cron path arrives here only after the database RPC has
+        // claimed the queued row. The direct-query fallback needs its own
+        // compare-and-set claim before it starts building PDFs or talking to
+        // Zoho, otherwise two workers could send the same agreement package.
+        if (markSending) {
+          const [claimed] = await supabaseRest<LuxorEmailJob[]>(
+            `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(job.id)}&status=eq.queued`,
+            {
+              method: 'PATCH',
+              headers: { Prefer: 'return=representation' },
+              body: JSON.stringify({
+                status: 'sending',
+                attempts: Number(job.attempts || 0) + 1,
+                updated_at: new Date().toISOString(),
+              }),
+            },
+          )
+          if (!claimed) {
+            results.push({ id: job.id, status: 'skipped' })
+            continue
+          }
+          job = claimed
+        }
+
+        // Keep agreement delivery separate from the generic plain-text worker.
+        // It always rebuilds the frozen proposal + exact agreement + Guest
+        // Guide attachment set, then marks portal state sent only after Zoho
+        // accepts the message.
+        const {
+          cancelAlreadyDeliveredLuxorAgreementEmailJob,
+          deferLuxorAgreementEmailJob,
+          deliverLuxorAgreementEmailJob,
+        } = await import('./luxorAgreementDeliveryServer')
+        const delivery = await deliverLuxorAgreementEmailJob(job)
+        if (delivery.status === 'sent') {
+          results.push({ id: job.id, status: 'sent' })
+        } else if (delivery.status === 'already_delivered') {
+          await cancelAlreadyDeliveredLuxorAgreementEmailJob(job)
+          results.push({ id: job.id, status: 'skipped' })
+        } else {
+          await deferLuxorAgreementEmailJob(job)
+          results.push({ id: job.id, status: 'skipped' })
+        }
+        continue
+      }
+
       if (markSending) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
@@ -769,6 +816,10 @@ export async function processLuxorEmailJobs(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
       await updateLuxorEmailJob(job.id, { status: 'failed', last_error: message })
+      if (job.job_type === 'contract_signature' && job.metadata?.agreement_delivery === true) {
+        const { markLuxorAgreementEmailJobFailed } = await import('./luxorAgreementDeliveryServer')
+        await markLuxorAgreementEmailJobFailed(job, message)
+      }
       if (job.job_type === 'marketing_campaign') {
         await markMarketingJobResult(job, 'failed', message)
       }

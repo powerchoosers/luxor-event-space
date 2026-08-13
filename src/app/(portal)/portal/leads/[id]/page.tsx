@@ -185,6 +185,30 @@ function proposalServiceIds(value: unknown) {
     : []
 }
 
+function getCurrentFinalProposal(invoices: LuxorInvoice[]) {
+  return [...invoices]
+    .filter((invoice) => (!invoice.invoice_kind || invoice.invoice_kind === 'event') && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn')
+    .sort((a, b) => {
+      const aUpdatedAt = new Date(a.updated_at || a.created_at).getTime()
+      const bUpdatedAt = new Date(b.updated_at || b.created_at).getTime()
+      return bUpdatedAt - aUpdatedAt
+    })[0] || null
+}
+
+function getProposalDeliveryState(invoice: LuxorInvoice | null) {
+  const deliverySnapshot = asProposalRecord(invoice?.proposal_context?.delivery_snapshot)
+  const proposalEmail = asProposalRecord(deliverySnapshot?.proposal_email)
+  return typeof proposalEmail?.delivery_state === 'string' ? proposalEmail.delivery_state : null
+}
+
+function hasPublishedFinalProposal(invoice: LuxorInvoice | null) {
+  return Boolean(
+    invoice?.proposal_sent_at ||
+    invoice?.status === 'sent' ||
+    getProposalDeliveryState(invoice) === 'delivered',
+  )
+}
+
 function EventTypeIcon({ eventType }: { eventType: string | null }) {
   const normalized = eventType?.trim().toLowerCase() || ''
   const Icon = normalized.includes('wedding')
@@ -336,6 +360,7 @@ export default function LeadDetailPage({
   // Status editing state
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [sendingContractBookingId, setSendingContractBookingId] = useState<string | null>(null)
+  const [preparingAgreementInvoiceId, setPreparingAgreementInvoiceId] = useState<string | null>(null)
   const [contractActionKey, setContractActionKey] = useState<string | null>(null)
   const [contractToCancel, setContractToCancel] = useState<LuxorBooking | null>(null)
   const contractStatusSnapshotRef = useRef<Record<string, string | null>>({})
@@ -574,6 +599,23 @@ export default function LeadDetailPage({
     [eventBookingIds, eventInvoiceIds, payments, selectedLeadEvent],
   )
   const latestBooking = useMemo(() => getMostRecentBooking(eventBookings), [eventBookings])
+  // Always anchor proposal/contract UI to the newest final proposal in the
+  // active lead workflow. A lead can have an older completed booking, and that
+  // record must never make a newer proposal look signed or delivered.
+  const currentProposalInvoice = useMemo(
+    // An accepted proposal can temporarily have no booking or event link
+    // while the acceptance workflow finishes. Include all lead invoices so
+    // that transient state cannot fall back to an unrelated legacy booking.
+    () => getCurrentFinalProposal(invoices),
+    [invoices],
+  )
+  const currentProposalBooking = useMemo(
+    () => currentProposalInvoice
+      ? bookings.find((booking) => booking.invoice_id === currentProposalInvoice.id) || null
+      : null,
+    [bookings, currentProposalInvoice],
+  )
+  const lifecycleBooking = currentProposalInvoice ? currentProposalBooking : latestBooking
   const activeEventForDisplay = useMemo(() => {
     if (!lead) return null
     if (!selectedLeadEvent) return null
@@ -731,7 +773,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const steps = getLeadLifecycleSteps(lifecycleLead || lead, latestBooking)
+    const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -744,7 +786,7 @@ export default function LeadDetailPage({
     }
     
     return 'closing'
-  }, [lead, latestBooking, lifecycleLead])
+  }, [currentProposalInvoice, lead, lifecycleBooking, lifecycleLead])
 
   // Set Event Summary states from lead metadata or latestBooking
   useEffect(() => {
@@ -2057,6 +2099,34 @@ export default function LeadDetailPage({
     }
   }
 
+  const handlePrepareAgreement = async (invoice: LuxorInvoice) => {
+    try {
+      setPreparingAgreementInvoiceId(invoice.id)
+      const response = await fetch(`/api/leads/${encodeURIComponent(id)}/send-agreement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId: invoice.id }),
+      })
+      const data = await response.json().catch(() => ({})) as { delivery?: 'queued' | 'already_sent'; message?: string; error?: string }
+      if (!response.ok) throw new Error(data.error || 'The agreement could not be prepared.')
+      await fetchAllData(false)
+      notify({
+        title: data.delivery === 'already_sent' ? 'Agreement already queued' : 'Agreement delivery queued',
+        description: data.message || 'Luxor will mark the agreement sent only after email delivery is confirmed.',
+        variant: 'success',
+      })
+    } catch (error) {
+      console.error(error)
+      notify({
+        title: 'Agreement not prepared',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'error',
+      })
+    } finally {
+      setPreparingAgreementInvoiceId(null)
+    }
+  }
+
   const handleSendDateLockInvoice = async (booking: LuxorBooking) => {
     try {
       setSendingContractBookingId(booking.id)
@@ -2161,6 +2231,24 @@ export default function LeadDetailPage({
     try {
       setContractActionKey(`${action}-${booking.id}`)
       setUpdatingStatus(true)
+      const isCurrentProposalAgreement = action === 'resend' && proposalInvoice?.id === booking.invoice_id
+      if (isCurrentProposalAgreement && proposalInvoice) {
+        const res = await fetch(`/api/leads/${encodeURIComponent(id)}/send-agreement`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId: proposalInvoice.id, resend: true }),
+        })
+        const data = await res.json().catch(() => ({})) as { delivery?: 'queued' | 'already_sent' | 'preparing'; message?: string; error?: string }
+        if (!res.ok) throw new Error(data.error || 'The agreement resend could not be queued.')
+        await fetchAllData(false)
+        notify({
+          title: data.delivery === 'already_sent' ? 'Agreement already queued' : 'Agreement resend queued',
+          description: data.message || 'The complete proposal, agreement, and Guest Guide will be delivered together once the queue confirms it.',
+          variant: 'success',
+        })
+        return
+      }
+
       const res = await fetch('/api/signatures', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -2659,14 +2747,16 @@ export default function LeadDetailPage({
     sortedPayments,
   } = leadDerivedData
   const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
-  const bookingContractAmount = Number(latestBooking?.contract_total || 0)
-  const bookingDepositAmount = Number(latestBooking?.deposit_required || 0)
-  const proposalInvoice = sortedInvoices.find((invoice) => invoice.id === latestBooking?.invoice_id)
-    || sortedInvoices.find((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
-    || latestInvoice
+  const proposalInvoice = currentProposalInvoice
+  const proposalBooking = proposalInvoice
+    ? bookings.find((booking) => booking.invoice_id === proposalInvoice.id) || null
+    : null
+  const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
+  const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
+  const bookingDepositAmount = Number(agreementBooking?.deposit_required || 0)
   const depositInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'deposit')
   const finalBalanceInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
-  const refundableSecurityDepositAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'security_deposit' || item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || latestBooking?.security_deposit_amount || LUXOR_DEFAULT_SECURITY_DEPOSIT)
+  const refundableSecurityDepositAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'security_deposit' || item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || agreementBooking?.security_deposit_amount || LUXOR_DEFAULT_SECURITY_DEPOSIT)
   const initialBookingPaymentAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'venue' || /initial booking payment/i.test(item.description))?.total || bookingDepositAmount)
   const initialPaymentInvoiceTotal = Number(depositInvoice?.total || (initialBookingPaymentAmount + refundableSecurityDepositAmount))
   const depositPaidTotal = depositInvoice ? getInvoicePaidTotal(depositInvoice.id) : getPaidTotal(sortedPayments, 'deposit')
@@ -2722,15 +2812,41 @@ export default function LeadDetailPage({
         ? (proposalDeliveryEmail as Record<string, unknown>).delivery_sent_at as string
         : proposalInvoice?.updated_at || null
       : proposalInvoice?.updated_at || null
-  ) : null) || notes.find((note) => (
-    note.note_type === 'status_change' &&
-    note.content.toLowerCase().includes('proposal')
-  ))?.created_at || (activeEventForDisplay?.status === 'proposal_sent' ? activeEventForDisplay.updated_at : null)
+  ) : null) || (proposalInvoice?.status === 'sent' ? proposalInvoice.updated_at : null)
   const proposalAcceptedAt = proposalInvoice?.proposal_accepted_at || null
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
+  const agreementDeliveryJob = agreementBooking
+    ? [...tourEmailJobs]
+      .filter((job) => job.booking_id === agreementBooking.id && job.job_type === 'contract_signature')
+      .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())[0] || null
+    : null
+  const agreementDeliveryConfirmed = agreementDeliveryJob?.status === 'sent'
+  const agreementDeliveryPending = agreementDeliveryJob?.status === 'queued' || agreementDeliveryJob?.status === 'sending'
+  const agreementDeliveryFailed = agreementDeliveryJob?.status === 'failed'
+  const agreementAwaitingSignature = Boolean(
+    agreementBooking &&
+    agreementBooking.contract_status !== 'signed' &&
+    ['sent', 'viewed', 'needs_follow_up'].includes(agreementBooking.contract_status || ''),
+  )
+  const agreementCanBeResent = Boolean(agreementDeliveryConfirmed && agreementBooking && agreementAwaitingSignature)
+  const agreementStatusLabel = !proposalInvoice
+    ? 'Not started'
+    : agreementBooking?.contract_status === 'signed'
+      ? 'Signed'
+      : agreementBooking?.contract_status === 'viewed'
+        ? 'Opened'
+        : agreementDeliveryConfirmed
+          ? 'Sent'
+          : agreementDeliveryPending
+            ? 'Sending'
+            : agreementDeliveryFailed
+              ? 'Delivery failed'
+              : proposalAcceptedAt
+                ? 'Delivery pending'
+                : 'Awaiting proposal acceptance'
   const proposalReminderJobs = tourEmailJobs.filter((job) => job.job_type === 'proposal_view_reminder' || job.job_type === 'proposal_payment_reminder')
   const queuedProposalReminders = proposalReminderJobs.filter((job) => job.status === 'queued')
-  const nextBestMove = getLeadNextStep(lifecycleLead || lead, latestBooking, latestInvoice)
+  const nextBestMove = getLeadNextStep(lifecycleLead || lead, agreementBooking, proposalInvoice)
   const marketingRecentEvents = marketingEngagement?.recent_events ?? []
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
   const marketingTopCampaign = marketingCampaigns[0] ?? null
@@ -2910,21 +3026,39 @@ export default function LeadDetailPage({
   } else if (lead.status === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: latestBooking ? (latestBooking.contract_status === 'signed' ? 'Review booking' : latestBooking.contract_status === 'not_sent' ? 'Publish final proposal' : 'Review contract status') : 'Build final proposal',
-      detail: latestBooking
-        ? latestBooking.contract_status === 'signed'
-          ? 'Contract is already signed'
-          : latestBooking.contract_status === 'not_sent'
-            ? 'Publish the locked package for the client to select'
-            : 'Open the contract record and review progress'
-        : 'The client acceptance creates the matching booking automatically',
-      onClick: latestBooking
-        ? latestBooking.contract_status === 'signed'
-          ? () => scrollToSection('lead-booking')
-          : latestBooking.contract_status === 'not_sent'
-            ? () => handleSendContractPackage(latestBooking)
-            : () => scrollToSection('lead-booking')
-        : () => openProposalBuilder(),
+      label: !proposalInvoice
+        ? 'Build final proposal'
+        : !proposalAcceptedAt
+          ? 'Edit proposal'
+          : !agreementBooking
+            ? 'Prepare agreement'
+            : agreementBooking.contract_status === 'signed'
+              ? 'Review booking'
+              : agreementCanBeResent
+                ? 'Resend agreement'
+                : 'Review contract status',
+      detail: !proposalInvoice
+        ? 'Calculate the exact package price for client selection'
+        : !proposalAcceptedAt
+          ? 'Review the locked proposal while the client considers it'
+          : !agreementBooking
+            ? 'The proposal is accepted; prepare the matching agreement without using an older booking'
+            : agreementBooking.contract_status === 'signed'
+              ? 'Contract is already signed'
+              : agreementCanBeResent
+                ? 'The client still needs to sign the current agreement'
+                : 'Open the current contract record and review progress',
+      onClick: !proposalInvoice
+        ? () => openProposalBuilder()
+        : !proposalAcceptedAt
+          ? () => openProposalBuilder(proposalInvoice)
+          : !agreementBooking
+            ? () => handlePrepareAgreement(proposalInvoice)
+            : agreementBooking.contract_status === 'signed'
+              ? () => scrollToSection('lead-booking')
+              : agreementCanBeResent
+                ? () => handleContractRequestAction(agreementBooking, 'resend')
+                : () => scrollToSection('lead-booking'),
       disabled: updatingStatus,
       loading: updatingStatus,
     })
@@ -2957,12 +3091,24 @@ export default function LeadDetailPage({
     onClick: () => setIsInvoiceModalOpen(true),
   })
 
-  if (lead.status !== 'booked' && lead.status !== 'closed_lost') {
+  if (lead.status !== 'closed_lost' && lead.status !== 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
-      label: 'Build final proposal',
-      detail: 'Calculate the exact package price for client selection',
-      onClick: () => openProposalBuilder(),
+      label: !proposalInvoice
+        ? 'Build final proposal'
+        : proposalAcceptedAt && !agreementBooking
+          ? 'Prepare agreement'
+          : 'Edit proposal',
+      detail: !proposalInvoice
+        ? 'Calculate the exact package price for client selection'
+        : proposalAcceptedAt && !agreementBooking
+          ? 'The proposal is accepted; prepare its matching agreement'
+          : 'Review the current final proposal',
+      onClick: !proposalInvoice
+        ? () => openProposalBuilder()
+        : proposalAcceptedAt && !agreementBooking
+          ? () => handlePrepareAgreement(proposalInvoice)
+          : () => openProposalBuilder(proposalInvoice),
     })
   }
 
@@ -3445,8 +3591,10 @@ export default function LeadDetailPage({
           <LeadLifecycleRail
             lead={lifecycleLead || lead}
             bookings={eventBookings}
-            latestBooking={latestBooking}
-            latestInvoice={latestInvoice}
+            latestBooking={agreementBooking}
+            latestInvoice={proposalInvoice}
+            agreementDeliveryConfirmed={agreementDeliveryConfirmed}
+            agreementDeliveryPending={agreementDeliveryPending}
             isSaving={updatingStatus}
             activeStageId={selectedStageOverride || activeStage}
             onStepClick={(stageId) => {
@@ -4495,10 +4643,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : latestBooking?.contract_status !== 'signed' ? 'Await agreement signature' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : !agreementBooking ? 'Agreement delivery pending' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'Await agreement signature' : 'Agreement delivery pending' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : latestBooking?.contract_status !== 'signed' ? 'Acceptance automatically sends the Event Agreement. Stripe is not available until it is signed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
+                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : !agreementBooking ? 'The proposal is accepted, but the matching agreement record has not been confirmed yet. Prepare the agreement before asking the client to sign.' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'The Event Agreement was delivered after proposal acceptance. Stripe is not available until it is signed.' : 'The agreement is not confirmed as delivered yet. Do not treat it as sent until delivery is confirmed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
                             </p>
                           </div>
                         </div>
@@ -4517,14 +4665,19 @@ export default function LeadDetailPage({
                             <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}</button>
                           ) : !proposalAcceptedAt ? (
                             <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Awaiting client acceptance</span>
-                          ) : latestBooking?.contract_status !== 'signed' ? (
-                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Agreement awaiting signature</span>
+                          ) : !agreementBooking ? (
+                            <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
+                              {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />}
+                              {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare Agreement'}
+                            </button>
+                          ) : agreementBooking.contract_status !== 'signed' ? (
+                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}</span>
                           ) : (
                             <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
                           )}
                         </div>
                       </div>
-                      {latestBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment method</p><PortalSelect value={String((latestBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(latestBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment amount</p><PortalSelect value={String((latestBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(latestBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div></div> : null}
+                      {agreementBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment method</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment amount</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div></div> : null}
                     </section>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -4635,7 +4788,7 @@ export default function LeadDetailPage({
                           </div>
                         </>
                       ) : (
-                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => openProposalBuilder()} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button></div>
+                        <div className="p-8 text-center"><p className="text-xs font-bold text-[color:var(--portal-muted)]">No proposal line items yet.</p><button type="button" onClick={() => proposalInvoice ? openProposalBuilder(proposalInvoice) : openProposalBuilder()} className="mt-4 rounded-lg bg-[#caa24c] px-4 py-2 text-[9px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{proposalInvoice ? 'Edit Proposal' : 'Build Proposal'}</button></div>
                       )}
                     </section>
                   </>
@@ -4643,7 +4796,11 @@ export default function LeadDetailPage({
               }
 
               if (currentStage === 'contract') {
-                const isSendingCurrentBooking = Boolean(latestBooking && sendingContractBookingId === latestBooking.id)
+                const contractBooking = agreementBooking
+                const isSendingCurrentBooking = Boolean(contractBooking && sendingContractBookingId === contractBooking.id)
+                const agreementSentAt = agreementDeliveryConfirmed
+                  ? agreementDeliveryJob?.sent_at || contractBooking?.contract_sent_at || null
+                  : null
                 return (
                   <>
                     {/* Next Move */}
@@ -4661,29 +4818,59 @@ export default function LeadDetailPage({
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <AnimatePresence mode="wait">
                               <motion.div
-                                key={latestBooking?.contract_status || 'no_booking'}
+                                key={`${proposalInvoice?.id || 'no_proposal'}-${contractBooking?.contract_status || agreementDeliveryJob?.status || 'no_booking'}`}
                                 initial={{ opacity: 0, y: 4 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -4 }}
                                 transition={{ duration: 0.25 }}
                               >
                                 <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                                  {!latestBooking ? 'Build the final proposal first' : latestBooking.contract_status === 'signed' ? 'Contract signed & executed' : latestBooking.contract_status === 'viewed' ? 'Contract viewed by client' : latestBooking.contract_status === 'sent' ? 'Awaiting client signature' : 'Publish final proposal'}
+                                  {!proposalInvoice
+                                    ? 'Build the final proposal first'
+                                    : !proposalAcceptedAt
+                                      ? 'Await final proposal acceptance'
+                                      : !contractBooking
+                                        ? 'Agreement delivery pending'
+                                        : contractBooking.contract_status === 'signed'
+                                          ? 'Contract signed & executed'
+                                          : contractBooking.contract_status === 'viewed'
+                                            ? 'Contract viewed by client'
+                                            : agreementDeliveryConfirmed
+                                              ? 'Awaiting client signature'
+                                              : agreementDeliveryPending
+                                                ? 'Agreement is being delivered'
+                                                : agreementDeliveryFailed
+                                                  ? 'Agreement delivery needs attention'
+                                                  : 'Agreement delivery pending'}
                                 </h4>
                                 <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                                  {!latestBooking ? 'The client accepts the locked proposal first; that acceptance creates the matching booking and sends the Event Agreement.' : latestBooking.contract_status === 'signed' ? 'Legal agreement is complete. Proceed to the signed-agreement payment step or planning.' : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? 'The Event Agreement was sent after proposal acceptance. Track the client signature here.' : 'Publish the locked final proposal for client selection.'}
+                                  {!proposalInvoice
+                                    ? 'Create the exact package first. The client must accept that locked proposal before an agreement can be delivered.'
+                                    : !proposalAcceptedAt
+                                      ? 'The client must accept the locked proposal before Luxor creates the matching agreement.'
+                                      : !contractBooking
+                                        ? 'The proposal is accepted, but the matching agreement record is still being recovered. No agreement email has been confirmed yet.'
+                                        : contractBooking.contract_status === 'signed'
+                                          ? 'Legal agreement is complete. Proceed to the signed-agreement payment step or planning.'
+                                          : agreementDeliveryConfirmed
+                                            ? 'The Event Agreement was delivered. Track the client signature here.'
+                                            : agreementDeliveryPending
+                                              ? 'Delivery is still processing. Do not send a duplicate agreement.'
+                                              : agreementDeliveryFailed
+                                                ? 'The agreement email was not confirmed. Use the resend control after reviewing the delivery issue.'
+                                                : 'No agreement email has been confirmed yet.'}
                                 </p>
                               </motion.div>
                             </AnimatePresence>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {latestBooking ? (
+                          {contractBooking ? (
                             <motion.button
                               layout
                               type="button"
-                              disabled={updatingStatus || latestBooking.contract_status === 'signed'}
-                              onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : void openContractReview(latestBooking)}
+                              disabled={updatingStatus || contractBooking.contract_status === 'signed' || !agreementDeliveryConfirmed}
+                              onClick={() => agreementDeliveryConfirmed ? void openContractReview(contractBooking) : undefined}
                               whileTap={{ scale: 0.96 }}
                               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                               className={`relative overflow-hidden min-h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors cursor-pointer disabled:opacity-50 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#dfbd68]'}`}
@@ -4701,7 +4888,7 @@ export default function LeadDetailPage({
                                     <Loader2 size={13} className="animate-spin text-white" />
                                     Sending Package...
                                   </motion.span>
-                                ) : latestBooking.contract_status === 'signed' ? (
+                                ) : contractBooking.contract_status === 'signed' ? (
                                   <motion.span
                                     key="signed"
                                     initial={{ opacity: 0, y: 6 }}
@@ -4713,7 +4900,7 @@ export default function LeadDetailPage({
                                     <CheckCircle2 size={13} className="text-emerald-300" />
                                     Agreement Complete
                                   </motion.span>
-                                ) : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                                ) : agreementDeliveryConfirmed ? (
                                   <motion.span
                                     key="sent"
                                     initial={{ opacity: 0, y: 6 }}
@@ -4722,33 +4909,50 @@ export default function LeadDetailPage({
                                     transition={{ duration: 0.2 }}
                                     className="inline-flex items-center gap-2"
                                   >
-                                    <CheckCircle2 size={13} className="text-emerald-400" />
+                                    <Eye size={13} className="text-white" />
                                     Review Contract
                                   </motion.span>
                                 ) : (
                                   <motion.span
-                                    key="not_sent"
+                                    key="delivery_pending"
                                     initial={{ opacity: 0, y: 6 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -6 }}
                                     transition={{ duration: 0.2 }}
                                     className="inline-flex items-center gap-2"
                                   >
-                                    <Send size={12} className="text-amber-100" />
-                                    Publish Final Proposal
+                                    <Clock size={12} className="text-white" />
+                                    Agreement Pending
                                   </motion.span>
                                 )}
                               </AnimatePresence>
                             </motion.button>
                           ) : (
+                            proposalInvoice ? (
+                              <span className="inline-flex min-h-11 items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
+                                {proposalAcceptedAt ? 'Agreement Pending' : 'Awaiting Acceptance'}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openProposalBuilder()}
+                                className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
+                              >
+                                Build Proposal
+                              </button>
+                            )
+                          )}
+                          {contractBooking && agreementCanBeResent ? (
                             <button
                               type="button"
-                              onClick={() => openProposalBuilder()}
-                              className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer"
+                              onClick={() => handleContractRequestAction(contractBooking, 'resend')}
+                              disabled={updatingStatus}
+                              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#8c6529] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                             >
-                              Build Proposal
+                              <RefreshCw size={13} className={contractActionKey === `resend-${contractBooking.id}` ? 'animate-spin' : ''} />
+                              Resend Agreement
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </motion.section>
@@ -4767,20 +4971,20 @@ export default function LeadDetailPage({
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Document Type</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{latestBooking ? 'Venue rental agreement' : 'Booking record needed'}</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{contractBooking ? 'Venue rental agreement' : proposalAcceptedAt ? 'Agreement delivery pending' : 'Proposal acceptance needed'}</span>
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
-                                  key={latestBooking?.contract_status || 'none'}
+                                  key={agreementStatusLabel}
                                   initial={{ opacity: 0, scale: 0.85 }}
                                   animate={{ opacity: 1, scale: 1 }}
                                   exit={{ opacity: 0, scale: 0.85 }}
                                   transition={{ duration: 0.2 }}
                                   className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase"
                                 >
-                                  {latestBooking?.contract_status?.replaceAll('_', ' ') || 'not started'}
+                                  {agreementStatusLabel}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
@@ -4788,14 +4992,14 @@ export default function LeadDetailPage({
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
-                                  key={latestBooking?.contract_sent_at || 'unsent'}
+                                  key={agreementSentAt || 'unsent'}
                                   initial={{ opacity: 0, x: 6 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: -6 }}
                                   transition={{ duration: 0.2 }}
                                   className="font-bold text-[color:var(--portal-text)]"
                                 >
-                                  {latestBooking?.contract_sent_at ? formatDisplayDate(latestBooking.contract_sent_at) : 'Not marked sent'}
+                                  {agreementSentAt ? formatDisplayDate(agreementSentAt) : agreementDeliveryPending ? 'Delivery pending' : agreementDeliveryFailed ? 'Delivery failed' : 'Not confirmed'}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
@@ -4803,14 +5007,14 @@ export default function LeadDetailPage({
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Signed Date</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
-                                  key={latestBooking?.contract_signed_at || 'unsigned'}
+                                  key={contractBooking?.contract_signed_at || 'unsigned'}
                                   initial={{ opacity: 0, x: 6 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: -6 }}
                                   transition={{ duration: 0.2 }}
                                   className="font-bold text-zinc-500"
                                 >
-                                  {latestBooking?.contract_signed_at ? formatDisplayDate(latestBooking.contract_signed_at) : 'Pending'}
+                                  {contractBooking?.contract_signed_at ? formatDisplayDate(contractBooking.contract_signed_at) : 'Pending'}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
@@ -4821,13 +5025,13 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          {latestBooking ? (
+                          {contractBooking ? (
                             <>
                               <motion.button 
                                 layout
                                 type="button" 
-                                disabled={updatingStatus || latestBooking.contract_status === 'signed'} 
-                                onClick={() => !latestBooking.contract_status || ['not_sent', 'void'].includes(latestBooking.contract_status) ? handleSendContractPackage(latestBooking) : void openContractReview(latestBooking)}
+                                disabled={updatingStatus || contractBooking.contract_status === 'signed' || !agreementDeliveryConfirmed}
+                                onClick={() => agreementDeliveryConfirmed ? void openContractReview(contractBooking) : undefined}
                                 whileTap={{ scale: 0.97 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                 className={`flex-1 min-w-[120px] py-2 rounded text-[9px] font-black uppercase text-white shadow-sm transition-colors cursor-pointer disabled:opacity-45 ${isSendingCurrentBooking ? 'bg-gradient-to-r from-[#b58b38] via-[#dfbd68] to-[#b58b38] animate-pulse' : 'bg-[#caa24c] hover:bg-[#a8792f]'}`}
@@ -4838,35 +5042,35 @@ export default function LeadDetailPage({
                                       <Loader2 size={11} className="animate-spin" />
                                       Sending...
                                     </motion.span>
-                                  ) : latestBooking.contract_status === 'signed' ? (
+                                  ) : contractBooking.contract_status === 'signed' ? (
                                     <motion.span key="signed" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
                                       Agreement Complete
                                     </motion.span>
-                                  ) : latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                                  ) : agreementDeliveryConfirmed ? (
                                     <motion.span key="sent" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                                      Review Contract
+                                      Review Agreement
                                     </motion.span>
                                   ) : (
                                     <motion.span key="not_sent" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                                      Publish Final Proposal
+                                      Agreement Pending
                                     </motion.span>
                                   )}
                                 </AnimatePresence>
                               </motion.button>
-                              {latestBooking.contract_status === 'sent' || latestBooking.contract_status === 'viewed' ? (
+                              {agreementCanBeResent ? (
                                 <>
                                   <button
                                     type="button"
                                     disabled={updatingStatus}
-                                    onClick={() => handleContractRequestAction(latestBooking, 'resend')}
+                                    onClick={() => handleContractRequestAction(contractBooking, 'resend')}
                                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] disabled:opacity-45 dark:hover:text-[#f1d27a]"
                                   >
-                                    <RefreshCw size={11} className={contractActionKey === `resend-${latestBooking.id}` ? 'animate-spin' : ''} /> Resend
+                                    <RefreshCw size={11} className={contractActionKey === `resend-${contractBooking.id}` ? 'animate-spin' : ''} /> Resend agreement
                                   </button>
                                   <button
                                     type="button"
                                     disabled={updatingStatus}
-                                    onClick={() => setContractToCancel(latestBooking)}
+                                    onClick={() => setContractToCancel(contractBooking)}
                                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded border border-rose-500/20 bg-rose-500/5 px-3 text-[9px] font-black uppercase tracking-wider text-rose-500 transition-colors hover:bg-rose-500/10 disabled:opacity-45 dark:text-rose-300"
                                   >
                                     <Trash2 size={11} /> Cancel
@@ -4874,6 +5078,10 @@ export default function LeadDetailPage({
                                 </>
                               ) : null}
                             </>
+                          ) : proposalInvoice ? (
+                            <div className="flex-1 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-center text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
+                              {proposalAcceptedAt ? 'Agreement delivery pending' : 'Awaiting client acceptance'}
+                            </div>
                           ) : (
                             <button type="button" onClick={() => openProposalBuilder()} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Build Proposal</button>
                           )}
@@ -4884,43 +5092,43 @@ export default function LeadDetailPage({
                       <motion.section 
                         layout
                         transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
-                        className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter"
+                        className="space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 dark:shadow-black/20 luxor-soft-enter"
                       >
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Signature Timeline</p>
+                          <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Signature Timeline</p>
                           <div className="space-y-3 text-xs">
                             <div className="flex items-center gap-3">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400"><Check size={10} /></span>
+                              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${contractBooking ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}><Check size={10} /></span>
                               <div>
                                 <p className="font-bold text-[color:var(--portal-text)]">Booking record created</p>
-                                <p className="text-[9px] text-zinc-500">{latestBooking ? formatTimelineDate(latestBooking.created_at) : 'Not created yet'}</p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)]">{contractBooking ? formatTimelineDate(contractBooking.created_at) : proposalAcceptedAt ? 'Proposal accepted — record pending' : 'Not created yet'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <AnimatePresence mode="wait">
                                 <motion.span
-                                  key={latestBooking?.contract_sent_at ? 'sent' : 'unsent'}
+                                  key={agreementDeliveryConfirmed ? 'sent' : agreementDeliveryPending ? 'sending' : agreementDeliveryFailed ? 'failed' : 'unsent'}
                                   initial={{ scale: 0.6, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
                                   exit={{ scale: 0.6, opacity: 0 }}
                                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                  className={`flex h-5 w-5 items-center justify-center rounded-full ${latestBooking?.contract_sent_at ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-600'}`}
+                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${agreementDeliveryConfirmed ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : agreementDeliveryFailed ? 'bg-rose-500/15 text-rose-700 ring-rose-600/20 dark:text-rose-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}
                                 >
                                   <Check size={10} />
                                 </motion.span>
                               </AnimatePresence>
                               <div>
-                                <p className={`font-bold transition-colors ${latestBooking?.contract_sent_at ? 'text-[color:var(--portal-text)]' : 'text-zinc-400'}`}>Contract marked sent</p>
+                                <p className={`font-bold transition-colors ${agreementDeliveryConfirmed ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{agreementDeliveryConfirmed ? 'Agreement email delivered' : agreementDeliveryPending ? 'Agreement email sending' : agreementDeliveryFailed ? 'Agreement email delivery failed' : 'Agreement email pending'}</p>
                                 <AnimatePresence mode="wait">
                                   <motion.p
-                                    key={latestBooking?.contract_sent_at || 'no_sent'}
+                                    key={agreementSentAt || agreementDeliveryJob?.status || 'no_sent'}
                                     initial={{ opacity: 0, y: 3 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -3 }}
                                     transition={{ duration: 0.2 }}
-                                    className="text-[9px] text-zinc-500"
+                                    className="text-[9px] text-[color:var(--portal-muted)]"
                                   >
-                                    {latestBooking?.contract_sent_at ? formatTimelineDate(latestBooking.contract_sent_at) : 'Waiting for manual tracking'}
+                                    {agreementSentAt ? formatTimelineDate(agreementSentAt) : agreementDeliveryPending ? 'Waiting for delivery confirmation' : agreementDeliveryFailed ? 'Review delivery before sending again' : 'No email confirmation yet'}
                                   </motion.p>
                                 </AnimatePresence>
                               </div>
@@ -4928,30 +5136,30 @@ export default function LeadDetailPage({
                             <div className="flex items-center gap-3">
                               <AnimatePresence mode="wait">
                                 <motion.span
-                                  key={latestBooking?.contract_status || 'pending_sig'}
+                                  key={contractBooking?.contract_status || (proposalAcceptedAt ? 'agreement_pending' : 'proposal_pending')}
                                   initial={{ scale: 0.6, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
                                   exit={{ scale: 0.6, opacity: 0 }}
                                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                  className={`flex h-5 w-5 items-center justify-center rounded-full ${latestBooking?.contract_status === 'signed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400 animate-pulse'}`}
+                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${contractBooking?.contract_status === 'signed' ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : agreementDeliveryConfirmed ? 'bg-[#caa24c]/15 text-[#8e661e] ring-[#caa24c]/30 dark:text-[#f1d27a] animate-pulse' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}
                                 >
-                                  {latestBooking?.contract_status === 'signed' ? <Check size={10} /> : <Circle size={4} className="fill-current" />}
+                                  {contractBooking?.contract_status === 'signed' ? <Check size={10} /> : <Circle size={4} className="fill-current" />}
                                 </motion.span>
                               </AnimatePresence>
                               <div>
                                 <AnimatePresence mode="wait">
                                   <motion.p
-                                    key={latestBooking?.contract_status === 'signed' ? 'signed_title' : latestBooking?.contract_status === 'viewed' ? 'viewed_title' : 'awaiting_title'}
+                                    key={contractBooking?.contract_status === 'signed' ? 'signed_title' : contractBooking?.contract_status === 'viewed' ? 'viewed_title' : agreementDeliveryConfirmed ? 'awaiting_title' : 'not_ready_title'}
                                     initial={{ opacity: 0, y: 3 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -3 }}
                                     transition={{ duration: 0.2 }}
                                     className="font-bold text-[color:var(--portal-text)]"
                                   >
-                                    {latestBooking?.contract_status === 'signed' ? 'Contract signed' : latestBooking?.contract_status === 'viewed' ? 'Contract viewed by client' : 'Awaiting client signature'}
+                                    {contractBooking?.contract_status === 'signed' ? 'Contract signed' : contractBooking?.contract_status === 'viewed' ? 'Contract viewed by client' : agreementDeliveryConfirmed ? 'Awaiting client signature' : 'Signing link not ready'}
                                   </motion.p>
                                 </AnimatePresence>
-                                <p className="text-[9px] text-zinc-500">{latestBooking?.contract_signed_at ? formatTimelineDate(latestBooking.contract_signed_at) : 'No email or portal generated here'}</p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)]">{contractBooking?.contract_signed_at ? formatTimelineDate(contractBooking.contract_signed_at) : agreementDeliveryConfirmed ? 'Waiting for the client to sign' : proposalAcceptedAt ? 'Agreement delivery must complete first' : 'The client must accept the proposal first'}</p>
                               </div>
                             </div>
                           </div>
@@ -6282,16 +6490,34 @@ export default function LeadDetailPage({
               <span className="font-mono text-xs text-[color:var(--portal-muted)]">{sortedBookings.length} records</span>
             </h3>
 
+            {proposalInvoice && !agreementBooking ? (
+              <div className="mb-4 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">Current proposal agreement</p>
+                <p className="mt-1">{proposalAcceptedAt ? 'The client accepted this proposal, but its matching agreement record is not confirmed yet.' : 'This proposal is still waiting for the client to accept it before an agreement can be prepared.'}</p>
+                {proposalAcceptedAt ? (
+                  <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-45">
+                    {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={12} className="animate-spin" /> : <FileSignature size={12} />}
+                    {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare agreement'}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] transition-colors hover:bg-[#caa24c]/20 dark:text-[#f1d27a]">
+                    <Pencil size={12} /> Edit proposal
+                  </button>
+                )}
+              </div>
+            ) : null}
+
             {sortedBookings.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
-                <p className="font-semibold text-[color:var(--portal-text)]">No booking record is linked yet.</p>
-                <p className="mt-1 text-[color:var(--portal-muted)]">The booking is created automatically once the client accepts the locked final proposal. That keeps the agreement and payment schedule aligned with the selected package.</p>
+                <p className="font-semibold text-[color:var(--portal-text)]">{proposalInvoice ? 'No current agreement record is linked yet.' : 'No booking record is linked yet.'}</p>
+                <p className="mt-1 text-[color:var(--portal-muted)]">{proposalInvoice ? proposalAcceptedAt ? 'Prepare the matching agreement for this accepted proposal. It will appear here after delivery begins.' : 'The client must accept this locked proposal before Luxor prepares the matching agreement.' : 'The booking is created automatically once the client accepts the locked final proposal. That keeps the agreement and payment schedule aligned with the selected package.'}</p>
                 <button
                   type="button"
-                  onClick={() => openProposalBuilder()}
+                  onClick={() => proposalInvoice ? proposalAcceptedAt ? handlePrepareAgreement(proposalInvoice) : openProposalBuilder(proposalInvoice) : openProposalBuilder()}
+                  disabled={Boolean(proposalInvoice && proposalAcceptedAt && preparingAgreementInvoiceId === proposalInvoice.id)}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 cursor-pointer"
                 >
-                  Build final proposal
+                  {proposalInvoice ? proposalAcceptedAt ? 'Prepare agreement' : 'Edit proposal' : 'Build proposal'}
                 </button>
               </div>
             ) : (
@@ -6301,7 +6527,7 @@ export default function LeadDetailPage({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
-                          {index === 0 ? 'Latest booking' : 'Booking record'}
+                          {booking.id === agreementBooking?.id ? 'Current proposal booking' : 'Earlier booking'}
                         </p>
                         <p className="mt-1 text-sm font-bold text-[color:var(--portal-text)]">{booking.event_date || 'Event date TBD'}</p>
                         <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] font-medium">
@@ -6335,11 +6561,27 @@ export default function LeadDetailPage({
                       </button>
                       <button
                         type="button"
-                        onClick={() => !booking.contract_status || ['not_sent', 'void'].includes(booking.contract_status) ? handleSendContractPackage(booking) : void openContractReview(booking)}
-                        disabled={booking.contract_status === 'signed' || updatingStatus}
+                        onClick={() => {
+                          const bookingProposal = sortedInvoices.find((invoice) => invoice.id === booking.invoice_id) || null
+                          const isCurrentProposalBooking = booking.id === agreementBooking?.id
+                          const canReviewAgreement = booking.contract_status === 'signed' || ((!isCurrentProposalBooking || agreementDeliveryConfirmed) && (booking.contract_status === 'sent' || booking.contract_status === 'viewed'))
+                          if (canReviewAgreement) {
+                            void openContractReview(booking)
+                          } else if (bookingProposal?.proposal_accepted_at) {
+                            void handlePrepareAgreement(bookingProposal)
+                          } else if (bookingProposal) {
+                            openProposalBuilder(bookingProposal)
+                          } else {
+                            openProposalBuilder()
+                          }
+                        }}
+                        disabled={booking.contract_status === 'signed' || updatingStatus || (booking.id === agreementBooking?.id && agreementDeliveryPending)}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 disabled:opacity-45 cursor-pointer"
                       >
-                        {booking.contract_status === 'signed' ? 'Contract Signed' : booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? 'Review Signing Status' : 'Publish Final Proposal'}
+                        {booking.contract_status === 'signed' ? 'Contract Signed' : ((booking.id !== agreementBooking?.id || agreementDeliveryConfirmed) && (booking.contract_status === 'sent' || booking.contract_status === 'viewed')) ? 'Review Signing Status' : (() => {
+                          const bookingProposal = sortedInvoices.find((invoice) => invoice.id === booking.invoice_id) || null
+                          return bookingProposal?.proposal_accepted_at ? (booking.id === agreementBooking?.id && agreementDeliveryPending ? 'Agreement Pending' : 'Prepare Agreement') : bookingProposal ? 'Edit Proposal' : 'Build Proposal'
+                        })()}
                       </button>
                       {booking.contract_status === 'sent' || booking.contract_status === 'viewed' ? (
                         <>
@@ -7451,6 +7693,8 @@ function LeadLifecycleRail({
   bookings,
   latestBooking,
   latestInvoice,
+  agreementDeliveryConfirmed = false,
+  agreementDeliveryPending = false,
   isSaving = false,
   activeStageId,
   onStepClick,
@@ -7459,6 +7703,8 @@ function LeadLifecycleRail({
   bookings: LuxorBooking[]
   latestBooking: LuxorBooking | null
   latestInvoice: LuxorInvoice | null
+  agreementDeliveryConfirmed?: boolean
+  agreementDeliveryPending?: boolean
   isSaving?: boolean
   activeStageId?: string
   onStepClick?: (stageId: string) => void
@@ -7472,25 +7718,29 @@ function LeadLifecycleRail({
   const eventDate = parseLocalCalendarDate(lead.target_date)
   const formattedEventDate = eventDate ? eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
 
-  const formattedProposalSentDate = lead.status === 'proposal_sent' || lead.status === 'booked'
-    ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : ''
+  const proposalSentDate = latestInvoice?.proposal_sent_at || (latestInvoice?.status === 'sent' ? latestInvoice.updated_at : null)
+  const formattedProposalSentDate = proposalSentDate
+    ? new Date(proposalSentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : lead.status === 'proposal_sent' || lead.status === 'booked'
+      ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : ''
 
-  const steps = getLeadLifecycleSteps(lead, latestBooking).map((step) => {
+  const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice).map((step) => {
     if (step.id === 'inquiry') {
       return { ...step, label: 'Inquiry', subtext: formattedInquiryDate }
     }
     if (step.id === 'tour') {
-      return { ...step, label: 'Tour', subtext: formattedTourDate || '' }
+      const tourWasImplicitlyCompleted = step.isCompleted && lead.tour_attendance_status !== 'attended' && !formattedTourDate
+      return { ...step, label: 'Tour', subtext: formattedTourDate || (tourWasImplicitlyCompleted ? 'Skipped' : '') }
     }
     if (step.id === 'proposal') {
       return {
         ...step,
         label: 'Proposal',
         subtext:
-          lead.status === 'booked'
+          latestInvoice?.proposal_accepted_at || lead.status === 'booked'
             ? 'Accepted'
-            : lead.status === 'proposal_sent'
+            : hasPublishedFinalProposal(latestInvoice) || lead.status === 'proposal_sent'
               ? formattedProposalSentDate || ''
               : '',
       }
@@ -7503,9 +7753,15 @@ function LeadLifecycleRail({
           ? 'Signed'
           : latestBooking?.contract_status === 'viewed'
             ? 'Opened'
-          : latestBooking?.contract_status === 'sent'
+          : agreementDeliveryConfirmed
             ? 'Sent'
-            : '',
+            : agreementDeliveryPending
+              ? 'Sending'
+              : latestInvoice?.proposal_accepted_at
+                ? 'Pending'
+                : hasPublishedFinalProposal(latestInvoice)
+                  ? 'Awaiting acceptance'
+                  : '',
       }
     }
     if (step.id === 'deposit') {
@@ -8175,6 +8431,41 @@ function getLeadNextStep(lead: LuxorInquiry, latestBooking: LuxorBooking | null,
     }
   }
 
+  if (latestInvoice) {
+    if (!hasPublishedFinalProposal(latestInvoice)) {
+      return {
+        title: 'Finish the final proposal',
+        detail: 'Review the package, services, and payment plan before publishing it to the client',
+      }
+    }
+
+    if (!latestInvoice.proposal_accepted_at) {
+      return {
+        title: 'Await proposal acceptance',
+        detail: 'The client must accept this locked proposal before Luxor prepares the agreement',
+      }
+    }
+
+    if (!latestBooking) {
+      return {
+        title: 'Prepare the agreement',
+        detail: 'The proposal is accepted, but its matching agreement record is not confirmed yet',
+      }
+    }
+
+    if (latestBooking.contract_status === 'signed') {
+      return {
+        title: 'Review booking',
+        detail: 'Contract is signed, so keep the record clean',
+      }
+    }
+
+    return {
+      title: 'Track agreement signature',
+      detail: 'Use the current agreement record to monitor delivery and signature progress',
+    }
+  }
+
   if (lead.status === 'new') {
     return {
       title: 'Reach out today',
@@ -8273,11 +8564,19 @@ type LeadLifecycleStepState = {
   isActive: boolean
 }
 
-function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null): LeadLifecycleStepState[] {
-  const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
-  const hasTourBeenCompleted = lead.tour_attendance_status === 'attended' || ['proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '') || lead.status === 'proposal_sent' || lead.status === 'booked'
-  const hasProposalStepBeenReached = lead.status === 'booked' || ['contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '')
-  const proposalIsActive = lead.pipeline_stage === 'proposal' || lead.status === 'proposal_sent'
+function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null, currentProposal: LuxorInvoice | null = null): LeadLifecycleStepState[] {
+  const hasProposalOrContractWorkflow = Boolean(
+    hasPublishedFinalProposal(currentProposal) ||
+    currentProposal?.proposal_accepted_at ||
+    latestBooking,
+  )
+  const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status) || hasProposalOrContractWorkflow
+  // A proposal or agreement can be created for a client who has already toured
+  // outside the portal. Keep the record untouched, but render the tour as
+  // complete so the operational screen does not send the owner backwards.
+  const hasTourBeenCompleted = lead.tour_attendance_status === 'attended' || hasProposalOrContractWorkflow || ['proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '') || lead.status === 'proposal_sent' || lead.status === 'booked'
+  const hasProposalStepBeenReached = hasProposalOrContractWorkflow || lead.status === 'booked' || ['contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '')
+  const proposalIsActive = !hasProposalOrContractWorkflow && (lead.pipeline_stage === 'proposal' || lead.status === 'proposal_sent')
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
   const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking)
@@ -8306,7 +8605,7 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     {
       id: 'contract',
       isCompleted: latestBooking?.contract_status === 'signed',
-      isActive: Boolean(latestBooking) && latestBooking?.contract_status !== 'signed',
+      isActive: hasProposalOrContractWorkflow && latestBooking?.contract_status !== 'signed',
     },
     {
       id: 'deposit',

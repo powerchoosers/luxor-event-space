@@ -114,7 +114,7 @@ function isFreshPreparingSignature(signature: LuxorSignatureRequest, now = Date.
 
 function agreementDeliveryState(signature: LuxorSignatureRequest) {
   const state = signature.metadata?.agreementDeliveryState
-  return state === 'preparing' || state === 'delivered' || state === 'failed' ? state : null
+  return state === 'preparing' || state === 'delivered' || state === 'failed' || state === 'retry_requested' ? state : null
 }
 
 function hasFreshAgreementDeliveryClaim(signature: LuxorSignatureRequest, now = Date.now()) {
@@ -192,7 +192,11 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
 
   const token = createPublicToken()
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString()
-  const requestedStatus = options?.status || 'sent'
+  // An agreement is only "sent" after Zoho accepts the actual message.  The
+  // PDF-preparation helper must never make that claim on behalf of a caller:
+  // a later attachment or provider failure would otherwise leave the portal
+  // showing a contract that the client never received.
+  const requestedStatus = 'draft' as const
 
   const ownerName = resolveOwnerSignerName(process.env.LUXOR_OWNER_SIGNER_NAME)
   const ownerEmail = process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
@@ -299,16 +303,17 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
     throw new Error('The Event Agreement could not be prepared. No signing link was sent; please try again.')
   }
 
-  if (requestedStatus === 'sent') {
-    await updateLuxorBooking(booking.id, {
-      contract_status: 'sent',
-      contract_sent_at: new Date().toISOString(),
-    })
-    await recordLuxorSignatureEvent({ signatureRequestId: created.id, eventType: 'sent', metadata: { ownerName, ownerEmail } })
-  } else {
-    await updateLuxorBooking(booking.id, { contract_status: 'not_sent' })
-    await recordLuxorSignatureEvent({ signatureRequestId: created.id, eventType: 'drafted', metadata: { ownerName, ownerEmail, signingMode: options?.signingMode || 'email' } })
-  }
+  await updateLuxorBooking(booking.id, { contract_status: 'not_sent' })
+  await recordLuxorSignatureEvent({
+    signatureRequestId: created.id,
+    eventType: 'drafted',
+    metadata: {
+      ownerName,
+      ownerEmail,
+      signingMode: options?.signingMode || 'email',
+      requestedDeliveryStatus: options?.status || 'draft',
+    },
+  })
   return ready
 }
 
@@ -407,18 +412,25 @@ export type LuxorSignatureAgreementDeliveryClaim = {
 
 /**
  * Claims the one client-facing agreement delivery for a signature. The draft
- * to sent transition is conditional, so concurrent proposal accepts can never
- * both email the contract. A stale interrupted attempt can be recovered later
- * without voiding the agreement the client is meant to sign.
+ * remains a draft while delivery is in flight, so the owner portal never calls
+ * an agreement "sent" before Zoho has accepted it. A stale interrupted attempt
+ * can be recovered later without voiding the agreement the client is meant to
+ * sign.
  */
 export async function claimLuxorSignatureAgreementDelivery(
   signature: LuxorSignatureRequest,
   claimedAt = new Date().toISOString(),
+  options?: { deliveryRequestId?: string },
 ): Promise<LuxorSignatureAgreementDeliveryClaim> {
   if (!hasLuxorSignatureDeliveryDocuments(signature)) {
     return { state: 'in_flight', signature }
   }
-  if (signature.status === 'viewed' || agreementDeliveryState(signature) === 'delivered') {
+  const requestedResend = Boolean(
+    options?.deliveryRequestId &&
+    agreementDeliveryState(signature) === 'retry_requested' &&
+    signature.metadata?.agreementDeliveryRequestId === options.deliveryRequestId,
+  )
+  if (!requestedResend && (signature.status === 'viewed' || agreementDeliveryState(signature) === 'delivered')) {
     return { state: 'delivered', signature }
   }
 
@@ -428,13 +440,41 @@ export async function claimLuxorSignatureAgreementDelivery(
     agreementDeliveryClaimedAt: claimedAt,
   }
   let claimed: LuxorSignatureRequest | null = null
-  if (signature.status === 'draft') {
+  if (requestedResend) {
     const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
-      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=eq.draft`,
+      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=in.(sent,viewed)&metadata->>agreementDeliveryState=eq.retry_requested&metadata->>agreementDeliveryRequestId=eq.${encodeURIComponent(options!.deliveryRequestId!)}`,
       {
         method: 'PATCH',
         headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ status: 'sent', metadata: nextMetadata, updated_at: claimedAt }),
+        body: JSON.stringify({ metadata: nextMetadata, updated_at: claimedAt }),
+      },
+    )
+    claimed = updated ?? null
+  } else if (signature.status === 'draft') {
+    // A draft stays a draft until the provider accepts the mail, so use its
+    // timestamp as a compare-and-set lock. Without this, two workers holding
+    // the same draft could both set "preparing" and both deliver the package.
+    if (hasFreshAgreementDeliveryClaim(signature)) {
+      return { state: 'in_flight', signature }
+    }
+    const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=eq.draft&updated_at=eq.${encodeURIComponent(signature.updated_at)}`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ metadata: nextMetadata, updated_at: claimedAt }),
+      },
+    )
+    claimed = updated ?? null
+  } else if ((signature.status === 'sent' || signature.status === 'viewed') && agreementDeliveryState(signature) === 'failed') {
+    // A failed provider attempt is explicitly retryable. The state predicate
+    // is the lock: only one queued worker can turn it back into "preparing".
+    const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=in.(sent,viewed)&metadata->>agreementDeliveryState=eq.failed`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ metadata: nextMetadata, updated_at: claimedAt }),
       },
     )
     claimed = updated ?? null
@@ -460,7 +500,7 @@ export async function claimLuxorSignatureAgreementDelivery(
   if (claimed) return { state: 'claimed', signature: claimed }
 
   const current = await getLuxorSignatureRequestById(signature.id)
-  if (current && (current.status === 'viewed' || agreementDeliveryState(current) === 'delivered')) {
+  if (current && !requestedResend && (current.status === 'viewed' || agreementDeliveryState(current) === 'delivered')) {
     return { state: 'delivered', signature: current }
   }
   return { state: 'in_flight', signature: current || signature }
@@ -472,6 +512,7 @@ export async function markLuxorSignatureAgreementDelivery(
   recordedAt = new Date().toISOString(),
 ) {
   return updateLuxorSignatureRequest(signature.id, {
+    ...(state === 'delivered' && signature.status === 'draft' ? { status: 'sent' } : {}),
     metadata: {
       ...(signature.metadata || {}),
       agreementDeliveryState: state,
