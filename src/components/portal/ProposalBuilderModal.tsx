@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import type { LuxorInvoiceLineItem, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
+import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
+import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 
 type ProposalSubmitAction = 'save' | 'email'
 
@@ -45,6 +47,10 @@ type CalculatedPackage = {
   finalEventPrice?: number
   refundableSecurityDeposit?: number
   amountDueToBook?: number
+  subtotal?: number
+  discountAmount?: number
+  taxAmount?: number
+  taxRate?: number
   lineItems?: LuxorInvoiceLineItem[]
   warnings?: string[]
   errors?: string[]
@@ -112,32 +118,61 @@ const PACKAGE_OPTIONS: Array<{
   name: string
   eyebrow: string
   description: string
+  inclusions: readonly string[]
 }> = [
   {
     id: 'rent_only',
     name: 'Rental Only',
     eyebrow: 'Venue access',
     description: 'A clear venue foundation with the required event services calculated for this guest count.',
+    inclusions: ['Venue rental', 'Security', 'Cleaning', 'Tables & chairs setup'],
   },
   {
     id: 'bronze',
     name: 'Bronze - Essentials',
     eyebrow: 'Essentials',
     description: 'A polished starting point for a hosted celebration.',
+    inclusions: ['Everything in Rental Only', 'Essential Decor', 'Buffet catering', 'DJ'],
   },
   {
     id: 'silver',
     name: 'Silver - Premier',
     eyebrow: 'Premier',
     description: 'A fuller celebration package with the selected experience details.',
+    inclusions: ['Everything in Bronze', 'Full Decor & Planning', 'Signature Photo Booth', '8 event hours + 4 setup/breakdown hours'],
   },
   {
     id: 'gold',
     name: 'Gold - All-Inclusive',
     eyebrow: 'All inclusive',
     description: 'The most complete Luxor experience, calculated from the event itself.',
+    inclusions: ['Everything in Silver', 'Bartender service', '8 event hours + 4 setup/breakdown hours'],
   },
 ]
+
+/**
+ * The pricing engine owns the package base. These IDs are used only to keep
+ * a former optional selection from being carried into a new package and
+ * charged a second time when an owner switches packages.
+ */
+const PACKAGE_INCLUDED_SERVICE_IDS: Record<ProposalPackageId, readonly string[]> = {
+  rent_only: [],
+  bronze: ['essential_decor', 'buffet_catering', 'dj'],
+  silver: ['full_decor', 'buffet_catering', 'dj', 'photo_booth_signature'],
+  gold: ['full_decor', 'buffet_catering', 'dj', 'photo_booth_signature', 'bartender_service'],
+}
+
+/**
+ * These are replacements for an included service, not independent add-ons.
+ * The configuration deliberately does not have replacement pricing rules, so
+ * do not let the UI create a misleading double-charge.
+ */
+const PACKAGE_UNAVAILABLE_ADD_ON_IDS: Record<ProposalPackageId, readonly string[]> = {
+  rent_only: [],
+  bronze: ['full_decor', 'plated_catering'],
+  silver: ['essential_decor', 'plated_catering', 'photo_booth_signature', 'photo_booth_celebration', 'photo_booth_forever'],
+  gold: ['essential_decor', 'plated_catering', 'photo_booth_signature', 'photo_booth_celebration', 'photo_booth_forever'],
+}
 
 const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
   { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Decor package selected for the event.', exclusiveGroup: 'decor' },
@@ -156,8 +191,8 @@ const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
 
 const STEPS = [
   { id: 'details', label: 'Details', icon: ClipboardList },
+  { id: 'compare', label: 'Compare packages', icon: ReceiptText },
   { id: 'services', label: 'Services & items', icon: PackageCheck },
-  { id: 'compare', label: 'Compare', icon: ReceiptText },
   { id: 'review', label: 'Selected proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
 ] as const
@@ -263,6 +298,10 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
       finalEventPrice: asNumber(packageRecord.final_event_price, packageRecord.finalEventPrice, packageRecord.total, packageRecord.event_total),
       refundableSecurityDeposit: asNumber(packageRecord.refundable_security_deposit, packageRecord.refundableSecurityDeposit, packageRecord.security_deposit),
       amountDueToBook: asNumber(packageRecord.amount_due_to_book, packageRecord.amountDueToBook, packageRecord.due_now),
+      subtotal: asNumber(packageRecord.subtotal),
+      discountAmount: asNumber(packageRecord.discount_amount, packageRecord.discountAmount),
+      taxAmount: asNumber(packageRecord.tax_amount, packageRecord.taxAmount),
+      taxRate: asNumber(packageRecord.tax_rate, packageRecord.taxRate),
       lineItems: arrayFromUnknown(sourceLines).map(normalizeLineItem).filter((item): item is LuxorInvoiceLineItem => Boolean(item)),
       warnings: arrayFromUnknown(packageRecord.warnings).filter((warning): warning is string => typeof warning === 'string'),
       errors: arrayFromUnknown(packageRecord.errors).filter((error): error is string => typeof error === 'string'),
@@ -349,6 +388,7 @@ export function ProposalBuilderModal({
   onSubmit,
 }: ProposalBuilderModalProps) {
   const [stepIndex, setStepIndex] = useState(0)
+  const [furthestUnlockedStep, setFurthestUnlockedStep] = useState(0)
   const [localContext, setLocalContext] = useState<ProposalBuilderContext>(() => proposalContext || {})
   const [pricingStatus, setPricingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pricingError, setPricingError] = useState<string | null>(null)
@@ -369,6 +409,7 @@ export function ProposalBuilderModal({
   useEffect(() => {
     if (isOpen) return
     setStepIndex(0)
+    setFurthestUnlockedStep(0)
     setValidationMessage(null)
   }, [isOpen])
 
@@ -379,6 +420,16 @@ export function ProposalBuilderModal({
   const rentalPeriod = effectiveContext.rental_period || 'evening'
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
   const selectedServiceIdSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
+  const selectedPackageOption = PACKAGE_OPTIONS.find((option) => option.id === selectedPackage)
+  const packageIncludedServiceIds = selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : []
+  const packageUnavailableAddOnIds = selectedPackageOption ? PACKAGE_UNAVAILABLE_ADD_ON_IDS[selectedPackageOption.id] : []
+  const ineligibleServiceIds = useMemo(() => new Set([
+    ...packageIncludedServiceIds,
+    ...packageUnavailableAddOnIds,
+  ]), [packageIncludedServiceIds, packageUnavailableAddOnIds])
+  const optionalServices = useMemo(() => selectedPackageOption
+    ? availableServices.filter((service) => !ineligibleServiceIds.has(service.id))
+    : [], [availableServices, ineligibleServiceIds, selectedPackageOption])
   const paymentPlan = getPaymentPlan(effectiveContext)
   const adjustmentValue = discountValue ?? discountPercent
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
@@ -408,16 +459,32 @@ export function ProposalBuilderModal({
   const selectPackage = (packageId: string) => {
     const packageOption = PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(packageId))
     const canonicalId = packageOption?.id || packageId
+    const excludedServiceIds = new Set(packageOption
+      ? [...PACKAGE_INCLUDED_SERVICE_IDS[packageOption.id], ...PACKAGE_UNAVAILABLE_ADD_ON_IDS[packageOption.id]]
+      : [])
+    const nextServiceIds = selectedServiceIds.filter((id) => !excludedServiceIds.has(id))
+    const nextItems = items.filter((item) => (
+      item.pricingRole !== 'add_on'
+      || !item.catalogId
+      || !excludedServiceIds.has(item.catalogId)
+    ))
     onSelectedPackageIdChange?.(canonicalId)
     updateProposalContext({
       package_id: canonicalId,
       package_name: packageOption?.name,
+      pricing_selection: {
+        ...(effectiveContext.pricing_selection || {}),
+        service_ids: nextServiceIds,
+      },
     })
+    // Package base items come back from the server calculator. Keep only
+    // optional selections that remain valid for the newly selected package.
+    onItemsChange(nextItems)
   }
 
   const updateServiceSelection = (serviceId: string) => {
     const service = availableServices.find((candidate) => candidate.id === serviceId)
-    if (!service) return
+    if (!service || !selectedPackageOption || ineligibleServiceIds.has(serviceId)) return
 
     const libraryById = new Map(availableServices.map((candidate) => [candidate.id, candidate]))
     const isSelected = selectedServiceIdSet.has(serviceId)
@@ -550,12 +617,18 @@ export function ProposalBuilderModal({
   const selectedContext = calculation?.context || effectiveContext
   const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
   const refundableSecurityDeposit = selectedCalculatedPackage?.refundableSecurityDeposit ?? asNumber(selectedContext.refundable_security_deposit)
-  const amountDueToBook = selectedCalculatedPackage?.amountDueToBook ?? asNumber(selectedContext.amount_due_to_book)
   const finalLineItems = selectedCalculatedPackage?.lineItems?.length
     ? selectedCalculatedPackage.lineItems
     : calculation?.lineItems?.length
       ? calculation.lineItems
       : []
+  const proposalSubtotal = selectedCalculatedPackage?.subtotal ?? asNumber(selectedContext.subtotal)
+  const proposalDiscountAmount = selectedCalculatedPackage?.discountAmount ?? asNumber(selectedContext.discount_amount, selectedContext.discountAmount)
+  const proposalTaxAmount = selectedCalculatedPackage?.taxAmount ?? asNumber(selectedContext.tax_amount, selectedContext.taxAmount)
+  const proposalTaxRate = selectedCalculatedPackage?.taxRate ?? asNumber(selectedContext.tax_rate, selectedContext.taxRate)
+  const venueServicesTotal = asNumber(selectedContext.venue_services_total)
+  const eventServicesTotal = asNumber(selectedContext.event_services_total)
+  const eventAccess = asString(selectedContext.event_access)
   const pricingWarnings = uniqueMessages([
     ...(calculation?.warnings || []),
     ...(selectedCalculatedPackage?.warnings || []),
@@ -582,19 +655,22 @@ export function ProposalBuilderModal({
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.length > 0
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
-  const amountDueNow = typeof amountDueToBook === 'number' ? amountDueToBook : undefined
 
   const advance = () => {
     if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
       setValidationMessage('Add the event date and an expected guest count from 1 to 200 before continuing.')
       return
     }
-    if (stepIndex === 2 && !selectedPackage) {
-      setValidationMessage('Choose one package before reviewing the final proposal.')
+    if (stepIndex === 1 && !selectedPackage) {
+      setValidationMessage('Choose one package before continuing to its prefilled services and items.')
       return
     }
     setValidationMessage(null)
-    setStepIndex((current) => Math.min(current + 1, STEPS.length - 1))
+    setStepIndex((current) => {
+      const next = Math.min(current + 1, STEPS.length - 1)
+      setFurthestUnlockedStep((furthest) => Math.max(furthest, next))
+      return next
+    })
   }
 
   const retreat = () => {
@@ -613,14 +689,23 @@ export function ProposalBuilderModal({
 
   const headerStatus = pricingStatus === 'loading'
     ? 'Updating final price'
-    : pricingStatus === 'ready' && !pricingErrors.length && paymentPlanRequired
-      ? 'Payment plan needed'
-      : pricingStatus === 'ready' && !pricingErrors.length
-      ? 'Final price verified'
-      : 'Pricing needs event details'
+    : pricingStatus === 'ready' && !pricingErrors.length && !selectedPackage
+      ? 'Choose a package'
+      : pricingStatus === 'ready' && !pricingErrors.length && paymentPlanRequired
+        ? 'Payment plan needed'
+        : pricingStatus === 'ready' && !pricingErrors.length
+          ? 'Final price verified'
+          : 'Pricing needs event details'
+  const continueLabel = stepIndex === 0
+    ? 'Continue to compare'
+    : stepIndex === 1
+      ? 'Continue to services'
+      : stepIndex === 2
+        ? 'Continue to review'
+        : 'Continue to payment plan'
 
   return (
-    <PortalModal isOpen={isOpen} onClose={onClose} ariaLabel="Final proposal builder" maxWidth="max-w-[1180px]">
+    <PortalModal isOpen={isOpen} onClose={onClose} ariaLabel="Final proposal builder" maxWidth="max-w-[1340px]">
       <div className="flex h-[calc(100dvh-2rem)] max-h-[94vh] min-h-0 flex-col bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] sm:h-[90vh]">
         <header className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
@@ -646,16 +731,19 @@ export function ProposalBuilderModal({
                 const Icon = step.icon
                 const active = index === stepIndex
                 const complete = index < stepIndex
+                const locked = index > furthestUnlockedStep
                 return (
                   <li key={step.id} className="flex items-center gap-1 sm:gap-2">
                     <button
                       type="button"
+                      disabled={locked}
                       onClick={() => {
+                        if (locked) return
                         setStepIndex(index)
                         setValidationMessage(null)
                       }}
                       aria-current={active ? 'step' : undefined}
-                      className={`flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[9px] font-black uppercase tracking-[0.11em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:px-3 ${active ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : complete ? 'text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/8' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                      className={`flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[9px] font-black uppercase tracking-[0.11em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:cursor-not-allowed disabled:opacity-55 sm:px-3 ${active ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : complete ? 'text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/8' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
                     >
                       <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[#caa24c]/45 bg-[#caa24c]/15' : complete ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-[color:var(--portal-border)]'}`}>
                         {complete ? <Check size={11} /> : <Icon size={11} />}
@@ -837,82 +925,23 @@ export function ProposalBuilderModal({
           ) : null}
 
           {stepIndex === 1 ? (
-            <section className="mx-auto max-w-5xl space-y-6">
-              <div className="max-w-2xl">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 5</p>
-                <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Choose the services that belong in this event.</h3>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">This is the only place to alter selected services. Required cleaning, security, and any guest-count rules are calculated automatically and cannot be removed.</p>
-              </div>
-
-              <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-                  <p>Service prices are never typed here. Luxor’s pricing rules calculate the correct final amount from the event date, guest count, rental period, package, and selected services.</p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {availableServices.map((service) => {
-                  const selected = selectedServiceIdSet.has(service.id)
-                  return (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => updateServiceSelection(service.id)}
-                      aria-pressed={selected}
-                      className={`group min-h-32 rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/55 bg-[#caa24c]/10 shadow-[0_0_0_1px_rgba(202,162,76,0.08)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/35 hover:bg-[color:var(--portal-soft)]'}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{service.category}</span>
-                        <span className={`flex h-6 w-6 items-center justify-center rounded-full border ${selected ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)] group-hover:border-[#caa24c]/45'}`}>
-                          {selected ? <Check size={13} /> : <span className="text-base leading-none">+</span>}
-                        </span>
-                      </div>
-                      <p className="mt-4 text-base font-bold">{service.name}</p>
-                      {service.detail ? <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Selected services</p>
-                    <p className="mt-1 text-sm font-bold">{selectedServiceIds.length ? `${selectedServiceIds.length} service${selectedServiceIds.length === 1 ? '' : 's'} selected` : 'No optional services selected'}</p>
-                  </div>
-                  <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-[10px] font-bold text-[color:var(--portal-muted)]">Final price updates automatically</span>
-                </div>
-                {selectedServiceIds.length ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {selectedServiceIds.map((serviceId) => {
-                      const service = availableServices.find((candidate) => candidate.id === serviceId)
-                      return <span key={serviceId} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-2.5 py-1.5 text-[10px] font-bold text-[#8c6529] dark:text-[#f1d27a]"><Check size={12} />{service?.name || serviceId}</span>
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-
-          {stepIndex === 2 ? (
-            <section className="mx-auto max-w-5xl space-y-6">
+            <section className="mx-auto max-w-6xl space-y-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="max-w-2xl">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 5</p>
-                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare the packages at the actual event price.</h3>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">All four options use the same date, guest count, required services, and approved adjustment. Pick the one the client will receive.</p>
+                <div className="max-w-3xl">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 5</p>
+                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare packages at the actual event price.</h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Every card uses the same date, guest count, rental period, required services, approved adjustment, and tax treatment. Choose one first; its included items will be prefilled on the next screen.</p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold ${pricingStatus === 'ready' && !pricingErrors.length ? paymentPlanRequired ? 'border-amber-500/25 bg-amber-500/8 text-amber-800 dark:text-amber-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
                   {pricingStatus === 'loading' ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ReceiptText size={14} />}
-                  {pricingStatus === 'loading' ? 'Calculating final prices' : pricingStatus === 'ready' && paymentPlanRequired && !pricingErrors.length ? 'Final prices calculated — set payment plan' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}
+                  {pricingStatus === 'loading' ? 'Calculating final prices' : pricingStatus === 'ready' && paymentPlanRequired && !pricingErrors.length ? 'Final prices calculated — set payment plan later' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}
                 </div>
               </div>
 
               {pricingStatus === 'error' ? (
                 <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200">
                   <AlertCircle size={17} className="mt-0.5 shrink-0" />
-                  <div><p className="font-bold">Pricing configuration required — administrator review.</p><p className="mt-1">{pricingError || 'The current event cannot be priced yet.'}</p></div>
+                  <div><p className="font-bold">We could not calculate the final price yet.</p><p className="mt-1">{pricingError || 'Review the event details and package rules, then try again.'}</p></div>
                 </div>
               ) : null}
 
@@ -920,13 +949,14 @@ export function ProposalBuilderModal({
                 {packageCards.map((packageOption) => {
                   const active = normalizePackageId(packageOption.id) === normalizePackageId(selectedPackage)
                   const showPrice = pricingStatus === 'ready' && typeof packageOption.finalEventPrice === 'number'
+                  const inclusions = PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(packageOption.id))?.inclusions || []
                   return (
                     <button
                       key={packageOption.id}
                       type="button"
                       onClick={() => selectPackage(packageOption.id)}
                       aria-pressed={active}
-                      className={`relative flex min-h-[270px] flex-col rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/11 shadow-[0_0_0_1px_rgba(202,162,76,0.12)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40'}`}
+                      className={`relative flex min-h-[400px] flex-col rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/11 shadow-[0_0_0_1px_rgba(202,162,76,0.12)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">{packageOption.eyebrow}</span>
@@ -934,15 +964,45 @@ export function ProposalBuilderModal({
                       </div>
                       <h4 className="mt-3 font-serif text-xl font-semibold leading-6">{packageOption.name}</h4>
                       <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{packageOption.description}</p>
-                      <div className="mt-auto border-t border-[color:var(--portal-border)] pt-4">
+                      <div className="mt-4 border-y border-[color:var(--portal-border)] py-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p>
                         {showPrice ? <p className="mt-1 font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(packageOption.finalEventPrice)}</p> : <p className="mt-2 text-xs font-semibold text-[color:var(--portal-muted)]">Pricing appears after details are complete.</p>}
-                        {showPrice && typeof packageOption.amountDueToBook === 'number' ? <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Booking payment: <span className="font-mono font-bold text-[color:var(--portal-text)]">{formatMoney(packageOption.amountDueToBook)}</span> + separate security deposit</p> : null}
                       </div>
+                      <div className="mt-4">
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">What’s included</p>
+                        <ul className="mt-2 space-y-2 text-xs leading-4 text-[color:var(--portal-muted)]">
+                          {inclusions.map((inclusion) => <li key={inclusion} className="flex gap-2"><Check size={13} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /> <span>{inclusion}</span></li>)}
+                        </ul>
+                      </div>
+                      <span className={`mt-auto inline-flex min-h-10 items-center justify-center rounded-lg border px-3 text-[10px] font-black uppercase tracking-[0.12em] ${active ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}>{active ? 'Selected package' : 'Select package'}</span>
                     </button>
                   )
                 })}
               </div>
+
+              {selectedPackageOption ? (
+                <section className="grid gap-4 rounded-2xl border border-[#caa24c]/24 bg-[#caa24c]/[0.045] p-4 sm:p-5 lg:grid-cols-[1.35fr_.9fr]">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Selected package</p>
+                    <h4 className="mt-1 font-serif text-2xl font-semibold">{selectedCalculatedPackage?.name || selectedPackageOption.name}</h4>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Its base services are locked into the price. Continue to Services &amp; Items to see the exact calculated rows and choose any compatible upgrades.</p>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {selectedPackageOption.inclusions.map((inclusion) => <p key={inclusion} className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs font-semibold"><Check size={13} className="shrink-0 text-emerald-700 dark:text-emerald-300" />{inclusion}</p>)}
+                    </div>
+                  </div>
+                  <aside className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal summary</p>
+                    <div className="mt-3 space-y-2.5 text-sm">
+                      {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
+                      {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
+                      {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${proposalTaxRate}%)` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+                      <div className="flex items-end justify-between gap-3 border-t border-[#caa24c]/20 pt-3"><span className="text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Calculating…'}</span></div>
+                      <div className="flex items-center justify-between gap-3 text-xs"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{formatMoney(refundableSecurityDeposit ?? 750)}</span></div>
+                    </div>
+                    <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">The $750 deposit is collected separately after the Event Agreement is signed. It never changes the event price.</p>
+                  </aside>
+                </section>
+              ) : null}
 
               {pricingWarnings.length ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4">
@@ -959,6 +1019,41 @@ export function ProposalBuilderModal({
                   <p className="mt-1">Set the owner-approved payment plan in Step 5 before publishing. It does not change the final event price.</p>
                 </div>
               ) : null}
+
+              {pricingErrors.length ? (
+                <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200"><p className="font-bold">This package needs a pricing rule before it can be published.</p>{pricingErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1">{error}</p>)}</div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {stepIndex === 2 ? (
+            <section className="mx-auto max-w-6xl space-y-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 5</p>
+                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Services &amp; items, already built from the package.</h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The selected package has already filled in its required and included services. This is the only place to add a compatible upgrade; prices remain calculated from Luxor’s rules.</p>
+                </div>
+                <button type="button" onClick={() => { setStepIndex(1); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ArrowLeft size={13} /> Change package</button>
+              </div>
+
+              <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
+                  <p>Required services stay locked. Package services are never added twice, and replacement services only appear when Luxor has a defined pricing rule for them.</p>
+                </div>
+              </div>
+
+              <ProposalPackageItemsPanel
+                packageName={selectedCalculatedPackage?.name || selectedPackageOption?.name || null}
+                lineItems={finalLineItems}
+                optionalServices={optionalServices}
+                selectedServiceIds={selectedServiceIds}
+                pricingReady={pricingStatus === 'ready' && !pricingErrors.length}
+                finalEventPrice={finalEventPrice}
+                refundableSecurityDeposit={refundableSecurityDeposit}
+                onToggleService={updateServiceSelection}
+              />
 
               {pricingErrors.length ? (
                 <div role="alert" className="rounded-xl border border-red-500/25 bg-red-500/8 p-4 text-sm leading-6 text-red-800 dark:text-red-200"><p className="font-bold">This package needs a pricing rule before it can be published.</p>{pricingErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1">{error}</p>)}</div>
@@ -994,27 +1089,57 @@ export function ProposalBuilderModal({
                       <span className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">{selectedCalculatedPackage?.name || PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(selectedPackage))?.name}</span>
                     </div>
 
-                    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_250px]">
+                    <div className="mt-5 grid gap-2 border-y border-[color:var(--portal-border)] py-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {[
+                        ['Venue', 'Luxor Event Space'],
+                        ['Event date', formatEventDate(eventDateValue)],
+                        ['Guests', `${guestCount} expected`],
+                        ['Access', eventAccess || (rentalPeriod === 'full_day' ? 'Full day · 11 AM–11 PM' : rentalPeriod === 'morning' ? 'Morning · 9 AM–4 PM' : 'Evening · 6 PM–1 AM')],
+                      ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
+                    </div>
+
+                    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_290px]">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Included in the final proposal</p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">What’s included in this final proposal</p>
+                          <span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Exact calculated values</span>
+                        </div>
                         {finalLineItems.length ? (
                           <div className="mt-3 divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
-                            {finalLineItems.map((item, index) => (
-                              <div key={`${item.catalogId || item.description}-${index}`} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
-                                <div className="min-w-0"><p className="font-semibold">{item.description}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>{item.detail ? <p className="mt-0.5 text-xs leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}</div>
-                                <span className={`shrink-0 font-mono text-xs font-bold ${item.included ? 'text-emerald-700 dark:text-emerald-300' : 'text-[color:var(--portal-text)]'}`}>{item.included ? 'Included' : formatMoney(item.total)}</span>
-                              </div>
-                            ))}
+                            {finalLineItems.map((item, index) => {
+                              const itemStatus = item.included || item.pricingRole === 'included'
+                                ? 'Included'
+                                : item.required || item.pricingRole === 'required'
+                                  ? 'Required'
+                                  : item.pricingRole === 'add_on'
+                                    ? 'Add-on'
+                                    : item.pricingRole === 'discount'
+                                      ? 'Adjustment'
+                                      : 'Calculated'
+                              return (
+                                <div key={`${item.catalogId || item.description}-${index}`} className="flex items-start justify-between gap-4 px-3 py-3 text-sm">
+                                  <div className="min-w-0"><p className="font-semibold">{item.description}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>{item.detail ? <p className="mt-0.5 text-xs leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}</div>
+                                  <div className="shrink-0 text-right"><p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(item.total)}</p><span className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ${itemStatus === 'Included' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : itemStatus === 'Required' ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : itemStatus === 'Add-on' ? 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{itemStatus}</span></div>
+                                </div>
+                              )
+                            })}
                           </div>
                         ) : <p className="mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-muted)]">The detailed itemization will appear when the pricing service returns the selected package snapshot.</p>}
                       </div>
                       <aside className="h-fit rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4">
-                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p>
-                        <p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p>
-                        <div className="my-4 h-px bg-[#caa24c]/20" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Separate refundable security deposit</p>
-                        <p className="mt-1 font-mono text-lg font-black">{typeof refundableSecurityDeposit === 'number' ? formatMoney(refundableSecurityDeposit) : '$750'}</p>
-                        <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Held through the event and returned after the post-event inspection, subject to the Event Agreement.</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price summary</p>
+                        <div className="mt-3 space-y-2.5 text-sm">
+                          {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
+                          {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
+                          {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${proposalTaxRate}%)` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+                          <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
+                        </div>
+                        <div className="mt-4 border-t border-[#caa24c]/20 pt-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Separate refundable security deposit</p>
+                          <p className="mt-1 font-mono text-lg font-black">{formatMoney(refundableSecurityDeposit ?? 750)}</p>
+                          <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Held through the event and returned after the post-event inspection, subject to the Event Agreement.</p>
+                        </div>
+                        <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#8c6529] dark:text-[#f1d27a]">Payment process</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Proposal acceptance → Event Agreement → Stripe payment link after signature.</p></div>
                       </aside>
                     </div>
                   </div>
@@ -1024,84 +1149,91 @@ export function ProposalBuilderModal({
           ) : null}
 
           {stepIndex === 4 ? (
-            <section className="mx-auto max-w-4xl space-y-6">
-              <div className="max-w-2xl">
+            <section className="mx-auto max-w-6xl space-y-6">
+              <div className="max-w-3xl">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 5</p>
-                <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Set the booking payment plan.</h3>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The prospect accepts the final proposal first. Luxor sends the contract next. Stripe is sent only after the contract is signed.</p>
+                <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Set the exact agreement payment terms.</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The client accepts the final proposal first, Luxor sends the Event Agreement next, and Stripe is sent only after the agreement is signed. The schedule below shows exactly what that process will collect.</p>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.05fr_.95fr]">
-                <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Set the payment plan for this final proposal</p>
-                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">These are owner-entered agreement terms, saved with this specific proposal. Nothing is assumed automatically. Saving a draft opens the exact client email and attached-PDF preview; no message is sent.</p>
-                  <div className="mt-4 grid gap-3">
-                    <PortalSelect
-                      value={paymentPlan?.mode || ''}
-                      onChange={(value) => {
-                        if (value === 'deposit_and_balance' || value === 'pay_in_full') updatePaymentPlan({ mode: value })
-                      }}
-                      options={[
-                        { value: '', label: 'Choose a payment plan' },
-                        { value: 'deposit_and_balance', label: 'Initial booking payment + final balance' },
-                        { value: 'pay_in_full', label: 'Event price due in full after signing' },
-                      ]}
-                      className="w-full"
-                      buttonClassName="min-h-12 px-3 text-sm font-semibold normal-case tracking-normal"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-1.5">
-                        <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial booking payment %</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={paymentPlan?.booking_payment_percent ?? ''}
-                          onChange={(event) => updatePaymentPlan({ booking_payment_percent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })}
-                          disabled={paymentPlan?.mode === 'pay_in_full'}
-                          placeholder="Enter approved %"
-                          className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 font-mono text-sm outline-none focus:border-[#caa24c]/55 disabled:cursor-not-allowed disabled:opacity-45"
-                        />
-                      </label>
-                      <label className="space-y-1.5">
-                        <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final balance due (days before)</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={paymentPlan?.final_payment_due_days_before_event ?? ''}
-                          onChange={(event) => updatePaymentPlan({ final_payment_due_days_before_event: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
-                          placeholder="Enter approved days"
-                          className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 font-mono text-sm outline-none focus:border-[#caa24c]/55"
-                        />
-                      </label>
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.8fr)] lg:items-start">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">1 · Agreement payment terms</p>
+                    <h4 className="mt-1 text-lg font-bold">Choose the payment structure that Luxor has approved.</h4>
+                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">The percentage applies to the Final Event Price—not the refundable security deposit. The $750 deposit is collected separately with the initial Stripe payment and is not applied to the final balance.</p>
+                    <div className="mt-4 grid gap-3">
+                      <PortalSelect
+                        value={paymentPlan?.mode || ''}
+                        onChange={(value) => {
+                          if (value === 'deposit_and_balance' || value === 'pay_in_full') updatePaymentPlan({ mode: value })
+                        }}
+                        options={[
+                          { value: '', label: 'Choose an agreement payment plan' },
+                          { value: 'deposit_and_balance', label: 'Initial contract payment + final balance' },
+                          { value: 'pay_in_full', label: 'Final Event Price due in full after signing' },
+                        ]}
+                        className="w-full"
+                        buttonClassName="min-h-12 px-3 text-sm font-semibold normal-case tracking-normal"
+                      />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5">
+                          <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial contract payment %</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={paymentPlan?.booking_payment_percent ?? ''}
+                            onChange={(event) => updatePaymentPlan({ booking_payment_percent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })}
+                            disabled={paymentPlan?.mode === 'pay_in_full'}
+                            placeholder="Enter approved %"
+                            className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
+                          />
+                          <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Used only for the first Final Event Price payment.</p>
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final balance due (days before event)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={paymentPlan?.final_payment_due_days_before_event ?? ''}
+                            onChange={(event) => updatePaymentPlan({ final_payment_due_days_before_event: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
+                            disabled={paymentPlan?.mode === 'pay_in_full'}
+                            placeholder="Enter approved days"
+                            className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
+                          />
+                          <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">The schedule calculates this exact date from the event date.</p>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-5 space-y-4 border-t border-[color:var(--portal-border)] pt-5">
-                    {[
-                      { number: '1', title: 'Client accepts the final proposal', copy: 'The accepted package, price, service list, and payment terms are saved as one snapshot.' },
-                      { number: '2', title: 'Luxor sends the Event Agreement', copy: 'The client receives the contract to review and sign.' },
-                      { number: '3', title: 'Stripe payment link is sent after signature', copy: 'The initial booking payment and refundable security deposit are collected together only after the agreement is signed.' },
-                    ].map((item) => <div key={item.number} className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/28 bg-[#caa24c]/9 font-mono text-[10px] font-black text-[#8c6529] dark:text-[#f1d27a]">{item.number}</span><div><p className="text-sm font-bold">{item.title}</p><p className="mt-0.5 text-xs leading-5 text-[color:var(--portal-muted)]">{item.copy}</p></div></div>)}
-                  </div>
+                  <aside className="rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">What the client experiences</p>
+                    <ol className="mt-3 space-y-3">
+                      {[
+                        ['1', 'Accepts the proposal', 'The package, final price, service list, and payment terms lock together.'],
+                        ['2', 'Signs the Event Agreement', 'Luxor sends a secure agreement after proposal acceptance.'],
+                        ['3', 'Receives the Stripe link', 'Only then does Stripe collect the initial payment and the $750 refundable deposit.'],
+                      ].map(([number, title, copy]) => <li key={number} className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/28 bg-[#caa24c]/9 font-mono text-[10px] font-black text-[#8c6529] dark:text-[#f1d27a]">{number}</span><span><span className="block text-xs font-bold">{title}</span><span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--portal-muted)]">{copy}</span></span></li>)}
+                    </ol>
+                  </aside>
                 </div>
-                <aside className="rounded-2xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Booking payment summary</p>
-                  {hasFinalPrice ? (
-                    <div className="mt-4 space-y-3 text-sm">
-                      <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono font-bold">{formatMoney(finalEventPrice)}</span></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{paymentPlan?.mode === 'pay_in_full' ? 'Event price due after signing' : paymentPlan ? `Booking payment (${paymentPlan.booking_payment_percent}%)` : 'Booking payment'}</span><span className="font-mono font-bold">{typeof amountDueNow === 'number' ? formatMoney(amountDueNow) : 'Set payment terms above'}</span></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{typeof refundableSecurityDeposit === 'number' ? formatMoney(refundableSecurityDeposit) : '$750'}</span></div>
-                      <div className="border-t border-[#caa24c]/20 pt-3"><div className="flex items-end justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Due after contract signature</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{typeof amountDueNow === 'number' ? formatMoney(amountDueNow + (refundableSecurityDeposit ?? 750)) : 'Calculated after selection'}</span></div></div>
-                    </div>
-                  ) : <p className="mt-4 text-sm leading-6 text-[color:var(--portal-muted)]">Select a package with complete event details before the booking payment can be finalized.</p>}
-                  <div className="mt-5 border-t border-[#caa24c]/20 pt-4 text-xs leading-5 text-[color:var(--portal-muted)]">Separate refundable security deposit required for all bookings. Deposit is held throughout the event period and is returned following the post-event inspection, subject to the terms of the Event Agreement.</div>
-                </aside>
-              </div>
+              </section>
+
+              <ProposalPaymentSchedule
+                finalEventPrice={finalEventPrice}
+                venueServicesTotal={venueServicesTotal}
+                eventServicesTotal={eventServicesTotal}
+                refundableSecurityDeposit={refundableSecurityDeposit}
+                paymentPlan={paymentPlan}
+                finalPaymentDueDate={asString(selectedContext.final_payment_due_date)}
+                eventDate={eventDateValue}
+              />
 
               {paymentPlanRequired ? (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100"><p className="font-bold">Payment plan required before publishing.</p><p className="mt-1">Choose the payment plan and enter the owner-approved terms above. The event price is already calculated; these terms determine what is due after the agreement is signed.</p>{publicationErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1 text-xs">{error}</p>)}</div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100"><p className="font-bold">Payment terms are required before publishing.</p><p className="mt-1">The Final Event Price is already calculated. Choose the agreement plan and complete its approved terms above; the exact schedule will update immediately.</p>{publicationErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1 text-xs">{error}</p>)}</div>
               ) : null}
 
               {pricingErrors.length ? (
@@ -1117,7 +1249,7 @@ export function ProposalBuilderModal({
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
-            {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">Continue <ArrowRight size={14} /></button> : <>
+            {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} /></button> : <>
               <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
               <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
             </>}
