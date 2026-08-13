@@ -15,7 +15,7 @@ const PortalPdfViewerRenderer = dynamic<PortalPdfViewerProps>(
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-[440px] flex-1 items-center justify-center bg-[color:var(--portal-soft)] px-6 text-center text-sm text-[color:var(--portal-muted)]">
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-[color:var(--portal-soft)] px-6 text-center text-sm text-[color:var(--portal-muted)]">
         <LoaderCircle className="mr-2 animate-spin text-[#a8792f] dark:text-[#f1d27a]" size={18} />
         Preparing document viewer…
       </div>

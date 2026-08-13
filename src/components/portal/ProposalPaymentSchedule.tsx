@@ -22,8 +22,12 @@ export type ProposalPaymentScheduleProps = {
   eventServicesTotal?: number | null
   /** Kept separate from the event price and held under the signed agreement. */
   refundableSecurityDeposit?: number | null
-  /** The owner-approved terms saved with this proposal. */
-  paymentPlan?: LuxorProposalPaymentPlan | null
+  /**
+   * The owner-entered terms. A partial plan is rendered as an honest
+   * in-progress schedule, while calculation still withholds any amounts until
+   * it becomes an approved, complete plan.
+   */
+  paymentPlan?: Partial<LuxorProposalPaymentPlan> | null
   /** An explicit final-balance date. It wins over the days-before-event term. */
   finalPaymentDueDate?: DateValue
   eventDate?: DateValue
@@ -299,10 +303,19 @@ export function ProposalPaymentSchedule({
     : paymentPlan?.mode === 'deposit_and_balance'
       ? 'Initial contract payment + final balance'
       : 'Payment plan not set'
+  const hasFinalEventBalance = typeof schedule.finalEventBalance === 'number' && schedule.finalEventBalance > 0
+  const hasScheduledFinalBalance = hasFinalEventBalance && Boolean(schedule.finalPaymentDueDate)
+  const finalBalanceTiming = hasScheduledFinalBalance
+    ? `Due ${formatDate(schedule.finalPaymentDueDate)}`
+    : schedule.finalEventBalance === 0
+      ? 'No final balance'
+      : hasFinalEventBalance
+        ? 'Set due date in payment terms'
+        : 'Complete payment terms'
 
   return (
     <section aria-label="Proposal payment plan" className={`space-y-5 ${className}`.trim()}>
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Payment plan</p>
           <h3 className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)] sm:text-3xl">How this proposal is paid</h3>
@@ -369,7 +382,7 @@ export function ProposalPaymentSchedule({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Exact payment schedule</p>
-              {schedule.finalPaymentDueDate ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Final balance due <span className="font-semibold text-[color:var(--portal-text)]">{formatDate(schedule.finalPaymentDueDate)}</span>{schedule.finalPaymentDueDateSource === 'event_date' && paymentPlan ? ` (${paymentPlan.final_payment_due_days_before_event} days before the event)` : ''}.</p> : null}
+              {hasScheduledFinalBalance ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Final balance due <span className="font-semibold text-[color:var(--portal-text)]">{formatDate(schedule.finalPaymentDueDate)}</span>{schedule.finalPaymentDueDateSource === 'event_date' && paymentPlan ? ` (${paymentPlan.final_payment_due_days_before_event} days before the event)` : ''}.</p> : null}
             </div>
           </div>
 
@@ -400,7 +413,7 @@ export function ProposalPaymentSchedule({
               </table>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-5 text-sm leading-6 text-[color:var(--portal-muted)]">Set the Final Event Price and owner-approved payment plan to generate the exact agreement schedule.</div>
+            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-5 text-sm leading-6 text-[color:var(--portal-muted)]">Complete the owner-approved payment terms to generate the exact agreement schedule.</div>
           )}
 
           <div className="mt-4 grid gap-3 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] p-4 sm:grid-cols-[1fr_auto] sm:items-center">
@@ -457,7 +470,7 @@ export function ProposalPaymentSchedule({
             <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
               <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Final Event Price balance</p>
               <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>
-              <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{schedule.finalPaymentDueDate ? `Due ${formatDate(schedule.finalPaymentDueDate)}` : 'Set due date in payment terms'}</p>
+              <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{finalBalanceTiming}</p>
             </div>
           </div>
         </div>

@@ -25,10 +25,35 @@ type ProposalSubmitAction = 'save' | 'email'
 
 type ProposalPackageId = 'rent_only' | 'bronze' | 'silver' | 'gold'
 
-export type ProposalBuilderContext = Partial<LuxorProposalContext> & {
+export type ProposalBuilderContext = {
+  [key: string]: unknown
+  version?: number
+  pricing_config_version?: number
   package_id?: string
   package_name?: string
+  event_type?: string
+  event_date?: string
+  expected_guest_count?: number
+  rental_period?: 'morning' | 'evening' | 'full_day'
+  event_access?: string
+  venue_services_total?: number
+  event_services_total?: number
+  final_event_price?: number
+  refundable_security_deposit?: number
+  final_payment_due_date?: string
+  subtotal?: number
+  discount_amount?: number
+  discountAmount?: number
+  tax_amount?: number
+  taxAmount?: number
+  tax_rate?: number
+  taxRate?: number
+  calculation_warnings?: string[]
+  calculation_errors?: string[]
+  publication_errors?: string[]
   pricing_selection?: Record<string, unknown>
+  /** Step 5 may be intentionally incomplete while the owner is entering approved terms. */
+  payment_plan?: Partial<LuxorProposalPaymentPlan>
 }
 
 export type ProposalServiceOption = {
@@ -200,9 +225,16 @@ const STEPS = [
 const formatMoney = (value: number | null | undefined) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: value && value % 1 !== 0 ? 2 : 0,
+  // A proposal is a financial document: always show cents, including whole-dollar package lines.
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 }).format(value || 0)
+
+/** The pricing API stores a tax rate as a decimal (0.0825), while owners and clients expect 8.25%. */
+function formatTaxRate(value: number) {
+  const percent = value > 0 && value <= 1 ? value * 100 : value
+  return `${Number(percent.toFixed(3))}%`
+}
 
 function formatEventDate(value?: string | null) {
   const normalized = normalizeEventDateValue(value)
@@ -362,6 +394,26 @@ function getPaymentPlan(context: ProposalBuilderContext): LuxorProposalPaymentPl
   }
 }
 
+/**
+ * Step 5 needs to retain a partially-entered owner plan while it is being
+ * completed. It is intentionally separate from getPaymentPlan(), which only
+ * returns a publishable plan that the schedule and server may trust.
+ */
+function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProposalPaymentPlan> | null {
+  const plan = asRecord(context.payment_plan)
+  const mode = plan?.mode === 'pay_in_full' || plan?.mode === 'deposit_and_balance'
+    ? plan.mode
+    : null
+  if (!plan || !mode) return null
+  const bookingPaymentPercent = asNumber(plan.booking_payment_percent)
+  const finalPaymentDays = asNumber(plan.final_payment_due_days_before_event)
+  return {
+    mode,
+    ...(bookingPaymentPercent !== undefined ? { booking_payment_percent: bookingPaymentPercent } : {}),
+    ...(finalPaymentDays !== undefined ? { final_payment_due_days_before_event: finalPaymentDays } : {}),
+  }
+}
+
 export function ProposalBuilderModal({
   isOpen,
   onClose,
@@ -445,6 +497,7 @@ export function ProposalBuilderModal({
     ? availableServices.filter((service) => !ineligibleServiceIds.has(service.id))
     : [], [availableServices, ineligibleServiceIds, selectedPackageOption])
   const paymentPlan = getPaymentPlan(effectiveContext)
+  const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
   const adjustmentValue = discountValue ?? discountPercent
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
   const discountApproved = Boolean(
@@ -693,11 +746,7 @@ export function ProposalBuilderModal({
   }
 
   const updatePaymentPlan = (patch: Partial<LuxorProposalPaymentPlan>) => {
-    const current = paymentPlan || {
-      mode: 'deposit_and_balance' as const,
-      booking_payment_percent: 0,
-      final_payment_due_days_before_event: 0,
-    }
+    const current = paymentPlanDraft || {}
     updateProposalContext({ payment_plan: { ...current, ...patch } })
   }
 
@@ -816,7 +865,7 @@ export function ProposalBuilderModal({
                           value={guestCount || ''}
                           onChange={(event) => setGuestCount(event.target.value)}
                           placeholder="1–200"
-                          className="min-h-10 min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
+                          className="portal-input-transparent min-h-10 min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
                         />
                       </span>
                       <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Luxor accommodates up to 200 guests.</p>
@@ -1009,7 +1058,7 @@ export function ProposalBuilderModal({
                     <div className="mt-3 space-y-2.5 text-sm">
                       {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
                       {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
-                      {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${proposalTaxRate}%)` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+                      {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
                       <div className="flex items-end justify-between gap-3 border-t border-[#caa24c]/20 pt-3"><span className="text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Calculating…'}</span></div>
                       <div className="flex items-center justify-between gap-3 text-xs"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{formatMoney(refundableSecurityDeposit ?? 750)}</span></div>
                     </div>
@@ -1145,7 +1194,7 @@ export function ProposalBuilderModal({
                         <div className="mt-3 space-y-2.5 text-sm">
                           {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
                           {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
-                          {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${proposalTaxRate}%)` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+                          {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
                           <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
                         </div>
                         <div className="mt-4 border-t border-[#caa24c]/20 pt-4">
@@ -1178,7 +1227,7 @@ export function ProposalBuilderModal({
                     <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">The percentage applies to the Final Event Price—not the refundable security deposit. The $750 deposit is collected separately with the initial Stripe payment and is not applied to the final balance.</p>
                     <div className="mt-4 grid gap-3">
                       <PortalSelect
-                        value={paymentPlan?.mode || ''}
+                        value={paymentPlanDraft?.mode || ''}
                         onChange={(value) => {
                           if (value === 'deposit_and_balance' || value === 'pay_in_full') updatePaymentPlan({ mode: value })
                         }}
@@ -1198,9 +1247,9 @@ export function ProposalBuilderModal({
                             min="0"
                             max="100"
                             step="0.01"
-                            value={paymentPlan?.booking_payment_percent ?? ''}
+                            value={paymentPlanDraft?.booking_payment_percent ?? ''}
                             onChange={(event) => updatePaymentPlan({ booking_payment_percent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })}
-                            disabled={paymentPlan?.mode === 'pay_in_full'}
+                            disabled={paymentPlanDraft?.mode === 'pay_in_full'}
                             placeholder="Enter approved %"
                             className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
                           />
@@ -1212,9 +1261,9 @@ export function ProposalBuilderModal({
                             type="number"
                             min="0"
                             step="1"
-                            value={paymentPlan?.final_payment_due_days_before_event ?? ''}
+                            value={paymentPlanDraft?.final_payment_due_days_before_event ?? ''}
                             onChange={(event) => updatePaymentPlan({ final_payment_due_days_before_event: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
-                            disabled={paymentPlan?.mode === 'pay_in_full'}
+                            disabled={paymentPlanDraft?.mode === 'pay_in_full'}
                             placeholder="Enter approved days"
                             className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
                           />
@@ -1241,7 +1290,7 @@ export function ProposalBuilderModal({
                 venueServicesTotal={venueServicesTotal}
                 eventServicesTotal={eventServicesTotal}
                 refundableSecurityDeposit={refundableSecurityDeposit}
-                paymentPlan={paymentPlan}
+                paymentPlan={paymentPlanDraft}
                 finalPaymentDueDate={asString(selectedContext.final_payment_due_date)}
                 eventDate={eventDateValue}
               />
@@ -1263,7 +1312,7 @@ export function ProposalBuilderModal({
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
-            {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} /></button> : <>
+            {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
               <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
               <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
             </>}

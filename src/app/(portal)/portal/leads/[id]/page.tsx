@@ -1803,9 +1803,15 @@ export default function LeadDetailPage({
     setProposalContext((current) => {
       const currentSelection = asProposalRecord(current?.pricing_selection) || {}
       const calculatedSelection = asProposalRecord(calculationContext.pricing_selection) || {}
+      // Calculation responses arrive asynchronously. A response that began
+      // before the owner selected (or completed) Step 5 has no valid payment
+      // plan yet, so it must never erase the in-progress owner input.
+      const currentPaymentPlan = current?.payment_plan
+      const calculatedPaymentPlan = calculationContext.payment_plan
       return {
         ...current,
         ...calculationContext,
+        ...(currentPaymentPlan && !calculatedPaymentPlan ? { payment_plan: currentPaymentPlan } : {}),
         package_id: activePackageId || normalizeProposalPackageId(calculationContext.package_id) || current?.package_id,
         pricing_selection: { ...currentSelection, ...calculatedSelection },
       }

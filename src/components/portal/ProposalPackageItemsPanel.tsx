@@ -26,8 +26,9 @@ type ProposalPackageItemsPanelProps = {
 const formatMoney = (value: number | null | undefined) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: Number(value || 0) % 1 ? 2 : 0,
+  // Keep every line-item amount contract-ready and visually consistent.
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 }).format(Number(value || 0))
 
 const lineAmount = (item: LuxorInvoiceLineItem) => {

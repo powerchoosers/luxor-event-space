@@ -66,16 +66,18 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
 
   const scrollToPage = (pageNumber: number) => {
     const target = pageRefs.current[pageNumber - 1]
-    if (!target) return
+    const root = containerRef.current
+    if (!target || !root) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })
+    const targetTop = target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop
+    root.scrollTo({ top: Math.max(0, targetTop - 12), behavior: reducedMotion ? 'auto' : 'smooth' })
     setCurrentPage(pageNumber)
   }
 
   const titleLabel = title.charAt(0).toUpperCase() + title.slice(1)
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-label={`${titleLabel} document preview`}>
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label={`${titleLabel} document preview`}>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
         <p className="min-w-[105px] text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]" aria-live="polite">
           {pageCount ? `Page ${currentPage} of ${pageCount}` : 'Loading pages'}
@@ -122,7 +124,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
         </div>
       </div>
 
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-[#d8d2c8] p-3 sm:p-5">
+      <div ref={containerRef} tabIndex={0} aria-label={`Scrollable ${title.toLowerCase()} pages`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#d8d2c8] p-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/55 sm:p-5">
         {loadError ? (
           <div className="mx-auto flex min-h-[440px] max-w-md flex-col items-center justify-center rounded-xl border border-rose-500/20 bg-white/80 p-6 text-center">
             <p className="text-sm font-bold text-rose-700">This PDF could not be opened.</p>

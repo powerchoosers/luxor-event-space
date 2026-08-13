@@ -198,7 +198,7 @@ export function ProposalDeliveryPreview({
               </div>
             </section>
           ) : (
-            <section id={`${tabId}-pdf-panel`} role="tabpanel" aria-labelledby={`${tabId}-pdf-tab`} className="min-h-0 flex-1">
+            <section id={`${tabId}-pdf-panel`} role="tabpanel" aria-labelledby={`${tabId}-pdf-tab`} className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <PortalPdfViewer url={pdfUrl} title={isFrozen ? 'final proposal attachment' : isLegacyPublished ? 'historical legacy attachment' : 'proposal draft attachment'} />
             </section>
           )}

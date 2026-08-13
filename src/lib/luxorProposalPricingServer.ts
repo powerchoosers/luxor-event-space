@@ -1,7 +1,6 @@
 import 'server-only'
 
 import {
-  LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
   type LuxorProposalPricingConfig,
 } from './luxorProposalPricing'
 import { supabaseRest } from './supabaseRestServer'
@@ -20,9 +19,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeConfig(value: unknown): LuxorProposalPricingConfig {
-  // The pricing engine independently validates each required scenario. This
-  // narrow guard avoids treating a malformed database response as usable.
-  return isRecord(value) ? value as LuxorProposalPricingConfig : LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG
+  // Final proposals must always use the owner-managed database catalog. Do
+  // not silently fall back to code-held rates when the saved record is
+  // malformed; that could quote a client from an out-of-date price sheet.
+  if (!isRecord(value)) {
+    throw new Error('The active pricing catalog is invalid. Update it before creating a final proposal.')
+  }
+  return value as LuxorProposalPricingConfig
 }
 
 export async function getDefaultLuxorProposalPricing(): Promise<LuxorProposalPricingRecord> {
@@ -31,7 +34,7 @@ export async function getDefaultLuxorProposalPricing(): Promise<LuxorProposalPri
   )
   const row = rows[0]
   if (!row) {
-    throw new Error('Pricing configuration required — administrator review.')
+    throw new Error('No active pricing rules are available. A final price cannot be calculated until the Luxor pricing catalog is restored.')
   }
   return { ...row, config: normalizeConfig(row.config) }
 }
