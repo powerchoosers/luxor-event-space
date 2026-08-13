@@ -14,6 +14,7 @@ import {
   hasLuxorSignatureDeliveryDocuments,
   markLuxorSignatureAgreementDelivery,
   recordLuxorSignatureEvent,
+  updateLuxorSignatureRequest,
 } from './luxorSignaturesServer'
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
@@ -238,13 +239,13 @@ export async function markLuxorAgreementEmailJobFailed(job: LuxorEmailJob, error
         agreementDeliveryResendFailedAt: new Date().toISOString(),
         agreementDeliveryResendLastError: error,
       },
-    }).catch((markError) => {
+    }).catch((markError: unknown) => {
       console.error('Agreement resend failure could not preserve the original delivery state:', markError)
     })
     return
   }
   if (signature) {
-    await markLuxorSignatureAgreementDelivery(signature, 'failed').catch((markError) => {
+    await markLuxorSignatureAgreementDelivery(signature, 'failed').catch((markError: unknown) => {
       console.error('Agreement delivery failure could not be marked on the signature:', markError)
     })
   }

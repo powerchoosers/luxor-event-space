@@ -5097,14 +5097,16 @@ export default function LeadDetailPage({
                         <div>
                           <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Signature Timeline</p>
                           <div className="space-y-3 text-xs">
-                            <div className="flex items-center gap-3">
-                              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${contractBooking ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}><Check size={10} /></span>
-                              <div>
+                            <div className="flex items-start gap-3">
+                              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${contractBooking ? 'border-emerald-700/25 bg-emerald-700/10 text-emerald-800 dark:border-emerald-300/30 dark:bg-emerald-400/15 dark:text-emerald-200' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
+                                {contractBooking ? <Check size={11} strokeWidth={2.5} /> : <Circle size={7} className="fill-current" />}
+                              </span>
+                              <div className="min-w-0">
                                 <p className="font-bold text-[color:var(--portal-text)]">Booking record created</p>
-                                <p className="text-[9px] text-[color:var(--portal-muted)]">{contractBooking ? formatTimelineDate(contractBooking.created_at) : proposalAcceptedAt ? 'Proposal accepted — record pending' : 'Not created yet'}</p>
+                                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{contractBooking ? formatTimelineDate(contractBooking.created_at) : proposalAcceptedAt ? 'Proposal accepted — record pending' : 'Not created yet'}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-start gap-3">
                               <AnimatePresence mode="wait">
                                 <motion.span
                                   key={agreementDeliveryConfirmed ? 'sent' : agreementDeliveryPending ? 'sending' : agreementDeliveryFailed ? 'failed' : 'unsent'}
@@ -5112,13 +5114,13 @@ export default function LeadDetailPage({
                                   animate={{ scale: 1, opacity: 1 }}
                                   exit={{ scale: 0.6, opacity: 0 }}
                                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${agreementDeliveryConfirmed ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : agreementDeliveryFailed ? 'bg-rose-500/15 text-rose-700 ring-rose-600/20 dark:text-rose-300' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}
+                                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${agreementDeliveryConfirmed ? 'border-emerald-700/25 bg-emerald-700/10 text-emerald-800 dark:border-emerald-300/30 dark:bg-emerald-400/15 dark:text-emerald-200' : agreementDeliveryFailed ? 'border-rose-700/25 bg-rose-700/10 text-rose-800 dark:border-rose-300/30 dark:bg-rose-400/15 dark:text-rose-200' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}
                                 >
-                                  <Check size={10} />
+                                  {agreementDeliveryConfirmed ? <Check size={11} strokeWidth={2.5} /> : agreementDeliveryFailed ? <AlertCircle size={11} strokeWidth={2.4} /> : <Circle size={7} className="fill-current" />}
                                 </motion.span>
                               </AnimatePresence>
-                              <div>
-                                <p className={`font-bold transition-colors ${agreementDeliveryConfirmed ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{agreementDeliveryConfirmed ? 'Agreement email delivered' : agreementDeliveryPending ? 'Agreement email sending' : agreementDeliveryFailed ? 'Agreement email delivery failed' : 'Agreement email pending'}</p>
+                              <div className="min-w-0">
+                                <p className="font-bold text-[color:var(--portal-text)] transition-colors">{agreementDeliveryConfirmed ? 'Agreement email delivered' : agreementDeliveryPending ? 'Agreement email sending' : agreementDeliveryFailed ? 'Agreement email delivery failed' : 'Agreement email pending'}</p>
                                 <AnimatePresence mode="wait">
                                   <motion.p
                                     key={agreementSentAt || agreementDeliveryJob?.status || 'no_sent'}
@@ -5126,14 +5128,14 @@ export default function LeadDetailPage({
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -3 }}
                                     transition={{ duration: 0.2 }}
-                                    className="text-[9px] text-[color:var(--portal-muted)]"
+                                    className="text-[10px] leading-4 text-[color:var(--portal-muted)]"
                                   >
                                     {agreementSentAt ? formatTimelineDate(agreementSentAt) : agreementDeliveryPending ? 'Waiting for delivery confirmation' : agreementDeliveryFailed ? 'Review delivery before sending again' : 'No email confirmation yet'}
                                   </motion.p>
                                 </AnimatePresence>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-start gap-3">
                               <AnimatePresence mode="wait">
                                 <motion.span
                                   key={contractBooking?.contract_status || (proposalAcceptedAt ? 'agreement_pending' : 'proposal_pending')}
@@ -5141,12 +5143,12 @@ export default function LeadDetailPage({
                                   animate={{ scale: 1, opacity: 1 }}
                                   exit={{ scale: 0.6, opacity: 0 }}
                                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ${contractBooking?.contract_status === 'signed' ? 'bg-emerald-500/15 text-emerald-700 ring-emerald-600/20 dark:text-emerald-300' : agreementDeliveryConfirmed ? 'bg-[#caa24c]/15 text-[#8e661e] ring-[#caa24c]/30 dark:text-[#f1d27a] animate-pulse' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] ring-[color:var(--portal-border)]'}`}
+                                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${contractBooking?.contract_status === 'signed' ? 'border-emerald-700/25 bg-emerald-700/10 text-emerald-800 dark:border-emerald-300/30 dark:bg-emerald-400/15 dark:text-emerald-200' : agreementDeliveryConfirmed ? 'border-[#a8792f]/35 bg-[#caa24c]/15 text-[#765017] dark:border-[#e3bf67]/35 dark:bg-[#caa24c]/20 dark:text-[#f4d98f] animate-pulse' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}
                                 >
-                                  {contractBooking?.contract_status === 'signed' ? <Check size={10} /> : <Circle size={4} className="fill-current" />}
+                                  {contractBooking?.contract_status === 'signed' ? <Check size={11} strokeWidth={2.5} /> : <Circle size={7} className="fill-current" />}
                                 </motion.span>
                               </AnimatePresence>
-                              <div>
+                              <div className="min-w-0">
                                 <AnimatePresence mode="wait">
                                   <motion.p
                                     key={contractBooking?.contract_status === 'signed' ? 'signed_title' : contractBooking?.contract_status === 'viewed' ? 'viewed_title' : agreementDeliveryConfirmed ? 'awaiting_title' : 'not_ready_title'}
@@ -5159,7 +5161,7 @@ export default function LeadDetailPage({
                                     {contractBooking?.contract_status === 'signed' ? 'Contract signed' : contractBooking?.contract_status === 'viewed' ? 'Contract viewed by client' : agreementDeliveryConfirmed ? 'Awaiting client signature' : 'Signing link not ready'}
                                   </motion.p>
                                 </AnimatePresence>
-                                <p className="text-[9px] text-[color:var(--portal-muted)]">{contractBooking?.contract_signed_at ? formatTimelineDate(contractBooking.contract_signed_at) : agreementDeliveryConfirmed ? 'Waiting for the client to sign' : proposalAcceptedAt ? 'Agreement delivery must complete first' : 'The client must accept the proposal first'}</p>
+                                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{contractBooking?.contract_signed_at ? formatTimelineDate(contractBooking.contract_signed_at) : agreementDeliveryConfirmed ? 'Waiting for the client to sign' : proposalAcceptedAt ? 'Agreement delivery must complete first' : 'The client must accept the proposal first'}</p>
                               </div>
                             </div>
                           </div>
