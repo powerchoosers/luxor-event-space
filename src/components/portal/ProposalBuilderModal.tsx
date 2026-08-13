@@ -205,10 +205,24 @@ const formatMoney = (value: number | null | undefined) => new Intl.NumberFormat(
 }).format(value || 0)
 
 function formatEventDate(value?: string | null) {
-  if (!value) return 'Not set'
-  const parsed = new Date(`${value}T12:00:00`)
+  const normalized = normalizeEventDateValue(value)
+  if (!normalized) return 'Not set'
+  const parsed = new Date(`${normalized}T12:00:00`)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+/** PortalDatePicker accepts calendar dates, not legacy display strings such as “February 14th”. */
+function normalizeEventDateValue(value?: string | null) {
+  if (typeof value !== 'string') return ''
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return ''
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return ''
+  return `${match[1]}-${match[2]}-${match[3]}`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -415,7 +429,7 @@ export function ProposalBuilderModal({
 
   const effectiveContext = localContext
   const selectedPackage = normalizePackageId(selectedPackageId || effectiveContext.package_id)
-  const eventDateValue = effectiveContext.event_date || eventDate || ''
+  const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
