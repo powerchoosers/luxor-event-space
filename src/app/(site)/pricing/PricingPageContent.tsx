@@ -60,7 +60,7 @@ export default function PricingPageContent() {
 
       <section className="bg-[#080706] py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Venue rental · from $1,000</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Start with the room. Add only what your celebration needs.</h2><p className="mt-5 text-base leading-7 text-[#d7c29a]/72">Morning is 9am–4pm, evening is 6pm–1am, and full day is 11am–11pm. These are the actual base rental rates; availability and required services are confirmed in your final proposal.</p></Reveal>
+          <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Venue rental · from $1,000</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Start with the room. Add only what your celebration needs.</h2><p className="mt-5 text-base leading-7 text-[#d7c29a]/72">Morning is 8am–3pm, evening is 5pm–12am, and full day is 11am–11pm. These are the actual base rental rates; availability and required services are confirmed in your final proposal.</p></Reveal>
           <Reveal delay={100}>
             <div className="mt-10 overflow-hidden rounded-md border border-[#caa24c]/22">
               <div className="hidden grid-cols-4 bg-[#120d0c] px-6 py-4 font-mono text-xs uppercase tracking-[.2em] text-[#caa24c] sm:grid"><span>Day</span><span>Morning</span><span>Evening</span><span>Full day</span></div>

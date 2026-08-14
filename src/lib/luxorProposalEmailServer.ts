@@ -17,6 +17,21 @@ export type LuxorProposalDisplayLine = {
   included: boolean
 }
 
+/**
+ * A promotion is copied into the proposal snapshot when the owner publishes
+ * it. The display layer deliberately reads that copy instead of the live
+ * promotion record so a later edit or deactivation can never change a
+ * proposal that was already sent, accepted, or signed.
+ */
+export type LuxorProposalPromotionSnapshot = {
+  id: string | null
+  name: string
+  code: string | null
+  discountType: 'percent' | 'fixed' | null
+  value: number | null
+  amount: number
+}
+
 export type LuxorProposalPricingSummary = {
   packageName: string | null
   /** The date frozen with the proposal, which can differ from a lead's old request. */
@@ -26,6 +41,7 @@ export type LuxorProposalPricingSummary = {
   lines: LuxorProposalDisplayLine[]
   subtotal: number
   approvedDiscount: number
+  promotion: LuxorProposalPromotionSnapshot | null
   tax: number
   finalEventPrice: number
   refundableSecurityDeposit: number
@@ -73,6 +89,66 @@ function proposalContext(value: unknown): UnknownRecord {
     return isRecord(parsed) ? parsed : {}
   } catch {
     return {}
+  }
+}
+
+function recordFrom(value: unknown) {
+  return isRecord(value) ? value : null
+}
+
+function recordValue(record: UnknownRecord | null, ...keys: string[]) {
+  if (!record) return undefined
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) return record[key]
+  }
+  return undefined
+}
+
+function promotionSnapshot(context: UnknownRecord, rawInvoice: UnknownRecord, approvedDiscount: number): LuxorProposalPromotionSnapshot | null {
+  if (approvedDiscount <= 0.004) return null
+
+  const pricingSnapshot = recordFrom(context.pricing_snapshot)
+  const pricingSelection = recordFrom(context.pricing_selection)
+  const candidates = [
+    recordFrom(context.promotion_snapshot),
+    recordFrom(context.promotionSnapshot),
+    recordFrom(context.promotion),
+    recordFrom(pricingSnapshot?.promotion_snapshot),
+    recordFrom(pricingSnapshot?.promotionSnapshot),
+    recordFrom(pricingSnapshot?.promotion),
+    recordFrom(pricingSelection?.promotion_snapshot),
+    recordFrom(pricingSelection?.promotionSnapshot),
+    recordFrom(pricingSelection?.promotion),
+    recordFrom(rawInvoice.promotion_snapshot),
+    recordFrom(rawInvoice.promotionSnapshot),
+    recordFrom(rawInvoice.promotion),
+  ]
+  const promotion = candidates.find((candidate): candidate is UnknownRecord => Boolean(candidate)) ?? null
+  const source = promotion || context
+  const rawType = recordValue(source, 'discount_type', 'discountType', 'type')
+    ?? recordValue(context, 'promotion_discount_type', 'promotionDiscountType', 'discount_type', 'discountType')
+    ?? recordValue(rawInvoice, 'discount_type', 'discountType')
+  const discountType = rawType === 'percent' || rawType === 'fixed' ? rawType : null
+  const rawName = recordValue(source, 'name', 'promotion_name', 'promotionName')
+    ?? recordValue(context, 'promotion_name', 'promotionName')
+    ?? recordValue(rawInvoice, 'promotion_name', 'promotionName')
+  const rawCode = recordValue(source, 'code', 'promotion_code', 'promotionCode')
+    ?? recordValue(context, 'promotion_code', 'promotionCode')
+    ?? recordValue(rawInvoice, 'promotion_code', 'promotionCode')
+  const rawId = recordValue(source, 'id', 'promotion_id', 'promotionId')
+    ?? recordValue(context, 'promotion_id', 'promotionId')
+    ?? recordValue(rawInvoice, 'promotion_id', 'promotionId')
+  const rawValue = recordValue(source, 'value', 'discount_value', 'discountValue')
+    ?? recordValue(context, 'promotion_value', 'promotionValue', 'discount_value', 'discountValue')
+    ?? recordValue(rawInvoice, 'discount_value', 'discountValue')
+
+  return {
+    id: asText(rawId),
+    name: asText(rawName) || 'Promotion discount',
+    code: asText(rawCode),
+    discountType,
+    value: asNonNegativeMoney(rawValue),
+    amount: approvedDiscount,
   }
 }
 
@@ -145,6 +221,7 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const tax = explicitTax > 0
     ? explicitTax
     : Math.max(0, roundMoney(finalEventPrice - (subtotal - approvedDiscount)))
+  const promotion = promotionSnapshot(context, rawInvoice, approvedDiscount)
 
   const isEventProposal = asText(rawInvoice.invoice_kind) === 'event' || Object.keys(context).length > 0
   const refundableSecurityDeposit = asNonNegativeMoney(context.refundable_security_deposit)
@@ -158,6 +235,7 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     lines: serviceItems.map(({ category, service, quantity, unitPrice, lineTotal, included }) => ({ category, service, quantity, unitPrice, lineTotal, included })),
     subtotal,
     approvedDiscount,
+    promotion,
     tax,
     finalEventPrice,
     refundableSecurityDeposit,
@@ -196,10 +274,13 @@ function proposalFinancialSummaryHtml(summary: LuxorProposalPricingSummary, opti
   const paymentCopy = options.paymentRequested
     ? 'Use the secure payment link in this email to complete the requested payment.'
     : 'No payment is requested in this proposal. A secure payment link is sent only after the agreement is signed.'
+  const promotionRow = summary.approvedDiscount > 0.004
+    ? `<tr><td style="padding:10px 20px 0;color:#b8aa9a;font-size:11px">${escapeHtml(summary.promotion?.name || 'Promotion discount')}</td><td align="right" style="padding:10px 20px 0;color:#f7efe3;font-size:12px;font-weight:700">-${money(summary.approvedDiscount)}</td></tr>`
+    : ''
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;border:1px solid rgba(202,162,76,.22);background:#0d0b09;border-collapse:collapse">
     <tr><td style="padding:18px 20px 0;color:#b8aa9a;font-size:11px">Package subtotal</td><td align="right" style="padding:18px 20px 0;color:#f7efe3;font-size:12px;font-weight:700">${money(summary.subtotal)}</td></tr>
-    <tr><td style="padding:10px 20px 0;color:#b8aa9a;font-size:11px">Approved discount</td><td align="right" style="padding:10px 20px 0;color:#f7efe3;font-size:12px;font-weight:700">${summary.approvedDiscount > 0 ? `-${money(summary.approvedDiscount)}` : money(0)}</td></tr>
+    ${promotionRow}
     <tr><td style="padding:10px 20px 18px;color:#b8aa9a;font-size:11px">Sales tax</td><td align="right" style="padding:10px 20px 18px;color:#f7efe3;font-size:12px;font-weight:700">${money(summary.tax)}</td></tr>
     <tr><td style="padding:17px 20px;border-top:1px solid rgba(202,162,76,.24);color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Final event price</td><td align="right" style="padding:14px 20px;border-top:1px solid rgba(202,162,76,.24);color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700">${money(summary.finalEventPrice)}</td></tr>
     <tr><td colspan="2" style="padding:0 20px 18px;color:#a99878;font-size:10px;line-height:1.55">This is the final price for your event services. It does not include the refundable security deposit below.</td></tr>
@@ -222,10 +303,11 @@ function offerDisclosureHtml(
     const offer = luxorOfferSnapshot(invoice)
     const finalPrice = summary?.finalEventPrice ?? offer.discountedTotal
     const originalPrice = summary ? roundMoney(finalPrice + offer.savings) : offer.originalTotal
+    const promotionName = summary?.promotion?.name || 'Promotion discount'
     const timingCopy = stage === 'accepted'
-      ? `The approved ${offer.percent}% adjustment saves ${money(offer.savings)} and is already reflected in the locked Final Event Price.`
-      : `The approved ${offer.percent}% adjustment saves ${money(offer.savings)}. ${expiresAt ? `Accept this final proposal by ${escapeHtml(expiresAt)} to lock its Final Event Price.` : 'Accept this final proposal to lock its Final Event Price.'}`
-    return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 8px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Approved adjustment</p><p style="margin:0;color:#f7efe3;font-size:14px"><span style="color:#b8aa9a;text-decoration:line-through">${money(originalPrice)}</span> &nbsp; <strong>${money(finalPrice)}</strong></p><p style="margin:8px 0 0;color:#d2efd9;font-size:12px;line-height:1.6">${timingCopy}</p></div>`
+      ? `${escapeHtml(promotionName)} saves ${money(offer.savings)} and is already reflected in the locked Final Event Price.`
+      : `${escapeHtml(promotionName)} saves ${money(offer.savings)}. ${expiresAt ? `Accept this final proposal by ${escapeHtml(expiresAt)} to lock its Final Event Price.` : 'Accept this final proposal to lock its Final Event Price.'}`
+    return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 8px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Promotion applied</p><p style="margin:0;color:#f7efe3;font-size:14px"><span style="color:#b8aa9a;text-decoration:line-through">${money(originalPrice)}</span> &nbsp; <strong>${money(finalPrice)}</strong></p><p style="margin:8px 0 0;color:#d2efd9;font-size:12px;line-height:1.6">${timingCopy}</p></div>`
   }
   if (expiresAt && stage === 'proposal') return `<div style="margin:22px 0;padding:16px 18px;border:1px solid rgba(202,162,76,.25);background:#0d0b09;color:#e7d4aa;font-size:12px;line-height:1.6">Accept this final proposal by ${escapeHtml(expiresAt)} to lock the Final Event Price. Luxor will then send the Event Agreement; the secure Stripe link follows after signature.</div>`
   return ''

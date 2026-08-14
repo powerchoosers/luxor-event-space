@@ -25,7 +25,8 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Tag
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -40,6 +41,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
 import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSettings'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
+import { PromotionManager } from '@/components/portal/PromotionManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -55,6 +57,7 @@ type Tab =
   | 'team'
   | 'integrations'
   | 'hours'
+  | 'promotions'
   | 'content'
 
 type BrandAsset = {
@@ -323,6 +326,7 @@ export default function SettingsPage() {
             { id: 'team', label: 'Team & Permissions', icon: <Lock size={15} /> },
             { id: 'integrations', label: 'Integrations', icon: <Cpu size={15} /> },
             { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> },
+            { id: 'promotions', label: 'Promotions', icon: <Tag size={15} /> },
             { id: 'content', label: 'Site Content', icon: <Building size={15} /> }
           ]}
           activeTab={activeTab}
@@ -765,6 +769,11 @@ export default function SettingsPage() {
             </div>
           )}
 
+
+          {/* SITE CONTENT */}
+          {activeTab === 'promotions' && (
+            <PromotionManager />
+          )}
 
           {/* SITE CONTENT */}
           {activeTab === 'content' && (

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import {
   getDefaultLuxorProposalPricing,
+  LuxorPromotionSelectionError,
+  resolveLuxorProposalPromotion,
   updateDefaultLuxorProposalPricing,
 } from '@/lib/luxorProposalPricingServer'
 import {
@@ -26,7 +28,9 @@ export async function GET() {
 /**
  * Server-authoritative calculation endpoint for the owner proposal builder.
  * It never accepts client-supplied totals or unit prices: just the selected
- * package, event details, allowed add-ons, and an explicit approved discount.
+ * package, event details, allowed add-ons, and a saved promotion id. It
+ * resolves saved promotion terms itself rather than trusting discount values
+ * from the browser.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -35,9 +39,11 @@ export async function POST(request: NextRequest) {
     const selection = object(body)?.selection
     if (!object(selection)) return NextResponse.json({ error: 'Proposal selection is required.' }, { status: 400 })
     const pricing = await getDefaultLuxorProposalPricing()
-    const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config)
+    const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection)
+    const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion })
     return NextResponse.json({ pricing_config_version: pricing.version, calculation })
   } catch (error) {
+    if (error instanceof LuxorPromotionSelectionError) return NextResponse.json({ error: error.message }, { status: 409 })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Pricing configuration required — administrator review.' }, { status: 500 })
   }
 }

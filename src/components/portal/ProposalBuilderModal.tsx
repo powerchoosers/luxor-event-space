@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import type { LuxorInvoiceLineItem, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
+import type { LuxorInvoiceLineItem, LuxorPromotion, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
@@ -52,6 +52,8 @@ export type ProposalBuilderContext = {
   calculation_errors?: string[]
   publication_errors?: string[]
   pricing_selection?: Record<string, unknown>
+  promotion_id?: string | null
+  promotionId?: string | null
   /** Step 5 may be intentionally incomplete while the owner is entering approved terms. */
   payment_plan?: Partial<LuxorProposalPaymentPlan>
 }
@@ -62,6 +64,8 @@ export type ProposalServiceOption = {
   category: string
   detail?: string
   exclusiveGroup?: 'decor' | 'catering' | 'photo_booth' | 'bar'
+  /** Basic choices establish a package tier; upgrades replace or enhance it. */
+  serviceLevel?: 'basic' | 'upgrade'
   quantityLabel?: string
   locked?: boolean
   required?: boolean
@@ -93,6 +97,20 @@ export type ProposalPricingCalculation = {
   requirements?: {
     paymentPlan?: boolean
   }
+  addOnQuotes?: Array<{
+    id?: string
+    total?: number | null
+    available?: boolean
+    error?: string
+    quoteBreakdown?: {
+      quantity?: number
+      unitPrice?: number
+      subtotal?: number
+      perGuestRate?: number
+      minimum?: number
+      appliedMinimum?: boolean
+    }
+  }>
   errors?: string[]
   [key: string]: unknown
 }
@@ -128,6 +146,11 @@ type ProposalBuilderModalProps = {
   onProposalContextChange?: (context: ProposalBuilderContext) => void
   selectedPackageId?: string | null
   onSelectedPackageIdChange?: (packageId: string) => void
+  /** Promotions are chosen by id; the pricing server resolves and snapshots their terms. */
+  promotionId?: string | null
+  onPromotionIdChange?: (promotionId: string | null) => void
+  /** Legacy drafts must be converted to a saved promotion before their next save. */
+  legacyDiscount?: { type: 'percent' | 'fixed'; value: number } | null
   availableServices?: ProposalServiceOption[]
   onCalculationChange?: (calculation: ProposalPricingCalculation | null) => void
   pricingEndpoint?: string
@@ -194,36 +217,29 @@ const PACKAGE_INCLUDED_SERVICE_IDS: Record<ProposalPackageId, readonly string[]>
  * The configuration deliberately does not have replacement pricing rules, so
  * do not let the UI create a misleading double-charge.
  */
-const PACKAGE_UNAVAILABLE_ADD_ON_IDS: Record<ProposalPackageId, readonly string[]> = {
-  rent_only: [],
-  bronze: ['full_decor', 'plated_catering'],
-  silver: ['essential_decor', 'plated_catering', 'photo_booth_signature', 'photo_booth_celebration', 'photo_booth_forever'],
-  gold: ['essential_decor', 'plated_catering', 'photo_booth_signature', 'photo_booth_celebration', 'photo_booth_forever'],
-}
-
 const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
   { id: 'venue_rental', name: 'Venue rental', category: 'Venue & rental', detail: 'The selected date and rental period set this exact price.', locked: true, required: true },
   { id: 'required_security', name: 'Security', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
   { id: 'required_cleaning', name: 'Cleaning', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
   { id: 'tables_chairs_setup', name: 'Tables & chairs setup', category: 'Setup & rentals', detail: 'Included or required according to the selected package.', locked: true, required: true },
-  { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Decor package selected for the event.', exclusiveGroup: 'decor' },
-  { id: 'full_decor', name: 'Full decor', category: 'Decor', detail: 'Full decor collection selected for the event.', exclusiveGroup: 'decor' },
-  { id: 'buffet_catering', name: 'Buffet catering', category: 'Catering', detail: 'Calculated from the expected guest count.', exclusiveGroup: 'catering' },
-  { id: 'plated_catering', name: 'Plated catering', category: 'Catering', detail: 'Calculated from the expected guest count.', exclusiveGroup: 'catering' },
+  { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Basic decor collection for the event.', exclusiveGroup: 'decor', serviceLevel: 'basic' },
+  { id: 'full_decor', name: 'Full decor & planning', category: 'Decor', detail: 'Upgrade to the full decor collection and planning service.', exclusiveGroup: 'decor', serviceLevel: 'upgrade' },
+  { id: 'buffet_catering', name: 'Buffet catering', category: 'Catering', detail: 'Basic catering style, calculated from the expected guest count.', exclusiveGroup: 'catering', serviceLevel: 'basic' },
+  { id: 'plated_catering', name: 'Plated catering', category: 'Catering', detail: 'Upgrade catering style, calculated from the expected guest count.', exclusiveGroup: 'catering', serviceLevel: 'upgrade' },
   { id: 'dj', name: 'DJ', category: 'Entertainment', detail: 'Professional DJ service.' },
-  { id: 'photo_booth_signature', name: 'Signature photo booth', category: 'Photo booth', detail: 'Signature photo booth experience.', exclusiveGroup: 'photo_booth' },
-  { id: 'photo_booth_celebration', name: 'Celebration photo booth', category: 'Photo booth', detail: 'Celebration photo booth experience.', exclusiveGroup: 'photo_booth' },
-  { id: 'photo_booth_forever', name: 'Forever photo booth', category: 'Photo booth', detail: 'Forever photo booth experience.', exclusiveGroup: 'photo_booth' },
-  { id: 'bartender_service', name: 'Bartender service', category: 'Bar', detail: 'Bartender service tier determined by guest count.', exclusiveGroup: 'bar' },
-  { id: 'byob_signature', name: 'Signature BYOB bar', category: 'Bar', detail: 'Signature BYOB package with the applicable minimum.', exclusiveGroup: 'bar' },
-  { id: 'byob_premium', name: 'Premium BYOB bar', category: 'Bar', detail: 'Premium BYOB package with the applicable minimum.', exclusiveGroup: 'bar' },
-  { id: 'byob_non_alcoholic', name: 'Non-alcoholic bar', category: 'Bar', detail: 'Non-alcoholic package with the applicable minimum.', exclusiveGroup: 'bar' },
+  { id: 'photo_booth_signature', name: 'Signature photo booth', category: 'Photo booth', detail: 'Basic photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'basic' },
+  { id: 'photo_booth_celebration', name: 'Celebration photo booth', category: 'Photo booth', detail: 'Upgrade photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
+  { id: 'photo_booth_forever', name: 'Forever photo booth', category: 'Photo booth', detail: 'Upgrade photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
+  { id: 'bartender_service', name: 'Bartender service', category: 'Bar', detail: 'Basic bar service tier determined by guest count.', exclusiveGroup: 'bar', serviceLevel: 'basic' },
+  { id: 'byob_signature', name: 'Signature BYOB bar', category: 'Bar', detail: 'Upgrade bar package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
+  { id: 'byob_premium', name: 'Premium BYOB bar', category: 'Bar', detail: 'Upgrade bar package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
+  { id: 'byob_non_alcoholic', name: 'Non-alcoholic bar', category: 'Bar', detail: 'Upgrade non-alcoholic package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
 ]
 
 const STEPS = [
   { id: 'details', label: 'Details', icon: ClipboardList },
-  { id: 'compare', label: 'Compare packages', icon: ReceiptText },
   { id: 'services', label: 'Services & items', icon: PackageCheck },
+  { id: 'compare', label: 'Compare packages', icon: ReceiptText },
   { id: 'review', label: 'Selected proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
 ] as const
@@ -537,18 +553,15 @@ export function ProposalBuilderModal({
   onDueDateChange,
   offerExpiryTime,
   onOfferExpiryTimeChange,
-  discountPercent,
-  onDiscountPercentChange,
-  discountType = 'percent',
-  onDiscountTypeChange,
-  discountValue,
-  onDiscountValueChange,
   items,
   onItemsChange,
   proposalContext,
   onProposalContextChange,
   selectedPackageId,
   onSelectedPackageIdChange,
+  promotionId,
+  onPromotionIdChange,
+  legacyDiscount,
   availableServices = DEFAULT_SERVICE_LIBRARY,
   onCalculationChange,
   pricingEndpoint = '/api/proposal-pricing',
@@ -566,6 +579,13 @@ export function ProposalBuilderModal({
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [calculation, setCalculation] = useState<ProposalPricingCalculation | null>(null)
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
+  const [pendingPackageChange, setPendingPackageChange] = useState<{ packageId: string; absorbedServiceIds: string[] } | null>(null)
+  const [promotions, setPromotions] = useState<LuxorPromotion[]>([])
+  const [promotionsStatus, setPromotionsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [promotionError, setPromotionError] = useState<string | null>(null)
+  const [promotionCreatorOpen, setPromotionCreatorOpen] = useState(false)
+  const [promotionDraft, setPromotionDraft] = useState<{ name: string; discount_type: 'percent' | 'fixed'; value: string }>({ name: '', discount_type: 'percent', value: '' })
+  const [savingPromotion, setSavingPromotion] = useState(false)
   const calculationCallbackRef = useRef(onCalculationChange)
   const contextKey = JSON.stringify(proposalContext || {})
 
@@ -583,6 +603,13 @@ export function ProposalBuilderModal({
     setStepIndex(0)
     setFurthestUnlockedStep(0)
     setValidationMessage(null)
+    setPendingPackageChange(null)
+    setPromotionCreatorOpen(false)
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    void loadPromotions()
   }, [isOpen])
 
   const effectiveContext = localContext
@@ -597,29 +624,86 @@ export function ProposalBuilderModal({
   ), [effectiveContext, items])
   const selectedServiceIdSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
   const selectedPackageOption = PACKAGE_OPTIONS.find((option) => option.id === selectedPackage)
-  const packageIncludedServiceIds = selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : []
-  const packageUnavailableAddOnIds = selectedPackageOption ? PACKAGE_UNAVAILABLE_ADD_ON_IDS[selectedPackageOption.id] : []
-  const ineligibleServiceIds = useMemo(() => new Set([
-    ...packageIncludedServiceIds,
-    ...packageUnavailableAddOnIds,
-  ]), [packageIncludedServiceIds, packageUnavailableAddOnIds])
+  const packageIncludedServiceIds = useMemo(() => selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : [], [selectedPackageOption])
+  const ineligibleServiceIds = useMemo(() => new Set(packageIncludedServiceIds), [packageIncludedServiceIds])
   const optionalServices = useMemo(() => selectedPackageOption
     ? availableServices.filter((service) => !ineligibleServiceIds.has(service.id))
     : [], [availableServices, ineligibleServiceIds, selectedPackageOption])
-  const paymentPlan = getPaymentPlan(effectiveContext)
   const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
-  const adjustmentValue = discountValue ?? discountPercent
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
-  const discountApproved = Boolean(
-    pricingSelection?.discount_approved
-    ?? pricingSelection?.discountApproved
-    ?? pricingSelection?.approved,
-  )
+  const selectedPromotionId = promotionId
+    || asString(pricingSelection?.promotionId)
+    || asString(pricingSelection?.promotion_id)
+    || asString(effectiveContext.promotionId)
+    || asString(effectiveContext.promotion_id)
+    || null
+  const selectedPromotion = promotions.find((promotion) => promotion.id === selectedPromotionId) || null
+  const hasUnmigratedLegacyDiscount = Boolean(!selectedPromotionId && legacyDiscount && legacyDiscount.value > 0)
 
   const updateProposalContext = (patch: Partial<ProposalBuilderContext>) => {
     const next = { ...effectiveContext, ...patch }
     setLocalContext(next)
     onProposalContextChange?.(next)
+  }
+
+  const setSelectedPromotion = (nextPromotionId: string | null) => {
+    const nextSelection = { ...(effectiveContext.pricing_selection || {}) }
+    if (nextPromotionId) {
+      nextSelection.promotionId = nextPromotionId
+      nextSelection.promotion_id = nextPromotionId
+    } else {
+      delete nextSelection.promotionId
+      delete nextSelection.promotion_id
+    }
+    onPromotionIdChange?.(nextPromotionId)
+    updateProposalContext({
+      promotionId: nextPromotionId,
+      promotion_id: nextPromotionId,
+      pricing_selection: nextSelection,
+    })
+  }
+
+  const loadPromotions = async () => {
+    setPromotionsStatus('loading')
+    setPromotionError(null)
+    try {
+      const response = await fetch('/api/portal/promotions', { credentials: 'same-origin' })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !Array.isArray(payload)) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Promotions could not be loaded.')
+      setPromotions(payload.filter((promotion): promotion is LuxorPromotion => Boolean(promotion && typeof promotion.id === 'string')))
+      setPromotionsStatus('ready')
+    } catch (error) {
+      setPromotionsStatus('error')
+      setPromotionError(error instanceof Error ? error.message : 'Promotions could not be loaded.')
+    }
+  }
+
+  const savePromotion = async () => {
+    const name = promotionDraft.name.trim()
+    const value = Number(promotionDraft.value)
+    if (!name || !Number.isFinite(value) || value <= 0 || (promotionDraft.discount_type === 'percent' && value > 100)) return
+    setSavingPromotion(true)
+    setPromotionError(null)
+    try {
+      const response = await fetch('/api/portal/promotions', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, discount_type: promotionDraft.discount_type, value }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload || typeof payload.id !== 'string') throw new Error(typeof payload?.error === 'string' ? payload.error : 'Promotion could not be saved.')
+      const savedPromotion = payload as LuxorPromotion
+      setPromotions((current) => [...current.filter((promotion) => promotion.id !== savedPromotion.id), savedPromotion].sort((a, b) => a.name.localeCompare(b.name)))
+      setSelectedPromotion(savedPromotion.id)
+      setPromotionDraft({ name: '', discount_type: 'percent', value: '' })
+      setPromotionCreatorOpen(false)
+      setPromotionsStatus('ready')
+    } catch (error) {
+      setPromotionError(error instanceof Error ? error.message : 'Promotion could not be saved.')
+    } finally {
+      setSavingPromotion(false)
+    }
   }
 
   const updateCustomItems = (nextItems: LuxorInvoiceLineItem[]) => {
@@ -646,9 +730,7 @@ export function ProposalBuilderModal({
   const selectPackage = (packageId: string) => {
     const packageOption = PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(packageId))
     const canonicalId = packageOption?.id || packageId
-    const excludedServiceIds = new Set(packageOption
-      ? [...PACKAGE_INCLUDED_SERVICE_IDS[packageOption.id], ...PACKAGE_UNAVAILABLE_ADD_ON_IDS[packageOption.id]]
-      : [])
+    const excludedServiceIds = new Set(packageOption ? PACKAGE_INCLUDED_SERVICE_IDS[packageOption.id] : [])
     const nextServiceIds = selectedServiceIds.filter((id) => !excludedServiceIds.has(id))
     const nextItems = items.filter((item) => (
       item.pricingRole !== 'add_on'
@@ -667,6 +749,22 @@ export function ProposalBuilderModal({
     // Package base items come back from the server calculator. Keep only
     // optional selections that remain valid for the newly selected package.
     onItemsChange(nextItems)
+  }
+
+  const requestPackageChange = (packageId: string, requireConfirmation = false) => {
+    const nextPackageId = normalizePackageId(packageId)
+    if (!nextPackageId || nextPackageId === selectedPackage) return
+    const nextPackage = PACKAGE_OPTIONS.find((option) => option.id === nextPackageId)
+    const absorbedServiceIds = nextPackage
+      ? selectedServiceIds.filter((id) => PACKAGE_INCLUDED_SERVICE_IDS[nextPackage.id].includes(id))
+      : []
+
+    if (requireConfirmation) {
+      setPendingPackageChange({ packageId: nextPackageId, absorbedServiceIds })
+      return
+    }
+
+    selectPackage(nextPackageId)
   }
 
   const updateServiceSelection = (serviceId: string) => {
@@ -723,9 +821,7 @@ export function ProposalBuilderModal({
       rentalPeriod,
       addOns: selectedServiceIds,
       customItems: customItemSelection(customItems),
-      discountType,
-      discountValue: Math.max(0, Number(adjustmentValue) || 0),
-      discountApproved: Math.max(0, Number(adjustmentValue) || 0) <= 0 || discountApproved,
+      promotionId: selectedPromotionId,
       taxRate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
       paymentPlan: effectiveContext.payment_plan || null,
     },
@@ -738,6 +834,7 @@ export function ProposalBuilderModal({
       ...(effectiveContext.pricing_selection || {}),
       service_ids: selectedServiceIds,
       customItems: customItemSelection(customItems),
+      ...(selectedPromotionId ? { promotionId: selectedPromotionId, promotion_id: selectedPromotionId } : {}),
     },
     selected_services: selectedServiceIds,
     line_items: items.map((item) => ({
@@ -746,12 +843,8 @@ export function ProposalBuilderModal({
       included: item.included,
       pricingRole: item.pricingRole,
     })),
-    discount: {
-      type: discountType,
-      value: Math.max(0, Number(adjustmentValue) || 0),
-    },
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [adjustmentValue, customItems, discountApproved, discountType, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, rentalPeriod, selectedPackage, selectedServiceIds, taxRate])
+  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = JSON.stringify(pricingRequest)
 
   useEffect(() => {
@@ -824,6 +917,16 @@ export function ProposalBuilderModal({
     }
     return result
   }, [calculation])
+  const serviceQuotes = useMemo(() => {
+    const result: Record<string, NonNullable<ProposalPricingCalculation['addOnQuotes']>[number]> = {}
+    for (const value of arrayFromUnknown(calculation?.addOnQuotes)) {
+      const quote = asRecord(value)
+      const id = asString(quote?.id)
+      if (!id) continue
+      result[id] = value as NonNullable<ProposalPricingCalculation['addOnQuotes']>[number]
+    }
+    return result
+  }, [calculation])
   const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === normalizePackageId(selectedPackage))
   const selectedContext = calculation?.context || effectiveContext
   const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
@@ -879,7 +982,7 @@ export function ProposalBuilderModal({
       return
     }
     if (stepIndex === 1 && !selectedPackage) {
-      setValidationMessage('Choose one package before continuing to its prefilled services and items.')
+      setValidationMessage('Choose a package at the top of Services & Items before comparing the final options.')
       return
     }
     setValidationMessage(null)
@@ -910,11 +1013,11 @@ export function ProposalBuilderModal({
           ? 'Final price verified'
           : 'Pricing needs event details'
   const continueLabel = stepIndex === 0
-    ? 'Continue to compare'
+    ? 'Continue to services & items'
     : stepIndex === 1
-      ? 'Continue to services'
-      : stepIndex === 2
-        ? 'Continue to review'
+      ? 'Continue to compare'
+    : stepIndex === 2
+      ? 'Continue to review'
         : 'Continue to payment plan'
 
   return (
@@ -984,7 +1087,7 @@ export function ProposalBuilderModal({
               <div className="max-w-2xl">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 1 of 5</p>
                 <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Start with the facts that set the price.</h3>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The date, rental period, guest count, approved adjustment, tax treatment, and selected services are the only inputs that shape this proposal. The final price comes from Luxor’s pricing rules.</p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The date, rental period, guest count, promotion, tax treatment, and selected services are the only inputs that shape this proposal. The final price comes from Luxor’s pricing rules.</p>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
@@ -994,7 +1097,7 @@ export function ProposalBuilderModal({
                     <input
                       value={description}
                       onChange={(event) => onDescriptionChange(event.target.value)}
-                      placeholder={`${eventType || 'Event'} at Luxor`}
+                      placeholder={`${clientName.split(/\s+/)[0] || 'Client'}’s ${eventType || 'Event'}`}
                       className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm font-semibold outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12"
                     />
                   </label>
@@ -1029,8 +1132,8 @@ export function ProposalBuilderModal({
                         value={rentalPeriod}
                         onChange={(value) => updateProposalContext({ rental_period: value as ProposalBuilderContext['rental_period'] })}
                         options={[
-                          { value: 'morning', label: 'Morning · 9 AM–4 PM' },
-                          { value: 'evening', label: 'Evening · 6 PM–1 AM' },
+                          { value: 'morning', label: 'Morning · 8 AM–3 PM' },
+                          { value: 'evening', label: 'Evening · 5 PM–12 AM' },
                           { value: 'full_day', label: 'Full day · 11 AM–11 PM' },
                         ]}
                         className="w-full"
@@ -1088,46 +1191,29 @@ export function ProposalBuilderModal({
                   </div>
                   <div className="border-t border-[color:var(--portal-border)] pt-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Approved price adjustment</span>
-                      {onDiscountTypeChange ? (
-                        <PortalSelect
-                          value={discountType}
-                          onChange={(value) => onDiscountTypeChange(value as 'percent' | 'fixed')}
-                          options={[{ value: 'percent', label: 'Percent' }, { value: 'fixed', label: 'Fixed amount' }]}
-                          className="min-w-[130px]"
-                          buttonClassName="min-h-8 px-2 text-[10px] font-bold normal-case tracking-normal"
-                        />
-                      ) : <span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Percent</span>}
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Add promotion</p>
+                        <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Promotions are saved once and can be used on future proposals.</p>
+                      </div>
+                      <button type="button" onClick={() => { setPromotionDraft({ name: '', discount_type: 'percent', value: '' }); setPromotionCreatorOpen(true) }} className="inline-flex min-h-8 shrink-0 items-center rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-[#8c6529] transition hover:bg-[#caa24c]/16 dark:text-[#f1d27a]">Create</button>
                     </div>
-                    <label className="mt-2 flex min-h-11 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12">
-                      <span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">{discountType === 'fixed' ? '$' : '%'}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={adjustmentValue}
-                        onChange={(event) => {
-                          if (onDiscountValueChange) onDiscountValueChange(event.target.value)
-                          else onDiscountPercentChange(event.target.value)
-                        }}
-                        className="min-h-10 min-w-0 flex-1 bg-transparent px-3 text-right font-mono text-sm font-bold outline-none"
-                      />
-                    </label>
-                    <label className="mt-2 flex cursor-pointer items-start gap-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                      <input
-                        type="checkbox"
-                        checked={discountApproved}
-                        onChange={(event) => updateProposalContext({
-                          pricing_selection: {
-                            ...(effectiveContext.pricing_selection || {}),
-                            discount_approved: event.target.checked,
-                          },
-                        })}
-                        className="mt-0.5 h-3.5 w-3.5 rounded border-[color:var(--portal-border)] text-[#a8792f] focus:ring-[#caa24c]/30"
-                      />
-                      <span>I confirm this adjustment has been approved. It will be visible in the locked final proposal.</span>
-                    </label>
+                    <PortalSelect
+                      value={selectedPromotionId || ''}
+                      onChange={(value) => setSelectedPromotion(value || null)}
+                      options={[
+                        { value: '', label: 'No promotion' },
+                        ...promotions.filter((promotion) => promotion.active).map((promotion) => ({
+                          value: promotion.id,
+                          label: `${promotion.name} · ${promotion.discount_type === 'fixed' ? formatMoney(promotion.value) : `${promotion.value}%`} off`,
+                        })),
+                      ]}
+                      className="mt-2 w-full"
+                      buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
+                    />
+                    {promotionsStatus === 'loading' ? <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]"><ProposalCalculationStatus label="Loading saved promotions" /></p> : null}
+                    {selectedPromotion ? <p className="mt-2 text-[10px] leading-4 text-emerald-700 dark:text-emerald-300">{selectedPromotion.name} ({selectedPromotion.code}) will be verified and snapped into this final proposal.</p> : null}
+                    {hasUnmigratedLegacyDiscount ? <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-[10px] leading-4 text-amber-900 dark:text-amber-100"><p className="font-bold">This draft has a legacy adjustment.</p><p className="mt-0.5">Save it as a promotion before saving this revision so its exact terms stay protected.</p><button type="button" onClick={() => { setPromotionDraft({ name: 'Legacy proposal promotion', discount_type: legacyDiscount?.type || 'percent', value: String(legacyDiscount?.value || '') }); setPromotionCreatorOpen(true) }} className="mt-2 font-black uppercase tracking-[0.09em] text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 dark:text-[#f1d27a]">Save as promotion</button></div> : null}
+                    {promotionError ? <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-[10px] leading-4 text-rose-700 dark:text-rose-300"><span>{promotionError}</span>{promotionsStatus === 'error' ? <button type="button" onClick={() => void loadPromotions()} className="font-black uppercase tracking-[0.09em] underline underline-offset-2">Retry</button> : null}</div> : null}
                   </div>
                 </aside>
               </div>
@@ -1139,13 +1225,13 @@ export function ProposalBuilderModal({
             </section>
           ) : null}
 
-          {stepIndex === 1 ? (
+          {stepIndex === 2 ? (
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 5</p>
-                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare packages at the actual event price.</h3>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Every card uses the same date, guest count, rental period, required services, approved adjustment, and tax treatment. Choose one first; its included items will be prefilled on the next screen.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 5</p>
+                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare the packages against your service selections.</h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Every card uses the same date, guest count, rental period, required services, saved promotion, and tax treatment. Switch packages here only when the comparison changes the right fit; compatible add-ons and custom items stay with the proposal.</p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold ${pricingStatus === 'ready' && !pricingErrors.length ? paymentPlanRequired ? 'border-amber-500/25 bg-amber-500/8 text-amber-800 dark:text-amber-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
                   {isCalculating ? <ProposalCalculationStatus label="Updating final prices" /> : <><ReceiptText size={14} />{pricingStatus === 'ready' && paymentPlanRequired && !pricingErrors.length ? 'Final prices calculated — set payment plan later' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}</>}
@@ -1168,7 +1254,7 @@ export function ProposalBuilderModal({
                     <button
                       key={packageOption.id}
                       type="button"
-                      onClick={() => selectPackage(packageOption.id)}
+                      onClick={() => requestPackageChange(packageOption.id, true)}
                       aria-pressed={active}
                       className={`relative flex min-h-[400px] flex-col rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/11 shadow-[0_0_0_1px_rgba(202,162,76,0.12)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'}`}
                     >
@@ -1199,7 +1285,7 @@ export function ProposalBuilderModal({
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Selected package</p>
                     <h4 className="mt-1 font-serif text-2xl font-semibold">{selectedCalculatedPackage?.name || selectedPackageOption.name}</h4>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Its base services are locked into the price. Continue to Services &amp; Items to see the exact calculated rows and choose any compatible upgrades.</p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Its base services are locked into the price. Compatible add-ons and custom items stay with the proposal; any service now included by the new package is absorbed and never charged twice.</p>
                     <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       {selectedPackageOption.inclusions.map((inclusion) => <p key={inclusion} className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs font-semibold"><Check size={13} className="shrink-0 text-emerald-700 dark:text-emerald-300" />{inclusion}</p>)}
                     </div>
@@ -1208,7 +1294,7 @@ export function ProposalBuilderModal({
                     <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal summary</p>
                     {isCalculating ? <div aria-label="Updating proposal summary" className="mt-3 space-y-3"><div className="flex items-center justify-between gap-3"><span className="h-3 w-28 rounded luxor-skeleton" /><span className="h-3 w-16 rounded luxor-skeleton" /></div><div className="flex items-center justify-between gap-3"><span className="h-3 w-24 rounded luxor-skeleton" /><span className="h-3 w-14 rounded luxor-skeleton" /></div><div className="border-t border-[#caa24c]/20 pt-3"><span className="block h-2.5 w-24 rounded luxor-skeleton" /><span className="mt-2 block h-6 w-28 rounded luxor-skeleton" /></div><div className="flex items-center justify-between gap-3"><span className="h-3 w-36 rounded luxor-skeleton" /><span className="h-3 w-16 rounded luxor-skeleton" /></div></div> : <div className="mt-3 space-y-2.5 text-sm">
                       {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
-                      {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved adjustment</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
+                      {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                       {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
                       <div className="flex items-end justify-between gap-3 border-t border-[#caa24c]/20 pt-3"><span className="text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Pricing not ready'}</span></div>
                       <div className="flex items-center justify-between gap-3 text-xs"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{formatMoney(refundableSecurityDeposit ?? 750)}</span></div>
@@ -1240,21 +1326,21 @@ export function ProposalBuilderModal({
             </section>
           ) : null}
 
-          {stepIndex === 2 ? (
+          {stepIndex === 1 ? (
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 5</p>
-                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Services &amp; items, already built from the package.</h3>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The selected package has already filled in its required and included services. This is the only place to add a compatible upgrade; prices remain calculated from Luxor’s rules.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 5</p>
+                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Build the services and items for this event.</h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Choose a starting package above, then adjust the exact service list. Required services stay locked; basic choices and upgrades are priced from Luxor’s approved rules.</p>
                 </div>
-                <button type="button" onClick={() => { setStepIndex(1); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ArrowLeft size={13} /> Change package</button>
+                <button type="button" onClick={() => { setStepIndex(2); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ReceiptText size={13} /> Compare packages</button>
               </div>
 
               <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
                 <div className="flex items-start gap-3">
                   <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-                  <p>Required services stay locked. Package services are never added twice, and replacement services only appear when Luxor has a defined pricing rule for them.</p>
+                  <p>Required services stay locked. Basic and upgrade choices are mutually exclusive inside each category, and the server verifies every exact price before publishing.</p>
                 </div>
               </div>
 
@@ -1269,9 +1355,10 @@ export function ProposalBuilderModal({
                 catalogServices={availableServices}
                 addableServiceIds={optionalServices.map((service) => service.id)}
                 lockedServiceIds={[...packageIncludedServiceIds]}
-                unavailableServiceIds={[...packageUnavailableAddOnIds]}
+                unavailableServiceIds={[]}
                 selectedServiceIds={selectedServiceIds}
                 servicePrices={servicePrices}
+                serviceQuotes={serviceQuotes}
                 pricingReady={pricingStatus === 'ready' && !pricingErrors.length}
                 finalEventPrice={finalEventPrice}
                 refundableSecurityDeposit={refundableSecurityDeposit}
@@ -1311,7 +1398,7 @@ export function ProposalBuilderModal({
                     <div className="flex flex-col gap-5 border-b border-[color:var(--portal-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Final proposal</p>
-                        <h4 className="mt-1 font-serif text-2xl font-semibold">{description || `${eventType || 'Event'} at Luxor`}</h4>
+                        <h4 className="mt-1 font-serif text-2xl font-semibold">{description || `${clientName.split(/\s+/)[0] || 'Client'}’s ${eventType || 'Event'}`}</h4>
                         <p className="mt-2 text-sm text-[color:var(--portal-muted)]">Prepared for {clientName} · {formatEventDate(eventDateValue)} · {guestCount} guests</p>
                       </div>
                       <span className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">{selectedCalculatedPackage?.name || PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(selectedPackage))?.name}</span>
@@ -1322,7 +1409,7 @@ export function ProposalBuilderModal({
                         ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
-                        ['Access', eventAccess || (rentalPeriod === 'full_day' ? 'Full day · 11 AM–11 PM' : rentalPeriod === 'morning' ? 'Morning · 9 AM–4 PM' : 'Evening · 6 PM–1 AM')],
+                        ['Access', eventAccess || (rentalPeriod === 'full_day' ? 'Full day · 11 AM–11 PM' : rentalPeriod === 'morning' ? 'Morning · 8 AM–3 PM' : 'Evening · 5 PM–12 AM')],
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
                     </div>
 
@@ -1347,7 +1434,7 @@ export function ProposalBuilderModal({
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price summary</p>
                         <div className="mt-3 space-y-2.5 text-sm">
                           {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Subtotal</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
-                          {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Approved discount</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
+                          {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                           {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
                           <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final total</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
                         </div>
@@ -1462,11 +1549,57 @@ export function ProposalBuilderModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
-              <button type="button" onClick={() => onSubmit('save')} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
-              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish} title={!canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
+              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : !canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>
+
+        <PortalModal isOpen={Boolean(pendingPackageChange)} onClose={() => setPendingPackageChange(null)} ariaLabel="Confirm package change" maxWidth="max-w-lg">
+          <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Compare packages</p>
+                <h3 className="mt-1 font-serif text-xl font-semibold">Switch the selected package?</h3>
+              </div>
+              <PortalCloseButton onClick={() => setPendingPackageChange(null)} aria-label="Cancel package change" />
+            </div>
+            <div className="space-y-4 px-5 py-5 text-sm leading-6 text-[color:var(--portal-muted)]">
+              <p>{pendingPackageChange ? <>Switch to <strong className="text-[color:var(--portal-text)]">{PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(pendingPackageChange.packageId))?.name}</strong>. Luxor will recalculate the exact price from its approved rules.</> : null}</p>
+              <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+                <p className="font-semibold text-[color:var(--portal-text)]">What stays with this proposal</p>
+                <p className="mt-1 text-xs">All custom items and compatible upgrades stay selected. Services that the new package already includes are absorbed into it and never charged twice.</p>
+              </div>
+              {pendingPackageChange?.absorbedServiceIds.length ? <div className="rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-3"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Moved into the new package</p><ul className="mt-1.5 space-y-1 text-xs">{pendingPackageChange.absorbedServiceIds.map((serviceId) => <li key={serviceId}>• {availableServices.find((service) => service.id === serviceId)?.name || serviceId.replaceAll('_', ' ')}</li>)}</ul></div> : null}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] px-5 py-4 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setPendingPackageChange(null)} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)] transition hover:text-[color:var(--portal-text)]">Keep current package</button>
+              <button type="button" onClick={() => { if (!pendingPackageChange) return; selectPackage(pendingPackageChange.packageId); setPendingPackageChange(null) }} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f]">Switch package</button>
+            </div>
+          </section>
+        </PortalModal>
+
+        <PortalModal isOpen={promotionCreatorOpen} onClose={() => setPromotionCreatorOpen(false)} ariaLabel="Create saved promotion" maxWidth="max-w-md">
+          <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Saved promotion</p>
+                <h3 className="mt-1 font-serif text-xl font-semibold">Create promotion</h3>
+              </div>
+              <PortalCloseButton onClick={() => setPromotionCreatorOpen(false)} aria-label="Close promotion creator" />
+            </div>
+            <form onSubmit={(event) => { event.preventDefault(); void savePromotion() }} className="space-y-4 px-5 py-5">
+              <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Promotion name</span><input value={promotionDraft.name} onChange={(event) => setPromotionDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Example: Grand opening special" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" autoFocus /></label>
+              <div className="grid gap-3 sm:grid-cols-[.9fr_1.1fr]">
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Type</span><PortalSelect value={promotionDraft.discount_type} onChange={(value) => setPromotionDraft((current) => ({ ...current, discount_type: value === 'fixed' ? 'fixed' : 'percent' }))} options={[{ value: 'percent', label: 'Percent off' }, { value: 'fixed', label: 'Dollar amount' }]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Value</span><span className="flex min-h-11 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12"><span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">{promotionDraft.discount_type === 'fixed' ? '$' : '%'}</span><input type="number" min="0.01" max={promotionDraft.discount_type === 'percent' ? 100 : undefined} step="0.01" inputMode="decimal" value={promotionDraft.value} onChange={(event) => setPromotionDraft((current) => ({ ...current, value: event.target.value }))} className="min-h-10 min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none" /></span></label>
+              </div>
+              <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Luxor creates the internal code automatically. You can edit or deactivate this saved promotion later in Settings.</p>
+              {promotionError ? <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{promotionError}</p> : null}
+              <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setPromotionCreatorOpen(false)} disabled={savingPromotion} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Cancel</button><button type="submit" disabled={savingPromotion || !promotionDraft.name.trim() || !(Number(promotionDraft.value) > 0)} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45">{savingPromotion ? 'Saving…' : 'Save promotion'}</button></div>
+            </form>
+          </section>
+        </PortalModal>
       </div>
     </PortalModal>
   )

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { getInvoiceByPublicToken, markLuxorProposalViewed } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
-import { formatLuxorOfferExpiry, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
+import { formatLuxorOfferExpiry, isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { AcceptProposalButton } from '@/components/proposal/AcceptEstimateButton'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { createNote } from '@/lib/luxorNotesServer'
@@ -39,7 +39,6 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     ? invoice.proposal_context
     : {}) as Record<string, unknown>
   const offerExpired = isLuxorOfferExpired(invoice)
-  const offer = luxorOfferSnapshot(invoice)
   const isPublished = invoice.status === 'sent' && Boolean(invoice.price_locked_at)
   const isAccepted = Boolean(invoice.proposal_accepted_at) || Boolean(booking)
   const contractSigned = booking?.contract_status === 'signed'
@@ -49,6 +48,10 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const eventDate = dateLabel(context.event_date)
   const expectedGuestCount = Number(context.expected_guest_count || 0)
   const packageItems = pricingSummary.lines
+  const promotion = pricingSummary.promotion
+  const promotionRate = promotion?.discountType === 'percent' && promotion.value !== null
+    ? ` (${promotion.value}%)`
+    : ''
 
   // A portal preview must never look like a client engagement event. Validate
   // the signed portal session rather than trusting the mere presence of a
@@ -85,7 +88,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
       <div className="mx-auto max-w-4xl overflow-hidden rounded-[28px] border border-[#caa24c]/25 bg-[#0b0907] shadow-2xl shadow-black/50">
         <header className="border-b border-[#caa24c]/15 px-6 py-8 text-center sm:px-10 sm:py-10">
           <p className="font-serif text-3xl font-semibold tracking-[0.2em] text-[#f1d27a]">LUXOR</p>
-          <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.38em] text-[#caa24c]/65">Event Space</p>
+          <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.38em] text-[#caa24c]/65">At Las Palmas Events</p>
         </header>
 
         <div className="px-5 py-7 sm:px-10 sm:py-10">
@@ -107,6 +110,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Event</p>
               <p className="mt-2 text-sm font-bold text-white">{typeof context.event_type === 'string' ? context.event_type : invoice.event_type || 'Private event'}</p>
               {eventDate ? <p className="mt-1 text-xs text-zinc-400">{eventDate}</p> : null}
+              {pricingSummary.eventAccess ? <p className="mt-1 text-xs text-zinc-500">Venue access: {pricingSummary.eventAccess}</p> : null}
               {expectedGuestCount > 0 ? <p className="mt-1 text-xs text-zinc-500">Expected guest count: {expectedGuestCount}</p> : null}
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -116,8 +120,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
             </div>
           </section>
 
-          {offer.active ? <section className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.08] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Approved promotion applied</p><p className="mt-2 text-lg font-bold text-white">Save {money(offer.savings)} ({offer.percent}%)</p><p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100/80">This approved reduction is already included in the Final Event Price.</p></section> : null}
-          {!offer.active && !offerExpired && invoice.offer_expires_at ? <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f1d27a]">Proposal availability</p><p className="mt-2 text-sm leading-6 text-zinc-200">Please select this proposal by {formatLuxorOfferExpiry(invoice.offer_expires_at) || 'the stated deadline'}.</p></section> : null}
+          {promotion ? <section className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.08] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Promotion applied</p><p className="mt-2 text-lg font-bold text-white">{promotion.name}: save {money(promotion.amount)}{promotionRate}</p><p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100/80">This promotion is already included in the Final Event Price.</p></section> : null}
+          {!offerExpired && invoice.offer_expires_at ? <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f1d27a]">Proposal availability</p><p className="mt-2 text-sm leading-6 text-zinc-200">Please select this proposal by {formatLuxorOfferExpiry(invoice.offer_expires_at) || 'the stated deadline'}.</p></section> : null}
           {offerExpired ? <section className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">Proposal expired</p><p className="mt-2 text-sm leading-6 text-amber-100/85">This proposal is no longer available at the previous price. Please contact Luxor for a refreshed final proposal.</p></section> : null}
 
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
@@ -129,7 +133,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
             <div className="border-b border-[#caa24c]/15 px-5 py-4 sm:px-6"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Final price</p><p className="mt-1 text-xs text-zinc-400">The package total below is the only service price shown to your guests.</p></div>
             <dl className="divide-y divide-white/[0.07] px-5 py-1 text-sm sm:px-6">
               <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Package subtotal</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.subtotal)}</dd></div>
-              {pricingSummary.approvedDiscount > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Approved discount</dt><dd className="font-mono text-zinc-200">-{money(pricingSummary.approvedDiscount)}</dd></div> : null}
+              {pricingSummary.approvedDiscount > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">{promotion?.name || 'Promotion discount'}</dt><dd className="font-mono text-zinc-200">-{money(pricingSummary.approvedDiscount)}</dd></div> : null}
               {pricingSummary.tax > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Sales tax</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.tax)}</dd></div> : null}
               <div className="flex items-end justify-between gap-5 py-4"><dt className="text-xs font-black uppercase tracking-[0.16em] text-[#f1d27a]">Final Event Price</dt><dd className="font-mono text-2xl font-black text-[#f1d27a]">{money(finalPrice)}</dd></div>
             </dl>

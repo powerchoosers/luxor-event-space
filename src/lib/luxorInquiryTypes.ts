@@ -175,6 +175,35 @@ export type LuxorPromotion = {
   metadata: Record<string, unknown>
 }
 
+/**
+ * Immutable promotion terms copied into a proposal when it is calculated.
+ * The live promotion may later be edited or deactivated; a published proposal
+ * must still display and charge the exact terms the owner selected.
+ */
+export type LuxorProposalPromotionSnapshot = {
+  id: string
+  name: string
+  code: string
+  discount_type: 'percent' | 'fixed'
+  value: number
+  amount: number
+}
+
+/**
+ * Owner-facing pricing evidence for calculated service rows. It keeps a
+ * per-guest rate and a minimum charge visible without changing the true line
+ * total used by the signed proposal.
+ */
+export type LuxorProposalPriceBreakdown = {
+  quantity: number
+  unit_price: number
+  subtotal: number
+  per_guest_rate?: number
+  minimum?: number
+  applied_minimum?: boolean
+  replacement_of?: string
+}
+
 export type LuxorPaymentInstallment = {
   id: string
   created_at: string
@@ -208,6 +237,10 @@ export type LuxorInvoiceLineItem = {
   required?: boolean
   /** Client-safe supporting copy for a service or package inclusion. */
   detail?: string
+  /** Owner-facing calculation evidence; optional for older immutable rows. */
+  quoteBreakdown?: LuxorProposalPriceBreakdown
+  /** A checklist-only inclusion, not a standalone priceable service. */
+  isChecklistItem?: boolean
   description: string
   quantity: number
   unitPrice: number
@@ -238,6 +271,8 @@ export type LuxorProposalContext = {
   refundable_security_deposit?: number
   amount_due_to_book?: number | null
   payment_plan?: LuxorProposalPaymentPlan
+  /** Immutable promotion terms, if a saved promotion was selected. */
+  promotion?: LuxorProposalPromotionSnapshot
   pricing_selection?: Record<string, unknown>
   calculation_warnings?: string[]
   calculation_errors?: string[]

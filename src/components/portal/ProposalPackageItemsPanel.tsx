@@ -22,6 +22,7 @@ export type ProposalPackageServiceOption = {
   category: string
   detail?: string
   exclusiveGroup?: 'decor' | 'catering' | 'photo_booth' | 'bar'
+  serviceLevel?: 'basic' | 'upgrade'
   quantityLabel?: string
   /** A visible package/required row that can be inspected but never changed here. */
   locked?: boolean
@@ -46,6 +47,20 @@ type CustomItemDraft = {
   paymentBucket: 'venue' | 'event'
 }
 
+type ProposalServiceQuote = {
+  total?: number | null
+  available?: boolean
+  error?: string
+  quoteBreakdown?: {
+    quantity?: number
+    unitPrice?: number
+    subtotal?: number
+    perGuestRate?: number
+    minimum?: number
+    appliedMinimum?: boolean
+  }
+}
+
 type ProposalPackageItemsPanelProps = {
   packageName?: string | null
   /** A compact, in-context package switcher for the Services & Items workspace. */
@@ -67,6 +82,8 @@ type ProposalPackageItemsPanelProps = {
   selectedServiceIds: string[]
   /** Exact current price for each selectable service, supplied by the pricing calculator. */
   servicePrices?: Record<string, number | null>
+  /** Rich quote metadata supports transparent per-guest and minimum-price math. */
+  serviceQuotes?: Record<string, ProposalServiceQuote>
   pricingReady: boolean
   finalEventPrice?: number | null
   refundableSecurityDeposit?: number | null
@@ -149,6 +166,20 @@ function libraryPrice(service: ProposalPackageServiceOption, lineItems: LuxorInv
   return matched ? lineAmount(matched) : null
 }
 
+function quoteMath(quote?: ProposalServiceQuote) {
+  const breakdown = quote?.quoteBreakdown
+  if (!breakdown) return null
+  const quantity = Number(breakdown.quantity)
+  const unitPrice = Number(breakdown.perGuestRate ?? breakdown.unitPrice)
+  const minimum = Number(breakdown.minimum)
+  if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(unitPrice) && unitPrice > 0) {
+    const base = `${quantity} guests × ${formatMoney(unitPrice)}`
+    if (Number.isFinite(minimum) && minimum > 0) return breakdown.appliedMinimum ? `${base}; ${formatMoney(minimum)} minimum applied` : `${base}; ${formatMoney(minimum)} minimum`
+    return `${base} = ${formatMoney(Number(breakdown.subtotal ?? quote?.total ?? quantity * unitPrice))}`
+  }
+  return null
+}
+
 export function ProposalPackageItemsPanel({
   packageName,
   packageOptions,
@@ -163,6 +194,7 @@ export function ProposalPackageItemsPanel({
   unavailableServiceIds,
   selectedServiceIds,
   servicePrices,
+  serviceQuotes,
   pricingReady,
   finalEventPrice,
   refundableSecurityDeposit,
@@ -219,7 +251,7 @@ export function ProposalPackageItemsPanel({
     setCustomDraft(null)
   }
 
-  if (!packageName) {
+  if (!packageName && !displayedPackages.length) {
     return (
       <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-5 text-sm leading-6 text-amber-900 dark:text-amber-100">
         <p className="font-bold">Choose a package before building its item list.</p>
@@ -291,25 +323,40 @@ export function ProposalPackageItemsPanel({
                   {services.map((service, index) => {
                     const selected = selectedServiceIdsSet.has(service.id)
                     const covered = lockedServiceIdsSet.has(service.id) || service.locked === true
-                    const unavailable = unavailableServiceIdsSet.has(service.id)
-                    const canToggle = selected || (addableServiceIdsSet.has(service.id) && !covered && !unavailable)
+                    const quote = serviceQuotes?.[service.id]
+                    const needsPricingReview = !covered && (unavailableServiceIdsSet.has(service.id) || quote?.available === false)
+                    const canToggle = selected || (addableServiceIdsSet.has(service.id) && !covered && !needsPricingReview)
                     const price = libraryPrice(service, calculatedLineItems, servicePrices)
-                    const stateLabel = service.required ? 'Required' : covered ? 'Included' : selected ? 'Added' : unavailable ? 'Not offered' : 'Add'
+                    const serviceState = service.required ? 'Required' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
+                    const perGuestMath = quoteMath(quote)
+                    const displayPrice = covered && price === 0
+                      ? 'Included'
+                      : price !== null && price > 0
+                        ? formatMoney(price)
+                        : null
                     return (
                       <div key={service.id} className={`flex gap-3 px-3 py-3 ${index ? 'border-t border-[color:var(--portal-border)]' : ''} ${selected ? 'bg-[#caa24c]/[0.055]' : ''}`}>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <p className="text-sm font-semibold leading-5">{service.name}</p>
-                            {pricingReady && price !== null ? (
-                              <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(price)}</p>
+                            {pricingReady && displayPrice ? (
+                              <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{displayPrice}</p>
+                            ) : pricingReady && needsPricingReview ? (
+                              <p className="shrink-0 text-right text-[9px] font-black uppercase tracking-[0.09em] text-amber-800 dark:text-amber-200">Pricing review</p>
+                            ) : pricingReady && covered ? (
+                              <p className="shrink-0 text-right text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Included</p>
+                            ) : pricingReady ? (
+                              <p className="shrink-0 text-right text-[9px] font-bold text-[color:var(--portal-muted)]">Exact price pending</p>
                             ) : (
                               <PortalSkeleton className="mt-0.5 h-3.5 w-16 shrink-0 rounded" />
                             )}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {service.detail ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
-                            {covered ? <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] ${service.required ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>{service.required ? 'Required for this event' : 'Included in package'}</span> : null}
-                            {unavailable ? <span className="inline-flex rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-[color:var(--portal-muted)]">Needs a pricing rule</span> : null}
+                            <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] ${service.required ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : service.serviceLevel === 'upgrade' ? 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{serviceState}</span>
+                            {covered && !service.required ? <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-emerald-700 dark:text-emerald-300">Included in package</span> : null}
+                            {needsPricingReview ? <span className="inline-flex rounded-full border border-amber-500/25 bg-amber-500/8 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-amber-800 dark:text-amber-200">Pricing rule needed</span> : null}
+                            {perGuestMath ? <span className="basis-full text-[10px] leading-4 text-[color:var(--portal-muted)]">{perGuestMath}</span> : null}
                           </div>
                         </div>
                         {canToggle ? (
@@ -319,10 +366,10 @@ export function ProposalPackageItemsPanel({
                             aria-pressed={selected}
                             className={`inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border px-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a] hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'}`}
                           >
-                            {selected ? <><X size={12} /> Remove</> : <><Plus size={12} /> {stateLabel}</>}
+                            {selected ? <><X size={12} /> Remove</> : <><Plus size={12} /> {service.serviceLevel === 'upgrade' ? 'Add upgrade' : service.serviceLevel === 'basic' ? 'Add basic' : 'Add'}</>}
                           </button>
                         ) : (
-                          <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{stateLabel}</span>
+                          <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{needsPricingReview ? 'Pricing review' : covered ? 'Included' : serviceState}</span>
                         )}
                       </div>
                     )
@@ -398,6 +445,7 @@ export function ProposalPackageItemsPanel({
                           ? allServices.find((service) => selectedServiceIdsSet.has(service.id) && serviceMatchesLineItem(service, item))
                           : undefined
                         const canRemoveAddOn = Boolean(matchingService)
+                        const isZeroIncludedValue = status.label === 'Included' && amount === 0
                         return (
                           <div key={`${item.id || item.catalogId || item.description}-${index}`} className={`flex gap-3 px-3 py-3 sm:px-4 ${index ? 'border-t border-[color:var(--portal-border)]' : ''}`}>
                             <div className="pt-0.5">
@@ -406,11 +454,11 @@ export function ProposalPackageItemsPanel({
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                                 <p className="text-sm font-semibold leading-5">{item.description}{Number(item.quantity || 1) > 1 ? ` × ${item.quantity}` : ''}</p>
-                                <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{status.label === 'Included' && amount === 0 ? 'Included' : formatMoney(amount)}</p>
+                                <p className="shrink-0 font-mono text-xs font-bold text-[color:var(--portal-text)]">{isZeroIncludedValue ? 'Included' : formatMoney(amount)}</p>
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                 <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ${statusClass(status.tone)}`}>{status.label}</span>
-                                <span className="text-[10px] text-[color:var(--portal-muted)]">Qty {Math.max(1, Number(item.quantity) || 1)} · {formatMoney(item.unitPrice)} each</span>
+                                <span className="text-[10px] text-[color:var(--portal-muted)]">{isZeroIncludedValue ? 'Package value is part of the selected final price.' : `Qty ${Math.max(1, Number(item.quantity) || 1)} · ${formatMoney(item.unitPrice)} each`}</span>
                               </div>
                               {item.detail ? <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{item.detail}</p> : null}
                               {isCustom || canRemoveAddOn ? (

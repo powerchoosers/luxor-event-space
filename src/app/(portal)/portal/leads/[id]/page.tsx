@@ -325,6 +325,8 @@ export default function LeadDetailPage({
   const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState('23:59')
   const [proposalContext, setProposalContext] = useState<ProposalBuilderContext | null>(null)
   const [selectedProposalPackageId, setSelectedProposalPackageId] = useState<string | null>(null)
+  const [selectedProposalPromotionId, setSelectedProposalPromotionId] = useState<string | null>(null)
+  const [legacyProposalDiscount, setLegacyProposalDiscount] = useState<{ type: 'percent' | 'fixed'; value: number } | null>(null)
   const [proposalGuestCount, setProposalGuestCount] = useState('')
   const [proposalCalculation, setProposalCalculation] = useState<ProposalPricingCalculation | null>(null)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
@@ -1721,6 +1723,12 @@ export default function LeadDetailPage({
   const getInvoiceTax = () => getInvoiceSubtotal() * (Math.max(0, Number(invoiceTaxRate) || 0) / 100)
   const getInvoiceTotal = () => getInvoiceSubtotal() + getInvoiceTax()
 
+  const defaultProposalTitle = (fullName?: string | null, requestedEventType?: string | null) => {
+    const firstName = String(fullName || '').trim().split(/\s+/)[0] || 'Client'
+    const proposalEventType = String(requestedEventType || '').trim() || 'Event'
+    return `${firstName}’s ${proposalEventType}`
+  }
+
   const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
@@ -1740,6 +1748,7 @@ export default function LeadDetailPage({
       || lead?.package_interest,
     ) || 'rent_only'
     const savedSelection = asProposalRecord(savedContext?.pricing_selection) || {}
+    const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext?.promotionId || savedContext?.promotion_id || '').trim() || null
     const nextContext: ProposalBuilderContext = {
       version: asProposalNumber(savedContext?.version, 1) || 1,
       event_type: String(savedContext?.event_type || activeEventForDisplay?.event_type || lead?.event_type || 'Event Booking'),
@@ -1753,6 +1762,7 @@ export default function LeadDetailPage({
     }
     setProposalContext(nextContext)
     setSelectedProposalPackageId(packageId)
+    setSelectedProposalPromotionId(savedPromotionId)
     setProposalGuestCount(guestCount ? String(guestCount) : '')
 
     if (invoice) {
@@ -1780,9 +1790,10 @@ export default function LeadDetailPage({
       setInvoiceItems(lineItems)
       setInvoiceNotes(invoice.notes || '')
       setInvoiceTaxRate(String(Number(invoice.tax_rate || 0) * 100))
+      setLegacyProposalDiscount(!savedPromotionId && discountValue > 0 ? { type: discountType, value: discountValue } : null)
     } else {
       const savedItems = activeEventForDisplay?.metadata?.proposalLineItems
-      setInvoiceDesc(String(activeEventForDisplay?.event_type || lead?.event_type || 'Event') + ' at Luxor')
+      setInvoiceDesc(defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate('')
       setInvoiceOfferExpiryTime('23:59')
       setInvoiceDiscountType('percent')
@@ -1793,6 +1804,7 @@ export default function LeadDetailPage({
         : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
       setInvoiceNotes('')
       setInvoiceTaxRate('')
+      setLegacyProposalDiscount(null)
     }
 
     setIsInvoiceModalOpen(true)
@@ -1903,6 +1915,8 @@ export default function LeadDetailPage({
             ? calculationSelection.custom_items
             : undefined
     const paymentPlan = asProposalRecord(context.payment_plan || calculationContext.payment_plan)
+    const promotionId = selectedProposalPromotionId
+      || String(contextSelection?.promotionId || contextSelection?.promotion_id || calculationSelection?.promotionId || calculationSelection?.promotion_id || '').trim()
 
     return {
       packageId,
@@ -1911,18 +1925,8 @@ export default function LeadDetailPage({
       eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
       rentalPeriod,
       addOns,
-      discountType: invoiceDiscountType,
-      discountValue: Math.max(0, Number(invoiceDiscountValue) || 0),
-      discountApproved: Math.max(0, Number(invoiceDiscountValue) || 0) <= 0
-        || contextSelection?.discount_approved === true
-        || contextSelection?.discountApproved === true
-        || calculationSelection?.discount_approved === true
-        || calculationSelection?.discountApproved === true,
+      ...(promotionId ? { promotionId } : {}),
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
-      discount: {
-        type: invoiceDiscountType,
-        value: Math.max(0, Number(invoiceDiscountValue) || 0),
-      },
       ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
     }
@@ -1965,14 +1969,11 @@ export default function LeadDetailPage({
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
-          description: invoiceDesc || String(activeEventForDisplay?.event_type || lead.event_type || 'Event') + ' at Luxor',
+          description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, activeEventForDisplay?.event_type || lead.event_type || 'Event')),
           line_items: invoiceItems,
           tax_rate: taxRate,
           due_date: invoiceDueDate || null,
           offer_expires_at: offerExpiresAt,
-          discount_percent: invoiceDiscountType === 'percent' ? invoiceDiscountValue : 0,
-          discount_type: invoiceDiscountType,
-          discount_value: invoiceDiscountValue,
           proposal_selection: proposalSelection,
           inquiry_id: id,
           lead_event_id: selectedLeadEvent?.id || null,
@@ -7202,6 +7203,23 @@ export default function LeadDetailPage({
           setSelectedProposalPackageId(packageId)
           setProposalContext((current) => ({ ...current, package_id: packageId }))
         }}
+        promotionId={selectedProposalPromotionId}
+        onPromotionIdChange={(promotionId) => {
+          setSelectedProposalPromotionId(promotionId)
+          setLegacyProposalDiscount(null)
+          setProposalContext((current) => {
+            const nextSelection = { ...(current?.pricing_selection || {}) }
+            if (promotionId) {
+              nextSelection.promotionId = promotionId
+              nextSelection.promotion_id = promotionId
+            } else {
+              delete nextSelection.promotionId
+              delete nextSelection.promotion_id
+            }
+            return { ...current, promotionId, promotion_id: promotionId, pricing_selection: nextSelection }
+          })
+        }}
+        legacyDiscount={legacyProposalDiscount}
         onCalculationChange={handleProposalCalculationChange}
         pricingEndpoint="/api/proposal-pricing"
         notes={invoiceNotes}

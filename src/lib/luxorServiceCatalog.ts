@@ -51,17 +51,17 @@ const CONTEXTUAL_PRICING_NOTE = 'Calculated by the final proposal builder from t
  * static package table or an estimate.
  */
 export const LUXOR_SERVICE_CATALOG: LuxorCatalogItem[] = [
-  { id: 'rental-weekday-morning', category: 'Venue rental', name: 'Monday-Thursday morning rental (9am-4pm)', unitPrice: 1000 },
-  { id: 'rental-weekday-evening', category: 'Venue rental', name: 'Monday-Thursday evening rental (6pm-1am)', unitPrice: 1200 },
+  { id: 'rental-weekday-morning', category: 'Venue rental', name: 'Monday-Thursday morning rental (8am-3pm)', unitPrice: 1000 },
+  { id: 'rental-weekday-evening', category: 'Venue rental', name: 'Monday-Thursday evening rental (5pm-12am)', unitPrice: 1200 },
   { id: 'rental-weekday-full', category: 'Venue rental', name: 'Monday-Thursday full-day rental (11am-11pm)', unitPrice: 1600 },
-  { id: 'rental-friday-morning', category: 'Venue rental', name: 'Friday morning rental (9am-4pm)', unitPrice: 1500 },
-  { id: 'rental-friday-evening', category: 'Venue rental', name: 'Friday evening rental (6pm-1am)', unitPrice: 1700 },
+  { id: 'rental-friday-morning', category: 'Venue rental', name: 'Friday morning rental (8am-3pm)', unitPrice: 1500 },
+  { id: 'rental-friday-evening', category: 'Venue rental', name: 'Friday evening rental (5pm-12am)', unitPrice: 1700 },
   { id: 'rental-friday-full', category: 'Venue rental', name: 'Friday full-day rental (11am-11pm)', unitPrice: 2500 },
-  { id: 'rental-saturday-morning', category: 'Venue rental', name: 'Saturday morning rental (9am-4pm)', unitPrice: 1900 },
-  { id: 'rental-saturday-evening', category: 'Venue rental', name: 'Saturday evening rental (6pm-1am)', unitPrice: 2100 },
+  { id: 'rental-saturday-morning', category: 'Venue rental', name: 'Saturday morning rental (8am-3pm)', unitPrice: 1900 },
+  { id: 'rental-saturday-evening', category: 'Venue rental', name: 'Saturday evening rental (5pm-12am)', unitPrice: 2100 },
   { id: 'rental-saturday-full', category: 'Venue rental', name: 'Saturday full-day rental (11am-11pm)', unitPrice: 3000 },
-  { id: 'rental-sunday-morning', category: 'Venue rental', name: 'Sunday morning rental (9am-4pm)', unitPrice: 1400 },
-  { id: 'rental-sunday-evening', category: 'Venue rental', name: 'Sunday evening rental (6pm-1am)', unitPrice: 1600 },
+  { id: 'rental-sunday-morning', category: 'Venue rental', name: 'Sunday morning rental (8am-3pm)', unitPrice: 1400 },
+  { id: 'rental-sunday-evening', category: 'Venue rental', name: 'Sunday evening rental (5pm-12am)', unitPrice: 1600 },
   { id: 'rental-sunday-full', category: 'Venue rental', name: 'Sunday full-day rental (11am-11pm)', unitPrice: 2200 },
 
   { id: 'cleaning', category: 'Required services', name: 'Cleaning fee', unitPrice: null, note: CONTEXTUAL_PRICING_NOTE, requiresCustomPrice: true },

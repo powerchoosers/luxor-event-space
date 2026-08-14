@@ -202,13 +202,18 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     y -= rowHeight
   }
 
+  const hasPromotion = summary.approvedDiscount > 0.004
+  const promotionLabel = summary.promotion?.name || 'Promotion discount'
+  const summaryHeight = isFinalProposal
+    ? (hasPromotion ? 121 : 99)
+    : (hasPromotion ? 100 : 78)
   ensureSpace(isFinalProposal ? 245 : 145, true)
   const summaryTop = y
-  page.drawRectangle({ x: margin, y: summaryTop - (isFinalProposal ? 121 : 100), width: contentRight - margin, height: isFinalProposal ? 121 : 100, color: rgb(0.93, 0.9, 0.83), borderColor: line, borderWidth: 0.6 })
+  page.drawRectangle({ x: margin, y: summaryTop - summaryHeight, width: contentRight - margin, height: summaryHeight, color: rgb(0.93, 0.9, 0.83), borderColor: line, borderWidth: 0.6 })
   text(isFinalProposal ? 'EVENT PRICE SUMMARY' : 'INVOICE SUMMARY', margin + 20, y - 12, 7.5, bold, paleMuted)
   y -= 23
   drawSummaryRow('Package subtotal', money(summary.subtotal))
-  drawSummaryRow('Approved discount', summary.approvedDiscount > 0 ? `-${money(summary.approvedDiscount)}` : money(0))
+  if (hasPromotion) drawSummaryRow(promotionLabel, `-${money(summary.approvedDiscount)}`)
   drawSummaryRow('Sales tax', money(summary.tax))
   drawSummaryRow(isFinalProposal ? 'FINAL EVENT PRICE' : 'INVOICE TOTAL', money(isFinalProposal ? summary.finalEventPrice : invoiceTotal), { accent: true, strong: true, topBorder: true })
 
@@ -251,7 +256,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     const offer = luxorOfferSnapshot(invoice)
     const offerFinalPrice = isFinalProposal ? summary.finalEventPrice : offer.discountedTotal
     const originalOfferPrice = isFinalProposal ? offerFinalPrice + offer.savings : offer.originalTotal
-    text('APPROVED OFFER', margin, y, 8, bold, gold)
+    text((summary.promotion?.name || 'PROMOTION').toUpperCase(), margin, y, 8, bold, gold)
     y -= 14
     text(`Original ${money(originalOfferPrice)} | Final ${money(offerFinalPrice)} | Savings ${money(offer.savings)}`, margin, y, 8.5, regular, muted)
     y -= 15

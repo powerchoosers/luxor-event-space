@@ -21,6 +21,129 @@ const pageWidth = 612
 const pageHeight = 792
 const contentWidth = 508
 
+type UnknownRecord = Record<string, unknown>
+
+type ContractProposalLine = {
+  category: string | null
+  description: string
+  quantity: number
+}
+
+type ContractPromotion = {
+  name: string
+  amount: number
+}
+
+type ContractProposalSummary = {
+  lines: ContractProposalLine[]
+  subtotal: number | null
+  discount: number
+  tax: number | null
+  finalEventPrice: number
+  promotion: ContractPromotion | null
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function recordFrom(value: unknown) {
+  return isRecord(value) ? value : null
+}
+
+function textValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function moneyValue(value: unknown) {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value)
+      : Number.NaN
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : null
+}
+
+function recordValue(record: UnknownRecord | null, ...keys: string[]) {
+  if (!record) return undefined
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) return record[key]
+  }
+  return undefined
+}
+
+function promotionFromContext(context: UnknownRecord, metadata: UnknownRecord, discount: number): ContractPromotion | null {
+  if (discount <= 0.004) return null
+  const pricingSnapshot = recordFrom(context.pricing_snapshot)
+  const pricingSelection = recordFrom(context.pricing_selection)
+  const candidates = [
+    recordFrom(context.promotion_snapshot),
+    recordFrom(context.promotionSnapshot),
+    recordFrom(context.promotion),
+    recordFrom(pricingSnapshot?.promotion_snapshot),
+    recordFrom(pricingSnapshot?.promotionSnapshot),
+    recordFrom(pricingSnapshot?.promotion),
+    recordFrom(pricingSelection?.promotion_snapshot),
+    recordFrom(pricingSelection?.promotionSnapshot),
+    recordFrom(pricingSelection?.promotion),
+    recordFrom(metadata.proposalPromotion),
+    recordFrom(metadata.proposal_promotion),
+  ]
+  const promotion = candidates.find((candidate): candidate is UnknownRecord => Boolean(candidate)) ?? null
+  const name = textValue(recordValue(promotion, 'name', 'promotion_name', 'promotionName'))
+    ?? textValue(recordValue(context, 'promotion_name', 'promotionName'))
+    ?? 'Promotion discount'
+  return { name, amount: discount }
+}
+
+/**
+ * Contracts only receive the booking record, so the accepted immutable
+ * proposal context is carried in booking metadata. This reader intentionally
+ * avoids live pricing records and keeps the signed agreement aligned with the
+ * exact proposal the client accepted.
+ */
+function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSummary {
+  const metadata = recordFrom(booking.metadata) || {}
+  const context = recordFrom(metadata.final_proposal_context)
+    ?? recordFrom(metadata.finalProposalContext)
+    ?? {}
+  const pricingSnapshot = recordFrom(context.pricing_snapshot)
+    ?? recordFrom(context.pricingSnapshot)
+    ?? {}
+  const rawLines = Array.isArray(pricingSnapshot.line_items)
+    ? pricingSnapshot.line_items
+    : Array.isArray(metadata.proposalLineItems)
+      ? metadata.proposalLineItems
+      : []
+  const lines = rawLines.flatMap((value): ContractProposalLine[] => {
+    const line = recordFrom(value)
+    if (!line) return []
+    const description = textValue(line.description)
+    if (!description) return []
+    const category = textValue(line.category)
+    const pricingRole = textValue(line.pricingRole)?.toLowerCase() || ''
+    const paymentBucket = textValue(line.paymentBucket)?.toLowerCase() || ''
+    const searchable = `${category || ''} ${description}`.toLowerCase()
+    const hiddenLine = pricingRole === 'discount' || pricingRole === 'tax' || paymentBucket === 'security_deposit'
+      || /refundable\s+security\s+deposit|(^|\s)(sales\s+)?tax($|\s)|discount|credit|promotion/.test(searchable)
+    if (hiddenLine) return []
+    const rawQuantity = moneyValue(line.quantity)
+    return [{ category, description, quantity: rawQuantity === null || rawQuantity < 1 ? 1 : rawQuantity }]
+  })
+  const discount = moneyValue(pricingSnapshot.discount_amount ?? pricingSnapshot.discountAmount ?? context.discount_amount ?? context.discountAmount) ?? 0
+  const subtotal = moneyValue(pricingSnapshot.subtotal ?? pricingSnapshot.original_subtotal ?? context.original_subtotal ?? context.subtotal)
+  const tax = moneyValue(pricingSnapshot.tax_amount ?? pricingSnapshot.taxAmount ?? context.tax_amount ?? context.taxAmount)
+  const finalEventPrice = Math.max(0, Number(booking.contract_total || context.final_event_price || 0))
+  return {
+    lines,
+    subtotal,
+    discount,
+    tax,
+    finalEventPrice,
+    promotion: promotionFromContext(context, metadata, discount),
+  }
+}
+
 function money(value: number) {
   return `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -163,6 +286,18 @@ async function createWriter(documentLabel: string) {
     y -= 4
   }
 
+  const checklistItem = (text: string) => {
+    const lines = wrap(text, regular, 9.35, contentWidth - 26)
+    ensure(lines.length * 13.5 + 6)
+    page!.drawLine({ start: { x: margin + 1, y: y + 1 }, end: { x: margin + 4, y: y - 2 }, thickness: 1.1, color: gold })
+    page!.drawLine({ start: { x: margin + 4, y: y - 2 }, end: { x: margin + 10, y: y + 4 }, thickness: 1.1, color: gold })
+    for (const line of lines) {
+      page!.drawText(line, { x: margin + 17, y, size: 9.35, font: regular, color: ink })
+      y -= 13.5
+    }
+    y -= 4
+  }
+
   const fieldPair = (leftLabel: string, leftValue: string, rightLabel: string, rightValue: string) => {
     ensure(48)
     const half = 242
@@ -225,6 +360,7 @@ async function createWriter(documentLabel: string) {
     subheading,
     paragraph,
     bullet,
+    checklistItem,
     fieldPair,
     feeRow,
     note,
@@ -241,8 +377,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   }
   const names = parseClientName(booking.client_name)
   const balance = Math.max(0, Number(booking.contract_total || 0) - Number(booking.deposit_required || 0))
-  const proposalOffer = booking.metadata?.proposalOffer as { originalTotal?: number; discountedTotal?: number; percent?: number; savings?: number; expiresAt?: string | null } | undefined
-  const hasOffer = Number(proposalOffer?.percent || 0) > 0 && Number(proposalOffer?.savings || 0) > 0
+  const proposalSummary = proposalSummaryForBooking(booking)
   const securityDeposit = Math.max(0, Number(booking.security_deposit_amount ?? 750))
   const w = await createWriter('BOOKING AGREEMENT')
 
@@ -270,14 +405,22 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.addPage()
   w.title('Package, pricing & payment', 'Financial terms')
   w.heading('3. Contract price')
-  w.fieldPair('Final Event Price', money(booking.contract_total), 'Initial booking payment', money(booking.deposit_required))
-  w.fieldPair('Remaining balance', money(balance), 'Final payment due', displayDate(finalPaymentDueDate))
+  w.subheading('Final event price')
+  const displaySubtotal = proposalSummary.subtotal ?? Math.max(0, proposalSummary.finalEventPrice - (proposalSummary.tax || 0) + proposalSummary.discount)
+  w.feeRow('Package subtotal', money(displaySubtotal))
+  if (proposalSummary.discount > 0.004) w.feeRow(proposalSummary.promotion?.name || 'Promotion discount', `-${money(proposalSummary.discount)}`)
+  if (proposalSummary.tax !== null) w.feeRow('Sales tax', money(proposalSummary.tax))
+  w.feeRow('Final Event Price', money(proposalSummary.finalEventPrice))
+  w.fieldPair('Initial booking payment', money(booking.deposit_required), 'Remaining balance', money(balance))
+  w.fieldPair('Final payment due', displayDate(finalPaymentDueDate), 'Payment timing', 'After agreement signature')
   w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', 'With initial booking payment')
-  if (hasOffer) {
-    w.fieldPair('Original contract price', money(Number(proposalOffer?.originalTotal || 0)), 'Limited-time savings', `${Number(proposalOffer?.percent || 0)}% (${money(Number(proposalOffer?.savings || 0))})`)
-    w.paragraph(`Approved adjustment: the discount shown above is already reflected in the locked Final Event Price for this Agreement. The secure booking-payment link is sent only after this Agreement is signed.`)
-  } else if (proposalOffer?.expiresAt) {
-    w.paragraph('The final proposal was accepted before its stated availability deadline. The Final Event Price above is locked for this Agreement; the secure booking-payment link is sent only after signature.')
+  if (proposalSummary.promotion) w.paragraph(`${proposalSummary.promotion.name} is already reflected in the locked Final Event Price for this Agreement. The secure booking-payment link is sent only after this Agreement is signed.`)
+  if (proposalSummary.lines.length) {
+    w.subheading('Accepted package')
+    for (const item of proposalSummary.lines) {
+      const quantity = item.quantity > 1 ? ` (Qty ${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })})` : ''
+      w.checklistItem(`${item.category ? `${item.category}: ` : ''}${item.description}${quantity}`)
+    }
   }
   w.paragraph(`The event date is not reserved until the initial booking payment and separate refundable security deposit have been received after this Agreement has been fully executed. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`)
   w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Returned checks are subject to a $35.00 fee.')
