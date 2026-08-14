@@ -80,8 +80,10 @@ type ProposalPackageItemsPanelProps = {
   catalogServices?: ProposalPackageServiceOption[]
   /** Services eligible to be added to the selected package. Defaults to optionalServices. */
   addableServiceIds?: string[]
-  /** Services already covered by the selected package. */
+  /** Only required services are locked from owner edits. */
   lockedServiceIds?: string[]
+  /** Current package components, shown as included but still removable by an owner. */
+  includedServiceIds?: string[]
   /** Package replacements or incompatible services that need an approved pricing rule. */
   unavailableServiceIds?: string[]
   selectedServiceIds: string[]
@@ -203,6 +205,7 @@ export function ProposalPackageItemsPanel({
   lockedServiceIds,
   unavailableServiceIds,
   selectedServiceIds,
+  includedServiceIds,
   servicePrices,
   serviceQuotes,
   pricingReady,
@@ -218,6 +221,7 @@ export function ProposalPackageItemsPanel({
   const selectedServiceIdsSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
   const addableServiceIdsSet = useMemo(() => new Set(addableServiceIds || optionalServices.map((service) => service.id)), [addableServiceIds, optionalServices])
   const lockedServiceIdsSet = useMemo(() => new Set(lockedServiceIds || []), [lockedServiceIds])
+  const includedServiceIdsSet = useMemo(() => new Set(includedServiceIds || []), [includedServiceIds])
   const unavailableServiceIdsSet = useMemo(() => new Set(unavailableServiceIds || []), [unavailableServiceIds])
   const allServices = catalogServices?.length ? catalogServices : optionalServices
   const searchTerm = search.trim().toLowerCase()
@@ -332,12 +336,15 @@ export function ProposalPackageItemsPanel({
                 <div className="mt-2 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40">
                   {services.map((service, index) => {
                     const selected = selectedServiceIdsSet.has(service.id)
-                    const covered = lockedServiceIdsSet.has(service.id) || service.locked === true
+                    const required = service.required === true || lockedServiceIdsSet.has(service.id) || service.locked === true
+                    const includedInPackage = includedServiceIdsSet.has(service.id)
+                    const covered = required || includedInPackage
+                    const active = selected || includedInPackage
                     const quote = serviceQuotes?.[service.id]
-                    const needsPricingReview = !covered && (unavailableServiceIdsSet.has(service.id) || quote?.available === false)
-                    const canToggle = selected || (addableServiceIdsSet.has(service.id) && !covered && !needsPricingReview)
+                    const needsPricingReview = !required && (unavailableServiceIdsSet.has(service.id) || quote?.available === false)
+                    const canToggle = !required && !needsPricingReview && (selected || includedInPackage || addableServiceIdsSet.has(service.id))
                     const price = libraryPrice(service, calculatedLineItems, servicePrices)
-                    const serviceState = service.required ? 'Required' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
+                    const serviceState = required ? 'Required' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
                     const perGuestMath = quoteMath(quote)
                     const displayPrice = covered && price === 0
                       ? 'Included'
@@ -345,7 +352,7 @@ export function ProposalPackageItemsPanel({
                         ? formatMoney(price)
                         : null
                     return (
-                      <div key={service.id} className={`flex gap-3 px-3 py-3 ${index ? 'border-t border-[color:var(--portal-border)]' : ''} ${selected ? 'bg-[#caa24c]/[0.055]' : ''}`}>
+                      <div key={service.id} className={`flex gap-3 px-3 py-3 ${index ? 'border-t border-[color:var(--portal-border)]' : ''} ${active ? 'bg-[#caa24c]/[0.055]' : ''}`}>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <p className="text-sm font-semibold leading-5">{service.name}</p>
@@ -364,7 +371,7 @@ export function ProposalPackageItemsPanel({
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {service.detail ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
                             <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] ${service.required ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : service.serviceLevel === 'upgrade' ? 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{serviceState}</span>
-                            {covered && !service.required ? <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-emerald-700 dark:text-emerald-300">Included in package</span> : null}
+                            {includedInPackage ? <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-emerald-700 dark:text-emerald-300">Included in package</span> : null}
                             {needsPricingReview ? <span className="inline-flex rounded-full border border-amber-500/25 bg-amber-500/8 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-amber-800 dark:text-amber-200">Pricing rule needed</span> : null}
                             {perGuestMath ? <span className="basis-full text-[10px] leading-4 text-[color:var(--portal-muted)]">{perGuestMath}</span> : null}
                           </div>
@@ -373,13 +380,13 @@ export function ProposalPackageItemsPanel({
                           <button
                             type="button"
                             onClick={() => onToggleService(service.id)}
-                            aria-pressed={selected}
-                            className={`inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border px-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a] hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'}`}
+                            aria-pressed={active}
+                            className={`inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border px-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a] hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'}`}
                           >
-                            {selected ? <><X size={12} /> Remove</> : <><Plus size={12} /> {service.serviceLevel === 'upgrade' ? 'Add upgrade' : service.serviceLevel === 'basic' ? 'Add basic' : 'Add'}</>}
+                            {active ? <><X size={12} /> Remove</> : <><Plus size={12} /> {service.serviceLevel === 'upgrade' ? 'Add upgrade' : service.serviceLevel === 'basic' ? 'Add basic' : 'Add'}</>}
                           </button>
                         ) : (
-                          <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{needsPricingReview ? 'Pricing review' : covered ? 'Included' : serviceState}</span>
+                          <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{needsPricingReview ? 'Pricing review' : required ? 'Required' : covered ? 'Included' : serviceState}</span>
                         )}
                       </div>
                     )
@@ -402,7 +409,7 @@ export function ProposalPackageItemsPanel({
                 ) : <PortalSkeleton className="h-5 w-16 rounded-full" />}
               </div>
               <h4 className="mt-1 text-base font-bold">{packageName}</h4>
-              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Package and required rows are protected. Optional add-ons and owner items can be changed here.</p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Required rows are protected. Package components, add-ons, and owner items can be adjusted here with exact recalculation.</p>
             </div>
             <div className="flex shrink-0 items-start gap-2">
               <div className="text-right">

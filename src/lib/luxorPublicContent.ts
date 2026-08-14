@@ -71,7 +71,7 @@ export const LUXOR_PUBLIC_EVENT_PAGES: LuxorPublicEventPage[] = [
     ],
     walkthrough: ['Brunch or lunch seating', 'Gift, dessert, and backdrop placement', 'Lounge use and family comfort', 'Setup timing and package fit'],
     faqs: [
-      { question: 'Can Luxor host a daytime shower?', answer: 'Yes. Morning rental windows run from 9am to 4pm, depending on the day and availability.' },
+      { question: 'Can Luxor host a daytime shower?', answer: 'Yes. Morning rental windows run from 8 AM to 3 PM, depending on the day and availability.' },
       { question: 'Can we personalize the room?', answer: 'Yes. Bring your color palette and inspiration so the team can help you think through backdrop, dessert, and table placement.' },
       { question: 'Do you offer smaller-event options?', answer: 'Luxor has venue and service options that can be shaped around the guest count. Use the rates page as a starting point, then request a specific quote.' },
     ],

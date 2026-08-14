@@ -33,6 +33,10 @@ export type LuxorProposalAddOnQuote = {
   id: string
   label: string
   category: string
+  /** Mutually exclusive service family used for replacement semantics. */
+  group: 'decor' | 'catering' | 'dj' | 'photo_booth' | 'bar'
+  /** Concrete catalog choice within the service family. */
+  kind: string
   rateTier: 'retail' | 'all_inclusive'
   available: boolean
   total: number | null
@@ -55,6 +59,7 @@ export type LuxorProposalSelection = {
   eventType?: string | null
   rentalPeriod?: LuxorRentalPeriod | string | null
   addOns?: string[] | null
+  add_ons?: string[] | null
   removedServiceIds?: string[] | null
   removed_service_ids?: string[] | null
   /** Only the server resolves this to a saved promotion and its exact terms. */
@@ -578,7 +583,8 @@ function packageDefaults(packageId: LuxorProposalPackageId): PackageDefaults {
 }
 
 function selectedProposalAddOns(selection: LuxorProposalSelection) {
-  return [...new Set(array(selection.addOns).map(normalizeAddOn).filter((value): value is string => Boolean(value)))]
+  const raw = selection.addOns ?? selection.add_ons
+  return [...new Set(array(raw).map(normalizeAddOn).filter((value): value is string => Boolean(value)))]
 }
 
 function selectedRemovedServiceIds(selection: LuxorProposalSelection) {
@@ -1195,7 +1201,7 @@ export function calculateLuxorProposal(
       eventDate,
       guestCount,
       rentalPeriod: safePeriod,
-      addOns: array(selection.addOns).filter((item): item is string => typeof item === 'string'),
+      addOns: array(selection.addOns ?? selection.add_ons).filter((item): item is string => typeof item === 'string'),
       removedServiceIds: array(selection.removedServiceIds ?? selection.removed_service_ids).filter((item): item is string => typeof item === 'string'),
       ...(resolvedPromotion ? { promotion_id: resolvedPromotion.id } : {}),
       ...(legacyDiscount && !resolvedPromotion ? { legacy_draft_adjustment: legacyDiscount } : {}),

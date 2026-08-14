@@ -472,6 +472,16 @@ function selectedServiceIdsFrom(context: ProposalBuilderContext, items: LuxorInv
     .filter((id): id is string => Boolean(id))
 }
 
+function removedServiceIdsFrom(context: ProposalBuilderContext) {
+  const selection = context.pricing_selection || {}
+  for (const candidate of [selection.removedServiceIds, selection.removed_service_ids]) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((value): value is string => typeof value === 'string' && Boolean(value))
+    }
+  }
+  return []
+}
+
 /**
  * Custom rows are an owner-only editing affordance, but a custom charge must
  * be part of the same final-price calculation and client-facing breakdown as
@@ -566,7 +576,7 @@ export function ProposalBuilderModal({
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [calculation, setCalculation] = useState<ProposalPricingCalculation | null>(null)
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
-  const [pendingPackageChange, setPendingPackageChange] = useState<{ packageId: string; absorbedServiceIds: string[] } | null>(null)
+  const [pendingPackageChange, setPendingPackageChange] = useState<{ packageId: string; absorbedServiceIds: string[]; clearedConflictServiceIds: string[] } | null>(null)
   const [promotions, setPromotions] = useState<LuxorPromotion[]>([])
   const [promotionsStatus, setPromotionsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [promotionError, setPromotionError] = useState<string | null>(null)
@@ -605,25 +615,31 @@ export function ProposalBuilderModal({
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
+  const removedServiceIds = useMemo(() => removedServiceIdsFrom(effectiveContext), [effectiveContext])
   const customItems = useMemo(() => (
     customItemsFrom(effectiveContext)
     ?? items.filter((item) => item.pricingRole === 'custom')
   ), [effectiveContext, items])
   const selectedServiceIdSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
+  const removedServiceIdsSet = useMemo(() => new Set(removedServiceIds), [removedServiceIds])
   const selectedPackageOption = PACKAGE_OPTIONS.find((option) => option.id === selectedPackage)
   const packageBaseServiceIds = useMemo(() => selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : [], [selectedPackageOption])
   const packageIncludedServiceIds = useMemo(() => packageBaseServiceIds.filter((includedServiceId) => {
+    if (removedServiceIdsSet.has(includedServiceId)) return false
     const includedService = availableServices.find((service) => service.id === includedServiceId)
     if (!includedService?.exclusiveGroup) return true
     return !selectedServiceIds.some((selectedServiceId) => {
       if (selectedServiceId === includedServiceId) return false
       return availableServices.find((service) => service.id === selectedServiceId)?.exclusiveGroup === includedService.exclusiveGroup
     })
-  }), [availableServices, packageBaseServiceIds, selectedServiceIds])
-  const ineligibleServiceIds = useMemo(() => new Set(packageIncludedServiceIds), [packageIncludedServiceIds])
-  const optionalServices = useMemo(() => selectedPackageOption
-    ? availableServices.filter((service) => !ineligibleServiceIds.has(service.id))
-    : [], [availableServices, ineligibleServiceIds, selectedPackageOption])
+  }), [availableServices, packageBaseServiceIds, removedServiceIdsSet, selectedServiceIds])
+  // Only actual venue/required rows are locked. Package components can be
+  // removed or restored; the calculation uses removedServiceIds rather than
+  // inventing package credits on the client.
+  const lockedServiceIds = useMemo(() => availableServices
+    .filter((service) => service.required || service.locked)
+    .map((service) => service.id), [availableServices])
+  const optionalServices = useMemo(() => selectedPackageOption ? availableServices : [], [availableServices, selectedPackageOption])
   const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
   const selectedPromotionId = promotionId
@@ -722,15 +738,46 @@ export function ProposalBuilderModal({
     onEventGuestCountChange?.(String(parsed || ''))
   }
 
+  /**
+   * Package switches start from the new package defaults. A selected Basic
+   * service only conflicts when the new package supplies a higher-level
+   * service in that same group (for example Essential Decor → Full Decor).
+   * Selected upgrades remain: the pricing engine treats them as approved
+   * replacements, rather than stacking another charge on top of the package.
+   */
+  const reconcilePackageServices = (packageOption?: (typeof PACKAGE_OPTIONS)[number]) => {
+    const packageServiceIds = new Set(packageOption ? PACKAGE_INCLUDED_SERVICE_IDS[packageOption.id] : [])
+    const libraryById = new Map(availableServices.map((service) => [service.id, service]))
+    const packageServices = [...packageServiceIds]
+      .map((serviceId) => libraryById.get(serviceId))
+      .filter((service): service is ProposalServiceOption => Boolean(service))
+    const absorbedServiceIds = selectedServiceIds.filter((serviceId) => packageServiceIds.has(serviceId))
+    const clearedConflictServiceIds = selectedServiceIds.filter((serviceId) => {
+      if (packageServiceIds.has(serviceId)) return false
+      const selectedService = libraryById.get(serviceId)
+      if (!selectedService?.exclusiveGroup || selectedService.serviceLevel !== 'basic') return false
+      return packageServices.some((packageService) => (
+        packageService.id !== selectedService.id
+        && packageService.exclusiveGroup === selectedService.exclusiveGroup
+        && packageService.serviceLevel === 'upgrade'
+      ))
+    })
+    return {
+      absorbedServiceIds,
+      clearedConflictServiceIds,
+      removedServiceIds: new Set([...absorbedServiceIds, ...clearedConflictServiceIds]),
+    }
+  }
+
   const selectPackage = (packageId: string) => {
     const packageOption = PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(packageId))
     const canonicalId = packageOption?.id || packageId
-    const excludedServiceIds = new Set(packageOption ? PACKAGE_INCLUDED_SERVICE_IDS[packageOption.id] : [])
-    const nextServiceIds = selectedServiceIds.filter((id) => !excludedServiceIds.has(id))
+    const { removedServiceIds } = reconcilePackageServices(packageOption)
+    const nextServiceIds = selectedServiceIds.filter((id) => !removedServiceIds.has(id))
     const nextItems = items.filter((item) => (
       item.pricingRole !== 'add_on'
       || !item.catalogId
-      || !excludedServiceIds.has(item.catalogId)
+      || !removedServiceIds.has(item.catalogId)
     ))
     onSelectedPackageIdChange?.(canonicalId)
     updateProposalContext({
@@ -739,6 +786,8 @@ export function ProposalBuilderModal({
       pricing_selection: {
         ...(effectiveContext.pricing_selection || {}),
         service_ids: nextServiceIds,
+        removedServiceIds: [],
+        removed_service_ids: [],
       },
     })
     // Package base items come back from the server calculator. Keep only
@@ -750,12 +799,10 @@ export function ProposalBuilderModal({
     const nextPackageId = normalizePackageId(packageId)
     if (!nextPackageId || nextPackageId === selectedPackage) return
     const nextPackage = PACKAGE_OPTIONS.find((option) => option.id === nextPackageId)
-    const absorbedServiceIds = nextPackage
-      ? selectedServiceIds.filter((id) => PACKAGE_INCLUDED_SERVICE_IDS[nextPackage.id].includes(id))
-      : []
+    const { absorbedServiceIds, clearedConflictServiceIds } = reconcilePackageServices(nextPackage)
 
     if (requireConfirmation) {
-      setPendingPackageChange({ packageId: nextPackageId, absorbedServiceIds })
+      setPendingPackageChange({ packageId: nextPackageId, absorbedServiceIds, clearedConflictServiceIds })
       return
     }
 
@@ -764,10 +811,50 @@ export function ProposalBuilderModal({
 
   const updateServiceSelection = (serviceId: string) => {
     const service = availableServices.find((candidate) => candidate.id === serviceId)
-    if (!service || !selectedPackageOption || ineligibleServiceIds.has(serviceId)) return
+    if (!service || !selectedPackageOption || lockedServiceIds.includes(serviceId)) return
 
     const libraryById = new Map(availableServices.map((candidate) => [candidate.id, candidate]))
     const isSelected = selectedServiceIdSet.has(serviceId)
+    const isPackageDefault = packageBaseServiceIds.includes(serviceId)
+    const isPackageIncluded = packageIncludedServiceIds.includes(serviceId)
+    const wasPackageDefaultRemoved = isPackageDefault && removedServiceIdsSet.has(serviceId)
+
+    if (isPackageIncluded) {
+      const nextRemovedServiceIds = [...new Set([...removedServiceIds, serviceId])]
+      updateProposalContext({
+        pricing_selection: {
+          ...(effectiveContext.pricing_selection || {}),
+          service_ids: selectedServiceIds,
+          removedServiceIds: nextRemovedServiceIds,
+          removed_service_ids: nextRemovedServiceIds,
+        },
+      })
+      return
+    }
+
+    if (wasPackageDefaultRemoved || (isPackageDefault && !isSelected)) {
+      const nextServiceIds = selectedServiceIds.filter((id) => {
+        const current = libraryById.get(id)
+        return !service.exclusiveGroup || current?.exclusiveGroup !== service.exclusiveGroup
+      })
+      const nextItems = items.filter((item) => {
+        if (!item.catalogId) return true
+        const current = libraryById.get(item.catalogId)
+        return !service.exclusiveGroup || current?.exclusiveGroup !== service.exclusiveGroup
+      })
+      const nextRemovedServiceIds = removedServiceIds.filter((id) => id !== serviceId)
+      updateProposalContext({
+        pricing_selection: {
+          ...(effectiveContext.pricing_selection || {}),
+          service_ids: nextServiceIds,
+          removedServiceIds: nextRemovedServiceIds,
+          removed_service_ids: nextRemovedServiceIds,
+        },
+      })
+      onItemsChange(nextItems)
+      return
+    }
+
     const idsWithoutExclusiveGroup = selectedServiceIds.filter((id) => {
       const current = libraryById.get(id)
       return !service.exclusiveGroup || current?.exclusiveGroup !== service.exclusiveGroup
@@ -802,6 +889,8 @@ export function ProposalBuilderModal({
       pricing_selection: {
         ...(effectiveContext.pricing_selection || {}),
         service_ids: nextServiceIds,
+        removedServiceIds,
+        removed_service_ids: removedServiceIds,
       },
     })
     onItemsChange(nextItems)
@@ -815,6 +904,7 @@ export function ProposalBuilderModal({
       eventType: eventType || effectiveContext.event_type || null,
       rentalPeriod,
       addOns: selectedServiceIds,
+      removedServiceIds,
       customItems: customItemSelection(customItems),
       promotionId: selectedPromotionId,
       taxRate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
@@ -828,6 +918,8 @@ export function ProposalBuilderModal({
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
       service_ids: selectedServiceIds,
+      removedServiceIds,
+      removed_service_ids: removedServiceIds,
       customItems: customItemSelection(customItems),
       ...(selectedPromotionId ? { promotionId: selectedPromotionId, promotion_id: selectedPromotionId } : {}),
     },
@@ -839,7 +931,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = JSON.stringify(pricingRequest)
 
   useEffect(() => {
@@ -1348,8 +1440,9 @@ export function ProposalBuilderModal({
                 customItems={customItems}
                 optionalServices={optionalServices}
                 catalogServices={availableServices}
-                addableServiceIds={optionalServices.map((service) => service.id)}
-                lockedServiceIds={[...packageIncludedServiceIds]}
+                addableServiceIds={optionalServices.filter((service) => !lockedServiceIds.includes(service.id)).map((service) => service.id)}
+                lockedServiceIds={lockedServiceIds}
+                includedServiceIds={[...packageIncludedServiceIds]}
                 unavailableServiceIds={[]}
                 selectedServiceIds={selectedServiceIds}
                 servicePrices={servicePrices}
@@ -1566,6 +1659,7 @@ export function ProposalBuilderModal({
                 <p className="mt-1 text-xs">All custom items and compatible upgrades stay selected. Services that the new package already includes are absorbed into it and never charged twice.</p>
               </div>
               {pendingPackageChange?.absorbedServiceIds.length ? <div className="rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-3"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Moved into the new package</p><ul className="mt-1.5 space-y-1 text-xs">{pendingPackageChange.absorbedServiceIds.map((serviceId) => <li key={serviceId}>• {availableServices.find((service) => service.id === serviceId)?.name || serviceId.replaceAll('_', ' ')}</li>)}</ul></div> : null}
+              {pendingPackageChange?.clearedConflictServiceIds.length ? <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 p-3"><p className="text-xs font-semibold text-amber-900 dark:text-amber-100">Removed because the new package replaces it</p><p className="mt-1 text-xs text-amber-800 dark:text-amber-200">The selected Basic choice conflicts with the higher package level. Compatible upgrades remain selected.</p><ul className="mt-1.5 space-y-1 text-xs text-amber-800 dark:text-amber-200">{pendingPackageChange.clearedConflictServiceIds.map((serviceId) => <li key={serviceId}>• {availableServices.find((service) => service.id === serviceId)?.name || serviceId.replaceAll('_', ' ')}</li>)}</ul></div> : null}
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] px-5 py-4 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setPendingPackageChange(null)} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)] transition hover:text-[color:var(--portal-text)]">Keep current package</button>
