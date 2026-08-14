@@ -78,6 +78,10 @@ import {
   type LeadLifecycleAction,
 } from '@/components/portal/LeadLifecycleActionSheet'
 
+// Luxor operates in Texas. New proposals default to the state's maximum
+// combined state/local rate; an existing saved proposal keeps its snapshot.
+const DEFAULT_TEXAS_SALES_TAX_RATE_PERCENT = '8.25'
+
 type ZohoEmailMessage = {
   id: string
   subject: string
@@ -338,7 +342,7 @@ export default function LeadDetailPage({
     { description: '', quantity: 1, unitPrice: 0, total: 0 },
   ])
   const [invoiceNotes, setInvoiceNotes] = useState('')
-  const [invoiceTaxRate, setInvoiceTaxRate] = useState('')
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState(DEFAULT_TEXAS_SALES_TAX_RATE_PERCENT)
   const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState('0')
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<'percent' | 'fixed'>('percent')
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState('0')
@@ -832,7 +836,7 @@ export default function LeadDetailPage({
       : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
     setInvoiceTaxRate(typeof selectedLeadEvent.metadata?.proposalTaxRate === 'number'
       ? String(Number(selectedLeadEvent.metadata.proposalTaxRate) * 100)
-      : '')
+      : DEFAULT_TEXAS_SALES_TAX_RATE_PERCENT)
   }, [selectedLeadEvent?.id])
 
   useEffect(() => {
@@ -1840,7 +1844,7 @@ export default function LeadDetailPage({
         ? savedItems as LuxorInvoiceLineItem[]
         : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
       setInvoiceNotes('')
-      setInvoiceTaxRate('')
+      setInvoiceTaxRate(DEFAULT_TEXAS_SALES_TAX_RATE_PERCENT)
       setLegacyProposalDiscount(null)
     }
 
