@@ -504,27 +504,9 @@ function customItemSelection(items: LuxorInvoiceLineItem[]) {
   }))
 }
 
-function getPaymentPlan(context: ProposalBuilderContext): LuxorProposalPaymentPlan | null {
-  const plan = asRecord(context.payment_plan)
-  const mode = plan?.mode === 'pay_in_full' || plan?.mode === 'deposit_and_balance'
-    ? plan.mode
-    : null
-  const bookingPaymentPercent = asNumber(plan?.booking_payment_percent)
-  const finalPaymentDays = asNumber(plan?.final_payment_due_days_before_event)
-  if (!mode || bookingPaymentPercent === undefined || bookingPaymentPercent < 0 || bookingPaymentPercent > 100 ||
-    finalPaymentDays === undefined || !Number.isInteger(finalPaymentDays) || finalPaymentDays < 0 ||
-    (mode === 'deposit_and_balance' && bookingPaymentPercent <= 0)) return null
-  return {
-    mode,
-    booking_payment_percent: bookingPaymentPercent,
-    final_payment_due_days_before_event: finalPaymentDays,
-  }
-}
-
 /**
  * Step 5 needs to retain a partially-entered owner plan while it is being
- * completed. It is intentionally separate from getPaymentPlan(), which only
- * returns a publishable plan that the schedule and server may trust.
+ * completed so the schedule can stay visible while the owner enters terms.
  */
 function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProposalPaymentPlan> | null {
   const plan = asRecord(context.payment_plan)
