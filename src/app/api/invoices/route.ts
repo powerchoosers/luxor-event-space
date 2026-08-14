@@ -56,6 +56,35 @@ function proposalSelectionFrom(body: UnknownRecord): LuxorProposalSelection | nu
   return isRecord(raw) ? raw as LuxorProposalSelection : null
 }
 
+function selectionHasSavedPromotion(selection: LuxorProposalSelection) {
+  const value = selection.promotionId ?? selection.promotion_id
+  return typeof value === 'string' && Boolean(value.trim())
+}
+
+function selectionHasLegacyDraftAdjustment(selection: LuxorProposalSelection) {
+  const raw = selection as unknown as UnknownRecord
+  const nested = recordFrom(raw.discount)
+  return (nonNegativeMoney(raw.discountValue ?? raw.discount_value ?? nested?.value) ?? 0) > 0
+}
+
+/**
+ * Old editable drafts may still carry a raw discount column from before
+ * promotions existed. Keep that fact visible to the calculator so it can
+ * block publishing and ask the owner to save it as a promotion, rather than
+ * silently dropping the adjustment during the next draft save.
+ */
+function preserveLegacyDraftAdjustment(selection: LuxorProposalSelection, existing: { discount_type?: string | null; discount_value?: number | null }) {
+  if (selectionHasSavedPromotion(selection) || selectionHasLegacyDraftAdjustment(selection)) return selection
+  const value = nonNegativeMoney(existing.discount_value)
+  if (!value) return selection
+  return {
+    ...selection,
+    discountType: existing.discount_type === 'fixed' ? 'fixed' : 'percent',
+    discountValue: value,
+    discountApproved: true,
+  } satisfies LuxorProposalSelection
+}
+
 function declaredInvoiceKind(value: unknown): 'event' | 'deposit' | 'final_balance' | null {
   if (value === undefined || value === null || value === '') return 'event'
   return value === 'event' || value === 'deposit' || value === 'final_balance' ? value : null
@@ -95,6 +124,28 @@ function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
     const paymentBucket = typeof rawPaymentBucket === 'string' && paymentBuckets.has(rawPaymentBucket as NonNullable<LuxorInvoiceLineItem['paymentBucket']>)
       ? rawPaymentBucket as NonNullable<LuxorInvoiceLineItem['paymentBucket']>
       : undefined
+    const rawQuoteBreakdown = recordFrom(line.quoteBreakdown ?? line.quote_breakdown)
+    const breakdownQuantity = numberValue(rawQuoteBreakdown?.quantity)
+    const breakdownUnitPrice = numberValue(rawQuoteBreakdown?.unit_price ?? rawQuoteBreakdown?.unitPrice)
+    const breakdownSubtotal = numberValue(rawQuoteBreakdown?.subtotal)
+    const quoteBreakdown = rawQuoteBreakdown && breakdownQuantity !== null && breakdownQuantity > 0 &&
+      breakdownUnitPrice !== null && breakdownSubtotal !== null
+      ? {
+          quantity: breakdownQuantity,
+          unit_price: breakdownUnitPrice,
+          subtotal: breakdownSubtotal,
+          ...(nonNegativeMoney(rawQuoteBreakdown.per_guest_rate ?? rawQuoteBreakdown.perGuestRate) !== null
+            ? { per_guest_rate: nonNegativeMoney(rawQuoteBreakdown.per_guest_rate ?? rawQuoteBreakdown.perGuestRate) as number }
+            : {}),
+          ...(nonNegativeMoney(rawQuoteBreakdown.minimum) !== null
+            ? { minimum: nonNegativeMoney(rawQuoteBreakdown.minimum) as number }
+            : {}),
+          ...(rawQuoteBreakdown.applied_minimum === true || rawQuoteBreakdown.appliedMinimum === true ? { applied_minimum: true } : {}),
+          ...(stringValue(rawQuoteBreakdown.replacement_of ?? rawQuoteBreakdown.replacementOf)
+            ? { replacement_of: stringValue(rawQuoteBreakdown.replacement_of ?? rawQuoteBreakdown.replacementOf) as string }
+            : {}),
+        }
+      : undefined
 
     return {
       ...(stringValue(line.catalogId) ? { catalogId: stringValue(line.catalogId) as string } : {}),
@@ -105,6 +156,8 @@ function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
       ...(paymentBucket ? { paymentBucket } : {}),
       ...(line.required === true ? { required: true } : {}),
       ...(stringValue(line.detail) ? { detail: stringValue(line.detail) as string } : {}),
+      ...(quoteBreakdown ? { quoteBreakdown } : {}),
+      ...(line.isChecklistItem === true || line.is_checklist_item === true ? { isChecklistItem: true } : {}),
       description,
       quantity,
       unitPrice,
@@ -378,6 +431,8 @@ export async function POST(request: NextRequest) {
         discount_amount: calculated.discountAmount,
         discount_type: calculated.discount.type,
         discount_value: calculated.discount.value,
+        promotion_id: calculated.promotion?.id ?? null,
+        promotion_snapshot: calculated.promotion ?? {},
         offer_expires_at: offerExpiresAt?.toISOString() || null,
         due_date: stringValue(body.due_date),
         inquiry_id: inquiryId,
@@ -472,6 +527,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(invoice, { status: 201 })
   } catch (error) {
+    if (error instanceof LuxorPromotionSelectionError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     if (error instanceof ProposalPricingConfigurationError) {
       return NextResponse.json({ error: PRICING_CONFIGURATION_REQUIRED }, { status: 409 })
     }
@@ -509,7 +567,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'This final proposal is already published. Create a revised proposal instead of changing this version.' }, { status: 409 })
     }
 
-    const selection = proposalSelectionFrom(body)
+    let selection = proposalSelectionFrom(body)
+    if (selection && isEventInvoice) {
+      selection = preserveLegacyDraftAdjustment(selection, existing)
+    }
     const attemptsManualEventPricing = body.line_items !== undefined ||
       body.tax_rate !== undefined ||
       body.discount_percent !== undefined ||
@@ -550,6 +611,8 @@ export async function PATCH(request: NextRequest) {
       updates.discount_amount = calculated.discountAmount
       updates.discount_type = calculated.discount.type
       updates.discount_value = calculated.discount.value
+      updates.promotion_id = calculated.promotion?.id ?? null
+      updates.promotion_snapshot = calculated.promotion ?? {}
       updates.proposal_context = calculated.proposalContext
     } else {
       const legacyPricingChanged = Array.isArray(body.line_items) || body.tax_rate !== undefined || body.discount_percent !== undefined
@@ -631,6 +694,9 @@ export async function PATCH(request: NextRequest) {
     }
     return NextResponse.json(updatedInvoice)
   } catch (error) {
+    if (error instanceof LuxorPromotionSelectionError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     if (error instanceof ProposalPricingConfigurationError) {
       return NextResponse.json({ error: PRICING_CONFIGURATION_REQUIRED }, { status: 409 })
     }

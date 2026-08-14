@@ -7206,7 +7206,9 @@ export default function LeadDetailPage({
         promotionId={selectedProposalPromotionId}
         onPromotionIdChange={(promotionId) => {
           setSelectedProposalPromotionId(promotionId)
-          setLegacyProposalDiscount(null)
+          // A legacy draft adjustment must be explicitly converted to a saved
+          // promotion. Clearing the selector cannot silently discard it.
+          if (promotionId) setLegacyProposalDiscount(null)
           setProposalContext((current) => {
             const nextSelection = { ...(current?.pricing_selection || {}) }
             if (promotionId) {

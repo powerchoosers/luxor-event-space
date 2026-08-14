@@ -440,11 +440,12 @@ export function ProposalPackageItemsPanel({
             <div className="divide-y divide-[color:var(--portal-border)]">
               {itemGroups.map(([category, categoryItems]) => {
                 const categoryTotal = categoryItems.reduce((sum, item) => sum + lineAmount(item), 0)
+                const hasPricedCategoryItems = categoryItems.some((item) => lineAmount(item) !== 0)
                 return (
                   <section key={category} className="p-4 sm:p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
-                      <p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{formatMoney(categoryTotal)}</p>
+                      <p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{hasPricedCategoryItems ? formatMoney(categoryTotal) : 'Included'}</p>
                     </div>
                     <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40">
                       {categoryItems.map((item, index) => {

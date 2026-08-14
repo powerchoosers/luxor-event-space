@@ -104,7 +104,7 @@ export async function createInvoice(data: {
   discount_type?: 'percent' | 'fixed' | null
   discount_value?: number | null
   promotion_id?: string | null
-  promotion_snapshot?: LuxorProposalPromotionSnapshot | null
+  promotion_snapshot?: LuxorProposalPromotionSnapshot | Record<string, never> | null
   offer_expires_at?: string | null
   offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn'
   offer_redeemed_at?: string | null

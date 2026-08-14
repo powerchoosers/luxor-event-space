@@ -1220,6 +1220,7 @@ export function calculateLuxorProposal(
     calculated_at: new Date().toISOString(),
     selection: finalContext.pricing_selection,
     pricing_config: config,
+    ...(selected.promotion ? { promotion: selected.promotion } : {}),
     selected_package: {
       id: selected.id,
       name: selected.name,
