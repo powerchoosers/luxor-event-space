@@ -1797,7 +1797,11 @@ export default function LeadDetailPage({
           }))
         : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }]
 
-      setInvoiceDesc(invoice.description || '')
+      // Older drafts can have an invoice record without a title. Treat that
+      // the same as a new proposal so the owner starts with a real editable
+      // value (not only a placeholder), while never replacing an existing
+      // custom title.
+      setInvoiceDesc(invoice.description?.trim() || defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate(invoice.due_date || expiry?.toISOString().slice(0, 10) || '')
       setInvoiceOfferExpiryTime(expiryTime)
       const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
@@ -3123,7 +3127,7 @@ export default function LeadDetailPage({
     icon: <ReceiptText size={15} />,
     label: 'Draft booking invoice',
     detail: 'Create deposit or event invoice',
-    onClick: () => setIsInvoiceModalOpen(true),
+    onClick: () => openProposalBuilder(),
   })
 
   if (lead.status !== 'closed_lost' && lead.status !== 'booked') {
@@ -3592,7 +3596,7 @@ export default function LeadDetailPage({
                         <Plus size={13} className="text-[#caa24c]" />
                         <span>Add event</span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setIsInvoiceModalOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); openProposalBuilder() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <ReceiptText size={13} className="text-[#caa24c]" />
                         <span>Create invoice for selected event</span>
                       </button>
@@ -6663,7 +6667,7 @@ export default function LeadDetailPage({
                 Invoices & Revenue
               </span>
               <button
-                onClick={() => setIsInvoiceModalOpen(true)}
+                onClick={() => openProposalBuilder()}
                 className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-blue-500 transition-colors hover:text-blue-400"
               >
                 <Plus size={12} /> New Invoice
@@ -6676,7 +6680,7 @@ export default function LeadDetailPage({
                 <p className="mt-1 text-zinc-600">Draft the deposit or event invoice when the numbers are ready.</p>
                 <button
                   type="button"
-                  onClick={() => setIsInvoiceModalOpen(true)}
+                  onClick={() => openProposalBuilder()}
                   className="mt-4 inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-300 transition-colors hover:bg-blue-500/15"
                 >
                   Draft Invoice

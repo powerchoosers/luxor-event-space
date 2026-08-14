@@ -331,6 +331,15 @@ function formatEventDate(value?: string | null) {
   return parsed.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+function formatEventAccess(value?: string | null, rentalPeriod?: string | null) {
+  const raw = String(value || rentalPeriod || '').trim()
+  const normalized = raw.toLowerCase().replace(/[^a-z]/g, '')
+  if (normalized === 'morning') return 'Morning · 8 AM–3 PM'
+  if (normalized === 'evening') return 'Evening · 5 PM–12 AM'
+  if (normalized === 'fullday') return 'Full day · 11 AM–11 PM'
+  return raw || 'Not set'
+}
+
 /** PortalDatePicker accepts calendar dates, not legacy display strings such as “February 14th”. */
 function normalizeEventDateValue(value?: string | null) {
   if (typeof value !== 'string') return ''
@@ -1497,7 +1506,7 @@ export function ProposalBuilderModal({
                         ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
-                        ['Access', eventAccess || (rentalPeriod === 'full_day' ? 'Full day · 11 AM–11 PM' : rentalPeriod === 'morning' ? 'Morning · 8 AM–3 PM' : 'Evening · 5 PM–12 AM')],
+                        ['Access', formatEventAccess(eventAccess, rentalPeriod)],
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
                     </div>
 

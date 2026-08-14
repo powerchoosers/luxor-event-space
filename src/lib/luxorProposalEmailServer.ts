@@ -104,9 +104,7 @@ function recordValue(record: UnknownRecord | null, ...keys: string[]) {
   return undefined
 }
 
-function promotionSnapshot(context: UnknownRecord, rawInvoice: UnknownRecord, approvedDiscount: number): LuxorProposalPromotionSnapshot | null {
-  if (approvedDiscount <= 0.004) return null
-
+function promotionSnapshot(context: UnknownRecord, rawInvoice: UnknownRecord, appliedDiscount: number | null): LuxorProposalPromotionSnapshot | null {
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
   const pricingSelection = recordFrom(context.pricing_selection)
   const candidates = [
@@ -141,6 +139,13 @@ function promotionSnapshot(context: UnknownRecord, rawInvoice: UnknownRecord, ap
   const rawValue = recordValue(source, 'value', 'discount_value', 'discountValue')
     ?? recordValue(context, 'promotion_value', 'promotionValue', 'discount_value', 'discountValue')
     ?? recordValue(rawInvoice, 'discount_value', 'discountValue')
+  const snapshotAmount = asNonNegativeMoney(
+    recordValue(source, 'amount', 'savings', 'discount_amount', 'discountAmount')
+      ?? recordValue(context, 'promotion_amount', 'promotionAmount', 'discount_amount', 'discountAmount')
+      ?? recordValue(rawInvoice, 'discount_amount', 'discountAmount'),
+  )
+  const amount = appliedDiscount ?? snapshotAmount
+  if (amount === null || amount <= 0.004) return null
 
   return {
     id: asText(rawId),
@@ -148,8 +153,21 @@ function promotionSnapshot(context: UnknownRecord, rawInvoice: UnknownRecord, ap
     code: asText(rawCode),
     discountType,
     value: asNonNegativeMoney(rawValue),
-    amount: approvedDiscount,
+    amount,
   }
+}
+
+/**
+ * Child payment invoices inherit the proposal's immutable promotion snapshot
+ * but intentionally have no discount line of their own. Read that snapshot
+ * only for disclosure; their scheduled totals already include the saved
+ * promotion and must never be discounted again at checkout.
+ */
+export function getLuxorProposalPromotionDisclosure(invoice: LuxorInvoice): LuxorProposalPromotionSnapshot | null {
+  const rawInvoice = invoice as unknown as UnknownRecord
+  const context = proposalContext(rawInvoice.proposal_context)
+  const storedDiscount = asNonNegativeMoney(rawInvoice.discount_amount)
+  return promotionSnapshot(context, rawInvoice, storedDiscount !== null && storedDiscount > 0.004 ? storedDiscount : null)
 }
 
 function normalizedLineItem(value: unknown) {
@@ -221,7 +239,9 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const tax = explicitTax > 0
     ? explicitTax
     : Math.max(0, roundMoney(finalEventPrice - (subtotal - approvedDiscount)))
-  const promotion = promotionSnapshot(context, rawInvoice, approvedDiscount)
+  const promotion = approvedDiscount > 0.004
+    ? promotionSnapshot(context, rawInvoice, approvedDiscount)
+    : null
 
   const isEventProposal = asText(rawInvoice.invoice_kind) === 'event' || Object.keys(context).length > 0
   const refundableSecurityDeposit = asNonNegativeMoney(context.refundable_security_deposit)
@@ -311,6 +331,16 @@ function offerDisclosureHtml(
   }
   if (expiresAt && stage === 'proposal') return `<div style="margin:22px 0;padding:16px 18px;border:1px solid rgba(202,162,76,.25);background:#0d0b09;color:#e7d4aa;font-size:12px;line-height:1.6">Accept this final proposal by ${escapeHtml(expiresAt)} to lock the Final Event Price. Luxor will then send the Event Agreement; the secure Stripe link follows after signature.</div>`
   return ''
+}
+
+function paymentPromotionDisclosureHtml(invoice: LuxorInvoice) {
+  const promotion = getLuxorProposalPromotionDisclosure(invoice)
+  if (!promotion) return ''
+  const promotionLabel = promotion.code
+    ? `${promotion.name} (${promotion.code})`
+    : promotion.name
+
+  return `<div style="margin:16px 0 0;padding:16px 18px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 7px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Promotion already applied</p><p style="margin:0;color:#f7efe3;font-size:12px;line-height:1.65"><strong>${escapeHtml(promotionLabel)}</strong> saved ${money(promotion.amount)} on your locked Final Event Price.</p><p style="margin:7px 0 0;color:#d2efd9;font-size:11px;line-height:1.65">The payment due above was calculated from that locked price and will not receive a second discount at checkout.</p></div>`
 }
 
 /** A proposal is deliberately not a contract or payment request. */
@@ -503,7 +533,7 @@ export async function buildLuxorPaymentRequestEmail(input: {
             ${remainingAfterPayment > 0 ? `<tr><td class="luxor-muted" style="padding:0 20px 18px;font-size:11px;color:rgba(215,194,154,0.54);">Remaining after this payment</td><td align="right" class="luxor-muted" style="padding:0 20px 18px;font-size:12px;color:rgba(215,194,154,0.72);">${money(remainingAfterPayment)}</td></tr>` : ''}
           </table>
           <p class="luxor-muted" style="margin:14px 2px 0;font-size:12px;line-height:1.65;color:rgba(215,194,154,0.68);">${escapeHtml(paymentScheduleNote)}</p>
-          ${offerDisclosureHtml(invoice)}
+          ${paymentPromotionDisclosureHtml(invoice)}
         </td></tr>
         <tr><td align="center" style="padding:8px 48px 42px;">
           <a href="${escapeHtml(paymentUrl)}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:15px 34px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);">Pay Securely with Stripe</a>

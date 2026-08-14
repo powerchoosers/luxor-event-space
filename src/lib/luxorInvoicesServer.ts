@@ -301,6 +301,27 @@ function securityDepositGross(invoice: LuxorInvoice) {
   return roundMoney(securitySubtotal * (1 + Math.max(0, Number(invoice.tax_rate) || 0)))
 }
 
+/**
+ * A booking-payment invoice is a child of the locked proposal. It must carry
+ * the same saved-promotion reference and immutable terms for audit and email
+ * disclosure, but never a new discount amount: the scheduled payment is
+ * already calculated from the discounted Final Event Price.
+ */
+function inheritedProposalPromotion(masterInvoice: LuxorInvoice) {
+  const promotionId = typeof masterInvoice.promotion_id === 'string'
+    ? masterInvoice.promotion_id.trim() || null
+    : null
+  const rawSnapshot = masterInvoice.promotion_snapshot
+  const promotionSnapshot = rawSnapshot && typeof rawSnapshot === 'object' && !Array.isArray(rawSnapshot)
+    ? { ...rawSnapshot }
+    : {}
+
+  return {
+    promotion_id: promotionId,
+    promotion_snapshot: promotionSnapshot,
+  }
+}
+
 export function calculateLuxorThirtyPercentDeposit(invoice: LuxorInvoice) {
   const refundableSecurityDeposit = Math.min(Number(invoice.total || 0), securityDepositGross(invoice))
   const nonSecurityTotal = Math.max(0, roundMoney(Number(invoice.total || 0) - refundableSecurityDeposit))
@@ -353,6 +374,7 @@ export async function ensureLuxorDepositInvoice(input: {
     },
   ]
   const notes = 'Amount due after the signed Event Agreement: the initial booking payment plus the separate refundable security deposit. The security deposit is held through post-event inspection and is not part of the Event Price.'
+  const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {
     if (existing.status === 'paid') return existing
     return await updateInvoice(existing.id, {
@@ -364,6 +386,7 @@ export async function ensureLuxorDepositInvoice(input: {
       original_total: total,
       discount_percent: 0,
       discount_amount: 0,
+      ...promotion,
       offer_expires_at: null,
       offer_status: 'active',
       stripe_coupon_id: null,
@@ -388,6 +411,7 @@ export async function ensureLuxorDepositInvoice(input: {
     original_total: total,
     discount_percent: 0,
     discount_amount: 0,
+    ...promotion,
     offer_expires_at: null,
     offer_status: 'active',
     stripe_coupon_id: null,
@@ -422,6 +446,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   const lineItems: LuxorInvoiceLineItem[] = [
     { description: 'Remaining Event Balance After Initial Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance', paymentBucket: 'event', required: true },
   ]
+  const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {
     if (existing.status === 'paid') return existing
     return await updateInvoice(existing.id, {
@@ -429,6 +454,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
       subtotal: finalBalance,
       tax_rate: 0,
       total: finalBalance,
+      ...promotion,
       due_date: dueDate,
       notes: `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
     }) || existing
@@ -445,6 +471,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
     subtotal: finalBalance,
     tax_rate: 0,
     total: finalBalance,
+    ...promotion,
     due_date: dueDate,
     notes: `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
   })
