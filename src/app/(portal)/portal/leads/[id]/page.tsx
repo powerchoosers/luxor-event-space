@@ -1982,6 +1982,7 @@ export default function LeadDetailPage({
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
       ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
+      paymentPolicyAcknowledged: context.payment_policy_acknowledged === true || calculationContext.payment_policy_acknowledged === true,
     }
   }
 

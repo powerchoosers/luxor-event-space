@@ -70,6 +70,8 @@ export type LuxorProposalSelection = {
   discountApproved?: boolean | null
   taxRate?: number | string | null
   paymentPlan?: Partial<LuxorProposalPaymentPlan> | Record<string, unknown> | null
+  paymentPolicyAcknowledged?: boolean | null
+  payment_policy_acknowledged?: boolean | null
   adminOverride?: boolean | null
   bartenderAdditionalHours?: number | string | null
   bartenderStaffCount?: number | string | null
@@ -162,6 +164,7 @@ export type LuxorProposalCalculation = {
 
 const CONFIGURATION_ERROR = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
+const PAYMENT_POLICY_REQUIRED = 'Acknowledge the payment and cancellation terms in Step 5 before publishing this proposal.'
 
 /**
  * The code fallback mirrors the approved rate schedule. It intentionally has
@@ -1182,6 +1185,7 @@ export function calculateLuxorProposal(
   // and outside the actual pricing-error bucket.
   const publicationErrors = [
     ...(paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]),
+    ...((selection.paymentPolicyAcknowledged === true || selection.payment_policy_acknowledged === true) ? [] : [PAYMENT_POLICY_REQUIRED]),
     ...(legacyDiscount && !resolvedPromotion ? ['Save this legacy draft adjustment as a promotion before publishing this proposal.'] : []),
   ]
   const errors = [...new Set([...calculationErrors, ...publicationErrors])]
@@ -1215,6 +1219,7 @@ export function calculateLuxorProposal(
     final_event_price: selected.finalEventPrice,
     tax_rate: selected.taxRate,
     refundable_security_deposit: securityDeposit || 750,
+    payment_policy_acknowledged: selection.paymentPolicyAcknowledged === true || selection.payment_policy_acknowledged === true,
     amount_due_to_book: selected.amountDueToBook,
     ...(paymentPlan ? { payment_plan: paymentPlan } : {}),
     pricing_selection: {

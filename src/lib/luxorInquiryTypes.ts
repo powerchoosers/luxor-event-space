@@ -287,6 +287,8 @@ export type LuxorProposalContext = {
   event_services_total?: number
   final_event_price?: number
   refundable_security_deposit?: number
+  /** Owner acknowledgment required before a new proposal can be published. */
+  payment_policy_acknowledged?: boolean
   amount_due_to_book?: number | null
   payment_plan?: LuxorProposalPaymentPlan
   /** Immutable promotion terms, if a saved promotion was selected. */

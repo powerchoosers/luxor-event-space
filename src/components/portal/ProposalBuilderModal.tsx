@@ -51,6 +51,7 @@ export type ProposalBuilderContext = {
   calculation_warnings?: string[]
   calculation_errors?: string[]
   publication_errors?: string[]
+  payment_policy_acknowledged?: boolean
   pricing_selection?: Record<string, unknown>
   promotion_id?: string | null
   promotionId?: string | null
@@ -926,6 +927,7 @@ export function ProposalBuilderModal({
       removedServiceIds,
       customItems: customItemSelection(customItems),
       promotionId: selectedPromotionId,
+      paymentPolicyAcknowledged: effectiveContext.payment_policy_acknowledged === true,
       taxRate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
       paymentPlan: effectiveContext.payment_plan || null,
     },
@@ -950,7 +952,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.payment_policy_acknowledged, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = JSON.stringify(pricingRequest)
 
   useEffect(() => {
@@ -1077,10 +1079,11 @@ export function ProposalBuilderModal({
   const savedPublicationErrors = uniqueMessages(selectedContext.publication_errors || [])
   const publicationErrors = structuredPublicationErrors ?? savedPublicationErrors
   const pricingRequirements = asRecord(calculation?.requirements)
-  const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.length > 0
+  const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
+  const paymentPolicyAcknowledged = effectiveContext.payment_policy_acknowledged === true
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
+  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired && paymentPolicyAcknowledged)
 
   const advance = () => {
     if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
@@ -1601,6 +1604,24 @@ export function ProposalBuilderModal({
                 editable
                 onPaymentCountChange={(count) => updatePaymentPlan({ mode: 'deposit_and_balance', payment_count: count, booking_payment_percent: 25, final_payment_due_days_before_event: 60 })}
               />}
+
+              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Payment &amp; refund policy</p>
+                <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--portal-muted)]">
+                  <p>Payments toward your Event Total are non-refundable once paid, except as otherwise expressly provided in your Event Agreement.</p>
+                  <p>Your $750 Security Deposit is separate from your Event Total and is refundable according to the terms of your Event Agreement.</p>
+                </div>
+                <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50">
+                  <input
+                    type="checkbox"
+                    checked={paymentPolicyAcknowledged}
+                    onChange={(event) => updateProposalContext({ payment_policy_acknowledged: event.target.checked })}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#caa24c]"
+                  />
+                  <span>I understand and agree to the payment and cancellation terms outlined in my Event Agreement.</span>
+                </label>
+                {!paymentPolicyAcknowledged ? <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">This acknowledgment is required before publishing the final proposal.</p> : null}
+              </section>
 
               {paymentPlanRequired ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100"><p className="font-bold">Payment terms are required before publishing.</p><p className="mt-1">The Final Event Price is already calculated. Choose the agreement plan and complete its approved terms above; the exact schedule will update immediately.</p>{publicationErrors.map((error, index) => <p key={`${error}-${index}`} className="mt-1 text-xs">{error}</p>)}</div>
