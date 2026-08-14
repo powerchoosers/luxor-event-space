@@ -1565,32 +1565,6 @@ export function ProposalBuilderModal({
                 <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The client accepts the final proposal first, Luxor sends the Event Agreement next, and Stripe is sent only after the agreement is signed. The schedule below shows exactly what that process will collect.</p>
               </div>
 
-              <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.8fr)] lg:items-start">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">1 · Agreement payment terms</p>
-                    <h4 className="mt-1 text-lg font-bold">Choose the payment schedule Luxor has approved.</h4>
-                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">The booking payment is 25% of Venue Services, with a $750 minimum. The refundable $750 security deposit is separate and due 30 days before the event.</p>
-                    <div className="mt-4 grid gap-3">
-                      <p className="text-xs font-semibold text-[color:var(--portal-muted)]">The schedule is anchored to the actual contract/Stripe booking date after signature. The preview uses today’s date until that booking exists.</p>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {[2, 3, 4, 5].map((count) => <button key={count} type="button" onClick={() => updatePaymentPlan({ mode: 'deposit_and_balance', payment_count: count as 2 | 3 | 4 | 5, booking_payment_percent: 25, final_payment_due_days_before_event: 60 })} className={`min-h-11 rounded-lg border px-3 text-xs font-bold ${paymentPlanDraft?.payment_count === count ? 'border-[#caa24c] bg-[#171512] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{count} Payments</button>)}
-                      </div>
-                    </div>
-                  </div>
-                  <aside className="rounded-xl border border-[#caa24c]/24 bg-[#caa24c]/[0.055] p-4">
-                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">What the client experiences</p>
-                    <ol className="mt-3 space-y-3">
-                      {[
-                        ['1', 'Accepts the proposal', 'The package, final price, service list, and payment terms lock together.'],
-                        ['2', 'Signs the Event Agreement', 'Luxor sends a secure agreement after proposal acceptance.'],
-                        ['3', 'Receives the Stripe link', 'Only then does Stripe collect the initial payment and the $750 refundable deposit.'],
-                      ].map(([number, title, copy]) => <li key={number} className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/28 bg-[#caa24c]/9 font-mono text-[10px] font-black text-[#8c6529] dark:text-[#f1d27a]">{number}</span><span><span className="block text-xs font-bold">{title}</span><span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--portal-muted)]">{copy}</span></span></li>)}
-                    </ol>
-                  </aside>
-                </div>
-              </section>
-
               {isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule
                 finalEventPrice={finalEventPrice}
                 venueServicesTotal={venueServicesTotal}
