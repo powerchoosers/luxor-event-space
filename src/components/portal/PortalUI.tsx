@@ -745,17 +745,20 @@ export function PortalModal({
   if (!mounted) return null
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence initial={false} mode="wait">
       {isOpen && (
         <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             className="absolute inset-0 bg-black/75 backdrop-blur-md cursor-default"
             onClick={onClose}
           />
@@ -769,7 +772,7 @@ export function PortalModal({
             initial={{ opacity: 0, scale: 0.95, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
-            transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
           >
             {title ? (
