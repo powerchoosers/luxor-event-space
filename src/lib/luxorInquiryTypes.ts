@@ -299,6 +299,10 @@ export type LuxorInvoice = {
   discount_amount?: number | null
   discount_type?: 'percent' | 'fixed' | null
   discount_value?: number | null
+  /** Live saved-promotion relationship for editable proposal drafts. */
+  promotion_id?: string | null
+  /** Immutable saved-promotion terms used by this proposal version. */
+  promotion_snapshot?: LuxorProposalPromotionSnapshot | null
   offer_expires_at?: string | null
   offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn' | null
   offer_redeemed_at?: string | null

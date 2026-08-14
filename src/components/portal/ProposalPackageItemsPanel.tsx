@@ -165,22 +165,27 @@ function defaultCustomDraft(item?: LuxorInvoiceLineItem): CustomItemDraft {
 }
 
 function libraryPrice(service: ProposalPackageServiceOption, lineItems: LuxorInvoiceLineItem[], servicePrices?: Record<string, number | null>) {
+  const matched = lineItems.find((item) => serviceMatchesLineItem(service, item))
+  const matchedAmount = matched ? lineAmount(matched) : null
+  // Package-covered rows must show their actual selected line, not the $0
+  // incremental add-on quote returned when the same service is already included.
+  if (typeof matchedAmount === 'number' && matchedAmount !== 0) return matchedAmount
   const quoted = servicePrices?.[service.id]
   if (typeof quoted === 'number' && Number.isFinite(quoted)) return quoted
-  const matched = lineItems.find((item) => serviceMatchesLineItem(service, item))
-  return matched ? lineAmount(matched) : null
+  return matchedAmount
 }
 
 function quoteMath(quote?: ProposalServiceQuote) {
   const breakdown = quote?.quoteBreakdown
   if (!breakdown) return null
   const quantity = Number(breakdown.quantity)
-  const unitPrice = Number(breakdown.perGuestRate ?? breakdown.per_guest_rate ?? breakdown.unitPrice ?? breakdown.unit_price)
+  const perGuestRate = Number(breakdown.perGuestRate ?? breakdown.per_guest_rate)
+  if (!Number.isFinite(perGuestRate) || perGuestRate <= 0) return null
   const minimum = Number(breakdown.minimum)
-  if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(unitPrice) && unitPrice > 0) {
-    const base = `${quantity} guests × ${formatMoney(unitPrice)}`
+  if (Number.isFinite(quantity) && quantity > 0) {
+    const base = `${quantity} guests × ${formatMoney(perGuestRate)}`
     if (Number.isFinite(minimum) && minimum > 0) return (breakdown.appliedMinimum || breakdown.applied_minimum) ? `${base}; ${formatMoney(minimum)} minimum applied` : `${base}; ${formatMoney(minimum)} minimum`
-    return `${base} = ${formatMoney(Number(breakdown.subtotal ?? quote?.total ?? quantity * unitPrice))}`
+    return `${base} = ${formatMoney(Number(breakdown.subtotal ?? quote?.total ?? quantity * perGuestRate))}`
   }
   return null
 }

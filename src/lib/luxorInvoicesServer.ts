@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment, LuxorProposalContext } from './luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment, LuxorProposalContext, LuxorProposalPromotionSnapshot } from './luxorInquiryTypes'
 import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 
@@ -103,6 +103,8 @@ export async function createInvoice(data: {
   discount_amount?: number | null
   discount_type?: 'percent' | 'fixed' | null
   discount_value?: number | null
+  promotion_id?: string | null
+  promotion_snapshot?: LuxorProposalPromotionSnapshot | null
   offer_expires_at?: string | null
   offer_status?: 'active' | 'redeemed' | 'expired' | 'withdrawn'
   offer_redeemed_at?: string | null
@@ -141,6 +143,8 @@ export async function createInvoice(data: {
       discount_amount: data.discount_amount ?? 0,
       discount_type: data.discount_type ?? 'percent',
       discount_value: data.discount_value ?? 0,
+      promotion_id: data.promotion_id ?? null,
+      promotion_snapshot: data.promotion_snapshot ?? {},
       offer_expires_at: data.offer_expires_at ?? null,
       offer_status: data.offer_status ?? 'active',
       offer_redeemed_at: data.offer_redeemed_at ?? null,
@@ -184,6 +188,8 @@ export async function updateInvoice(
     | 'discount_amount'
     | 'discount_type'
     | 'discount_value'
+    | 'promotion_id'
+    | 'promotion_snapshot'
     | 'offer_expires_at'
     | 'offer_status'
     | 'offer_redeemed_at'

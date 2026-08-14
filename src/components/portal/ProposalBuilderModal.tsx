@@ -629,7 +629,15 @@ export function ProposalBuilderModal({
   ), [effectiveContext, items])
   const selectedServiceIdSet = useMemo(() => new Set(selectedServiceIds), [selectedServiceIds])
   const selectedPackageOption = PACKAGE_OPTIONS.find((option) => option.id === selectedPackage)
-  const packageIncludedServiceIds = useMemo(() => selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : [], [selectedPackageOption])
+  const packageBaseServiceIds = useMemo(() => selectedPackageOption ? PACKAGE_INCLUDED_SERVICE_IDS[selectedPackageOption.id] : [], [selectedPackageOption])
+  const packageIncludedServiceIds = useMemo(() => packageBaseServiceIds.filter((includedServiceId) => {
+    const includedService = availableServices.find((service) => service.id === includedServiceId)
+    if (!includedService?.exclusiveGroup) return true
+    return !selectedServiceIds.some((selectedServiceId) => {
+      if (selectedServiceId === includedServiceId) return false
+      return availableServices.find((service) => service.id === selectedServiceId)?.exclusiveGroup === includedService.exclusiveGroup
+    })
+  }), [availableServices, packageBaseServiceIds, selectedServiceIds])
   const ineligibleServiceIds = useMemo(() => new Set(packageIncludedServiceIds), [packageIncludedServiceIds])
   const optionalServices = useMemo(() => selectedPackageOption
     ? availableServices.filter((service) => !ineligibleServiceIds.has(service.id))
