@@ -228,16 +228,16 @@ export function ProposalPackageItemsPanel({
   const visibleServiceGroups = useMemo(() => groupByCategory(allServices.filter((service) => (
     !searchTerm || `${service.name} ${service.category} ${service.detail || ''}`.toLowerCase().includes(searchTerm)
   ))), [allServices, searchTerm])
-  const displayedPackages = packageOptions?.length
+  const displayedPackages = useMemo(() => packageOptions?.length
     ? packageOptions
     : packageName
       ? [{ id: selectedPackageId || packageName, name: packageName, finalEventPrice }]
-      : []
+      : [], [packageOptions, packageName, selectedPackageId, finalEventPrice])
   const calculatedLineItems = customItems === undefined
     ? lineItems
     : lineItems.filter((item) => item.pricingRole !== 'custom')
-  const proposalItems = [...calculatedLineItems, ...(customItems || [])]
-  const itemGroups = groupByCategory(proposalItems)
+  const proposalItems = useMemo(() => [...calculatedLineItems, ...(customItems || [])], [calculatedLineItems, customItems])
+  const itemGroups = useMemo(() => groupByCategory(proposalItems), [proposalItems])
   const customItemIds = useMemo(() => new Set((customItems || []).map((item) => item.id).filter((id): id is string => Boolean(id))), [customItems])
 
   const beginCustomItem = (item?: LuxorInvoiceLineItem) => {
@@ -331,7 +331,7 @@ export function ProposalPackageItemsPanel({
 
           <div className="space-y-4 p-3 sm:p-4">
             {visibleServiceGroups.length ? visibleServiceGroups.map(([category, services]) => (
-              <section key={category} aria-label={category}>
+              <section key={category} aria-label={category} className="portal-render-surface">
                 <p className="px-1 text-[9px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
                 <div className="mt-2 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40">
                   {services.map((service, index) => {
@@ -449,7 +449,7 @@ export function ProposalPackageItemsPanel({
                 const categoryTotal = categoryItems.reduce((sum, item) => sum + lineAmount(item), 0)
                 const hasPricedCategoryItems = categoryItems.some((item) => lineAmount(item) !== 0)
                 return (
-                  <section key={category} className="p-4 sm:p-5">
+                  <section key={category} className="portal-render-surface p-4 sm:p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">{category}</p>
                       <p className="font-mono text-xs font-bold text-[color:var(--portal-text)]">{hasPricedCategoryItems ? formatMoney(categoryTotal) : 'Included'}</p>

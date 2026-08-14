@@ -956,7 +956,7 @@ export function ProposalBuilderModal({
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
   }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.payment_policy_acknowledged, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
-  const pricingRequestKey = JSON.stringify(pricingRequest)
+  const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
     if (!isOpen || !eventDateValue || !guestCount) {

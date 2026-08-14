@@ -806,6 +806,8 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
   .portal-scrollbar {
     scrollbar-color: rgba(59, 130, 246, 0.7) rgba(9, 9, 11, 0.9);
     scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .portal-scrollbar::-webkit-scrollbar {
