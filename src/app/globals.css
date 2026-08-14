@@ -33,6 +33,19 @@ html {
   scrollbar-width: thin;
 }
 
+/* Lenis owns page-level easing while marked panels keep native scrolling. */
+html.lenis {
+  height: auto;
+}
+
+html.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+html.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
 body {
   font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
   background:

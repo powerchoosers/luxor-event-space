@@ -9,6 +9,7 @@ import { SiteScrollGuard } from '@/components/SiteScrollGuard'
 import { RouteTransition } from '@/components/RouteTransition'
 import { PublicConversionTracker } from '@/components/PublicConversionTracker'
 import { PublicMobileActions } from '@/components/PublicMobileActions'
+import { SmoothScroll } from '@/components/SmoothScroll'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -85,6 +86,7 @@ export default function RootLayout({
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
       <body data-luxor-site className="min-h-full bg-[#050505] pb-16 text-[#f6efe8] sm:pb-0">
+        <SmoothScroll />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}
