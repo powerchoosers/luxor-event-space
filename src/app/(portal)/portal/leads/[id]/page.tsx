@@ -198,6 +198,11 @@ function proposalRemovedServiceIds(value: unknown) {
     : []
 }
 
+function hasProposalRemovedServiceIds(value: unknown) {
+  const record = asProposalRecord(value)
+  return Array.isArray(record?.removedServiceIds) || Array.isArray(record?.removed_service_ids)
+}
+
 function getCurrentFinalProposal(invoices: LuxorInvoice[]) {
   return [...invoices]
     .filter((invoice) => (!invoice.invoice_kind || invoice.invoice_kind === 'event') && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn')
@@ -1887,6 +1892,14 @@ export default function LeadDetailPage({
         : Array.isArray(currentSelection.custom_items)
           ? currentSelection.custom_items
           : undefined
+      // Treat a deliberately empty removal list as meaningful too. Without
+      // this, an older calculation response can put an item back after the
+      // owner has restored it (or remove one again after the owner kept it).
+      const currentRemovedServiceIds = Array.isArray(currentSelection.removedServiceIds)
+        ? currentSelection.removedServiceIds
+        : Array.isArray(currentSelection.removed_service_ids)
+          ? currentSelection.removed_service_ids
+          : undefined
       // Calculation responses arrive asynchronously. A response that began
       // before the owner selected (or completed) Step 5 has no valid payment
       // plan yet, so it must never erase the in-progress owner input.
@@ -1901,6 +1914,10 @@ export default function LeadDetailPage({
           ...currentSelection,
           ...calculatedSelection,
           ...(currentCustomItems ? { customItems: currentCustomItems } : {}),
+          ...(currentRemovedServiceIds ? {
+            removedServiceIds: currentRemovedServiceIds,
+            removed_service_ids: currentRemovedServiceIds,
+          } : {}),
         },
       }
     })
@@ -1918,7 +1935,7 @@ export default function LeadDetailPage({
     const addOns = proposalServiceIds(contextSelection).length
       ? proposalServiceIds(contextSelection)
       : proposalServiceIds(calculationSelection)
-    const removedServiceIds = proposalRemovedServiceIds(contextSelection).length
+    const removedServiceIds = hasProposalRemovedServiceIds(contextSelection)
       ? proposalRemovedServiceIds(contextSelection)
       : proposalRemovedServiceIds(calculationSelection)
     const customItems = Array.isArray(contextSelection?.customItems)
@@ -1941,7 +1958,7 @@ export default function LeadDetailPage({
       eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
       rentalPeriod,
       addOns,
-      ...(removedServiceIds.length ? { removedServiceIds } : {}),
+      ...(hasProposalRemovedServiceIds(contextSelection) || removedServiceIds.length ? { removedServiceIds } : {}),
       ...(promotionId ? { promotionId } : {}),
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
       ...(customItems ? { customItems } : {}),
