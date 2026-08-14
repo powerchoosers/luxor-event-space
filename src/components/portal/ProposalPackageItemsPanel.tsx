@@ -54,10 +54,15 @@ type ProposalServiceQuote = {
   quoteBreakdown?: {
     quantity?: number
     unitPrice?: number
+    unit_price?: number
     subtotal?: number
     perGuestRate?: number
+    per_guest_rate?: number
     minimum?: number
     appliedMinimum?: boolean
+    applied_minimum?: boolean
+    replacementOf?: string
+    replacement_of?: string
   }
 }
 
@@ -170,11 +175,11 @@ function quoteMath(quote?: ProposalServiceQuote) {
   const breakdown = quote?.quoteBreakdown
   if (!breakdown) return null
   const quantity = Number(breakdown.quantity)
-  const unitPrice = Number(breakdown.perGuestRate ?? breakdown.unitPrice)
+  const unitPrice = Number(breakdown.perGuestRate ?? breakdown.per_guest_rate ?? breakdown.unitPrice ?? breakdown.unit_price)
   const minimum = Number(breakdown.minimum)
   if (Number.isFinite(quantity) && quantity > 0 && Number.isFinite(unitPrice) && unitPrice > 0) {
     const base = `${quantity} guests × ${formatMoney(unitPrice)}`
-    if (Number.isFinite(minimum) && minimum > 0) return breakdown.appliedMinimum ? `${base}; ${formatMoney(minimum)} minimum applied` : `${base}; ${formatMoney(minimum)} minimum`
+    if (Number.isFinite(minimum) && minimum > 0) return (breakdown.appliedMinimum || breakdown.applied_minimum) ? `${base}; ${formatMoney(minimum)} minimum applied` : `${base}; ${formatMoney(minimum)} minimum`
     return `${base} = ${formatMoney(Number(breakdown.subtotal ?? quote?.total ?? quantity * unitPrice))}`
   }
   return null

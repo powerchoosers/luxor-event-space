@@ -105,10 +105,15 @@ export type ProposalPricingCalculation = {
     quoteBreakdown?: {
       quantity?: number
       unitPrice?: number
+      unit_price?: number
       subtotal?: number
       perGuestRate?: number
+      per_guest_rate?: number
       minimum?: number
       appliedMinimum?: boolean
+      applied_minimum?: boolean
+      replacementOf?: string
+      replacement_of?: string
     }
   }>
   errors?: string[]
