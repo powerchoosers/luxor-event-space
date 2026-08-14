@@ -3,7 +3,7 @@ import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateI
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
-import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer'
+import { getDefaultLuxorProposalPricing, LuxorPromotionSelectionError, resolveLuxorProposalPromotion } from '@/lib/luxorProposalPricingServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { calculateLuxorOfferPricing, clampLuxorDiscountPercent, luxorOfferSnapshot } from '@/lib/luxorOffer'
@@ -158,6 +158,7 @@ type ServerCalculatedProposal = {
   total: number
   proposalContext: LuxorProposalContext
   discount: { type: 'percent' | 'fixed'; value: number }
+  promotion: LuxorProposalContext['promotion']
 }
 
 type InvoiceRouteUpdates = Parameters<typeof updateInvoice>[1] & {
@@ -170,10 +171,13 @@ const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', '
 async function calculateServerProposal(selection: LuxorProposalSelection): Promise<ServerCalculatedProposal> {
   let pricingRecord: Awaited<ReturnType<typeof getDefaultLuxorProposalPricing>>
   let calculation: unknown
+  let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
     pricingRecord = await getDefaultLuxorProposalPricing()
-    calculation = calculateLuxorProposal(selection, pricingRecord.config)
-  } catch {
+    promotion = await resolveLuxorProposalPromotion(selection)
+    calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion })
+  } catch (error) {
+    if (error instanceof LuxorPromotionSelectionError) throw error
     throw new ProposalPricingConfigurationError()
   }
 
@@ -232,6 +236,7 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
       tax_amount: taxAmount,
       final_event_price: total,
       refundable_security_deposit: refundableSecurityDeposit,
+      ...(rawContext.promotion && typeof rawContext.promotion === 'object' ? { promotion: rawContext.promotion } : {}),
     },
   }
 
@@ -244,7 +249,10 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
     taxRate,
     total,
     proposalContext,
-    discount: discountSelection(selection, discountAmount),
+    discount: proposalContext.promotion
+      ? { type: proposalContext.promotion.discount_type, value: proposalContext.promotion.value }
+      : discountSelection(selection, discountAmount),
+    promotion: proposalContext.promotion,
   }
 }
 
