@@ -259,10 +259,12 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
   if (refundableSecurityDeposit === null) throw new ProposalPricingConfigurationError()
 
   const submittedPaymentPlan = paymentPlanSelection(selection)
-  const calculatedPublicationErrors = Array.isArray(record.publicationErrors)
-    ? record.publicationErrors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim()))
+  const calculatedPublicationErrors = Array.isArray(record.publicationErrors ?? record.publication_errors)
+    ? ((record.publicationErrors ?? record.publication_errors) as unknown[])
+      .filter((error): error is string => typeof error === 'string' && Boolean(error.trim()))
     : []
-  const paymentPlanRequired = recordFrom(record.requirements)?.paymentPlan === true || calculatedPublicationErrors.length > 0
+  const paymentPlanRequired = recordFrom(record.requirements)?.paymentPlan === true || calculatedPublicationErrors.includes(PAYMENT_PLAN_REQUIRED)
+  const nonPaymentPublicationErrors = calculatedPublicationErrors.filter((error) => error !== PAYMENT_PLAN_REQUIRED)
   const proposalContext: LuxorProposalContext = {
     ...rawContext,
     version: Math.max(1, Math.floor(numberValue(rawContext.version) ?? 1)),
@@ -278,9 +280,10 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
     // price. Keeping it separate means a valid draft can be reviewed and
     // previewed without incorrectly claiming its pricing needs admin review.
     calculation_errors: [],
-    publication_errors: paymentPlanRequired && !submittedPaymentPlan
-      ? [PAYMENT_PLAN_REQUIRED]
-      : [],
+    publication_errors: [
+      ...nonPaymentPublicationErrors,
+      ...(paymentPlanRequired && !submittedPaymentPlan ? [PAYMENT_PLAN_REQUIRED] : []),
+    ],
     pricing_snapshot: {
       ...(recordFrom(record.snapshot) || {}),
       line_items: lineItems,

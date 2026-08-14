@@ -185,6 +185,19 @@ function proposalServiceIds(value: unknown) {
     : []
 }
 
+/**
+ * Package defaults can be intentionally removed from a draft. Keep that
+ * selection alongside ordinary add-ons so saving uses the same calculation the
+ * owner just reviewed in Services & Items.
+ */
+function proposalRemovedServiceIds(value: unknown) {
+  const record = asProposalRecord(value)
+  const source = record?.removedServiceIds || record?.removed_service_ids
+  return Array.isArray(source)
+    ? source.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    : []
+}
+
 function getCurrentFinalProposal(invoices: LuxorInvoice[]) {
   return [...invoices]
     .filter((invoice) => (!invoice.invoice_kind || invoice.invoice_kind === 'event') && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn')
@@ -1905,6 +1918,9 @@ export default function LeadDetailPage({
     const addOns = proposalServiceIds(contextSelection).length
       ? proposalServiceIds(contextSelection)
       : proposalServiceIds(calculationSelection)
+    const removedServiceIds = proposalRemovedServiceIds(contextSelection).length
+      ? proposalRemovedServiceIds(contextSelection)
+      : proposalRemovedServiceIds(calculationSelection)
     const customItems = Array.isArray(contextSelection?.customItems)
       ? contextSelection.customItems
       : Array.isArray(contextSelection?.custom_items)
@@ -1925,6 +1941,7 @@ export default function LeadDetailPage({
       eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
       rentalPeriod,
       addOns,
+      ...(removedServiceIds.length ? { removedServiceIds } : {}),
       ...(promotionId ? { promotionId } : {}),
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
       ...(customItems ? { customItems } : {}),
