@@ -5,8 +5,41 @@ type ChatMessage = {
   content: string
 }
 
+const INDOOR_ONLY_REPLY =
+  'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour.'
+
 const fallbackReply =
-  'I can help with your event and tour. Private tours are 30 minutes Monday through Friday, with one party per time. Choose a live opening on the tour page at least 24 hours ahead to reserve it.'
+  'I can help you plan your event or reserve a private tour. Tours are 30 minutes, and the live booking card shows the current openings.'
+
+const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|open[-\s]?air|interior|exterior|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
+const outdoorVenueReferencePattern = /\b(outdoor|outdoors|outside|open[-\s]?air|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
+
+function latestVisitorMessage(messages: ChatMessage[]) {
+  return [...messages].reverse().find((message) => message.role === 'user')?.content ?? ''
+}
+
+function requiresIndoorOnlyReply(messages: ChatMessage[]) {
+  return venueSettingQuestionPattern.test(latestVisitorMessage(messages))
+}
+
+function keepVenueFactsAccurate(reply: string) {
+  return outdoorVenueReferencePattern.test(reply) ? INDOOR_ONLY_REPLY : reply
+}
+
+const SYSTEM_PROMPT = `You are Elena, the warm public concierge for Luxor Event Space in San Antonio.
+
+Verified venue facts:
+- Luxor is one single indoor-only event venue.
+- Luxor has no outdoor event space, patio, courtyard, garden, terrace, or open-air option.
+- Never ask a visitor whether they prefer an indoor or outdoor setting. Never describe, imply, or suggest an outdoor option.
+- If asked about an outdoor setting, say: "Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour."
+
+Your goal is to help a visitor confidently take the next step without overwhelming them:
+- Keep each answer to one or two short sentences and normally under 55 words.
+- Ask at most one useful question at a time. Do not repeat a question the visitor already answered.
+- For a tour, tell them to use the live booking card to choose a time and add their name and phone; do not make them type all booking details into chat.
+- Tours are 30 minutes, Monday through Friday, with one party per time and at least 24 hours ahead. The live booking card shows exact openings, and submitting it reserves the selected time.
+- Never invent availability, pricing, features, services, policies, or confirmation steps. Direct visitors to the relevant site page when an exact answer is not available.`
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +47,10 @@ export async function POST(request: Request) {
 
     if (!Array.isArray(messages)) {
       return NextResponse.json({ reply: fallbackReply }, { status: 200 })
+    }
+
+    if (requiresIndoorOnlyReply(messages)) {
+      return NextResponse.json({ reply: INDOOR_ONLY_REPLY }, { status: 200 })
     }
 
     const apiKey = process.env.OPEN_ROUTER_API_KEY
@@ -36,13 +73,12 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: 'openai/gpt-4.1-mini',
-        temperature: 0.7,
-        max_tokens: 260,
+        temperature: 0.35,
+        max_tokens: 160,
         messages: [
           {
             role: 'system',
-            content:
-              'You are Elena, the warm public concierge for Luxor Event Space in San Antonio. Help visitors with venue questions and booking private tours. Tours are 30 minutes and offered Monday through Friday at 11:00, 11:30, 12:00, 12:30, 1:00, 1:30, 5:00, 5:30, 6:00, 6:30, and 7:00. Each time accepts one party and must be booked at least 24 hours ahead. Direct visitors to the live booking form on the tour page for exact openings; submitting the form reserves the selected time. Never invent availability or say a coordinator must confirm a time that the booking form has successfully reserved. Ask one useful question at a time and keep answers under 90 words.',
+            content: SYSTEM_PROMPT,
           },
           ...messages.slice(-8),
         ],
@@ -58,7 +94,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      reply: data.choices?.[0]?.message?.content?.trim() || fallbackReply,
+      reply: keepVenueFactsAccurate(data.choices?.[0]?.message?.content?.trim() || fallbackReply),
     })
   } catch {
     return NextResponse.json({ reply: fallbackReply, mode: 'fallback' }, { status: 200 })

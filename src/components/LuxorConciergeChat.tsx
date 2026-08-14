@@ -11,8 +11,6 @@ import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import {
-  ArrowRight,
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -64,7 +62,11 @@ const eventCards = [
   },
 ]
 
-const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate event']
+const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate', 'Other']
+
+const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|open[-\s]?air|interior|exterior|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
+const indoorOnlyReply =
+  'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour.'
 
 function createId() {
   return Math.random().toString(36).slice(2)
@@ -72,6 +74,10 @@ function createId() {
 
 function fallbackResponse(input: string) {
   const text = input.toLowerCase()
+
+  if (venueSettingQuestionPattern.test(text)) {
+    return indoorOnlyReply
+  }
 
   if (text.includes('price') || text.includes('cost') || text.includes('package')) {
     return 'Packages depend on your date, guest count, and event type. You can compare the current package options on the pricing page, or I can help you request a private tour so the team can talk through the best fit.'
@@ -85,7 +91,7 @@ function fallbackResponse(input: string) {
     return 'For a quinceañera, we should look at the entrance, court seating, family photo areas, cake moment, and dance floor. I can help you pick a tour time.'
   }
 
-  return 'That sounds like a good fit for a walkthrough. Tell me the event type, guest count, and your target month, then pick one of the tour cards below.'
+  return 'That sounds like a great fit. What are you celebrating? When you are ready, I can help you reserve a private tour.'
 }
 
 function shouldShowBookingCard(input: string) {
@@ -158,14 +164,14 @@ function getVisitorGreeting() {
   const medium = attribution.utmMedium?.toLowerCase() ?? ''
 
   if (source.includes('instagram')) {
-    return 'Hi, I am Elena. Welcome from Instagram. Ask me about the room, pricing, or tour times, and I can help you take the next step.'
+    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
   }
 
   if (attribution.gclid || attribution.fbclid || /paid|cpc|ppc|display|social/.test(medium)) {
-    return 'Hi, I am Elena. Welcome to Luxor. Ask me about the room, pricing, or tour times, and I can help you take the next step.'
+    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
   }
 
-  return 'Hi, I am Elena. I can help you picture your event at Luxor, compare options, and request a private tour.'
+  return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
 }
 
 export function LuxorConciergeChat() {
@@ -178,10 +184,11 @@ export function LuxorConciergeChat() {
   const [bookingStep, setBookingStep] = useState<1 | 2>(1)
   const [selectedTourDate, setSelectedTourDate] = useState('')
   const [calendarMonth, setCalendarMonth] = useState('')
-  const [tourPickerOpen, setTourPickerOpen] = useState(false)
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
-  const [eventPickerOpen, setEventPickerOpen] = useState(true)
+  const [showOptionalContactDetails, setShowOptionalContactDetails] = useState(false)
+  const [startChoicesVisible, setStartChoicesVisible] = useState(true)
+  const [eventPickerOpen, setEventPickerOpen] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submittingInquiry, setSubmittingInquiry] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
@@ -201,12 +208,12 @@ export function LuxorConciergeChat() {
       id: createId(),
       role: 'assistant',
       content:
-        'Hi, I am Elena. I can help you picture your event at Luxor, compare options, and request a private tour.',
+        'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.',
     },
   ])
 
   const apiMessages = useMemo(
-    () => messages.map(({ role, content }) => ({ role, content })),
+    () => messages.filter((message) => message.content.trim()).map(({ role, content }) => ({ role, content })),
     [messages],
   )
 
@@ -214,7 +221,8 @@ export function LuxorConciergeChat() {
   const contactComplete =
     contactDetails.name.trim().length > 1 &&
     contactDetails.phone.replace(/\D/g, '').length >= 10
-  const bookingReady = contactComplete && Boolean(tourSelection || preferredTourWindow)
+  const hasTourTime = Boolean(tourSelection || preferredTourWindow)
+  const bookingReady = contactComplete && hasTourTime
   const availableTourDates = useMemo(() => new Set(tourSlots.map((slot) => slot.date)), [tourSlots])
   const selectedDateSlots = useMemo(
     () => tourSlots.filter((slot) => slot.date === selectedTourDate),
@@ -253,8 +261,6 @@ export function LuxorConciergeChat() {
   }
 
   function showBookingCard() {
-    setTourPickerOpen(false)
-
     if (hasBookingCard) {
       window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
       return
@@ -265,11 +271,16 @@ export function LuxorConciergeChat() {
       {
         id: createId(),
         role: 'assistant',
-        content: 'I can start the tour request here. Pick a time and leave the best contact info for the Luxor team.',
+        content: '',
         ui: 'booking',
       },
     ])
     window.setTimeout(() => messageEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+  }
+
+  function returnToChat() {
+    setMessages((current) => current.filter((message) => message.ui !== 'booking'))
+    window.requestAnimationFrame(() => inputRef.current?.focus())
   }
 
   async function sendMessage(messageText: string) {
@@ -278,6 +289,7 @@ export function LuxorConciergeChat() {
 
     const shouldOfferBooking = shouldShowBookingCard(trimmed)
     const userMessage: Message = { id: createId(), role: 'user', content: trimmed }
+    setStartChoicesVisible(false)
     setMessages((current) => [...current, userMessage])
     setInput('')
     setPending(true)
@@ -307,7 +319,7 @@ export function LuxorConciergeChat() {
           next.push({
             id: createId(),
             role: 'assistant',
-            content: 'Here is the quick booking card so you do not have to type everything out.',
+            content: '',
             ui: 'booking',
           })
         }
@@ -325,7 +337,7 @@ export function LuxorConciergeChat() {
           next.push({
             id: createId(),
             role: 'assistant',
-            content: 'Here is the quick booking card so you do not have to type everything out.',
+            content: '',
             ui: 'booking',
           })
         }
@@ -340,10 +352,11 @@ export function LuxorConciergeChat() {
   }
 
   function selectEvent(label: string) {
-    const event = eventCards.find((card) => card.label === label) || eventCards[0]
+    const event = eventCards.find((card) => card.label === label) ?? null
     setSelectedEvent(event)
+    setStartChoicesVisible(false)
     setEventPickerOpen(false)
-    void sendMessage(`I am planning a ${label}.`)
+    void sendMessage(label === 'Other' ? 'I am planning another type of event.' : `I am planning a ${label}.`)
   }
 
   async function submitTourRequest() {
@@ -449,7 +462,7 @@ export function LuxorConciergeChat() {
       <div className="rounded-md border border-[#caa24c]/18 bg-black/25 p-3">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Step {bookingStep} of 2</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Step {bookingStep} of 3</p>
             <p className="mt-1 text-xs text-[#d7c29a]/70">{bookingStep === 1 ? 'Choose a tour day' : 'Choose an available time'}</p>
           </div>
           {bookingStep === 2 ? (
@@ -521,7 +534,10 @@ export function LuxorConciergeChat() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Tour request</p>
-            <h3 className="mt-1 font-serif text-2xl leading-none text-[#f7efe3]">Fast booking details</h3>
+            <h3 className="mt-1 font-serif text-2xl leading-none text-[#f7efe3]">Reserve a private tour</h3>
+            <p className="mt-2 text-xs leading-5 text-[#d7c29a]/70">
+              {hasTourTime ? 'Almost there — add your name and phone to reserve your time.' : 'Choose a time first. You only need your name and phone to reserve it.'}
+            </p>
           </div>
           {submitted ? (
             <span className="rounded-md border border-[#caa24c]/25 bg-[#caa24c] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#050505]">
@@ -532,46 +548,63 @@ export function LuxorConciergeChat() {
 
         <div className="mt-3">{renderTourPicker()}</div>
 
-        <div className="mt-3 grid gap-2">
-          <label className="relative block">
-            <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
-            <input
-              value={contactDetails.name}
-              onChange={(event) => updateContactDetail('name', event.target.value)}
-              placeholder="Full name"
-              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
-            />
-          </label>
-          <label className="relative block">
-            <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
-            <input
-              value={contactDetails.email}
-              onChange={(event) => updateContactDetail('email', event.target.value)}
-              placeholder="Email (optional)"
-              type="email"
-              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
-            />
-          </label>
-          <label className="relative block">
-            <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
-            <input
-              value={contactDetails.phone}
-              onChange={(event) => updateContactDetail('phone', formatStandardPhoneInput(event.target.value))}
-              placeholder="Phone (required)"
-              type="tel"
-              required
-              aria-required="true"
-              className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] font-mono outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
-            />
-          </label>
-          <textarea
-            value={contactDetails.notes}
-            onChange={(event) => updateContactDetail('notes', event.target.value)}
-            placeholder="Event notes, guest count, target month..."
-            className="min-h-20 resize-none rounded-md border border-[#caa24c]/18 bg-black/30 px-3 py-2.5 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
-          />
-          {contactDetails.email ? <label className="flex items-start gap-2 rounded-md border border-[#caa24c]/16 bg-black/20 p-2.5 text-[11px] leading-4 text-[#d7c29a]/70"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 accent-[#caa24c]" /><span>Email me occasional Luxor event ideas and offers. Optional.</span></label> : null}
-        </div>
+        {hasTourTime ? (
+          <div className="mt-3 grid gap-2">
+            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Step 3 of 3 · Reserve your time</p>
+            <label className="relative block">
+              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+              <input
+                value={contactDetails.name}
+                onChange={(event) => updateContactDetail('name', event.target.value)}
+                placeholder="Full name"
+                aria-required="true"
+                className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+              />
+            </label>
+            <label className="relative block">
+              <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+              <input
+                value={contactDetails.phone}
+                onChange={(event) => updateContactDetail('phone', formatStandardPhoneInput(event.target.value))}
+                placeholder="Phone"
+                type="tel"
+                required
+                aria-required="true"
+                className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] font-mono outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+              />
+            </label>
+
+            {showOptionalContactDetails ? (
+              <>
+                <label className="relative block">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#caa24c]/70" />
+                  <input
+                    value={contactDetails.email}
+                    onChange={(event) => updateContactDetail('email', event.target.value)}
+                    placeholder="Email (optional)"
+                    type="email"
+                    className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+                  />
+                </label>
+                <textarea
+                  value={contactDetails.notes}
+                  onChange={(event) => updateContactDetail('notes', event.target.value)}
+                  placeholder="Event notes, guest count, target month..."
+                  className="min-h-20 resize-none rounded-md border border-[#caa24c]/18 bg-black/30 px-3 py-2.5 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
+                />
+                {contactDetails.email ? <label className="flex items-start gap-2 rounded-md border border-[#caa24c]/16 bg-black/20 p-2.5 text-[11px] leading-4 text-[#d7c29a]/70"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 accent-[#caa24c]" /><span>Email me occasional Luxor event ideas and offers. Optional.</span></label> : null}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowOptionalContactDetails(true)}
+                className="justify-self-start text-[10px] font-bold uppercase tracking-[0.12em] text-[#d7c29a]/65 transition hover:text-[#f1d27a]"
+              >
+                Add email or event details (optional)
+              </button>
+            )}
+          </div>
+        ) : null}
 
         {submissionError ? (
           <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200">
@@ -585,7 +618,7 @@ export function LuxorConciergeChat() {
           disabled={!bookingReady || submitted || submittingInquiry}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {submitted ? 'Tour requested' : submittingInquiry ? 'Sending request' : bookingReady ? (tourSelection ? 'Reserve tour' : 'Send tour request') : 'Pick a time + add contact'}
+          {submitted ? 'Tour requested' : submittingInquiry ? 'Sending request' : bookingReady ? (tourSelection ? 'Reserve tour' : 'Send tour request') : hasTourTime ? 'Add name + phone' : 'Pick a time'}
           <Check className="h-4 w-4" />
         </button>
       </motion.div>
@@ -638,18 +671,20 @@ export function LuxorConciergeChat() {
                       key={message.id}
                       className={`flex flex-col ${message.ui === 'booking' ? 'w-full items-stretch' : message.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
-                      <motion.div
-                        initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                        className={`max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-md shadow-black/5 ${
-                          message.role === 'user'
-                            ? 'bg-[#caa24c] text-[#050505]'
-                            : 'border border-[#caa24c]/18 bg-white/[0.035] text-[#eadcc8]'
-                        }`}
-                      >
-                        {message.content}
-                      </motion.div>
+                      {message.content ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: 50, scale: 0.85, originX: message.role === 'user' ? 1 : 0, originY: 1 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                          className={`max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 shadow-md shadow-black/5 ${
+                            message.role === 'user'
+                              ? 'bg-[#caa24c] text-[#050505]'
+                              : 'border border-[#caa24c]/18 bg-white/[0.035] text-[#eadcc8]'
+                          }`}
+                        >
+                          {message.content}
+                        </motion.div>
+                      ) : null}
                       {message.ui === 'booking' ? renderBookingCard(message.id) : null}
                     </motion.div>
                   ))}
@@ -698,6 +733,38 @@ export function LuxorConciergeChat() {
                 <div ref={messageEndRef} />
               </div>
 
+              {startChoicesVisible && !eventPickerOpen && !hasBookingCard ? (
+                <div className="mt-4 rounded-md border border-[#caa24c]/18 bg-black/20 p-3">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#caa24c]">Start here</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartChoicesVisible(false)
+                      showBookingCard()
+                    }}
+                    className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#050505] transition hover:bg-[#f1d27a]"
+                  >
+                    Check tour times
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartChoicesVisible(false)
+                      setEventPickerOpen(true)
+                    }}
+                    className="mt-2 w-full rounded-md border border-[#caa24c]/22 bg-black/24 px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/82 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
+                  >
+                    Tell Elena what you’re planning
+                  </button>
+                  <Link
+                    href="/pricing"
+                    className="mt-2 block text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/65 transition hover:text-[#f1d27a]"
+                  >
+                    View packages
+                  </Link>
+                </div>
+              ) : null}
+
               {eventPickerOpen ? (
                 <div className="mt-4">
                   <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#caa24c]">
@@ -709,29 +776,11 @@ export function LuxorConciergeChat() {
                         key={label}
                         type="button"
                         onClick={() => selectEvent(label)}
-                        className="rounded-md border border-[#caa24c]/22 bg-black/24 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#d7c29a]/82 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
+                        className={`${label === 'Other' ? 'col-span-2' : ''} rounded-md border border-[#caa24c]/22 bg-black/24 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#d7c29a]/82 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]`}
                       >
                         {label}
                       </button>
                     ))}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#caa24c]/12 pt-3">
-                    <Link
-                      href="/pricing"
-                      className="rounded-md border border-[#caa24c]/18 bg-black/18 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/78 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
-                    >
-                      Compare packages
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEventPickerOpen(false)
-                        showBookingCard()
-                      }}
-                      className="rounded-md border border-[#caa24c]/18 bg-black/18 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/78 transition hover:border-[#f1d27a]/50 hover:text-[#f1d27a]"
-                    >
-                      Check tour times
-                    </button>
                   </div>
                 </div>
               ) : null}
@@ -759,99 +808,51 @@ export function LuxorConciergeChat() {
               ) : null}
             </div>
 
-            {!hasBookingCard ? <div className="border-t border-[#caa24c]/18 bg-[#0d0908] px-3 py-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setTourPickerOpen((current) => !current)
-                  if (!hasBookingCard) showBookingCard()
-                }}
-                className="flex w-full items-center justify-between rounded-md border border-[#caa24c]/20 bg-black/20 px-3 py-2.5 text-left transition hover:border-[#f1d27a]/45"
-                aria-expanded={tourPickerOpen}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <CalendarDays className="h-4 w-4 shrink-0 text-[#caa24c]" />
-                  <span className="min-w-0">
-                    <span className="block font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">
-                      Tour window
-                    </span>
-                    <span className="block truncate text-xs text-[#d7c29a]/70">
-                      {tourSelection ? tourSelection.label : 'Tap to pick a time'}
-                    </span>
-                  </span>
-                </span>
-                <ChevronLeft className={`h-4 w-4 shrink-0 text-[#caa24c] transition ${tourPickerOpen ? '-rotate-90' : 'rotate-90'}`} />
-              </button>
-
-              <AnimatePresence initial={false}>
-                {tourPickerOpen ? (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-2">
-                      {renderTourPicker()}
-                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        {tourSelection || preferredTourWindow ? (
-                          <button
-                            type="button"
-                            onClick={submitTourRequest}
-                            className="flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a]"
-                          >
-                            {submitted ? 'Tour requested' : contactComplete ? 'Book tour' : 'Add contact info'}
-                            <Check className="h-4 w-4" />
-                          </button>
-                        ) : null}
-
-                        <Link
-                          href="/tour"
-                          className="flex items-center justify-center gap-2 rounded-md px-3 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#f1d27a] transition hover:text-[#fff0b5]"
-                        >
-                          Full form
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </div> : null}
-
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                void sendMessage(input)
-              }}
-              className="border-t border-[#caa24c]/18 bg-[#0d0908] p-3"
-            >
-              <div className="flex items-end gap-2">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault()
-                      void sendMessage(input)
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Tell Elena what you are planning..."
-                  className="max-h-24 min-h-11 flex-1 resize-none rounded-md border border-[#caa24c]/22 bg-black/35 px-3 py-3 text-sm leading-5 text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/65"
-                />
+            {hasBookingCard ? (
+              <div className="border-t border-[#caa24c]/18 bg-[#0d0908] p-3">
                 <button
-                  type="submit"
-                  disabled={pending || !input.trim()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#f1d27a]/45 bg-[#caa24c] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
-                  aria-label="Send message"
+                  type="button"
+                  onClick={returnToChat}
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-[#caa24c]/20 bg-black/20 px-3 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-[#d7c29a]/75 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]"
                 >
-                  <Send className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
+                  Back to chat
                 </button>
               </div>
-            </form>
+            ) : (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void sendMessage(input)
+                }}
+                className="border-t border-[#caa24c]/18 bg-[#0d0908] p-3"
+              >
+                <div className="flex items-end gap-2">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        void sendMessage(input)
+                      }
+                    }}
+                    rows={1}
+                    placeholder="Tell Elena what you are planning..."
+                    className="max-h-24 min-h-11 flex-1 resize-none rounded-md border border-[#caa24c]/22 bg-black/35 px-3 py-3 text-sm leading-5 text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/65"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pending || !input.trim()}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#f1d27a]/45 bg-[#caa24c] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+                    aria-label="Send message"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              </form>
+            )}
           </motion.section>
         ) : (
           <motion.button
