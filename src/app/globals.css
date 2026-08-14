@@ -820,7 +820,13 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     scrollbar-color: rgba(59, 130, 246, 0.7) rgba(9, 9, 11, 0.9);
     scrollbar-width: thin;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    /*
+     * Let a nested portal panel hand its wheel gesture back to the page when
+     * it reaches either vertical edge. Keep horizontal containment so a wide
+     * table cannot trigger browser-level sideways navigation.
+     */
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
   }
 
   .portal-scrollbar::-webkit-scrollbar {

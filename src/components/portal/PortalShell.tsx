@@ -58,6 +58,25 @@ function persistPortalThemeCookie(theme: PortalTheme) {
   document.cookie = `luxor-portal-theme=${theme}; path=/; max-age=31536000; samesite=lax`
 }
 
+function canScrollVertically(element: HTMLElement, deltaY: number) {
+  if (deltaY === 0) return false
+  const style = window.getComputedStyle(element)
+  if (!['auto', 'overlay', 'scroll'].includes(style.overflowY)) return false
+
+  const maximumScrollTop = element.scrollHeight - element.clientHeight
+  if (maximumScrollTop <= 0) return false
+  return deltaY < 0 ? element.scrollTop > 0 : element.scrollTop < maximumScrollTop
+}
+
+function hasNativeVerticalScrollPath(target: HTMLElement, deltaY: number) {
+  let current: HTMLElement | null = target
+  while (current && current !== document.body) {
+    if (canScrollVertically(current, deltaY)) return true
+    current = current.parentElement
+  }
+  return false
+}
+
 const EmailComposeDrawer = dynamic(
   () => import('@/components/portal/EmailComposeDrawer').then((mod) => mod.EmailComposeDrawer),
   { ssr: false }
@@ -144,6 +163,25 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
+  const contentScrollRef = useRef<HTMLDivElement>(null)
+
+  // Header, mobile navigation, and the desktop sidebar sit beside the page
+  // scroll area. If a wheel gesture starts there, hand it to the page—unless
+  // the pointer is already over a native scrollable control or a dialog.
+  const handOffWheelToPage = useCallback((event: React.WheelEvent<HTMLElement>) => {
+    if (event.defaultPrevented || event.deltaY === 0 || event.ctrlKey || event.metaKey) return
+
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (!target) return
+    if (target.closest('[role="dialog"], .portal-modal-layer, .portal-modal-body, .portal-sheet, input, textarea, select, [contenteditable="true"]')) return
+    if (hasNativeVerticalScrollPath(target, event.deltaY)) return
+
+    const page = contentScrollRef.current
+    if (!page || !canScrollVertically(page, event.deltaY)) return
+
+    event.preventDefault()
+    page.scrollTop += event.deltaY
+  }, [])
 
   useEffect(() => {
     const applySidebarLayout = () => {
@@ -356,7 +394,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   return (
     <body data-portal-theme={portalTheme} className="h-screen overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+      <aside onWheelCapture={handOffWheelToPage} className={`fixed left-0 top-0 z-50 hidden h-full backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
@@ -555,7 +593,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
         </div>
       </aside>
 
-      <main className={`flex h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+      <main onWheelCapture={handOffWheelToPage} className={`flex h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <header className={`z-50 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -749,7 +787,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           })}
         </nav>
 
-        <div className={`portal-scrollbar min-h-0 flex-1 ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-0 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-0 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
