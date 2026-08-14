@@ -66,6 +66,12 @@ function paymentDate(booking: Date, deadline: Date, index: number, count: number
   return iso(new Date(booking.getTime() + Math.round(span * (index / (count - 1)))))
 }
 
+function splitCents(total: number, parts: number) {
+  const safeParts = Math.max(1, parts)
+  const base = Math.floor(total / safeParts)
+  return Array.from({ length: safeParts }, (_, index) => index === safeParts - 1 ? total - (base * (safeParts - 1)) : base)
+}
+
 /**
  * Calculates the owner-approved event payment schedule. The refundable
  * security deposit is intentionally not returned as a schedule row.
@@ -93,37 +99,61 @@ export function calculateLuxorPaymentSchedule(input: {
   const selectedCount = (available.includes(count) ? count : available[available.length - 1]) as 2 | 3 | 4 | 5 | undefined
   if (!selectedCount) return null
 
-  const bookingPayment = Math.min(venueTotal, money(Math.max(venueTotal * 0.25, 750)))
-  const remaining = money(total - bookingPayment)
-  const remainingCents = cents(remaining)
-  const laterCount = selectedCount - 1
-  const base = Math.floor(remainingCents / laterCount)
-  let venueOutstanding = Math.max(0, cents(venueTotal - bookingPayment))
-  const rows: LuxorPaymentScheduleRow[] = [{
-    installment_order: 1,
-    label: 'Booking deposit',
-    description: 'Secure your date',
-    amount: bookingPayment,
-    due_at: iso(booking),
-    payment_bucket: 'venue',
-    allocation: { venue: bookingPayment, event: 0 },
-  }]
+  const venueCents = cents(venueTotal)
+  const eventCents = cents(eventTotal)
+  const bookingPaymentCents = selectedCount <= 3
+    ? venueCents
+    : Math.min(venueCents, Math.max(Math.round(venueCents * 0.25), cents(750)))
+  const remainingVenueCents = Math.max(0, venueCents - bookingPaymentCents)
+  const eventParts = selectedCount === 2 ? 1 : selectedCount === 3 || selectedCount === 4 ? 2 : 3
+  const eventInstallments = splitCents(eventCents, eventParts)
+  const rows: LuxorPaymentScheduleRow[] = []
+  const addRow = (row: Omit<LuxorPaymentScheduleRow, 'installment_order' | 'due_at'>, order: number) => rows.push({
+    ...row,
+    installment_order: order,
+    due_at: paymentDate(booking, deadline, order - 1, selectedCount),
+  })
 
-  for (let index = 1; index < selectedCount; index += 1) {
-    const amountCents = index === selectedCount - 1 ? remainingCents - base * (laterCount - 1) : base
-    const venueAllocation = Math.min(venueOutstanding, amountCents)
-    const eventAllocation = amountCents - venueAllocation
-    venueOutstanding -= venueAllocation
-    rows.push({
-      installment_order: index + 1,
-      label: index === selectedCount - 1 ? 'Final payment' : `Payment ${index + 1}`,
-      description: venueAllocation > 0 && eventAllocation > 0 ? 'Venue and Event Services payment' : venueAllocation > 0 ? 'Venue Services payment' : 'Event Services payment',
-      amount: money(amountCents / 100),
-      due_at: paymentDate(booking, deadline, index, selectedCount),
-      payment_bucket: venueAllocation > 0 ? 'venue' : 'event',
-      allocation: { venue: money(venueAllocation / 100), event: money(eventAllocation / 100) },
-    })
+  if (selectedCount <= 3) {
+    addRow({
+      label: 'Venue Services',
+      description: '100% of Venue Services',
+      amount: money(venueCents / 100),
+      payment_bucket: 'venue',
+      allocation: { venue: money(venueCents / 100), event: 0 },
+    }, 1)
+  } else {
+    addRow({
+      label: 'Venue Booking Deposit',
+      description: `${Math.round((bookingPaymentCents / Math.max(1, venueCents)) * 100)}% of Venue Services`,
+      amount: money(bookingPaymentCents / 100),
+      payment_bucket: 'venue',
+      allocation: { venue: money(bookingPaymentCents / 100), event: 0 },
+    }, 1)
+    addRow({
+      label: 'Remaining Venue Services',
+      description: `${Math.round((remainingVenueCents / Math.max(1, venueCents)) * 100)}% of Venue Services`,
+      amount: money(remainingVenueCents / 100),
+      payment_bucket: 'venue',
+      allocation: { venue: money(remainingVenueCents / 100), event: 0 },
+    }, 2)
   }
+
+  const eventStartOrder = selectedCount <= 3 ? 2 : 3
+  eventInstallments.forEach((amountCents, index) => {
+    const isFinal = index === eventInstallments.length - 1
+    const portion = eventParts === 1 ? '100%' : eventParts === 2 ? '50%' : '1/3'
+    addRow({
+      label: isFinal ? 'Final Event Services Payment' : `Event Services — Payment ${index + 1}`,
+      description: `${portion} of Event Services${isFinal ? ' · Final payment due 60 days before the event' : ''}`,
+      amount: money(amountCents / 100),
+      payment_bucket: 'event',
+      allocation: { venue: 0, event: money(amountCents / 100) },
+    }, eventStartOrder + index)
+  })
+
+  const bookingPayment = money(bookingPaymentCents / 100)
+  const remaining = money(total - bookingPayment)
 
   return {
     payment_count: selectedCount,

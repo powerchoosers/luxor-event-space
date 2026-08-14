@@ -951,10 +951,13 @@ function calculatePackage(input: {
   const venueServicesTotal = rounded(items
     .filter((item) => item.paymentBucket === 'venue' || item.category === 'Venue Services')
     .reduce((sum, item) => sum + Math.max(0, Number(item.total || 0)), 0))
+  const paymentCount = paymentPlan ? Number(paymentPlan.payment_count) : null
   const amountDueToBook = paymentPlan
     ? paymentPlan.mode === 'pay_in_full'
       ? total
-      : Math.min(venueServicesTotal, rounded(Math.max(venueServicesTotal * paymentPlan.booking_payment_percent / 100, 750)))
+      : paymentCount !== null && paymentCount <= 3
+        ? venueServicesTotal
+        : Math.min(venueServicesTotal, rounded(Math.max(venueServicesTotal * paymentPlan.booking_payment_percent / 100, 750)))
     : null
 
   return {

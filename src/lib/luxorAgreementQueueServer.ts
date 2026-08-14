@@ -59,9 +59,18 @@ function paymentTerms(invoiceTotal: number, context: Record<string, unknown>): P
   }
 
   const venueServicesTotal = Number(context.venue_services_total)
+  const paymentCount = hasNewSchedule ? Number(plan.payment_count) : null
+  // The new schedule is venue-first. Two- and three-payment plans collect
+  // the entire Venue Services allocation at signing; four- and five-payment
+  // plans use the 25% booking deposit (subject to the existing $750 minimum
+  // and Venue Services cap).
+  const bookingPercent = paymentCount !== null && paymentCount <= 3 ? 100 : percentage
   const reservationPayment = mode === 'pay_in_full'
     ? invoiceTotal
-    : roundLuxorMoney(Math.max(Number.isFinite(venueServicesTotal) ? venueServicesTotal * (percentage / 100) : invoiceTotal * (percentage / 100), 750))
+    : roundLuxorMoney(Math.min(
+      Number.isFinite(venueServicesTotal) ? venueServicesTotal : invoiceTotal,
+      Math.max((Number.isFinite(venueServicesTotal) ? venueServicesTotal : invoiceTotal) * (bookingPercent / 100), 750),
+    ))
   return {
     mode,
     percentage,
