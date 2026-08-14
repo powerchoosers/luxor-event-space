@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle,
   ArrowLeft,
@@ -590,6 +591,8 @@ export function ProposalBuilderModal({
   onSubmit,
 }: ProposalBuilderModalProps) {
   const [stepIndex, setStepIndex] = useState(0)
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1)
+  const reducedMotion = useReducedMotion() ?? false
   const [furthestUnlockedStep, setFurthestUnlockedStep] = useState(0)
   const [localContext, setLocalContext] = useState<ProposalBuilderContext>(() => proposalContext || {})
   const [pricingStatus, setPricingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -1095,6 +1098,7 @@ export function ProposalBuilderModal({
       return
     }
     setValidationMessage(null)
+    setStepDirection(1)
     setStepIndex((current) => {
       const next = Math.min(current + 1, STEPS.length - 1)
       setFurthestUnlockedStep((furthest) => Math.max(furthest, next))
@@ -1104,6 +1108,7 @@ export function ProposalBuilderModal({
 
   const retreat = () => {
     setValidationMessage(null)
+    setStepDirection(-1)
     setStepIndex((current) => Math.max(current - 1, 0))
   }
 
@@ -1164,6 +1169,7 @@ export function ProposalBuilderModal({
                       disabled={locked}
                       onClick={() => {
                         if (locked) return
+                        setStepDirection(index >= stepIndex ? 1 : -1)
                         setStepIndex(index)
                         setValidationMessage(null)
                       }}
@@ -1191,6 +1197,14 @@ export function ProposalBuilderModal({
             </div>
           ) : null}
 
+          <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={stepIndex}
+            initial={{ opacity: 0, x: reducedMotion ? 0 : stepDirection * 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: reducedMotion ? 0 : stepDirection * -12 }}
+            transition={{ duration: reducedMotion ? 0.01 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+          >
           {stepIndex === 0 ? (
             <section className="mx-auto max-w-4xl space-y-6">
               <div className="max-w-2xl">
@@ -1606,6 +1620,8 @@ export function ProposalBuilderModal({
               ) : null}
             </section>
           ) : null}
+          </motion.div>
+          </AnimatePresence>
         </div>
 
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
