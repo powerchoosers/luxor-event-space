@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
       const booking = invoice.booking_id
         ? await getLuxorBooking(invoice.booking_id)
         : invoiceBookings.find((candidate) => candidate.invoice_id === invoice.id) || null
-      if ((invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') || booking?.contract_status !== 'signed') {
+      if ((invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit') || booking?.contract_status !== 'signed') {
         return NextResponse.json({ error: 'A signed Event Agreement and a scheduled booking-payment invoice are required before a Stripe link can be sent or copied.' }, { status: 409 })
       }
 

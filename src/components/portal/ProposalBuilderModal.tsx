@@ -529,6 +529,15 @@ function customItemSelection(items: LuxorInvoiceLineItem[]) {
  */
 function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProposalPaymentPlan> | null {
   const plan = asRecord(context.payment_plan)
+  if (plan && Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count))) {
+    return {
+      mode: 'deposit_and_balance',
+      payment_count: Number(plan.payment_count) as 2 | 3 | 4 | 5,
+      booking_payment_percent: asNumber(plan.booking_payment_percent) ?? 25,
+      final_payment_due_days_before_event: asNumber(plan.final_payment_due_days_before_event) ?? 60,
+      ...(typeof plan.booking_date === 'string' ? { booking_date: plan.booking_date } : {}),
+    }
+  }
   const mode = plan?.mode === 'pay_in_full' || plan?.mode === 'deposit_and_balance'
     ? plan.mode
     : null
@@ -537,6 +546,7 @@ function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProp
   const finalPaymentDays = asNumber(plan.final_payment_due_days_before_event)
   return {
     mode,
+    ...(Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count)) ? { payment_count: Number(plan.payment_count) as 2 | 3 | 4 | 5 } : {}),
     ...(bookingPaymentPercent !== undefined ? { booking_payment_percent: bookingPaymentPercent } : {}),
     ...(finalPaymentDays !== undefined ? { final_payment_due_days_before_event: finalPaymentDays } : {}),
   }
@@ -1556,52 +1566,12 @@ export function ProposalBuilderModal({
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.8fr)] lg:items-start">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">1 · Agreement payment terms</p>
-                    <h4 className="mt-1 text-lg font-bold">Choose the payment structure that Luxor has approved.</h4>
-                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">The percentage applies to the Final Event Price—not the refundable security deposit. The $750 deposit is collected separately with the initial Stripe payment and is not applied to the final balance.</p>
+                    <h4 className="mt-1 text-lg font-bold">Choose the payment schedule Luxor has approved.</h4>
+                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">The booking payment is 25% of Venue Services, with a $750 minimum. The refundable $750 security deposit is separate and due 30 days before the event.</p>
                     <div className="mt-4 grid gap-3">
-                      <PortalSelect
-                        value={paymentPlanDraft?.mode || ''}
-                        onChange={(value) => {
-                          if (value === 'deposit_and_balance' || value === 'pay_in_full') updatePaymentPlan({ mode: value })
-                        }}
-                        options={[
-                          { value: '', label: 'Choose an agreement payment plan' },
-                          { value: 'deposit_and_balance', label: 'Initial contract payment + final balance' },
-                          { value: 'pay_in_full', label: 'Final Event Price due in full after signing' },
-                        ]}
-                        className="w-full"
-                        buttonClassName="min-h-12 px-3 text-sm font-semibold normal-case tracking-normal"
-                      />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="space-y-1.5">
-                          <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial contract payment %</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={paymentPlanDraft?.booking_payment_percent ?? ''}
-                            onChange={(event) => updatePaymentPlan({ booking_payment_percent: Math.max(0, Math.min(100, Number(event.target.value) || 0)) })}
-                            disabled={paymentPlanDraft?.mode === 'pay_in_full'}
-                            placeholder="Enter approved %"
-                            className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
-                          />
-                          <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Used only for the first Final Event Price payment.</p>
-                        </label>
-                        <label className="space-y-1.5">
-                          <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final balance due (days before event)</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={paymentPlanDraft?.final_payment_due_days_before_event ?? ''}
-                            onChange={(event) => updatePaymentPlan({ final_payment_due_days_before_event: Math.max(0, Math.floor(Number(event.target.value) || 0)) })}
-                            disabled={paymentPlanDraft?.mode === 'pay_in_full'}
-                            placeholder="Enter approved days"
-                            className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:cursor-not-allowed disabled:opacity-45"
-                          />
-                          <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">The schedule calculates this exact date from the event date.</p>
-                        </label>
+                      <p className="text-xs font-semibold text-[color:var(--portal-muted)]">The schedule is anchored to the actual contract/Stripe booking date after signature. The preview uses today’s date until that booking exists.</p>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {[2, 3, 4, 5].map((count) => <button key={count} type="button" onClick={() => updatePaymentPlan({ mode: 'deposit_and_balance', payment_count: count as 2 | 3 | 4 | 5, booking_payment_percent: 25, final_payment_due_days_before_event: 60 })} className={`min-h-11 rounded-lg border px-3 text-xs font-bold ${paymentPlanDraft?.payment_count === count ? 'border-[#caa24c] bg-[#171512] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{count} Payments</button>)}
                       </div>
                     </div>
                   </div>
@@ -1626,6 +1596,10 @@ export function ProposalBuilderModal({
                 paymentPlan={paymentPlanDraft}
                 finalPaymentDueDate={asString(selectedContext.final_payment_due_date)}
                 eventDate={eventDateValue}
+                bookingDate={new Date().toISOString().slice(0, 10)}
+                paymentCount={paymentPlanDraft?.payment_count ?? 4}
+                editable
+                onPaymentCountChange={(count) => updatePaymentPlan({ mode: 'deposit_and_balance', payment_count: count, booking_payment_percent: 25, final_payment_due_days_before_event: 60 })}
               />}
 
               {paymentPlanRequired ? (

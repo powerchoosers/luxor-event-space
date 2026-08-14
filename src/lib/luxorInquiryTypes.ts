@@ -161,7 +161,7 @@ export function parseGuestCount(value: unknown) {
 
 // --- Invoice Types ---
 export type LuxorInvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
-export type LuxorInvoiceKind = 'event' | 'deposit' | 'final_balance'
+export type LuxorInvoiceKind = 'event' | 'deposit' | 'final_balance' | 'security_deposit'
 
 export type LuxorPromotion = {
   id: string
@@ -251,6 +251,24 @@ export type LuxorProposalPaymentPlan = {
   mode: 'deposit_and_balance' | 'pay_in_full'
   booking_payment_percent: number
   final_payment_due_days_before_event: number
+  /** Number of event-price payments, including the booking payment. */
+  payment_count?: 2 | 3 | 4 | 5
+  /** The contract/Stripe booking date used to anchor installment dates. */
+  booking_date?: string
+  /** Event date minus the approved final-payment lead time. */
+  final_payment_due_date?: string
+  /** Event date minus 30 days; never included in event-price math. */
+  security_deposit_due_date?: string
+  /** Frozen schedule rows for accepted/signed proposals. */
+  schedule_rows?: Array<{
+    installment_order: number
+    label: string
+    description?: string
+    amount: number
+    due_at: string
+    payment_bucket: 'venue' | 'event' | 'security_deposit'
+    status?: 'scheduled' | 'sent' | 'partial' | 'paid' | 'void'
+  }>
 }
 
 export type LuxorProposalContext = {

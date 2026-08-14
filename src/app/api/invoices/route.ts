@@ -85,9 +85,9 @@ function preserveLegacyDraftAdjustment(selection: LuxorProposalSelection, existi
   } satisfies LuxorProposalSelection
 }
 
-function declaredInvoiceKind(value: unknown): 'event' | 'deposit' | 'final_balance' | null {
+function declaredInvoiceKind(value: unknown): 'event' | 'deposit' | 'final_balance' | 'security_deposit' | null {
   if (value === undefined || value === null || value === '') return 'event'
-  return value === 'event' || value === 'deposit' || value === 'final_balance' ? value : null
+  return value === 'event' || value === 'deposit' || value === 'final_balance' || value === 'security_deposit' ? value : null
 }
 
 function calculationHasErrors(calculation: UnknownRecord) {
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'client_name is required.' }, { status: 400 })
     }
     if (!requestedInvoiceKind) {
-      return NextResponse.json({ error: 'invoice_kind must be event, deposit, or final_balance.' }, { status: 400 })
+      return NextResponse.json({ error: 'invoice_kind must be event, deposit, final_balance, or security_deposit.' }, { status: 400 })
     }
     if (inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)

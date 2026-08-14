@@ -1,494 +1,69 @@
 import type { ReactNode } from 'react'
-import {
-  Building2,
-  CalendarDays,
-  CircleDollarSign,
-  CreditCard,
-  Info,
-  Landmark,
-  ReceiptText,
-  ShieldCheck,
-} from 'lucide-react'
+import { CalendarDays, Check, CircleDollarSign, CreditCard, Info, ReceiptText, ShieldCheck, Sparkles } from 'lucide-react'
 import { PortalCalculationSkeleton, PortalSkeleton } from '@/components/portal/PortalUI'
-import type { LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
+import { calculateLuxorPaymentSchedule } from '@/lib/luxorPaymentSchedule'
+import type { LuxorPaymentInstallment, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 
 type DateValue = string | null | undefined
-
 export type ProposalPaymentScheduleProps = {
-  /** The approved client-facing event price. The refundable deposit is excluded. */
   finalEventPrice?: number | null
-  /** Display-only pricing bucket for the proposal breakdown. */
   venueServicesTotal?: number | null
-  /** Display-only pricing bucket for the proposal breakdown. */
   eventServicesTotal?: number | null
-  /** Kept separate from the event price and held under the signed agreement. */
   refundableSecurityDeposit?: number | null
-  /**
-   * The owner-entered terms. A partial plan is rendered as an honest
-   * in-progress schedule, while calculation still withholds any amounts until
-   * it becomes an approved, complete plan.
-   */
   paymentPlan?: Partial<LuxorProposalPaymentPlan> | null
-  /** An explicit final-balance date. It wins over the days-before-event term. */
   finalPaymentDueDate?: DateValue
   eventDate?: DateValue
-  /** Optional exact copy for the service-bucket explanation. */
+  bookingDate?: DateValue
+  paymentCount?: number | null
+  editable?: boolean
+  onPaymentCountChange?: (count: 2 | 3 | 4 | 5) => void
+  installments?: LuxorPaymentInstallment[] | null
   eventServicesPaymentNote?: string | null
   className?: string
 }
+export type ProposalPaymentScheduleRow = { id: string; number: number; label?: string; description: string; dueDate: string | null; dueTiming: 'after_signature' | 'final_due_date' | 'not_due'; amount: number; collection: string }
+export type ProposalPaymentScheduleCalculation = { finalEventPrice: number | null; venueServicesTotal: number | null; eventServicesTotal: number | null; refundableSecurityDeposit: number; initialContractPayment: number | null; finalEventBalance: number | null; amountDueAfterSignature: number | null; finalPaymentDueDate: string | null; rows: ProposalPaymentScheduleRow[]; errors: string[] }
 
-export type ProposalPaymentScheduleRow = {
-  id: 'initial-contract-payment' | 'refundable-security-deposit' | 'final-event-balance'
-  number: number
-  description: string
-  dueDate: string | null
-  dueTiming: 'after_signature' | 'final_due_date' | 'not_due'
-  amount: number
-  collection: string
+const moneyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const dateFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const counts: Array<2 | 3 | 4 | 5> = [2, 3, 4, 5]
+const money = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? moneyFormatter.format(value) : '—'
+const date = (value: string | null | undefined) => { if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null; const [y, m, d] = value.split('-').map(Number); return dateFormatter.format(new Date(Date.UTC(y, m - 1, d))) }
+const today = () => new Date().toISOString().slice(0, 10)
+
+export function calculateProposalPaymentSchedule(input: ProposalPaymentScheduleProps): ProposalPaymentScheduleCalculation {
+  const finalEventPrice = typeof input.finalEventPrice === 'number' ? input.finalEventPrice : null
+  const venue = typeof input.venueServicesTotal === 'number' ? input.venueServicesTotal : null
+  const event = typeof input.eventServicesTotal === 'number' ? input.eventServicesTotal : null
+  const empty = (errors: string[]): ProposalPaymentScheduleCalculation => ({ finalEventPrice, venueServicesTotal: venue, eventServicesTotal: event, refundableSecurityDeposit: input.refundableSecurityDeposit ?? 750, initialContractPayment: null, finalEventBalance: null, amountDueAfterSignature: null, finalPaymentDueDate: null, rows: [], errors })
+  if (finalEventPrice === null || venue === null || event === null || !input.eventDate) return empty(['Complete event details and pricing to calculate the payment schedule.'])
+  const schedule = calculateLuxorPaymentSchedule({ eventDate: String(input.eventDate).slice(0, 10), bookingDate: String(input.bookingDate || input.paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: venue, eventServicesTotal: event, paymentCount: input.paymentCount ?? input.paymentPlan?.payment_count ?? 4 })
+  if (!schedule) return empty(['The event date is too close to the final-payment deadline for a payment schedule.'])
+  return { finalEventPrice, venueServicesTotal: venue, eventServicesTotal: event, refundableSecurityDeposit: input.refundableSecurityDeposit ?? 750, initialContractPayment: schedule.booking_payment, finalEventBalance: schedule.remaining_event_balance, amountDueAfterSignature: schedule.booking_payment, finalPaymentDueDate: schedule.final_payment_due_date, rows: schedule.rows.map((row) => ({ id: `installment-${row.installment_order}`, number: row.installment_order, label: row.label, description: row.description, dueDate: row.due_at, dueTiming: row.installment_order === 1 ? 'after_signature' : 'final_due_date', amount: row.amount, collection: 'Stripe after signature' })), errors: schedule.warnings }
 }
 
-export type ProposalPaymentScheduleCalculation = {
-  finalEventPrice: number | null
-  venueServicesTotal: number | null
-  eventServicesTotal: number | null
-  refundableSecurityDeposit: number
-  initialContractPayment: number | null
-  finalEventBalance: number | null
-  amountDueAfterSignature: number | null
-  finalPaymentDueDate: string | null
-  finalPaymentDueDateSource: 'explicit' | 'event_date' | null
-  rows: ProposalPaymentScheduleRow[]
-  errors: string[]
+function FinancialStat({ icon, label, value, detail, highlighted, loading }: { icon: ReactNode; label: string; value: string; detail: string; highlighted?: boolean; loading?: boolean }) {
+  return <div className={`min-w-0 rounded-xl border p-4 ${highlighted ? 'border-[#caa24c]/40 bg-[#caa24c]/[0.08]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}`}><div className="flex items-center gap-2 text-[color:var(--portal-muted)]"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[color:var(--portal-soft)] text-[#8c6529] dark:text-[#f1d27a]">{icon}</span><p className="text-[9px] font-black uppercase tracking-[0.12em]">{label}</p></div>{loading ? <PortalSkeleton className="mt-3 h-7 w-28 rounded" /> : <p className={`mt-3 font-mono text-2xl font-black tabular-nums ${highlighted ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>{value}</p>}<p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">{detail}</p></div>
 }
 
-const DEFAULT_REFUNDABLE_SECURITY_DEPOSIT = 750
-const moneyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-function normalizedMoney(value: number | null | undefined) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
-  return Math.round(value * 100) / 100
-}
-
-function toCents(value: number) {
-  return Math.round(value * 100)
-}
-
-function fromCents(value: number) {
-  return Math.round(value) / 100
-}
-
-function normalizeDate(value: DateValue) {
-  if (typeof value !== 'string') return null
-  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!match) return null
-
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  const parsed = new Date(Date.UTC(year, month - 1, day))
-
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    return null
-  }
-
-  return `${match[1]}-${match[2]}-${match[3]}`
-}
-
-function dateBeforeEvent(eventDate: string | null, daysBeforeEvent: number | null) {
-  if (!eventDate || daysBeforeEvent === null || !Number.isInteger(daysBeforeEvent) || daysBeforeEvent < 0) return null
-  const [year, month, day] = eventDate.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  date.setUTCDate(date.getUTCDate() - daysBeforeEvent)
-
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
-}
-
-function formatMoney(value: number | null) {
-  return value === null ? '—' : moneyFormatter.format(value)
-}
-
-function formatDate(value: string | null) {
-  if (!value) return null
-  const [year, month, day] = value.split('-').map(Number)
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(year, month - 1, day)))
-}
-
-/**
- * Mirrors the live collection flow: an initial contract payment and the
- * refundable security deposit are collected after signature; the remaining
- * final-event balance is due on the configured final-payment date. It does not
- * invent monthly or equal-installment dates that the backend does not create.
- */
-export function calculateProposalPaymentSchedule({
-  finalEventPrice,
-  venueServicesTotal,
-  eventServicesTotal,
-  refundableSecurityDeposit = DEFAULT_REFUNDABLE_SECURITY_DEPOSIT,
-  paymentPlan,
-  finalPaymentDueDate,
-  eventDate,
-}: ProposalPaymentScheduleProps): ProposalPaymentScheduleCalculation {
-  const normalizedFinalEventPrice = normalizedMoney(finalEventPrice)
-  const normalizedVenueServicesTotal = normalizedMoney(venueServicesTotal)
-  const normalizedEventServicesTotal = normalizedMoney(eventServicesTotal)
-  const normalizedSecurityDeposit = normalizedMoney(refundableSecurityDeposit) ?? DEFAULT_REFUNDABLE_SECURITY_DEPOSIT
-  const normalizedEventDate = normalizeDate(eventDate)
-  const explicitFinalPaymentDueDate = normalizeDate(finalPaymentDueDate)
-  const finalPaymentDaysBeforeEvent = typeof paymentPlan?.final_payment_due_days_before_event === 'number'
-    ? paymentPlan.final_payment_due_days_before_event
-    : null
-  const derivedFinalPaymentDueDate = dateBeforeEvent(normalizedEventDate, finalPaymentDaysBeforeEvent)
-  const resolvedFinalPaymentDueDate = explicitFinalPaymentDueDate || derivedFinalPaymentDueDate
-  const finalPaymentDueDateSource = explicitFinalPaymentDueDate
-    ? 'explicit'
-    : derivedFinalPaymentDueDate
-      ? 'event_date'
-      : null
-  const errors: string[] = []
-
-  if (normalizedFinalEventPrice === null) {
-    errors.push('Final Event Price is needed to calculate the payment schedule.')
-  }
-
-  const planMode = paymentPlan?.mode
-  if (planMode !== 'pay_in_full' && planMode !== 'deposit_and_balance') {
-    errors.push('Choose the owner-approved payment plan.')
-  }
-
-  const finalEventPriceCents = normalizedFinalEventPrice === null ? null : toCents(normalizedFinalEventPrice)
-  let initialContractPaymentCents: number | null = null
-  let finalEventBalanceCents: number | null = null
-
-  if (finalEventPriceCents !== null && planMode === 'pay_in_full') {
-    initialContractPaymentCents = finalEventPriceCents
-    finalEventBalanceCents = 0
-  }
-
-  if (finalEventPriceCents !== null && planMode === 'deposit_and_balance') {
-    const bookingPaymentPercent = paymentPlan?.booking_payment_percent ?? Number.NaN
-    const hasValidBookingPercent = Number.isFinite(bookingPaymentPercent) && bookingPaymentPercent > 0 && bookingPaymentPercent <= 100
-
-    if (!hasValidBookingPercent) {
-      errors.push('Enter the approved initial contract-payment percentage.')
-    } else {
-      initialContractPaymentCents = Math.round(finalEventPriceCents * bookingPaymentPercent / 100)
-      finalEventBalanceCents = Math.max(finalEventPriceCents - initialContractPaymentCents, 0)
-    }
-  }
-
-  if (finalEventBalanceCents !== null && finalEventBalanceCents > 0 && !resolvedFinalPaymentDueDate) {
-    errors.push('Set the final payment due date, or provide an event date and approved days-before-event term.')
-  }
-
-  const rows: ProposalPaymentScheduleRow[] = initialContractPaymentCents === null || finalEventBalanceCents === null
-    ? []
-    : [
-      {
-        id: 'initial-contract-payment',
-        number: 1,
-        description: planMode === 'pay_in_full' ? 'Final Event Price paid in full' : `Initial contract payment (${paymentPlan?.booking_payment_percent}%)`,
-        dueDate: null,
-        dueTiming: 'after_signature',
-        amount: fromCents(initialContractPaymentCents),
-        collection: 'Stripe link',
-      },
-      {
-        id: 'refundable-security-deposit',
-        number: 2,
-        description: 'Refundable security deposit — held separately',
-        dueDate: null,
-        dueTiming: 'after_signature',
-        amount: normalizedSecurityDeposit,
-        collection: 'Stripe link',
-      },
-      {
-        id: 'final-event-balance',
-        number: 3,
-        description: finalEventBalanceCents === 0 ? 'Final Event Price balance — paid in full' : 'Final Event Price balance',
-        dueDate: finalEventBalanceCents === 0 ? null : resolvedFinalPaymentDueDate,
-        dueTiming: finalEventBalanceCents === 0 ? 'not_due' : 'final_due_date',
-        amount: fromCents(finalEventBalanceCents),
-        collection: finalEventBalanceCents === 0 ? '—' : 'Stripe link',
-      },
-    ]
-
-  return {
-    finalEventPrice: normalizedFinalEventPrice,
-    venueServicesTotal: normalizedVenueServicesTotal,
-    eventServicesTotal: normalizedEventServicesTotal,
-    refundableSecurityDeposit: normalizedSecurityDeposit,
-    initialContractPayment: initialContractPaymentCents === null ? null : fromCents(initialContractPaymentCents),
-    finalEventBalance: finalEventBalanceCents === null ? null : fromCents(finalEventBalanceCents),
-    amountDueAfterSignature: initialContractPaymentCents === null ? null : fromCents(initialContractPaymentCents + toCents(normalizedSecurityDeposit)),
-    finalPaymentDueDate: resolvedFinalPaymentDueDate,
-    finalPaymentDueDateSource,
-    rows,
-    errors,
-  }
-}
-
-function FinancialStat({
-  icon,
-  label,
-  value,
-  detail,
-  highlighted = false,
-  loading = false,
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  detail: string
-  highlighted?: boolean
-  loading?: boolean
-}) {
-  return (
-    <div className={`min-w-0 rounded-xl border p-4 ${highlighted ? 'border-[#caa24c]/35 bg-[#caa24c]/[0.07]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}`}>
-      <div className="flex items-center gap-2 text-[color:var(--portal-muted)]">
-        <span className={`grid h-7 w-7 place-items-center rounded-lg ${highlighted ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)]'}`}>{icon}</span>
-        <p className="text-[9px] font-black uppercase tracking-[0.12em]">{label}</p>
-      </div>
-      {loading ? <PortalSkeleton className="mt-3 h-6 w-24 rounded" /> : <p className={`mt-3 font-mono text-xl font-black tabular-nums ${highlighted ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>{value}</p>}
-      <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
-    </div>
-  )
-}
-
-function PaymentTiming({ row }: { row: ProposalPaymentScheduleRow }) {
-  if (row.dueTiming === 'after_signature') return <span className="font-medium text-[#8c6529] dark:text-[#f1d27a]">After agreement signature</span>
-  if (row.dueTiming === 'not_due') return <span className="font-medium text-[color:var(--portal-muted)]">No balance remains</span>
-  if (row.dueDate) return <span className="font-medium text-[color:var(--portal-text)]">{formatDate(row.dueDate)}</span>
-  return <span className="font-medium text-amber-800 dark:text-amber-200">Set final due date</span>
-}
-
-/**
- * Read-only portal presentation of the approved financial terms. Controls for
- * selecting terms and dates intentionally stay in the proposal builder, which
- * lets this component be reused in review and preview states without changing
- * a proposal's money or collection behavior.
- */
-export function ProposalPaymentSchedule({
-  finalEventPrice,
-  venueServicesTotal,
-  eventServicesTotal,
-  refundableSecurityDeposit = DEFAULT_REFUNDABLE_SECURITY_DEPOSIT,
-  paymentPlan,
-  finalPaymentDueDate,
-  eventDate,
-  eventServicesPaymentNote,
-  className = '',
-}: ProposalPaymentScheduleProps) {
-  const schedule = calculateProposalPaymentSchedule({
-    finalEventPrice,
-    venueServicesTotal,
-    eventServicesTotal,
-    refundableSecurityDeposit,
-    paymentPlan,
-    finalPaymentDueDate,
-    eventDate,
-  })
-  const paymentPlanLabel = paymentPlan?.mode === 'pay_in_full'
-    ? 'Final Event Price paid in full after signature'
-    : paymentPlan?.mode === 'deposit_and_balance'
-      ? 'Initial contract payment + final balance'
-      : 'Payment plan not set'
-  const isAwaitingFinalPrice = schedule.finalEventPrice === null
-  const hasFinalEventBalance = typeof schedule.finalEventBalance === 'number' && schedule.finalEventBalance > 0
-  const hasScheduledFinalBalance = hasFinalEventBalance && Boolean(schedule.finalPaymentDueDate)
-  const finalBalanceTiming = hasScheduledFinalBalance
-    ? `Due ${formatDate(schedule.finalPaymentDueDate)}`
-    : schedule.finalEventBalance === 0
-      ? 'No final balance'
-      : hasFinalEventBalance
-        ? 'Set due date in payment terms'
-        : 'Complete payment terms'
-
-  return (
-    <section aria-label="Proposal payment plan" className={`space-y-5 ${className}`.trim()}>
-      <header className="flex flex-col gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Payment plan</p>
-          <h3 className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)] sm:text-3xl">How this proposal is paid</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--portal-muted)]">The schedule uses the Final Event Price in the signed agreement. The refundable security deposit is separate and never becomes part of that price.</p>
-        </div>
-        {eventDate ? (
-          <div className="flex items-center gap-2 self-start rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-muted)] sm:self-auto">
-            <CalendarDays size={14} className="text-[#8c6529] dark:text-[#f1d27a]" />
-            <span>Event date</span>
-            <span className="font-semibold text-[color:var(--portal-text)]">{formatDate(normalizeDate(eventDate)) || 'Set date'}</span>
-          </div>
-        ) : null}
-      </header>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <FinancialStat icon={<Building2 size={15} />} label="Venue Services" value={formatMoney(schedule.venueServicesTotal)} detail="Proposal pricing bucket" loading={isAwaitingFinalPrice} />
-        <FinancialStat icon={<CircleDollarSign size={15} />} label="Event Services" value={formatMoney(schedule.eventServicesTotal)} detail="Proposal pricing bucket" loading={isAwaitingFinalPrice} />
-        <FinancialStat icon={<ReceiptText size={15} />} label="Final Event Price" value={formatMoney(schedule.finalEventPrice)} detail="Used for this payment schedule" highlighted loading={isAwaitingFinalPrice} />
-      </div>
-
-      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.055] p-4">
-        <div className="flex gap-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><ShieldCheck size={16} /></span>
-          <div>
-            <p className="text-sm font-bold text-[color:var(--portal-text)]">The payment process</p>
-            <ol className="mt-2 grid gap-1.5 text-xs leading-5 text-[color:var(--portal-muted)] sm:grid-cols-3 sm:gap-4">
-              <li><span className="font-bold text-[color:var(--portal-text)]">1. Proposal accepted.</span> The client accepts this exact package, price, and set of terms.</li>
-              <li><span className="font-bold text-[color:var(--portal-text)]">2. Agreement signed.</span> Luxor sends the Event Agreement for the client to review and sign.</li>
-              <li><span className="font-bold text-[color:var(--portal-text)]">3. Stripe link sent.</span> The initial payment and refundable deposit are collected only after signature.</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-
-      <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-        <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
-          <div className="flex gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[color:var(--portal-soft)] text-[#8c6529] dark:text-[#f1d27a]"><Landmark size={16} /></span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Agreement payment schedule</p>
-              <h4 className="mt-0.5 text-base font-bold text-[color:var(--portal-text)]">{paymentPlanLabel}</h4>
-              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">This schedule is calculated from the final agreement price—not by splitting the display buckets or by inventing extra installments.</p>
-            </div>
-          </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/[0.06] px-2.5 py-1.5 text-[10px] font-bold text-[#8c6529] dark:text-[#f1d27a]"><CreditCard size={12} /> Stripe after signature</span>
-        </div>
-
-        <div className="grid gap-px border-b border-[color:var(--portal-border)] bg-[color:var(--portal-border)] sm:grid-cols-3">
-          <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
-            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final Event Price</p>
-            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>}
-          </div>
-          <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
-            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial contract payment</p>
-            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.initialContractPayment)}</p>}
-          </div>
-          <div className="bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-5">
-            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final Event Price balance</p>
-            {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>}
-          </div>
-        </div>
-
-        <div className="p-4 sm:p-5">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Exact payment schedule</p>
-              {hasScheduledFinalBalance ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Final balance due <span className="font-semibold text-[color:var(--portal-text)]">{formatDate(schedule.finalPaymentDueDate)}</span>{schedule.finalPaymentDueDateSource === 'event_date' && paymentPlan ? ` (${paymentPlan.final_payment_due_days_before_event} days before the event)` : ''}.</p> : null}
-            </div>
-          </div>
-
-          {isAwaitingFinalPrice ? (
-            <PortalCalculationSkeleton label="Calculating the agreement payment schedule" rows={3} />
-          ) : schedule.rows.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-[color:var(--portal-border)]">
-              <table className="w-full min-w-[620px] text-left">
-                <caption className="sr-only">Final Event Price payment schedule</caption>
-                <thead className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">
-                  <tr>
-                    <th scope="col" className="px-4 py-3">Payment</th>
-                    <th scope="col" className="px-4 py-3">Description</th>
-                    <th scope="col" className="px-4 py-3">Due date</th>
-                    <th scope="col" className="px-4 py-3 text-right">Amount</th>
-                    <th scope="col" className="px-4 py-3">Collection</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[color:var(--portal-border)] text-sm">
-                  {schedule.rows.map((row) => (
-                    <tr key={row.id} className="bg-[color:var(--portal-card)]">
-                      <td className="px-4 py-3"><span className="grid h-6 w-6 place-items-center rounded-full bg-[color:var(--portal-soft)] font-mono text-[10px] font-black text-[color:var(--portal-text)]">{row.number}</span></td>
-                      <td className="px-4 py-3 font-semibold text-[color:var(--portal-text)]">{row.description}</td>
-                      <td className="px-4 py-3 text-xs"><PaymentTiming row={row} /></td>
-                      <td className="px-4 py-3 text-right font-mono text-xs font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(row.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-[color:var(--portal-muted)]">{row.collection}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-5 text-sm leading-6 text-[color:var(--portal-muted)]">Complete the owner-approved payment terms to generate the exact agreement schedule.</div>
-          )}
-
-          <div className="mt-4 grid gap-3 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-            <div className="flex gap-3">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]"><ShieldCheck size={16} /></span>
-              <div>
-                <p className="text-sm font-bold text-[color:var(--portal-text)]">Refundable security deposit</p>
-                <p className="mt-0.5 text-xs leading-5 text-[color:var(--portal-muted)]">Collected after agreement signature with the initial payment. It is held through the event and handled after post-event inspection under the Event Agreement.</p>
-              </div>
-            </div>
-            <div className="sm:text-right">
-              <p className="font-mono text-lg font-black tabular-nums text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(schedule.refundableSecurityDeposit)}</p>
-              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Separate from Final Event Price</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-        <div className="flex gap-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[color:var(--portal-soft)] text-[#8c6529] dark:text-[#f1d27a]"><CircleDollarSign size={16} /></span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal service breakdown</p>
-                <h4 className="mt-0.5 text-base font-bold text-[color:var(--portal-text)]">Venue + Event Services</h4>
-              </div>
-              {isAwaitingFinalPrice ? <PortalSkeleton className="h-6 w-28 rounded" /> : <p className="font-mono text-xl font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventPrice)}</p>}
-            </div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{eventServicesPaymentNote?.trim() || 'Venue Services and Event Services are shown above so the proposal is easy to understand. The signed-agreement schedule is calculated from the Final Event Price, so neither display bucket changes the payment amounts by itself.'}</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-[#caa24c]/30 bg-[#caa24c]/[0.045] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Payment summary</p>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">
-              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-20 rounded" /> : <span>{formatMoney(schedule.initialContractPayment)}</span>}
-              <span className="text-[color:var(--portal-muted)]">+</span>
-              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-20 rounded" /> : <span>{formatMoney(schedule.finalEventBalance)}</span>}
-              <span className="text-[color:var(--portal-muted)]">=</span>
-              {isAwaitingFinalPrice ? <PortalSkeleton className="h-5 w-24 rounded" /> : <span className="text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(schedule.finalEventPrice)}</span>}
-            </div>
-            <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Initial contract payment + final balance = Final Event Price</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[380px]">
-            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Due after agreement signature</p>
-              {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.amountDueAfterSignature)}</p>}
-              <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Initial payment + refundable deposit</p>
-            </div>
-            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Final Event Price balance</p>
-              {isAwaitingFinalPrice ? <PortalSkeleton className="mt-2 h-5 w-24 rounded" /> : <p className="mt-1 font-mono text-lg font-black tabular-nums text-[color:var(--portal-text)]">{formatMoney(schedule.finalEventBalance)}</p>}
-              <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{finalBalanceTiming}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {schedule.errors.length > 0 ? (
-        <div role="status" className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4 text-sm leading-6 text-amber-900 dark:text-amber-100">
-          <Info size={16} className="mt-1 shrink-0" />
-          <div><p className="font-bold">Payment schedule needs a quick review.</p><ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs">{schedule.errors.map((error) => <li key={error}>{error}</li>)}</ul></div>
-        </div>
-      ) : null}
-    </section>
-  )
+export function ProposalPaymentSchedule({ finalEventPrice, venueServicesTotal, eventServicesTotal, refundableSecurityDeposit = 750, paymentPlan, eventDate, bookingDate, paymentCount, editable = false, onPaymentCountChange, installments, eventServicesPaymentNote, className = '' }: ProposalPaymentScheduleProps) {
+  const schedule = calculateProposalPaymentSchedule({ finalEventPrice, venueServicesTotal, eventServicesTotal, refundableSecurityDeposit, paymentPlan, eventDate, bookingDate, paymentCount })
+  const selectedCount = (paymentCount ?? paymentPlan?.payment_count ?? 4) as 2 | 3 | 4 | 5
+  const availability = eventDate ? calculateLuxorPaymentSchedule({ eventDate: String(eventDate).slice(0, 10), bookingDate: String(bookingDate || paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: venueServicesTotal || 0, eventServicesTotal: eventServicesTotal || 0, paymentCount: selectedCount }) : null
+  const available = availability?.available_counts || []
+  // An empty list means either the date inputs are not ready yet or the event
+  // is inside the 60-day deadline. Once both dates are known, hide every
+  // payment-count option when no schedule can legally fit.
+  const availabilityKnown = Boolean(eventDate && (bookingDate || paymentPlan?.booking_date))
+  const loading = schedule.finalEventPrice === null
+  const persistedByOrder = new Map((installments || []).map((item) => [item.installment_order, item]))
+  return <section aria-label="Proposal payment plan" className={`space-y-5 ${className}`.trim()}>
+    <header className="flex flex-col gap-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Your payment plan</p><h3 className="mt-2 max-w-2xl font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)]">Simple, flexible payments designed around your event.</h3><p className="mt-3 text-sm leading-6 text-[color:var(--portal-muted)]">Venue Services are paid first, then payments go toward Event Services.</p></div>{eventDate ? <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] p-4 sm:min-w-[245px]"><p className="text-[9px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">Event date</p><p className="mt-2 text-sm font-bold text-[color:var(--portal-text)]"><CalendarDays size={16} className="mr-2 inline text-[#8c6529] dark:text-[#f1d27a]" />{date(String(eventDate).slice(0, 10)) || 'Set event date'}</p><p className="mt-2 text-xs leading-5 text-[#8c6529] dark:text-[#f1d27a]">Final payment is due 60 days before your event.</p></div> : null}</header>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FinancialStat icon={<ReceiptText size={16} />} label="Event Total" value={money(schedule.finalEventPrice)} detail="Total investment" highlighted loading={loading} /><FinancialStat icon={<CalendarDays size={16} />} label="Due at signing" value={money(schedule.initialContractPayment)} detail="Booking payment" loading={loading} /><FinancialStat icon={<CircleDollarSign size={16} />} label="Remaining balance" value={money(schedule.finalEventBalance)} detail="Balance after booking payment" loading={loading} /><FinancialStat icon={<CreditCard size={16} />} label="Scheduled payments" value={schedule.rows.length ? String(schedule.rows.length) : '—'} detail="Total event payments" loading={loading} /></div>
+    <div className="flex gap-3 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] p-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]"><ShieldCheck size={17} /></span><div><p className="text-sm font-bold text-[color:var(--portal-text)]">Security Deposit: {money(refundableSecurityDeposit)}</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Refundable deposit due 30 days before your event. It is separate from your Event Total and returned after the event, subject to inspection and the Event Agreement.</p></div></div>
+    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6"><div className="flex items-center gap-3"><CalendarDays size={20} className="text-[#8c6529] dark:text-[#f1d27a]" /><div><p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Choose your payment schedule</p><p className="mt-1 text-sm text-[color:var(--portal-muted)]">Select the number of payments that works best for you.</p></div></div><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">{counts.map((count) => { const enabled = !availabilityKnown || available.includes(count); const active = selectedCount === count; return <button key={count} type="button" disabled={!editable || !enabled} onClick={() => onPaymentCountChange?.(count)} className={`min-h-12 rounded-xl border px-3 text-sm font-bold transition ${active ? 'border-[#caa24c] bg-[#171512] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${!enabled ? 'cursor-not-allowed opacity-35' : editable ? 'cursor-pointer hover:border-[#caa24c]/60' : 'cursor-default'}`}>{active ? <span className="inline-flex items-center gap-2"><Check size={15} className="text-[#e5bd60]" />{count} Payments</span> : `${count} Payments`}</button> })}</div></section>
+    <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><div className="border-b border-[color:var(--portal-border)] px-5 py-4"><p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Your {selectedCount}-payment schedule</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">The final payment is always due 60 days before the event.</p></div>{loading ? <div className="p-5"><PortalCalculationSkeleton label="Calculating payment schedule" rows={4} /></div> : <div className="divide-y divide-[color:var(--portal-border)]">{schedule.rows.map((row) => { const persisted = persistedByOrder.get(row.number); const status = persisted?.status || 'scheduled'; const statusLabel = status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : status === 'void' ? 'Voided' : 'Pending'; return <div key={row.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[64px_1fr_210px_130px] sm:items-center"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#171512] font-mono text-sm font-black text-white">{row.number}</span><div><p className="text-sm font-bold uppercase text-[color:var(--portal-text)]">{row.number === 1 ? 'Booking deposit' : row.label}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{row.description}{row.number === 1 ? ' · Due after agreement signature' : ''}{persisted?.payment_method ? ` · ${persisted.payment_method}` : ''}</p></div><div><p className="text-xs font-semibold text-[color:var(--portal-text)]">{row.dueDate ? date(row.dueDate) : 'Set due date'}</p><p className={`mt-1 text-[10px] font-bold uppercase ${status === 'paid' ? 'text-emerald-700 dark:text-emerald-300' : status === 'partial' ? 'text-amber-700 dark:text-amber-300' : 'text-[color:var(--portal-muted)]'}`}>{statusLabel}{persisted?.paid_at ? ` · ${date(persisted.paid_at.slice(0, 10))}` : ''}</p></div><p className="font-mono text-xl font-black tabular-nums text-[#8c6529] dark:text-[#f1d27a] sm:text-right">{money(row.amount)}</p></div>})}</div>}<div className="grid gap-4 border-t border-[color:var(--portal-border)] bg-[#caa24c]/[0.045] px-5 py-4 sm:grid-cols-2 sm:items-center"><div><p className="text-[9px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">Total investment</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{money(schedule.finalEventPrice)}</p></div><p className="flex items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]"><Check className="text-emerald-600" size={18} /> Everything must be paid in full 60 days before your event.</p></div></section>
+    <div className="flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.055] p-4"><Sparkles size={18} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" /><div><p className="text-sm font-bold text-[color:var(--portal-text)]">Want to pay more, sooner?</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">You can make additional payments toward your balance at any time. They do not create additional scheduled installments.</p></div></div>
+    {eventServicesPaymentNote ? <p className="text-xs text-[color:var(--portal-muted)]">{eventServicesPaymentNote}</p> : null}{schedule.errors.length ? <div role="status" className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4 text-xs leading-5 text-amber-900 dark:text-amber-100"><Info size={15} className="mt-0.5 shrink-0" /><span>{schedule.errors.join(' ')}</span></div> : null}
+  </section>
 }

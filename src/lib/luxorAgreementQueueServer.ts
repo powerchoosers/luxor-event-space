@@ -14,6 +14,7 @@ import {
   updateLuxorSignatureRequest,
 } from './luxorSignaturesServer'
 import { LUXOR_AGREEMENT_ATTACHMENT_MANIFEST } from './luxorAgreementDeliveryServer'
+import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
 
 export type LuxorAgreementQueueDelivery = 'queued' | 'already_sent' | 'already_signed' | 'preparing'
 
@@ -44,11 +45,10 @@ function paymentTerms(invoiceTotal: number, context: Record<string, unknown>): P
     : null
   if (!plan) return null
 
-  const mode = plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance'
-    ? plan.mode
-    : null
-  const percentage = Number(plan.booking_payment_percent)
-  const finalPaymentDays = Number(plan.final_payment_due_days_before_event)
+  const hasNewSchedule = Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count))
+  const mode = hasNewSchedule ? 'deposit_and_balance' : plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance' ? plan.mode : null
+  const percentage = hasNewSchedule ? 25 : Number(plan.booking_payment_percent)
+  const finalPaymentDays = hasNewSchedule ? 60 : Number(plan.final_payment_due_days_before_event)
   if (
     !mode ||
     !Number.isFinite(percentage) || percentage < 0 || percentage > 100 ||
@@ -58,9 +58,10 @@ function paymentTerms(invoiceTotal: number, context: Record<string, unknown>): P
     return null
   }
 
+  const venueServicesTotal = Number(context.venue_services_total)
   const reservationPayment = mode === 'pay_in_full'
     ? invoiceTotal
-    : roundLuxorMoney(invoiceTotal * (percentage / 100))
+    : roundLuxorMoney(Math.max(Number.isFinite(venueServicesTotal) ? venueServicesTotal * (percentage / 100) : invoiceTotal * (percentage / 100), 750))
   return {
     mode,
     percentage,
@@ -238,6 +239,10 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
   }
 
   const booking = await getOrCreateBooking(invoice, inquiry)
+  // Build the schedule once the proposal is accepted. The first date is
+  // provisional until the agreement is signed; signing refreshes the same
+  // rows using the booking/Stripe anchor without touching paid rows.
+  await syncLuxorPaymentInstallments({ booking, invoice })
   const signature = await getOrCreateSignature(booking)
   if (!hasLuxorSignatureDeliveryDocuments(signature)) {
     return {

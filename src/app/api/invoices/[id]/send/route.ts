@@ -629,7 +629,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (body.mode !== 'payment') {
       return NextResponse.json({ error: 'Choose a supported final-proposal or post-signature payment action.' }, { status: 400 })
     }
-    if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+    if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit') {
       return NextResponse.json({ error: 'Create the scheduled booking-payment invoice from the signed agreement before sending a Stripe link.' }, { status: 409 })
     }
     if (!booking || booking.contract_status !== 'signed') {

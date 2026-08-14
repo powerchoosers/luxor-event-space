@@ -494,6 +494,15 @@ function dateRateGroup(eventDate: string) {
 function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaymentPlan | null {
   const plan = record(selection.paymentPlan || selection.payment_plan)
   if (!plan) return null
+  const paymentCount = numberValue(plan.payment_count ?? plan.paymentCount)
+  if (paymentCount !== undefined && [2, 3, 4, 5].includes(paymentCount)) {
+    return {
+      mode: 'deposit_and_balance',
+      booking_payment_percent: 25,
+      final_payment_due_days_before_event: 60,
+      payment_count: paymentCount as 2 | 3 | 4 | 5,
+    }
+  }
   const mode = plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance' ? plan.mode : null
   const percentage = numberValue(plan.booking_payment_percent ?? plan.bookingPaymentPercent)
   const finalDays = numberValue(plan.final_payment_due_days_before_event ?? plan.finalPaymentDueDaysBeforeEvent)
@@ -935,8 +944,17 @@ function calculatePackage(input: {
     quoteBreakdown: { quantity: 1, unit_price: taxAmount, subtotal: taxAmount },
   }))
   const total = rounded(subtotal - discountAmount + taxAmount)
+  // The booking payment is applied to Venue Services first.  Do not derive it
+  // from the combined event total: that would make a large catering/decor
+  // package inflate the amount due at signing and would disagree with the
+  // payment schedule shown to the owner/client.
+  const venueServicesTotal = rounded(items
+    .filter((item) => item.paymentBucket === 'venue' || item.category === 'Venue Services')
+    .reduce((sum, item) => sum + Math.max(0, Number(item.total || 0)), 0))
   const amountDueToBook = paymentPlan
-    ? paymentPlan.mode === 'pay_in_full' ? total : rounded(total * paymentPlan.booking_payment_percent / 100)
+    ? paymentPlan.mode === 'pay_in_full'
+      ? total
+      : Math.min(venueServicesTotal, rounded(Math.max(venueServicesTotal * paymentPlan.booking_payment_percent / 100, 750)))
     : null
 
   return {

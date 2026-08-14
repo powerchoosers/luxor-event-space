@@ -49,7 +49,7 @@ import {
   PartyPopper,
   Loader2,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
@@ -71,6 +71,7 @@ import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
+import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -306,6 +307,7 @@ export default function LeadDetailPage({
   const [activeEventId, setActiveEventId] = useState<string | null>(null)
   const initializedEventPreferenceRef = useRef(false)
   const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
@@ -635,6 +637,19 @@ export default function LeadDetailPage({
       : null,
     [bookings, currentProposalInvoice],
   )
+  useEffect(() => {
+    let cancelled = false
+    const bookingId = currentProposalBooking?.id
+    if (!bookingId) {
+      setPaymentInstallments([])
+      return () => { cancelled = true }
+    }
+    void fetch(`/api/portal/payment-installments?bookingId=${encodeURIComponent(bookingId)}`)
+      .then((response) => response.ok ? response.json() as Promise<LuxorPaymentInstallment[]> : [])
+      .then((rows) => { if (!cancelled) setPaymentInstallments(Array.isArray(rows) ? rows : []) })
+      .catch(() => { if (!cancelled) setPaymentInstallments([]) })
+    return () => { cancelled = true }
+  }, [currentProposalBooking?.id])
   const lifecycleBooking = currentProposalInvoice ? currentProposalBooking : latestBooking
   const activeEventForDisplay = useMemo(() => {
     if (!lead) return null
@@ -5308,6 +5323,44 @@ export default function LeadDetailPage({
               }
 
               if (currentStage === 'final_payment') {
+                const paymentContext = (proposalInvoice?.proposal_context || {}) as Record<string, unknown>
+                const paymentPlan = paymentContext.payment_plan as Record<string, unknown> | null | undefined
+                const eventDate = typeof paymentContext.event_date === 'string' ? paymentContext.event_date : agreementBooking?.event_date
+                const venueServices = typeof paymentContext.venue_services_total === 'number' ? paymentContext.venue_services_total : null
+                const eventServices = typeof paymentContext.event_services_total === 'number' ? paymentContext.event_services_total : null
+                const paymentCount = paymentPlan && typeof paymentPlan === 'object' && Number.isInteger(Number(paymentPlan.payment_count)) ? Number(paymentPlan.payment_count) : 4
+                return (
+                  <>
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Final payment</p>
+                          <h4 className="mt-1 text-xl font-black text-[color:var(--portal-text)]">Track the event payment schedule</h4>
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Payments are applied to Venue Services first, then Event Services. The refundable security deposit is tracked separately.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {finalBalanceInvoice && finalPaymentBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="min-h-11 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-md hover:bg-[#a8792f] transition-all">Send secure payment link</button> : null}
+                          {agreementBooking && finalPaymentBalance > 0 ? <button type="button" onClick={() => handleRecordManualPayment(agreementBooking, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/60 transition-all">Record manual payment</button> : null}
+                        </div>
+                      </div>
+                    </section>
+                    <ProposalPaymentSchedule
+                      finalEventPrice={Number(proposalInvoice?.total || agreementBooking?.contract_total || 0)}
+                      venueServicesTotal={venueServices}
+                      eventServicesTotal={eventServices}
+                      refundableSecurityDeposit={refundableSecurityDepositAmount}
+                      paymentPlan={paymentPlan && typeof paymentPlan === 'object' ? paymentPlan : null}
+                      eventDate={eventDate}
+                      bookingDate={agreementBooking?.created_at}
+                      paymentCount={paymentCount}
+                      installments={paymentInstallments}
+                    />
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Payment history</p><span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Event payments only</span></div>
+                      <div className="space-y-3">{sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).length ? sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).map((payment) => <div key={payment.id} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 text-xs"><div><p className="font-bold text-[color:var(--portal-text)]">{String(payment.metadata?.payment_kind || 'Event payment').replaceAll('_', ' ')}</p><p className="text-[10px] text-[color:var(--portal-muted)]">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p></div><span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">{formatMoney(payment.amount)}</span></div>) : <p className="text-xs text-[color:var(--portal-muted)]">No event payments have been recorded yet.</p>}</div>
+                    </section>
+                  </>
+                )
                 return (
                   <>
                     {/* Next Move */}
@@ -5329,12 +5382,12 @@ export default function LeadDetailPage({
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {finalBalanceInvoice && finalPaymentBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice!)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
                               Send Secure Payment Link
                             </button>
                           ) : null}
                           {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking!, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
                               Mark Paid Manually
                             </button>
                           ) : null}
@@ -5356,7 +5409,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
-                              <span className="font-bold text-white">{latestBooking?.final_payment_due_date ? formatDisplayDate(latestBooking.final_payment_due_date) : 'No due date set'}</span>
+                              <span className="font-bold text-white">{latestBooking?.final_payment_due_date ? formatDisplayDate(latestBooking!.final_payment_due_date) : 'No due date set'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Late Status</span>
@@ -5364,7 +5417,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
-                              <span className="font-bold text-white">{finalBalanceInvoice ? finalBalanceInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                              <span className="font-bold text-white">{finalBalanceInvoice ? finalBalanceInvoice!.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
@@ -5374,10 +5427,10 @@ export default function LeadDetailPage({
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
                           {finalBalanceInvoice && finalPaymentBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
+                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice!)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
                           ) : null}
                           {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking!, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
                           ) : null}
                           <button type="button" onClick={() => setActiveLeadTab('tasks')} className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Create Reminder Task</button>
                         </div>

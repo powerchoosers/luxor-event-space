@@ -647,7 +647,7 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
   if (!invoiceId) return job
 
   const invoice = await getInvoice(invoiceId)
-  if (!invoice || (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance')) return job
+  if (!invoice || (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit')) return job
 
   const bookingId = job.booking_id || invoice.booking_id || null
   const booking = bookingId ? await getLuxorBooking(bookingId) : null

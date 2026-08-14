@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   if (!booking || booking.contract_status !== 'signed') {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
   }
-  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit') {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=payment-link-required`, _request.url))
   }
 
@@ -39,7 +39,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     booking,
     origin,
     paymentAmount: Number(invoice.payment_requested_amount || invoice.total),
-    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Reservation payment and refundable security deposit' : 'Final event balance'),
+    paymentLabel: invoice.payment_requested_label || (invoice.invoice_kind === 'deposit' ? 'Initial booking payment' : invoice.invoice_kind === 'security_deposit' ? 'Refundable security deposit' : 'Final event balance'),
     masterInvoiceId: invoice.parent_invoice_id || booking.invoice_id || undefined,
   })
   if (!checkout) return NextResponse.redirect(new URL('/payment/success', _request.url))

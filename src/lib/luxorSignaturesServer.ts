@@ -10,7 +10,8 @@ import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsSe
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
-import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
+import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, ensureLuxorSecurityDepositInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
+import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
 import { createNote, listNotesByInquiry } from './luxorNotesServer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 
@@ -719,6 +720,10 @@ export async function signLuxorSignatureRequest(input: {
           getLuxorBooking(signature.booking_id),
           getLuxorInquiry(signature.inquiry_id),
         ])
+      if (booking?.invoice_id) {
+        const signedInvoice = await getInvoice(booking.invoice_id)
+        if (signedInvoice) await syncLuxorPaymentInstallments({ booking: { ...booking, created_at: signedAt }, invoice: signedInvoice })
+      }
       const depositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
       const depositPayments = depositInvoice ? await listPaidPaymentsByInvoice(depositInvoice.id) : []
       const depositPaid = Boolean(depositInvoice) && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
@@ -917,12 +922,19 @@ export async function signLuxorSignatureRequest(input: {
     // The booking status is verified as signed above before either the child
     // invoice or Stripe Checkout can be created. `ensure…` reuses the same
     // deposit record if this completion path is retried.
+    const newScheduleProposal = Boolean(masterInvoice.proposal_context?.payment_plan && typeof masterInvoice.proposal_context.payment_plan === 'object' && Number.isInteger(Number((masterInvoice.proposal_context.payment_plan as Record<string, unknown>).payment_count)))
     paymentInvoice = await ensureLuxorDepositInvoice({
       masterInvoice,
       bookingId: booking.id,
       dueDate: signedAt.slice(0, 10),
       reservationDepositAmount: booking.deposit_required,
+      includeSecurityDeposit: !newScheduleProposal,
     })
+    if (newScheduleProposal) {
+      const securityDue = new Date(`${booking.event_date}T12:00:00Z`)
+      securityDue.setUTCDate(securityDue.getUTCDate() - 30)
+      await ensureLuxorSecurityDepositInvoice({ masterInvoice, bookingId: booking.id, dueDate: securityDue.toISOString().slice(0, 10) })
+    }
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
     const checkout = await createLuxorPostContractCheckout({
       invoice: paymentInvoice,
@@ -930,7 +942,7 @@ export async function signLuxorSignatureRequest(input: {
       booking,
       origin,
       paymentAmount: Number(paymentInvoice.total || 0),
-      paymentLabel: 'Initial Booking Payment + Refundable Security Deposit',
+      paymentLabel: newScheduleProposal ? 'Initial Booking Payment' : 'Initial Booking Payment + Refundable Security Deposit',
       masterInvoiceId: masterInvoice.id,
     })
     checkoutUrl = checkout?.checkoutUrl || null

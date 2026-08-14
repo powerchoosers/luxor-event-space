@@ -1451,7 +1451,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               const invoiceId = String(args.invoiceId || '').trim()
               if (!invoiceId) throw new Error('A verified booking-payment invoice is required.')
               const invoice = await getInvoice(invoiceId)
-              if (!invoice || (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance')) {
+              if (!invoice || (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit')) {
                 throw new Error('Only a scheduled booking-payment invoice can be prepared for payment.')
               }
               const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []

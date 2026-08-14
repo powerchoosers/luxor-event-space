@@ -66,7 +66,7 @@ export async function createLuxorPostContractCheckout(input: {
     throw new Error('The agreement must be signed before Stripe checkout can be created.')
   }
 
-  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance') {
+  if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit') {
     throw new Error('Stripe checkout can be created only for a scheduled booking-payment invoice.')
   }
 

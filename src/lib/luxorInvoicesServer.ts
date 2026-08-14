@@ -350,6 +350,7 @@ export async function ensureLuxorDepositInvoice(input: {
   bookingId: string
   dueDate?: string | null
   reservationDepositAmount?: number | null
+  includeSecurityDeposit?: boolean
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
   const calculated = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
@@ -359,7 +360,7 @@ export async function ensureLuxorDepositInvoice(input: {
   )
   // The refundable deposit is a fixed, separate $750 hold for every booking.
   // It is intentionally not configurable per proposal or payment method.
-  const securityDeposit = LUXOR_DEFAULT_SECURITY_DEPOSIT
+  const securityDeposit = input.includeSecurityDeposit === false ? 0 : LUXOR_DEFAULT_SECURITY_DEPOSIT
   if (reservationPayment < 0.5) throw new Error('The configured initial booking payment must be at least $0.50 to create a payment invoice.')
   const total = roundMoney(reservationPayment + securityDeposit)
   const lineItems: LuxorInvoiceLineItem[] = [
@@ -419,6 +420,16 @@ export async function ensureLuxorDepositInvoice(input: {
     due_date: input.dueDate || new Date().toISOString().slice(0, 10),
     notes,
   })
+}
+
+export async function ensureLuxorSecurityDepositInvoice(input: { masterInvoice: LuxorInvoice; bookingId: string; dueDate: string }) {
+  const existing = await getInvoiceByBookingAndKind(input.bookingId, 'security_deposit')
+  const total = LUXOR_DEFAULT_SECURITY_DEPOSIT
+  const lineItems: LuxorInvoiceLineItem[] = [{ description: 'Refundable Security Deposit', quantity: 1, unitPrice: total, total, category: 'Security Deposit', paymentBucket: 'security_deposit', required: true, detail: 'Held through the post-event inspection and returned subject to the Event Agreement.' }]
+  const promotion = inheritedProposalPromotion(input.masterInvoice)
+  const payload = { line_items: lineItems, subtotal: total, tax_rate: 0, total, original_subtotal: total, original_total: total, discount_percent: 0, discount_amount: 0, ...promotion, invoice_kind: 'security_deposit' as const, due_date: input.dueDate, notes: 'Separate refundable security deposit due 30 days before the event. It is not part of the Event Total.' }
+  if (existing) return existing.status === 'paid' ? existing : (await updateInvoice(existing.id, payload) || existing)
+  return createInvoice({ inquiry_id: input.masterInvoice.inquiry_id, booking_id: input.bookingId, parent_invoice_id: input.masterInvoice.id, client_name: input.masterInvoice.client_name, event_type: input.masterInvoice.event_type, description: 'Refundable Security Deposit', ...payload })
 }
 
 export async function ensureLuxorFinalBalanceInvoice(input: {

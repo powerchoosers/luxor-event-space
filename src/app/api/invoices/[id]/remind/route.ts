@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const booking = invoice.booking_id
       ? await getLuxorBooking(invoice.booking_id)
       : bookings.find((b) => b.invoice_id === invoice.id) || bookings[0] || null
-    const isPaymentInvoice = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance'
+    const isPaymentInvoice = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance' || invoice.invoice_kind === 'security_deposit'
 
     // A payment reminder is never a way around the signed-agreement gate.
     // In particular, do not forward an old stored Stripe URL for a booking
