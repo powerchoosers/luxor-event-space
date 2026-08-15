@@ -107,6 +107,7 @@ export default function LeadsPage() {
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -170,6 +171,17 @@ export default function LeadsPage() {
         setCurrentPage(parseInt(savedPage, 10))
       }
     }
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const syncViewport = () => {
+      setIsMobileViewport(mediaQuery.matches)
+      if (mediaQuery.matches) setViewMode('list')
+    }
+    syncViewport()
+    mediaQuery.addEventListener('change', syncViewport)
+    return () => mediaQuery.removeEventListener('change', syncViewport)
   }, [])
 
   // Restore board scroll position once data is loaded and columns are rendered
@@ -518,25 +530,27 @@ export default function LeadsPage() {
                   >
                     List
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('board')
-                      setSearchTerm('')
-                      setStatusFilter('all')
-                      setEventTypeFilter('all')
-                      setSourceFilter('all')
-                      setContactFilter('all')
-                      localStorage.setItem('luxor_leads_view_mode', 'board')
-                    }}
-                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                      viewMode === 'board'
-                        ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                        : 'text-zinc-500 hover:text-zinc-350 font-bold'
-                    }`}
-                  >
-                    Board
-                  </button>
+                  {!isMobileViewport ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewMode('board')
+                        setSearchTerm('')
+                        setStatusFilter('all')
+                        setEventTypeFilter('all')
+                        setSourceFilter('all')
+                        setContactFilter('all')
+                        localStorage.setItem('luxor_leads_view_mode', 'board')
+                      }}
+                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                        viewMode === 'board'
+                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
+                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                      }`}
+                    >
+                      Board
+                    </button>
+                  ) : null}
                 </div>
 
               </>
@@ -576,7 +590,7 @@ export default function LeadsPage() {
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
-          viewMode === 'list' ? (
+          viewMode === 'list' || isMobileViewport ? (
         <PortalTableCard
           controls={
             <PortalFilterBar
