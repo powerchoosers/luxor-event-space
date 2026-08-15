@@ -52,7 +52,7 @@ import {
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
+import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
@@ -266,6 +266,12 @@ type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' 
 
 const ACTIVITY_BATCH_SIZE = 18
 const EVENT_TIME_OPTIONS = LUXOR_TIME_DROPDOWN_OPTIONS
+const DEFAULT_OFFER_EXPIRY_TIME = '23:30'
+
+function normalizeOfferExpiryTime(value: string | null | undefined) {
+  const normalized = normalizeLuxorTimeDropdownValue(value)
+  return EVENT_TIME_OPTIONS.some((option) => option.value === normalized) ? normalized : DEFAULT_OFFER_EXPIRY_TIME
+}
 
 const PLANNING_COLOR_OPTIONS = [
   { id: 'black-gold', label: 'Black & gold', colors: ['#111111', '#caa24c', '#f1d27a', '#f7f3eb'] },
@@ -342,7 +348,7 @@ export default function LeadDetailPage({
   const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState('0')
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<'percent' | 'fixed'>('percent')
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState('0')
-  const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState('23:59')
+  const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState(DEFAULT_OFFER_EXPIRY_TIME)
   const [proposalContext, setProposalContext] = useState<ProposalBuilderContext | null>(null)
   const [selectedProposalPackageId, setSelectedProposalPackageId] = useState<string | null>(null)
   const [selectedProposalPromotionId, setSelectedProposalPromotionId] = useState<string | null>(null)
@@ -1802,7 +1808,7 @@ export default function LeadDetailPage({
       const expiry = invoice.offer_expires_at ? new Date(invoice.offer_expires_at) : null
       const expiryTime = expiry && !Number.isNaN(expiry.getTime())
         ? String(expiry.getHours()).padStart(2, '0') + ':' + String(expiry.getMinutes()).padStart(2, '0')
-        : '23:59'
+        : DEFAULT_OFFER_EXPIRY_TIME
       const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
         ? invoice.line_items.map((item) => ({
             ...item,
@@ -1818,7 +1824,7 @@ export default function LeadDetailPage({
       // custom title.
       setInvoiceDesc(invoice.description?.trim() || defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate(invoice.due_date || expiry?.toISOString().slice(0, 10) || '')
-      setInvoiceOfferExpiryTime(expiryTime)
+      setInvoiceOfferExpiryTime(normalizeOfferExpiryTime(expiryTime))
       const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
       const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
       setInvoiceDiscountType(discountType)
@@ -1832,7 +1838,7 @@ export default function LeadDetailPage({
       const savedItems = activeEventForDisplay?.metadata?.proposalLineItems
       setInvoiceDesc(defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate('')
-      setInvoiceOfferExpiryTime('23:59')
+      setInvoiceOfferExpiryTime(DEFAULT_OFFER_EXPIRY_TIME)
       setInvoiceDiscountType('percent')
       setInvoiceDiscountValue('0')
       setInvoiceDiscountPercent('0')
@@ -1995,7 +2001,7 @@ export default function LeadDetailPage({
       setSubmittingInvoice(true)
       const taxRate = invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0) / 100
       const offerExpiresAt = invoiceDueDate
-        ? new Date(invoiceDueDate + 'T' + (invoiceOfferExpiryTime || '23:59') + ':00').toISOString()
+        ? new Date(invoiceDueDate + 'T' + (invoiceOfferExpiryTime || DEFAULT_OFFER_EXPIRY_TIME) + ':00').toISOString()
         : null
       const editingInvoice = editingInvoiceId ? invoices.find((invoice) => invoice.id === editingInvoiceId) || null : null
       const createRevision = Boolean(editingInvoice && (

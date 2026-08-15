@@ -9,7 +9,7 @@ import {
   unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
 } from '@/lib/luxorTourSlotsServer'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime, LUXOR_TOUR_TIMES } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime, LUXOR_TOUR_EARLIEST_START_TIME } from '@/lib/luxorTourSlots'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
         return NextResponse.json({ error: 'Choose 1–62 weekdays.' }, { status: 400 })
       }
-      if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_TIMES[0]?.startTime || '08:00:00'))) {
+      if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_EARLIEST_START_TIME))) {
         return NextResponse.json({ error: 'Published days must be at least 24 hours away.' }, { status: 400 })
       }
       const slots = await publishLuxorTourDays(dates)

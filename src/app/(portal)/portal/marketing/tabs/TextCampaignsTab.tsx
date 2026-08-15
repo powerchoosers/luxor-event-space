@@ -23,6 +23,7 @@ import {
   PortalBulkRowSelector,
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
+import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 import type {
   LuxorTextAudienceRecipient,
   LuxorTextCampaign,
@@ -395,11 +396,7 @@ export function TextCampaignsTab() {
                     <PortalSelect
                       value={scheduledTime}
                       onChange={setScheduledTime}
-                      options={Array.from({ length: 13 }, (_, index) => {
-                        const hour = index + 8
-                        const value = `${String(hour).padStart(2, '0')}:00`
-                        return { value, label: new Date(`2026-01-01T${value}:00`).toLocaleTimeString('en-US', { hour: 'numeric' }) }
-                      })}
+                      options={LUXOR_TIME_DROPDOWN_OPTIONS}
                     />
                   </div>
                 </div>

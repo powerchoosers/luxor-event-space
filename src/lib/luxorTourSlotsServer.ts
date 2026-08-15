@@ -5,6 +5,7 @@ import {
   isLuxorTourDay,
   isLuxorTourSlotAtLeast24HoursAway,
   isLuxorTourTime,
+  luxorTourTimeDisplayOrder,
   LUXOR_TOUR_TIMES,
   LuxorTourSlot,
   PublicLuxorTourSlot,
@@ -18,20 +19,29 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function sortLuxorTourSlotsForDisplay<T extends Pick<LuxorTourSlot, 'slot_date' | 'start_time'>>(slots: T[]) {
+  return [...slots].sort((left, right) => (
+    left.slot_date.localeCompare(right.slot_date)
+    || luxorTourTimeDisplayOrder(left.start_time) - luxorTourTimeDisplayOrder(right.start_time)
+  ))
+}
+
 export async function listAvailableLuxorTourSlots(limit = 500): Promise<PublicLuxorTourSlot[]> {
   const slots = await supabaseRest<LuxorTourSlot[]>(
     `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&status=eq.available&slot_date=gte.${todayIsoDate()}&order=slot_date.asc,start_time.asc&limit=${encodeURIComponent(limit)}`,
   )
 
-  return slots
-    .filter((slot) => slot.capacity > slot.booked_count && isLuxorTourSlotAtLeast24HoursAway(slot.slot_date, slot.start_time))
+  return sortLuxorTourSlotsForDisplay(
+    slots.filter((slot) => slot.capacity > slot.booked_count && isLuxorTourSlotAtLeast24HoursAway(slot.slot_date, slot.start_time)),
+  )
     .map(toPublicTourSlot)
 }
 
 export async function listUpcomingLuxorTourSlots(limit = 1000): Promise<LuxorTourSlot[]> {
-  return supabaseRest<LuxorTourSlot[]>(
+  const slots = await supabaseRest<LuxorTourSlot[]>(
     `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&slot_date=gte.${todayIsoDate()}&order=slot_date.asc,start_time.asc&limit=${encodeURIComponent(limit)}`,
   )
+  return sortLuxorTourSlotsForDisplay(slots)
 }
 
 export async function getLuxorTourSlot(id: string) {

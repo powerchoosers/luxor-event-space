@@ -21,6 +21,7 @@ import type { LuxorInvoiceLineItem, LuxorPromotion, LuxorProposalContext, LuxorP
 import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
+import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 
 type ProposalSubmitAction = 'save' | 'email'
 
@@ -1280,12 +1281,13 @@ export function ProposalBuilderModal({
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal valid through</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_108px] lg:grid-cols-1">
                       <PortalDatePicker value={dueDate} onChange={onDueDateChange} className="w-full" placeholder="Select expiry date" />
-                      <input
-                        type="time"
+                      <PortalSelect
                         value={offerExpiryTime}
-                        onChange={(event) => onOfferExpiryTimeChange(event.target.value)}
-                        aria-label="Proposal expiry time"
-                        className="min-h-10 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12"
+                        onChange={onOfferExpiryTimeChange}
+                        options={LUXOR_TIME_DROPDOWN_OPTIONS}
+                        className="min-w-0"
+                        buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal"
+                        placeholder="Expiry time"
                       />
                     </div>
                     {normalizeEventDateValue(dueDate) ? <p className="mt-2 text-[10px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{formatEventDate(dueDate)}</p> : null}
@@ -1573,7 +1575,6 @@ export function ProposalBuilderModal({
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="max-w-3xl">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 5</p>
-                <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Set the exact agreement payment terms.</h3>
               </div>
 
               {isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule

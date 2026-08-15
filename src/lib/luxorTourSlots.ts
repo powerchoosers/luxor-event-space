@@ -39,6 +39,23 @@ export const LUXOR_TOUR_TIMES = LUXOR_TIME_DROPDOWN_OPTIONS.map(({ value }) => (
   endTime: `${addMinutesToClockTime(value, 30)}:00`,
 }))
 
+// The picker is deliberately presented as a business day (8 AM through 1 AM),
+// but a date plus 12–1 AM is still an earlier clock time. Use this value when
+// deciding whether a whole calendar day can safely be opened to the public.
+export const LUXOR_TOUR_EARLIEST_START_TIME = LUXOR_TOUR_TIMES.reduce(
+  (earliest, slot) => slot.startTime < earliest ? slot.startTime : earliest,
+  '23:59:59',
+)
+
+export function luxorTourTimeDisplayOrder(time: string) {
+  const [hours = '0', minutes = '0'] = time.split(':')
+  const totalMinutes = (Number(hours) * 60) + Number(minutes)
+  if (!Number.isFinite(totalMinutes)) return Number.MAX_SAFE_INTEGER
+
+  // Keep after-midnight times at the end of the displayed business day.
+  return totalMinutes < (8 * 60) ? totalMinutes + (24 * 60) : totalMinutes
+}
+
 export function isLuxorTourDay(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
   const day = new Date(`${date}T12:00:00Z`).getUTCDay()

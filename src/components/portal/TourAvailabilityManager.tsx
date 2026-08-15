@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { PortalButton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_TIMES, type LuxorTourSlot } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, LUXOR_TOUR_TIMES, type LuxorTourSlot } from '@/lib/luxorTourSlots'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -76,7 +76,7 @@ export function TourAvailabilityManager({
   const eligibleDates = useMemo(() => calendarDays
     .filter((date): date is Date => Boolean(date))
     .map(isoDate)
-    .filter((date) => isLuxorTourDay(date) && isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_TIMES[0]?.startTime || '08:00:00')),
+    .filter((date) => isLuxorTourDay(date) && isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_EARLIEST_START_TIME)),
   [calendarDays])
 
   function toggleDate(date: string) {

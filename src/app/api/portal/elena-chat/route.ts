@@ -4,7 +4,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
 import { getLuxorUserProfile, LuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, LUXOR_TOUR_TIMES } from '@/lib/luxorTourSlots'
 import { listUpcomingLuxorTourSlots, publishLuxorTourDays, unpublishLuxorTourDays } from '@/lib/luxorTourSlotsServer'
 import { getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
@@ -102,7 +102,7 @@ function parseTourDaysConfirmation(query: string) {
     throw new Error('Tour booking days must be valid Monday-through-Friday dates.')
   }
   if (dates.some((date) => date < todayInLuxorTimeZone())) throw new Error('Tour booking days must be today or later.')
-  if (action === 'open' && dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00'))) {
+  if (action === 'open' && dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_EARLIEST_START_TIME))) {
     throw new Error('New tour days must be at least 24 hours away.')
   }
 
@@ -122,7 +122,7 @@ async function runConfirmedTourDaysAction(query: string) {
     action,
     dates,
     daysChanged: dates.length,
-    tourTimesPerOpenedDay: action === 'open' ? 11 : undefined,
+    tourTimesPerOpenedDay: action === 'open' ? LUXOR_TOUR_TIMES.length : undefined,
     protectedBookingsKept: protectedBookings,
   }
 }
@@ -430,7 +430,7 @@ const TOOLS_DEFINITION = [
           action: {
             type: 'string',
             enum: ['open', 'close'],
-            description: 'Open publishes all eleven standard tour times on each day. Close hides unbooked times and preserves booked times.'
+            description: 'Open publishes every standard 30-minute tour time from 8:00 AM through 1:00 AM. Close hides unbooked times and preserves booked times.'
           },
           dates: {
             type: 'array',
