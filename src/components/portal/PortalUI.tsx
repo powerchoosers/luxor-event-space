@@ -306,16 +306,22 @@ export function PortalTableCard({
   children,
   footer,
   className = '',
+  mobilePageScroll = false,
 }: {
   controls?: React.ReactNode
   children: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  /**
+   * Lets a card's rows join the page scroll on phones instead of trapping
+   * them in a very short nested table area.
+   */
+  mobilePageScroll?: boolean
 }) {
   return (
-    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
+    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScroll ? 'max-md:flex-none' : ''} ${className}`}>
       {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{controls}</div> : null}
-      <div className="portal-scrollbar flex-1 overflow-auto" data-portal-table-scroller>
+      <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScroll ? 'max-md:flex-none max-md:overflow-visible' : ''}`} data-portal-table-scroller>
         {children}
       </div>
       {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-4 px-4 sm:px-6 flex items-center">{footer}</div> : null}

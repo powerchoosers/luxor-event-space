@@ -592,6 +592,7 @@ export default function LeadsPage() {
         {activeTab === 'pipeline' && (
           viewMode === 'list' || isMobileViewport ? (
         <PortalTableCard
+          mobilePageScroll
           controls={
             <PortalFilterBar
               searchValue={searchTerm}
@@ -1632,6 +1633,7 @@ function LeadsClientsTab({
   const clients = leads.filter(l => l.status === 'booked')
   return (
     <PortalTableCard
+      mobilePageScroll
       controls={
         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
       }

@@ -137,6 +137,18 @@ const marketingSubItems = [
   { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },
 ]
 
+const PORTAL_MOBILE_MEDIA_QUERY = '(max-width: 767px)'
+
+function subscribeToPortalMobileViewport(callback: () => void) {
+  const mediaQuery = window.matchMedia(PORTAL_MOBILE_MEDIA_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getPortalMobileViewportSnapshot() {
+  return window.matchMedia(PORTAL_MOBILE_MEDIA_QUERY).matches
+}
+
 export function PortalShell({ children, session, initialProfile, initialTheme }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme }) {
   return (
     <ToastProvider>
@@ -152,8 +164,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isMobileViewport = useSyncExternalStore(
+    subscribeToPortalMobileViewport,
+    getPortalMobileViewportSnapshot,
+    () => false,
+  )
   const usesInternalTableScroll =
-    pathname === '/portal/leads' ||
+    (!isMobileViewport && pathname === '/portal/leads') ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
