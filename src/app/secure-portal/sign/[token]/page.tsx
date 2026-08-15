@@ -166,6 +166,7 @@ export default function SignaturePage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [complete, setComplete] = useState(false)
+  const [paymentPreparing, setPaymentPreparing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
   const [numPages, setNumPages] = useState(0)
@@ -176,6 +177,7 @@ export default function SignaturePage() {
     const kind = complete ? 'executed' : 'contract'
     return `/api/public/signatures/download?token=${encodeURIComponent(params.token)}&kind=${kind}`
   }, [complete, params.token])
+  const signatureStatus = signature?.status
 
   useEffect(() => {
     let active = true
@@ -197,6 +199,42 @@ export default function SignaturePage() {
     void load()
     return () => { active = false }
   }, [params.token])
+
+  useEffect(() => {
+    if (loading || complete || signatureStatus !== 'draft') return
+
+    let active = true
+    let attempts = 0
+    const poll = window.setInterval(async () => {
+      attempts += 1
+      try {
+        const response = await fetch(`/api/public/signatures?token=${encodeURIComponent(params.token)}`, { cache: 'no-store' })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Unable to refresh the agreement.')
+        if (!active) return
+        setSignature(data)
+        if (data.status !== 'draft') {
+          window.clearInterval(poll)
+          return
+        }
+      } catch (pollError) {
+        if (active && attempts >= 60) {
+          window.clearInterval(poll)
+          setError(pollError instanceof Error ? pollError.message : 'Unable to refresh the agreement.')
+        }
+        return
+      }
+      if (attempts >= 60) {
+        window.clearInterval(poll)
+        if (active) setError('The agreement is taking longer than expected to activate. Please refresh this page in a moment.')
+      }
+    }, 1_500)
+
+    return () => {
+      active = false
+      window.clearInterval(poll)
+    }
+  }, [complete, loading, params.token, signatureStatus])
 
   useEffect(() => {
     const viewer = viewerRef.current
@@ -234,6 +272,33 @@ export default function SignaturePage() {
     }
   }, [signaturePlacement.pageIndex])
 
+  const recoverPaymentLink = async (attempt = 0): Promise<void> => {
+    if (attempt >= 8) {
+      setPaymentPreparing(false)
+      setError('Your agreement is signed, but the secure payment link is taking longer than expected. Please refresh this page shortly.')
+      return
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 1_500))
+    try {
+      const response = await fetch('/api/public/signatures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: params.token }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to prepare the payment link.')
+      setSignature(data)
+      if (data.payment_url) {
+        setPaymentPreparing(false)
+        window.location.assign(data.payment_url)
+        return
+      }
+      await recoverPaymentLink(attempt + 1)
+    } catch {
+      await recoverPaymentLink(attempt + 1)
+    }
+  }
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!signatureDataUrl) {
@@ -254,6 +319,12 @@ export default function SignaturePage() {
       setComplete(true)
       setPageNumber(1)
       setNumPages(0)
+      if (data.payment_url) {
+        window.location.assign(data.payment_url)
+        return
+      }
+      setPaymentPreparing(true)
+      void recoverPaymentLink()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to complete the agreement.')
@@ -281,7 +352,7 @@ export default function SignaturePage() {
       <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#c9a76e]">
-            <FileText size={13} /> {complete ? 'Completed agreement' : 'Ready for your review'}
+            <FileText size={13} /> {complete ? 'Completed agreement' : signature.status === 'draft' ? 'Preparing your agreement' : 'Ready for your review'}
           </div>
           <h1 className="truncate font-serif text-[22px] font-medium leading-none text-[#f7f1e8] sm:text-2xl">
             {signature.contract_title || 'Event Space Agreement'}
@@ -303,7 +374,7 @@ export default function SignaturePage() {
             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9f9589]">
               <FileText size={13} className="text-[#c9a76e]" /> Agreement preview
             </div>
-            {!complete && (
+            {!complete && signature.status !== 'draft' && (
               <button type="button" onClick={goToSignature} className="text-[11px] font-semibold text-[#d5b477] transition hover:text-[#f0d5a4]">
                 Go to signature
               </button>
@@ -369,7 +440,13 @@ export default function SignaturePage() {
                 <p className="mt-4 text-sm leading-6 text-[#6f665b]">
                   Your signature and Luxor’s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
                   {signature.payment_url ? ' Your secure booking-payment link is ready below.' : ''}
+                  {paymentPreparing && !signature.payment_url ? ' Your secure booking-payment link is being prepared now.' : ''}
                 </p>
+                {error && (
+                  <div role="alert" className="mt-5 flex items-start gap-2 rounded-xl bg-[#fff3d8] p-3 text-xs leading-5 text-[#8d672b]">
+                    <AlertCircle className="mt-0.5 shrink-0" size={14} /> {error}
+                  </div>
+                )}
                 <div className="mt-7 rounded-xl border border-[#ded5c8] bg-[#faf7f2] p-4">
                   <div className="flex items-start gap-3">
                     <Check size={16} className="mt-0.5 text-[#2f7547]" />
@@ -389,6 +466,24 @@ export default function SignaturePage() {
                 <a href={pdfUrl} download className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f]">
                   <Download size={16} /> Download executed agreement
                 </a>
+              </div>
+            </div>
+          ) : signature.status === 'draft' ? (
+            <div className="flex min-h-[520px] flex-1 flex-col lg:min-h-0">
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#fff3d8] text-[#9b7740]">
+                  <LoaderCircle className="animate-spin" size={23} />
+                </div>
+                <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]">Proposal accepted</p>
+                <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">Your agreement is opening.</h2>
+                <p className="mt-4 text-sm leading-6 text-[#6f665b]">
+                  Luxor is activating the secure signing step now. This page will unlock automatically as soon as the agreement is ready.
+                </p>
+                {error && (
+                  <div role="alert" className="mt-6 flex items-start gap-2 rounded-xl bg-[#f7e7e2] p-3 text-xs leading-5 text-[#9a4937]">
+                    <AlertCircle className="mt-0.5 shrink-0" size={14} /> {error}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

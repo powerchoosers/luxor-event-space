@@ -3,6 +3,7 @@ import { queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueSe
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
+import { hasLuxorSignatureDeliveryDocuments } from '@/lib/luxorSignaturesServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,12 +61,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       inquiry,
       requestedBy: 'Client Proposal Portal',
     })
+    const signingUrl = result.signature.token && hasLuxorSignatureDeliveryDocuments(result.signature) && ['sent', 'viewed'].includes(result.signature.status)
+      ? `${(process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, '')}/secure-portal/sign/${encodeURIComponent(result.signature.token)}`
+      : null
     return NextResponse.json({
       accepted: true,
       alreadyAccepted: !acceptanceClaim || Boolean(invoice.proposal_accepted_at),
       agreementQueued: result.delivery === 'queued',
       agreementPreparing: result.delivery === 'preparing',
       agreementAlreadySent: result.delivery === 'already_sent' || result.delivery === 'already_signed',
+      signingUrl,
     }, { status: result.delivery === 'preparing' || result.delivery === 'queued' ? 202 : 200 })
   } catch (error) {
     // The client never needs to interpret a database or provider implementation

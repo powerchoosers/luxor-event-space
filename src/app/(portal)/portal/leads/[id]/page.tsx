@@ -2879,8 +2879,10 @@ export default function LeadDetailPage({
       .filter((job) => job.booking_id === agreementBooking.id && job.job_type === 'contract_signature')
       .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())[0] || null
     : null
-  const agreementDeliveryConfirmed = agreementDeliveryJob?.status === 'sent'
-  const agreementDeliveryPending = agreementDeliveryJob?.status === 'queued' || agreementDeliveryJob?.status === 'sending'
+  const directAgreementHandoffConfirmed = agreementBooking?.metadata?.direct_handoff_channel === 'proposal_acceptance'
+    || typeof agreementBooking?.metadata?.direct_handoff_at === 'string'
+  const agreementDeliveryConfirmed = directAgreementHandoffConfirmed || agreementDeliveryJob?.status === 'sent'
+  const agreementDeliveryPending = !directAgreementHandoffConfirmed && (agreementDeliveryJob?.status === 'queued' || agreementDeliveryJob?.status === 'sending')
   const agreementDeliveryFailed = agreementDeliveryJob?.status === 'failed'
   const agreementAwaitingSignature = Boolean(
     agreementBooking &&

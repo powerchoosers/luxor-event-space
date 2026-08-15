@@ -4,12 +4,15 @@ import type { LuxorBooking, LuxorEmailJob, LuxorInquiry, LuxorInvoice, LuxorSign
 import { createOrGetLuxorBookingForInvoice, getLuxorBooking, getLuxorBookingByInvoice, updateLuxorBooking } from './luxorBookingsServer'
 import { createLuxorEmailJob, listLuxorEmailJobsForInquiry, updateLuxorEmailJob } from './luxorEmailJobsServer'
 import { updateInvoice } from './luxorInvoicesServer'
+import { updateLuxorInquiry } from './luxorInquiriesServer'
 import { roundLuxorMoney } from './luxorOffer'
 import { buildLuxorProposalContractEmail } from './luxorProposalEmailServer'
 import {
   createLuxorSignatureRequest,
+  activateLuxorDirectAgreementHandoff,
   getActiveLuxorSignatureRequestByBooking,
   getLatestLuxorSignatureRequestByBooking,
+  hasLuxorDirectAgreementHandoff,
   hasLuxorSignatureDeliveryDocuments,
   updateLuxorSignatureRequest,
 } from './luxorSignaturesServer'
@@ -110,10 +113,9 @@ function agreementJobMetadata(invoice: LuxorInvoice, requestedBy: string, extra:
 
 function agreementWasDelivered(signature: LuxorSignatureRequest, job: LuxorEmailJob | null) {
   return Boolean(
-    signature.status === 'viewed' ||
-    signature.status === 'signed' ||
     signature.metadata?.agreementDeliveryState === 'delivered' ||
-    job?.status === 'sent',
+    job?.status === 'sent' ||
+    (!hasLuxorDirectAgreementHandoff(signature) && (signature.status === 'viewed' || signature.status === 'signed')),
   )
 }
 
@@ -247,12 +249,12 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
     throw new Error('This Event Agreement no longer has an active client recipient.')
   }
 
-  const booking = await getOrCreateBooking(invoice, inquiry)
+  let booking = await getOrCreateBooking(invoice, inquiry)
   // Build the schedule once the proposal is accepted. The first date is
   // provisional until the agreement is signed; signing refreshes the same
   // rows using the booking/Stripe anchor without touching paid rows.
   await syncLuxorPaymentInstallments({ booking, invoice })
-  const signature = await getOrCreateSignature(booking)
+  let signature = await getOrCreateSignature(booking)
   if (!hasLuxorSignatureDeliveryDocuments(signature)) {
     return {
       delivery: 'preparing',
@@ -261,6 +263,45 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
       job: null,
       message: 'The Event Agreement PDFs are still being prepared. No email has been sent.',
     }
+  }
+
+  // The client has already authenticated possession of the private proposal
+  // link. Activate the same signing record for the in-app handoff immediately
+  // instead of making the client wait for the queued backup email or its send
+  // window. The email worker still uses the same record and sends the full
+  // package later, with its own provider-delivery audit state.
+  if (signature.status === 'draft') {
+    signature = await activateLuxorDirectAgreementHandoff(signature)
+  }
+  if (hasLuxorDirectAgreementHandoff(signature) && ['sent', 'viewed'].includes(signature.status)) {
+    const directHandoffAt = typeof signature.metadata?.directHandoffActivatedAt === 'string'
+      ? signature.metadata.directHandoffActivatedAt
+      : new Date().toISOString()
+    if (booking.contract_status !== 'sent' && booking.contract_status !== 'viewed' && booking.contract_status !== 'signed') {
+      booking = await updateLuxorBooking(booking.id, {
+        contract_status: 'sent',
+        contract_sent_at: directHandoffAt,
+        metadata: {
+          ...booking.metadata,
+          latest_signature_request_id: signature.id,
+          direct_handoff_channel: 'proposal_acceptance',
+          direct_handoff_at: directHandoffAt,
+          reservation_state: 'awaiting_signature',
+        },
+      }) || booking
+    }
+    await updateLuxorInquiry(inquiry.id, {
+      status: 'proposal_sent',
+      pipeline_stage: 'contract',
+      metadata: {
+        ...inquiry.metadata,
+        proposal_accepted_at: invoice.proposal_accepted_at,
+        latest_proposal_invoice_id: invoice.id,
+        latest_signature_request_id: signature.id,
+        direct_handoff_channel: 'proposal_acceptance',
+        direct_handoff_at: directHandoffAt,
+      },
+    })
   }
   if (signature.status === 'signed' || booking.contract_status === 'signed') {
     return {

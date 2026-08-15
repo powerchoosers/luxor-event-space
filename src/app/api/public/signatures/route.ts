@@ -118,34 +118,39 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const signedName = String(body.signedName || '').trim()
+    const token = String(body.token || '').trim()
+    const pendingSignature = await getLuxorSignatureRequestByToken(token)
+    if (!pendingSignature) {
+      return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
+    }
+    const recoveryOnly = pendingSignature.status === 'signed'
+    const signedName = String(body.signedName || pendingSignature.signed_name || '').trim()
 
     if (!signedName) {
       return NextResponse.json({ error: 'Please type your legal name.' }, { status: 400 })
     }
 
-    if (!body.accepted) {
+    if (!recoveryOnly && !body.accepted) {
       return NextResponse.json({ error: 'Please accept the signing acknowledgement.' }, { status: 400 })
     }
 
     const signatureDataUrl = String(body.signatureDataUrl || '')
-    if (!/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(signatureDataUrl)) {
+    if (!recoveryOnly && !/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(signatureDataUrl)) {
       return NextResponse.json({ error: 'Please add your signature before completing the agreement.' }, { status: 400 })
     }
-    if (signatureDataUrl.length > 2_500_000) {
+    if (!recoveryOnly && signatureDataUrl.length > 2_500_000) {
       return NextResponse.json({ error: 'The signature image is too large. Please clear it and try again.' }, { status: 413 })
     }
 
-    const pendingSignature = await getLuxorSignatureRequestByToken(String(body.token || ''))
     const pendingBooking = pendingSignature ? await getLuxorBooking(pendingSignature.booking_id) : null
     const pendingInvoice = pendingBooking?.invoice_id ? await getInvoice(pendingBooking.invoice_id) : null
-    if (pendingInvoice && isLuxorOfferExpired(pendingInvoice)) {
-      await updateLuxorSignatureRequest(pendingSignature!.id, { status: 'void', metadata: { ...pendingSignature!.metadata, voidReason: 'proposal_offer_expired', voidedAt: new Date().toISOString() } })
+    if (!recoveryOnly && pendingInvoice && isLuxorOfferExpired(pendingInvoice)) {
+      await updateLuxorSignatureRequest(pendingSignature.id, { status: 'void', metadata: { ...pendingSignature.metadata, voidReason: 'proposal_offer_expired', voidedAt: new Date().toISOString() } })
       return NextResponse.json({ error: 'This proposal offer has expired. Luxor will need to send an updated agreement before it can be signed.' }, { status: 410 })
     }
 
     const signature = await signLuxorSignatureRequest({
-      token: String(body.token || ''),
+      token,
       signedName,
       signatureDataUrl,
       ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),

@@ -1,8 +1,11 @@
 import { Check, FileCheck2, FileText, ShieldCheck } from 'lucide-react'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getInvoiceByPublicToken, markLuxorProposalViewed } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { hasLuxorSignatureDeliveryDocuments } from '@/lib/luxorSignaturesServer'
 import { formatLuxorOfferExpiry, isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { AcceptProposalButton } from '@/components/proposal/AcceptEstimateButton'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
@@ -32,7 +35,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   if (!invoice || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') notFound()
 
   const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-  const booking = invoice.booking_id
+  let booking = invoice.booking_id
     ? await getLuxorBooking(invoice.booking_id)
     : bookings.find((item) => item.invoice_id === invoice.id)
   const context = (invoice.proposal_context && typeof invoice.proposal_context === 'object'
@@ -41,7 +44,6 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const offerExpired = isLuxorOfferExpired(invoice)
   const isPublished = invoice.status === 'sent' && Boolean(invoice.price_locked_at)
   const isAccepted = Boolean(invoice.proposal_accepted_at) || Boolean(booking)
-  const contractSigned = booking?.contract_status === 'signed'
   const pricingSummary = getLuxorProposalPricingSummary(invoice)
   const finalPrice = pricingSummary.finalEventPrice
   const refundableSecurityDeposit = Number(context.refundable_security_deposit ?? booking?.security_deposit_amount ?? LUXOR_DEFAULT_SECURITY_DEPOSIT)
@@ -57,6 +59,30 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   // the signed portal session rather than trusting the mere presence of a
   // cookie with that name.
   const isInternalOwner = Boolean(await getVerifiedLuxorPortalSession())
+  let directAgreementUrl: string | null = null
+  if (invoice.proposal_accepted_at && booking && booking.contract_status !== 'signed' && !isInternalOwner && invoice.inquiry_id) {
+    const inquiry = await getLuxorInquiry(invoice.inquiry_id)
+    if (inquiry?.email && inquiry.status !== 'closed_lost') {
+      try {
+        const recovery = await queueLuxorAcceptedProposalAgreement({
+          invoice,
+          inquiry,
+          requestedBy: 'Client Proposal Portal Recovery',
+        })
+        booking = recovery.booking
+        if (recovery.signature.token && hasLuxorSignatureDeliveryDocuments(recovery.signature) && ['sent', 'viewed'].includes(recovery.signature.status)) {
+          directAgreementUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')}/secure-portal/sign/${encodeURIComponent(recovery.signature.token)}`
+        }
+      } catch (error) {
+        // The proposal remains readable if a recovery attempt is temporarily
+        // unavailable; the queued agreement worker can still retry safely.
+        console.error('Accepted proposal agreement recovery failed:', error)
+      }
+    }
+  }
+  if (directAgreementUrl) redirect(directAgreementUrl)
+  const contractSigned = booking?.contract_status === 'signed'
+  const agreementReady = booking?.contract_status === 'sent' || booking?.contract_status === 'viewed'
   if (isPublished && !invoice.proposal_viewed_at && !isInternalOwner) {
     const firstView = await markLuxorProposalViewed(invoice.id)
     if (firstView && invoice.inquiry_id) {
@@ -80,7 +106,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     : contractSigned
       ? { eyebrow: 'Agreement complete', title: 'Your secure payment link is on its way', copy: 'Luxor has sent the next payment link after your signed Event Agreement. The refundable security deposit remains separately tracked.', tone: 'emerald' }
       : isAccepted
-        ? { eyebrow: 'Proposal accepted', title: 'Your Event Agreement has been sent', copy: 'Please review and sign the agreement from your Luxor email. A Stripe payment link is sent only after the agreement is signed.', tone: 'gold' }
+        ? agreementReady
+          ? { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is ready', copy: 'Review and sign the agreement now. Luxor will open the secure payment step only after the agreement is signed.', tone: 'gold' }
+          : { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is being prepared', copy: 'Luxor is preparing your secure signing step now. The payment link will be created only after the agreement is signed.', tone: 'gold' }
         : { eyebrow: 'Final proposal', title: 'Review and select your package', copy: 'This is the final calculated price for the services shown below. Selecting it creates your Event Agreement; it does not charge you.', tone: 'gold' }
 
   return (

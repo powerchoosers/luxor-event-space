@@ -104,6 +104,44 @@ export function hasLuxorSignatureDeliveryDocuments(signature: Pick<LuxorSignatur
   return Boolean(signature.contract_document_path?.trim() && signature.guest_guide_path?.trim())
 }
 
+/**
+ * A proposal acceptance can hand the client into the signing portal before
+ * the queued backup email is released. This metadata distinguishes that
+ * in-app delivery channel from a Zoho-delivered agreement, so the worker can
+ * still send the email package later without blocking the client first.
+ */
+export function hasLuxorDirectAgreementHandoff(signature: Pick<LuxorSignatureRequest, 'metadata'>) {
+  return signature.metadata?.directHandoff === true
+}
+
+export async function activateLuxorDirectAgreementHandoff(
+  signature: LuxorSignatureRequest,
+  activatedAt = new Date().toISOString(),
+) {
+  if (!hasLuxorSignatureDeliveryDocuments(signature) || signature.status !== 'draft') return signature
+
+  const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+    `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=eq.draft&updated_at=eq.${encodeURIComponent(signature.updated_at)}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'sent',
+        metadata: {
+          ...(signature.metadata || {}),
+          directHandoff: true,
+          directHandoffChannel: 'proposal_acceptance',
+          directHandoffActivatedAt: activatedAt,
+        },
+        updated_at: activatedAt,
+      }),
+    },
+  )
+
+  if (updated) return updated
+  return await getLuxorSignatureRequestById(signature.id) || signature
+}
+
 const FRESH_SIGNATURE_PREPARATION_MS = 2 * 60 * 1000
 const FRESH_AGREEMENT_DELIVERY_CLAIM_MS = 2 * 60 * 1000
 
@@ -412,11 +450,10 @@ export type LuxorSignatureAgreementDeliveryClaim = {
 }
 
 /**
- * Claims the one client-facing agreement delivery for a signature. The draft
- * remains a draft while delivery is in flight, so the owner portal never calls
- * an agreement "sent" before Zoho has accepted it. A stale interrupted attempt
- * can be recovered later without voiding the agreement the client is meant to
- * sign.
+ * Claims the one provider-facing agreement delivery for a signature. A direct
+ * proposal handoff may already be marked sent/viewed/signed because the client
+ * can use the in-app signing channel immediately; the provider delivery state
+ * remains separate so the queued email still sends exactly once.
  */
 export async function claimLuxorSignatureAgreementDelivery(
   signature: LuxorSignatureRequest,
@@ -431,7 +468,7 @@ export async function claimLuxorSignatureAgreementDelivery(
     agreementDeliveryState(signature) === 'retry_requested' &&
     signature.metadata?.agreementDeliveryRequestId === options.deliveryRequestId,
   )
-  if (!requestedResend && (signature.status === 'viewed' || agreementDeliveryState(signature) === 'delivered')) {
+  if (!requestedResend && agreementDeliveryState(signature) === 'delivered') {
     return { state: 'delivered', signature }
   }
 
@@ -479,6 +516,32 @@ export async function claimLuxorSignatureAgreementDelivery(
       },
     )
     claimed = updated ?? null
+  } else if (['sent', 'viewed', 'signed'].includes(signature.status) && agreementDeliveryState(signature) === 'preparing') {
+    if (hasFreshAgreementDeliveryClaim(signature)) {
+      return { state: 'in_flight', signature }
+    }
+    const staleBefore = new Date(Date.now() - FRESH_AGREEMENT_DELIVERY_CLAIM_MS).toISOString()
+    const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=eq.${encodeURIComponent(signature.status)}&metadata->>agreementDeliveryState=eq.preparing&updated_at=lte.${encodeURIComponent(staleBefore)}`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ metadata: nextMetadata, updated_at: claimedAt }),
+      },
+    )
+    claimed = updated ?? null
+  } else if (hasLuxorDirectAgreementHandoff(signature) && ['sent', 'viewed', 'signed'].includes(signature.status) && !agreementDeliveryState(signature)) {
+    // The in-app handoff is already usable. Claim the queued provider email
+    // immediately, including if the client signed before the next cron tick.
+    const [updated] = await supabaseRest<LuxorSignatureRequest[]>(
+      `luxor_signature_requests?select=*&id=eq.${encodeURIComponent(signature.id)}&status=eq.${encodeURIComponent(signature.status)}&metadata->>directHandoff=eq.true&updated_at=eq.${encodeURIComponent(signature.updated_at)}`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ metadata: nextMetadata, updated_at: claimedAt }),
+      },
+    )
+    claimed = updated ?? null
   } else if (signature.status === 'sent') {
     if (hasFreshAgreementDeliveryClaim(signature)) {
       return { state: 'in_flight', signature }
@@ -501,7 +564,7 @@ export async function claimLuxorSignatureAgreementDelivery(
   if (claimed) return { state: 'claimed', signature: claimed }
 
   const current = await getLuxorSignatureRequestById(signature.id)
-  if (current && !requestedResend && (current.status === 'viewed' || agreementDeliveryState(current) === 'delivered')) {
+  if (current && !requestedResend && agreementDeliveryState(current) === 'delivered') {
     return { state: 'delivered', signature: current }
   }
   return { state: 'in_flight', signature: current || signature }

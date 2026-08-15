@@ -107,7 +107,7 @@ export async function deliverLuxorAgreementEmailJob(job: LuxorEmailJob): Promise
   if (signature.client_email.trim().toLowerCase() !== inquiry.email.trim().toLowerCase()) {
     throw new Error('The signing record email does not match the accepted proposal recipient.')
   }
-  if (signature.status === 'signed') {
+  if (signature.status === 'signed' && signature.metadata?.agreementDeliveryState === 'delivered') {
     return { status: 'already_delivered' }
   }
 
@@ -181,8 +181,9 @@ export async function deliverLuxorAgreementEmailJob(job: LuxorEmailJob): Promise
 
   try {
     const deliveredSignature = await markLuxorSignatureAgreementDelivery(claimedSignature, 'delivered', sentAt)
+    const agreementSigned = signature.status === 'signed' || booking.contract_status === 'signed'
     await updateLuxorBooking(booking.id, {
-      contract_status: booking.contract_status === 'viewed' ? 'viewed' : 'sent',
+      contract_status: agreementSigned ? 'signed' : booking.contract_status === 'viewed' ? 'viewed' : 'sent',
       contract_sent_at: sentAt,
       metadata: {
         ...booking.metadata,
@@ -192,8 +193,10 @@ export async function deliverLuxorAgreementEmailJob(job: LuxorEmailJob): Promise
       },
     })
     await updateLuxorInquiry(inquiry.id, {
-      status: 'booked',
-      pipeline_stage: 'contract',
+      // Delivery moves the inquiry into the contract stage, but it is not a
+      // booking yet. The signed agreement is the gate that moves it to booked.
+      status: agreementSigned ? 'booked' : 'proposal_sent',
+      pipeline_stage: agreementSigned ? inquiry.pipeline_stage || 'deposit' : 'contract',
       metadata: {
         ...inquiry.metadata,
         proposal_accepted_at: invoice.proposal_accepted_at,
