@@ -645,6 +645,7 @@ export default function LeadsPage() {
             </div>
           }
         >
+          <div className="hidden overflow-x-auto md:block">
           <PortalStickyTable minWidth="1060px">
             <PortalStickyThead>
               <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
@@ -775,6 +776,15 @@ export default function LeadsPage() {
               )}
             </tbody>
           </PortalStickyTable>
+          </div>
+          <MobileLeadList
+            leads={paginatedLeads}
+            startIndex={startIndex}
+            selectedIds={bulkSelection}
+            onToggle={bulkSelection.toggle}
+            onLifecycleAction={openLeadLifecycleAction}
+            showPipelineStage
+          />
         </PortalTableCard>
       ) : (
         <div ref={boardRef} onScroll={handleBoardScroll} className="flex-1 min-h-0 overflow-x-auto portal-scrollbar -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 flex gap-4 select-none">
@@ -1612,7 +1622,7 @@ function LeadsClientsTab({
         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
       }
     >
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <PortalStickyTable minWidth="900px">
           <PortalStickyThead>
             <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
@@ -1650,7 +1660,127 @@ function LeadsClientsTab({
           </tbody>
         </PortalStickyTable>
       </div>
+      <div className="divide-y divide-[color:var(--portal-border)] md:hidden">
+        {clients.length === 0 ? (
+          <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
+        ) : (
+          clients.map((client) => (
+            <MobileLeadCard
+              key={client.id}
+              lead={client}
+              onLifecycleAction={onLifecycleAction}
+              showPipelineStage={false}
+            />
+          ))
+        )}
+      </div>
     </PortalTableCard>
+  )
+}
+
+function MobileLeadList({
+  leads,
+  startIndex,
+  selectedIds,
+  onToggle,
+  onLifecycleAction,
+  showPipelineStage,
+}: {
+  leads: LuxorInquiry[]
+  startIndex: number
+  selectedIds: { isSelected: (id: string) => boolean }
+  onToggle: (id: string) => void
+  onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
+  showPipelineStage: boolean
+}) {
+  return (
+    <div className="divide-y divide-[color:var(--portal-border)] md:hidden">
+      {leads.length === 0 ? (
+        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No records matching search parameters.</div>
+      ) : (
+        leads.map((lead, index) => (
+          <MobileLeadCard
+            key={lead.id}
+            lead={lead}
+            index={startIndex + index + 1}
+            selected={selectedIds.isSelected(lead.id)}
+            onToggle={onToggle}
+            onLifecycleAction={onLifecycleAction}
+            showPipelineStage={showPipelineStage}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+function MobileLeadCard({
+  lead,
+  index,
+  selected = false,
+  onToggle,
+  onLifecycleAction,
+  showPipelineStage,
+}: {
+  lead: LuxorInquiry
+  index?: number
+  selected?: boolean
+  onToggle?: (id: string) => void
+  onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
+  showPipelineStage: boolean
+}) {
+  const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || 'Pipeline'
+
+  return (
+    <article className={`p-4 ${selected ? 'bg-[#caa24c]/8' : ''}`}>
+      <div className="flex items-start gap-3">
+        {onToggle ? (
+          <div className="pt-1">
+            <PortalBulkRowSelector checked={selected} index={index || 1} onChange={() => onToggle(lead.id)} label={lead.full_name} />
+          </div>
+        ) : null}
+        <Link href={`/portal/leads/${lead.id}`} className="flex min-w-0 flex-1 items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+          <PortalContactAvatar
+            name={lead.full_name}
+            avatarUrl={lead.metadata?.avatar_url as string | null}
+            size="md"
+            className="shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
+            <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">
+              {lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact details')}
+            </p>
+          </div>
+        </Link>
+        <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-3 text-xs">
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p>
+          <p className="mt-1 truncate font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p>
+          <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p>
+        </div>
+        {showPipelineStage ? (
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Pipeline</p>
+            <p className="mt-1 truncate font-semibold text-[#a8792f] dark:text-[#f1d27a]">{stageLabel}</p>
+          </div>
+        ) : null}
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p>
+          <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p>
+        </div>
+      </div>
+
+      <Link href={`/portal/leads/${lead.id}`} className="mt-3 inline-flex min-h-9 items-center text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
+        Open contact dossier <span className="ml-1" aria-hidden="true">→</span>
+      </Link>
+    </article>
   )
 }
 
