@@ -1,3 +1,5 @@
+import { LUXOR_TIME_DROPDOWN_OPTIONS } from './luxorTimeOptions'
+
 export type LuxorTourSlotStatus = 'available' | 'held' | 'booked' | 'unavailable'
 
 export type LuxorTourSlot = {
@@ -25,19 +27,17 @@ export type PublicLuxorTourSlot = {
 
 export const LUXOR_TOUR_TIME_ZONE = 'America/Chicago'
 export const LUXOR_TOUR_MIN_NOTICE_HOURS = 24
-export const LUXOR_TOUR_TIMES = [
-  { startTime: '11:00:00', endTime: '11:30:00' },
-  { startTime: '11:30:00', endTime: '12:00:00' },
-  { startTime: '12:00:00', endTime: '12:30:00' },
-  { startTime: '12:30:00', endTime: '13:00:00' },
-  { startTime: '13:00:00', endTime: '13:30:00' },
-  { startTime: '13:30:00', endTime: '14:00:00' },
-  { startTime: '17:00:00', endTime: '17:30:00' },
-  { startTime: '17:30:00', endTime: '18:00:00' },
-  { startTime: '18:00:00', endTime: '18:30:00' },
-  { startTime: '18:30:00', endTime: '19:00:00' },
-  { startTime: '19:00:00', endTime: '19:30:00' },
-] as const
+
+function addMinutesToClockTime(value: string, minutesToAdd: number) {
+  const [hours, minutes] = value.split(':').map(Number)
+  const total = ((hours * 60) + minutes + minutesToAdd) % (24 * 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+export const LUXOR_TOUR_TIMES = LUXOR_TIME_DROPDOWN_OPTIONS.map(({ value }) => ({
+  startTime: `${value}:00`,
+  endTime: `${addMinutesToClockTime(value, 30)}:00`,
+}))
 
 export function isLuxorTourDay(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false

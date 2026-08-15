@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { PortalButton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, type LuxorTourSlot } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_TIMES, type LuxorTourSlot } from '@/lib/luxorTourSlots'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -24,7 +24,7 @@ type TourAvailabilityManagerProps = {
 
 export function TourAvailabilityManager({
   title = 'Tour booking days',
-  description = 'Select several weekdays, then open or close them together. Each open day publishes eleven 30-minute times; every time accepts one client and closes 24 hours before it starts.',
+  description = `Select several weekdays, then open or close them together. Each open day publishes ${LUXOR_TOUR_TIMES.length} 30-minute times from 8:00 AM through 1:00 AM; every time accepts one client and closes 24 hours before it starts.`,
   publishLabel = 'Open selected days',
   onUpdated,
 }: TourAvailabilityManagerProps = {}) {
@@ -76,7 +76,7 @@ export function TourAvailabilityManager({
   const eligibleDates = useMemo(() => calendarDays
     .filter((date): date is Date => Boolean(date))
     .map(isoDate)
-    .filter((date) => isLuxorTourDay(date) && isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00')),
+    .filter((date) => isLuxorTourDay(date) && isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_TIMES[0]?.startTime || '08:00:00')),
   [calendarDays])
 
   function toggleDate(date: string) {
@@ -125,7 +125,7 @@ export function TourAvailabilityManager({
         </div>
         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-right">
           <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-faint)]">Weekly hours</p>
-          <p className="mt-1 text-xs font-semibold text-[color:var(--portal-text)]">Mon–Fri · 11 AM–2 PM / 5–7:30 PM</p>
+          <p className="mt-1 text-xs font-semibold text-[color:var(--portal-text)]">Mon–Fri · 8 AM–1 AM</p>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ export function TourAvailabilityManager({
         <div className="flex flex-col rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
           <CalendarDays size={20} className="text-[#a8792f]" />
           <p className="mt-4 text-3xl font-semibold text-[color:var(--portal-text)]">{selectedDates.length}</p>
-          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">days selected · {selectedDates.length * 11} tour times</p>
+          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">days selected · {selectedDates.length * LUXOR_TOUR_TIMES.length} tour times</p>
           {loading ? <p className="mt-4 flex items-center gap-2 text-xs text-[color:var(--portal-muted)]"><Loader2 size={13} className="animate-spin" /> Loading current schedule…</p> : null}
           <div className="mt-auto space-y-2 pt-6">
             <PortalButton type="button" variant="primary" className="w-full" disabled={!selectedDates.length || Boolean(saving)} onClick={() => void updateDays('publish')}>
@@ -189,7 +189,7 @@ export function TourAvailabilityManager({
         <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-faint)]">Times created on every open day</p>
         <p className="mt-2 text-xs leading-6 text-[color:var(--portal-text)]">
           {slots.length === 0 && !loading ? 'No tour days are open yet. ' : ''}
-          {['11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM'].join(' · ')}
+          8:00 AM through 1:00 AM in 30-minute intervals.
         </p>
       </div>
     </div>

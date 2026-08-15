@@ -31,6 +31,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
+import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import {
   ElenaLeadUpdateCard,
@@ -1254,9 +1255,9 @@ function ElenaContactCard({ payload }: { payload: LeadContactCardPayload }) {
 
 function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPayload; onSuccess: (message: string) => void }) {
   const [tourDate, setTourDate] = useState(payload.tourDate)
-  const [tourTime, setTourTime] = useState(payload.tourTime)
+  const [tourTime, setTourTime] = useState(normalizeLuxorTimeDropdownValue(payload.tourTime))
   const [meetingType, setMeetingType] = useState(payload.meetingType || 'Private Venue Tour')
-  const [durationMinutes, setDurationMinutes] = useState(String(payload.durationMinutes || 60))
+  const [durationMinutes, setDurationMinutes] = useState(String(payload.durationMinutes || 30))
   const [clientFacingNotes, setClientFacingNotes] = useState(payload.clientFacingNotes)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1314,7 +1315,7 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
           </div>
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Time</label>
-            <PortalSelect value={tourTime} onChange={setTourTime} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" placeholder="Choose time" options={TOUR_TIME_OPTIONS} />
+            <PortalSelect value={tourTime} onChange={setTourTime} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" placeholder="Choose time" options={LUXOR_TIME_DROPDOWN_OPTIONS} />
           </div>
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Meeting</label>
@@ -1340,13 +1341,6 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
     </div>
   )
 }
-
-const TOUR_TIME_OPTIONS = Array.from({ length: 19 }, (_, index) => {
-  const hour = index + 8
-  const suffix = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return { value: `${displayHour}:00 ${suffix}`, label: `${displayHour}:00 ${suffix}` }
-})
 
 const TOUR_MEETING_TYPE_OPTIONS = [
   { value: 'Private Venue Tour', label: 'Private Venue Tour' },

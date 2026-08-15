@@ -25,6 +25,11 @@ export type LuxorPaymentSchedule = {
 }
 
 const COUNTS: Array<2 | 3 | 4 | 5> = [2, 3, 4, 5]
+// The first payment is due at booking and the final one is due 60 days before
+// the event. A three-week minimum between scheduled payments lets events about
+// five months away support the requested 4- and 5-payment choices while still
+// producing a meaningful schedule from the actual deadline.
+const MINIMUM_PAYMENT_INTERVAL_DAYS = 21
 
 function cents(value: number) { return Math.round(value * 100) }
 function money(value: number) { return Math.round(value * 100) / 100 }
@@ -54,11 +59,9 @@ export function availablePaymentCounts(bookingDate: string, eventDate: string): 
   const finalDate = deadline ? parseDate(deadline) : null
   if (!booking || !finalDate) return []
   const days = daysBetween(booking, finalDate)
-  if (days <= 0) return []
-  if (days < 120) return [2]
-  if (days < 180) return [2, 3]
-  if (days < 240) return [2, 3, 4]
-  return COUNTS
+  if (days < MINIMUM_PAYMENT_INTERVAL_DAYS) return []
+
+  return COUNTS.filter((count) => days >= ((count - 1) * MINIMUM_PAYMENT_INTERVAL_DAYS))
 }
 
 function paymentDate(booking: Date, deadline: Date, index: number, count: number) {

@@ -9,11 +9,16 @@ import {
   unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
 } from '@/lib/luxorTourSlotsServer'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime, LUXOR_TOUR_TIMES } from '@/lib/luxorTourSlots'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function timeMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return (hours * 60) + minutes
+}
 
 export async function GET(request: Request) {
   try {
@@ -41,7 +46,7 @@ export async function POST(request: Request) {
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
         return NextResponse.json({ error: 'Choose 1–62 weekdays.' }, { status: 400 })
       }
-      if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, '11:00:00'))) {
+      if (dates.some((date) => !isLuxorTourSlotAtLeast24HoursAway(date, LUXOR_TOUR_TIMES[0]?.startTime || '08:00:00'))) {
         return NextResponse.json({ error: 'Published days must be at least 24 hours away.' }, { status: 400 })
       }
       const slots = await publishLuxorTourDays(dates)
@@ -52,15 +57,18 @@ export async function POST(request: Request) {
     const endTime = body.endTime ? String(body.endTime) : null
     const capacity = Number(body.capacity || 1)
 
-    if (!DATE_PATTERN.test(slotDate) || !isLuxorTourDay(slotDate) || !isLuxorTourSlotAtLeast24HoursAway(slotDate, startTime)) {
-      return NextResponse.json({ error: 'Choose a weekday at least 24 hours away.' }, { status: 400 })
-    }
     if (!TIME_PATTERN.test(startTime) || (endTime && !TIME_PATTERN.test(endTime))) {
       return NextResponse.json({ error: 'Choose a valid start and end time.' }, { status: 400 })
     }
+    if (!DATE_PATTERN.test(slotDate) || !isLuxorTourDay(slotDate) || !isLuxorTourSlotAtLeast24HoursAway(slotDate, startTime)) {
+      return NextResponse.json({ error: 'Choose a weekday at least 24 hours away.' }, { status: 400 })
+    }
     if (!isLuxorTourTime(startTime)) return NextResponse.json({ error: 'Choose one of Luxor’s tour times.' }, { status: 400 })
-    if (endTime && endTime <= startTime) {
-      return NextResponse.json({ error: 'The end time must be after the start time.' }, { status: 400 })
+    if (endTime) {
+      const duration = (timeMinutes(endTime) - timeMinutes(startTime) + (24 * 60)) % (24 * 60)
+      if (duration <= 0 || duration > 180) {
+        return NextResponse.json({ error: 'The end time must be within three hours of the start time.' }, { status: 400 })
+      }
     }
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 10) {
       return NextResponse.json({ error: 'Capacity must be between 1 and 10.' }, { status: 400 })

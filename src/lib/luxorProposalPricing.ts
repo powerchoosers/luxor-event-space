@@ -164,7 +164,6 @@ export type LuxorProposalCalculation = {
 
 const CONFIGURATION_ERROR = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
-const PAYMENT_POLICY_REQUIRED = 'Acknowledge the payment and cancellation terms in Step 5 before publishing this proposal.'
 
 /**
  * The code fallback mirrors the approved rate schedule. It intentionally has
@@ -215,7 +214,7 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
     },
   },
   // The supporting package workbook prices this setup at $500 for the
-  // Rental Only and Bronze packages. Keeping it explicit here prevents the
+  // Custom Package and Bronze packages. Keeping it explicit here prevents the
   // component from disappearing into a made-up package total.
   tables_and_chairs_setup: { retail: 500, all_inclusive: 0 },
   decor: {
@@ -252,7 +251,7 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
 }
 
 const PACKAGE_NAMES: Record<LuxorProposalPackageId, string> = {
-  rental_only: 'Rental Only',
+  rental_only: 'Custom Package',
   bronze_essentials: 'Bronze - Essentials',
   silver_premier: 'Silver - Premier',
   gold_all_inclusive: 'Gold - All-Inclusive',
@@ -347,7 +346,7 @@ function readNumber(root: unknown, ...path: string[]) {
 
 function normalizePackageId(value: unknown): LuxorProposalPackageId | null {
   const normalized = String(value || '').toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized === 'rentalonly' || normalized === 'rentonly' || normalized === 'venue') return 'rental_only'
+  if (normalized === 'custompackage' || normalized === 'rentalonly' || normalized === 'rentonly' || normalized === 'venue') return 'rental_only'
   if (normalized === 'bronzeessentials' || normalized === 'bronze' || normalized === 'essentials') return 'bronze_essentials'
   if (normalized === 'silverpremier' || normalized === 'silver' || normalized === 'premier') return 'silver_premier'
   if (normalized === 'goldallinclusive' || normalized === 'gold' || normalized === 'allinclusive') return 'gold_all_inclusive'
@@ -1185,7 +1184,6 @@ export function calculateLuxorProposal(
   // and outside the actual pricing-error bucket.
   const publicationErrors = [
     ...(paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]),
-    ...((selection.paymentPolicyAcknowledged === true || selection.payment_policy_acknowledged === true) ? [] : [PAYMENT_POLICY_REQUIRED]),
     ...(legacyDiscount && !resolvedPromotion ? ['Save this legacy draft adjustment as a promotion before publishing this proposal.'] : []),
   ]
   const errors = [...new Set([...calculationErrors, ...publicationErrors])]

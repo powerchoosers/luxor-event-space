@@ -7,18 +7,7 @@ import { renderEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
-
-const scheduleTimeOptions = Array.from({ length: 25 }, (_, index) => {
-  const totalMinutes = 8 * 60 + index * 30
-  const hours24 = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  const suffix = hours24 >= 12 ? 'PM' : 'AM'
-  const hours12 = hours24 % 12 || 12
-  return {
-    value: `${String(hours24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-    label: `${hours12}:${String(minutes).padStart(2, '0')} ${suffix}`,
-  }
-})
+import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 
 interface EmailPreviewProps {
   isOpen: boolean
@@ -758,7 +747,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
                         onChange={setScheduledTime}
                         className="w-full"
                         placeholder="Pick a time"
-                        options={scheduleTimeOptions}
+                        options={LUXOR_TIME_DROPDOWN_OPTIONS}
                       />
                       <p className="text-[10px] text-zinc-600">Leave date and time blank to send immediately.</p>
                     </div>

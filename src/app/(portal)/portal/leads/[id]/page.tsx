@@ -52,6 +52,7 @@ import {
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
@@ -170,7 +171,7 @@ function asProposalNumber(...values: unknown[]) {
 
 function normalizeProposalPackageId(value: unknown) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
+  if (normalized === 'custompackage' || normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
   if (normalized.startsWith('bronze') || normalized === 'essentials') return 'bronze'
   if (normalized.startsWith('silver') || normalized === 'premier') return 'silver'
   if (normalized.startsWith('gold') || normalized === 'allinclusive') return 'gold'
@@ -264,12 +265,7 @@ type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
 
 const ACTIVITY_BATCH_SIZE = 18
-const EVENT_TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
-  const hours = Math.floor(index / 4)
-  const minutes = (index % 4) * 15
-  const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-  return { value, label: formatTimeString(value) }
-})
+const EVENT_TIME_OPTIONS = LUXOR_TIME_DROPDOWN_OPTIONS
 
 const PLANNING_COLOR_OPTIONS = [
   { id: 'black-gold', label: 'Black & gold', colors: ['#111111', '#caa24c', '#f1d27a', '#f7f3eb'] },
@@ -378,7 +374,7 @@ export default function LeadDetailPage({
   const [isTourScheduleModalOpen, setIsTourScheduleModalOpen] = useState(false)
   const [tourScheduleDate, setTourScheduleDate] = useState('')
   const [tourScheduleTime, setTourScheduleTime] = useState('')
-  const [tourScheduleDuration, setTourScheduleDuration] = useState('60')
+  const [tourScheduleDuration, setTourScheduleDuration] = useState('30')
   const [tourMeetingType, setTourMeetingType] = useState('Private Venue Tour')
   const [tourClientFacingNotes, setTourClientFacingNotes] = useState('')
   const [schedulingTour, setSchedulingTour] = useState(false)
@@ -1986,7 +1982,6 @@ export default function LeadDetailPage({
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
       ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
-      paymentPolicyAcknowledged: context.payment_policy_acknowledged === true || calculationContext.payment_policy_acknowledged === true,
     }
   }
 
@@ -2436,7 +2431,7 @@ export default function LeadDetailPage({
     if (!lead) return
     setTourScheduleDate(lead.preferred_tour_date || '')
     setTourScheduleTime(normalizeTimeInputValue(lead.preferred_tour_time))
-    setTourScheduleDuration(String(lead.metadata?.tourDurationMinutes || 60))
+    setTourScheduleDuration(String(lead.metadata?.tourDurationMinutes || 30))
     setTourMeetingType(String(lead.metadata?.tourMeetingType || 'Private Venue Tour'))
     setTourClientFacingNotes(String(lead.metadata?.tourClientFacingNotes || lead.message || ''))
     const savedAssignees = Array.isArray(lead.metadata?.tour_assignees)
@@ -4137,16 +4132,19 @@ export default function LeadDetailPage({
                             </div>
                           </div>
                         </div>
-                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
+                        <div className="mt-6 border-t border-[color:var(--portal-border)] pt-4">
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
-                            <span className="flex-1 min-w-[100px] py-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
+                            <span className="mb-3 block rounded-lg border border-emerald-500/20 bg-emerald-500/10 py-1.5 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
-                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="flex-1 min-w-[90px] py-1.5 rounded bg-[#caa24c]/10 border border-[#caa24c]/20 text-[9px] font-black uppercase text-[#a8792f] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Complete</button>
+                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Mark Complete</button>
                           ) : null}
-                          <button type="button" onClick={openTourScheduleModal} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Reschedule</button>
-                          {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="flex-1 min-w-[80px] py-1.5 rounded border border-[color:var(--portal-border)] text-[9px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">Call</button> : null}
-                          {!['No show', 'Cancelled'].includes(tourDisplayStatus(lead)) ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="flex-1 min-w-[80px] py-1.5 rounded border border-red-500/20 text-[9px] font-black uppercase text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer">No Show</button> : null}
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <button type="button" onClick={openTourScheduleModal} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>
+                            {!['No show', 'Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="min-h-10 rounded-lg border border-red-500/25 px-3 text-[9px] font-black uppercase tracking-wider text-red-600 transition-colors hover:bg-red-500/8 dark:text-red-300">No Show</button> : null}
+                            {hasCancellableTour(lead) ? <button type="button" onClick={() => setLeadLifecycleAction('cancel-tour')} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:text-red-600 dark:hover:text-red-300">Cancel Tour</button> : null}
+                            {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Call</button> : null}
+                          </div>
                         </div>
                       </section>
                       

@@ -179,7 +179,7 @@ const PACKAGE_OPTIONS: Array<{
 }> = [
   {
     id: 'rent_only',
-    name: 'Rental Only',
+    name: 'Custom Package',
     eyebrow: 'Venue access',
     description: 'A clear venue foundation with the required event services calculated for this guest count.',
     inclusions: ['Venue rental', 'Security', 'Cleaning', 'Tables & chairs setup'],
@@ -189,7 +189,7 @@ const PACKAGE_OPTIONS: Array<{
     name: 'Bronze - Essentials',
     eyebrow: 'Essentials',
     description: 'A polished starting point for a hosted celebration.',
-    inclusions: ['Everything in Rental Only', 'Essential Decor', 'Buffet catering', 'DJ'],
+    inclusions: ['Everything in Custom Package', 'Essential Decor', 'Buffet catering', 'DJ'],
   },
   {
     id: 'silver',
@@ -373,7 +373,7 @@ function asString(value: unknown) {
 
 function normalizePackageId(value?: string | null) {
   const normalized = (value || '').toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
+  if (normalized === 'custompackage' || normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
   if (normalized === 'bronze' || normalized === 'essentials' || normalized === 'bronzeessentials') return 'bronze'
   if (normalized === 'silver' || normalized === 'premier' || normalized === 'silverpremier') return 'silver'
   if (normalized === 'gold' || normalized === 'allinclusive' || normalized === 'goldallinclusive') return 'gold'
@@ -930,7 +930,6 @@ export function ProposalBuilderModal({
       removedServiceIds,
       customItems: customItemSelection(customItems),
       promotionId: selectedPromotionId,
-      paymentPolicyAcknowledged: effectiveContext.payment_policy_acknowledged === true,
       taxRate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
       paymentPlan: effectiveContext.payment_plan || null,
     },
@@ -955,7 +954,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.payment_policy_acknowledged, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1083,10 +1082,9 @@ export function ProposalBuilderModal({
   const publicationErrors = structuredPublicationErrors ?? savedPublicationErrors
   const pricingRequirements = asRecord(calculation?.requirements)
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
-  const paymentPolicyAcknowledged = effectiveContext.payment_policy_acknowledged === true
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired && paymentPolicyAcknowledged)
+  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
 
   const advance = () => {
     if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
@@ -1576,7 +1574,6 @@ export function ProposalBuilderModal({
               <div className="max-w-3xl">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 5</p>
                 <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Set the exact agreement payment terms.</h3>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The client accepts the final proposal first, Luxor sends the Event Agreement next, and Stripe is sent only after the agreement is signed. The schedule below shows exactly what that process will collect.</p>
               </div>
 
               {isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule
@@ -1599,16 +1596,6 @@ export function ProposalBuilderModal({
                   <p>Payments toward your Event Total are non-refundable once paid, except as otherwise expressly provided in your Event Agreement.</p>
                   <p>Your $750 Security Deposit is separate from your Event Total and is refundable according to the terms of your Event Agreement.</p>
                 </div>
-                <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50">
-                  <input
-                    type="checkbox"
-                    checked={paymentPolicyAcknowledged}
-                    onChange={(event) => updateProposalContext({ payment_policy_acknowledged: event.target.checked })}
-                    className="mt-1 h-4 w-4 shrink-0 accent-[#caa24c]"
-                  />
-                  <span>I understand and agree to the payment and cancellation terms outlined in my Event Agreement.</span>
-                </label>
-                {!paymentPolicyAcknowledged ? <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">This acknowledgment is required before publishing the final proposal.</p> : null}
               </section>
 
               {paymentPlanRequired ? (

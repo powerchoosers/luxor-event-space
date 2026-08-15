@@ -287,7 +287,7 @@ export type LuxorProposalContext = {
   event_services_total?: number
   final_event_price?: number
   refundable_security_deposit?: number
-  /** Owner acknowledgment required before a new proposal can be published. */
+  /** Legacy record retained for historic proposals; no longer required to publish. */
   payment_policy_acknowledged?: boolean
   amount_due_to_book?: number | null
   payment_plan?: LuxorProposalPaymentPlan

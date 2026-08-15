@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       const tourAssignees = Array.isArray(body.tourAssignees)
         ? body.tourAssignees.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 12)
         : []
-      const durationMinutes = Math.min(Math.max(Number(body.durationMinutes) || 60, 30), 180)
+      const durationMinutes = Math.min(Math.max(Number(body.durationMinutes) || 30, 30), 180)
       const startUtc = zonedDateTimeToUtc(tourDate, tourTime, TOUR_TIMEZONE)
       const endUtc = new Date(startUtc.getTime() + durationMinutes * 60_000)
 

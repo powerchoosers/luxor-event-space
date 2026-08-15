@@ -146,7 +146,7 @@ const PACKAGE_SCOPE_ITEMS = {
 export const LUXOR_PACKAGE_PRESETS: LuxorPackagePreset[] = [
   {
     id: 'rental_only',
-    name: 'Rental Only',
+    name: 'Custom Package',
     eyebrow: 'Venue foundation',
     description: 'Venue rental with required cleaning, security, and tables & chairs setup.',
     catalogIds: [],
@@ -190,9 +190,10 @@ export const LUXOR_PACKAGE_INTEREST_OPTIONS = [
  * obsolete names to reappear in the current package picker.
  */
 export const LUXOR_LEGACY_PACKAGE_NAMES: Record<string, string> = {
-  'Rent Only': 'Rental Only',
-  'Venue Rental': 'Rental Only',
-  'Venue Essentials': 'Rental Only',
+  'Rental Only': 'Custom Package',
+  'Rent Only': 'Custom Package',
+  'Venue Rental': 'Custom Package',
+  'Venue Essentials': 'Custom Package',
   Small: 'Bronze - Essentials',
   Foundation: 'Bronze - Essentials',
   'Classic Celebration': 'Bronze - Essentials',

@@ -391,7 +391,7 @@ const TOOLS_DEFINITION = [
           tourDate: { type: 'string', description: 'Tour date in YYYY-MM-DD when known, otherwise an empty string.' },
           tourTime: { type: 'string', description: 'Tour start time, such as 3:00 PM, when known, otherwise an empty string.' },
           meetingType: { type: 'string', description: 'Private Venue Tour unless a more specific meeting type is known.' },
-          durationMinutes: { type: 'number', description: 'Duration in minutes; default 60.' },
+          durationMinutes: { type: 'number', description: 'Duration in minutes; default 30.' },
           clientFacingNotes: { type: 'string', description: 'Only client-safe details that may appear in the invite email.' }
         },
         required: ['inquiryId']
@@ -1387,7 +1387,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                 meetingType: String(args.meetingType || metadata.tourMeetingType || 'Private Venue Tour').trim().slice(0, 120),
                 durationMinutes: Number.isFinite(requestedDuration) && requestedDuration >= 30 && requestedDuration <= 180
                   ? requestedDuration
-                  : Number(metadata.tourDurationMinutes) || 60,
+                  : Number(metadata.tourDurationMinutes) || 30,
                 clientFacingNotes: String(args.clientFacingNotes || metadata.tourClientFacingNotes || record.message || '').trim().slice(0, 2_000),
               }
               openrouterMessages.push({
