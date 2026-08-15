@@ -617,7 +617,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                 window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
                 return next
               })}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 rounded-lg"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 lg:inline-flex"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!sidebarCollapsed}
             >

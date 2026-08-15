@@ -337,7 +337,7 @@ export default function EventsPage() {
                 {activeDetailTab === 'payments' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Financial Balance</h3>
-                    <div className="grid grid-cols-3 gap-4 font-mono">
+                    <div className="grid grid-cols-1 gap-3 font-mono sm:grid-cols-3 sm:gap-4">
                       <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl">
                         <p className="text-[8px] font-bold uppercase tracking-wider text-zinc-500">Contract Total</p>
                         <p className="text-sm font-bold text-white mt-1">${Number(selectedEvent.contract_total || 0).toLocaleString()}</p>
