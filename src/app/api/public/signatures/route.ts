@@ -45,7 +45,7 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   return {
     payment_url: invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
-    payment_label: invoice.payment_requested_label || 'Initial Booking Payment + Refundable Security Deposit',
+    payment_label: invoice.payment_requested_label || 'Initial Booking Payment - Luxor at Las Palmas Events',
   }
 }
 

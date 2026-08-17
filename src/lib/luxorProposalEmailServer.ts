@@ -451,7 +451,7 @@ export async function buildLuxorPaymentRequestEmail(input: {
     ? displayEventDate(booking.final_payment_due_date)
     : 'the due date in your Event Agreement'
   const paymentScheduleNote = invoice.invoice_kind === 'final_balance'
-    ? `This payment covers the remaining event balance due ${finalDueDate}. The refundable security deposit was collected separately with the initial booking payment and remains held under the Event Agreement.`
+    ? `This payment covers the remaining event balance due ${finalDueDate}. The refundable security deposit is billed separately from the initial booking payment and remains held under the Event Agreement.`
     : `This initial booking payment and the separate ${money(Number(booking.security_deposit_amount ?? 750))} refundable security deposit are due only after the agreement is signed. The remaining event balance is due ${finalDueDate}.`
   const itemRows = invoice.line_items.map((item) => `
     <tr>

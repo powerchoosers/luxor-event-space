@@ -985,19 +985,15 @@ export async function signLuxorSignatureRequest(input: {
     // The booking status is verified as signed above before either the child
     // invoice or Stripe Checkout can be created. `ensure…` reuses the same
     // deposit record if this completion path is retried.
-    const newScheduleProposal = Boolean(masterInvoice.proposal_context?.payment_plan && typeof masterInvoice.proposal_context.payment_plan === 'object' && Number.isInteger(Number((masterInvoice.proposal_context.payment_plan as Record<string, unknown>).payment_count)))
     paymentInvoice = await ensureLuxorDepositInvoice({
       masterInvoice,
       bookingId: booking.id,
       dueDate: signedAt.slice(0, 10),
       reservationDepositAmount: booking.deposit_required,
-      includeSecurityDeposit: !newScheduleProposal,
     })
-    if (newScheduleProposal) {
-      const securityDue = new Date(`${booking.event_date}T12:00:00Z`)
-      securityDue.setUTCDate(securityDue.getUTCDate() - 30)
-      await ensureLuxorSecurityDepositInvoice({ masterInvoice, bookingId: booking.id, dueDate: securityDue.toISOString().slice(0, 10) })
-    }
+    const securityDue = new Date(`${booking.event_date}T12:00:00Z`)
+    securityDue.setUTCDate(securityDue.getUTCDate() - 30)
+    await ensureLuxorSecurityDepositInvoice({ masterInvoice, bookingId: booking.id, dueDate: securityDue.toISOString().slice(0, 10) })
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
     const checkout = await createLuxorPostContractCheckout({
       invoice: paymentInvoice,
@@ -1005,7 +1001,7 @@ export async function signLuxorSignatureRequest(input: {
       booking,
       origin,
       paymentAmount: Number(paymentInvoice.total || 0),
-      paymentLabel: newScheduleProposal ? 'Initial Booking Payment' : 'Initial Booking Payment + Refundable Security Deposit',
+      paymentLabel: 'Initial Booking Payment - Luxor at Las Palmas Events',
       masterInvoiceId: masterInvoice.id,
     })
     checkoutUrl = checkout?.checkoutUrl || null
@@ -1017,10 +1013,10 @@ export async function signLuxorSignatureRequest(input: {
   }
 
   const paymentBreakdown = paymentInvoice ? getInitialPaymentBreakdown(paymentInvoice) : null
-  const paymentSection = checkoutUrl && paymentBreakdown ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: complete your booking payment</p><p style="margin:0 0 12px">Your secure payment due now is <strong>${formatMoney(paymentBreakdown.total)}</strong>: an initial booking payment of ${formatMoney(paymentBreakdown.initialBookingPayment)} plus a separate refundable security deposit of ${formatMoney(paymentBreakdown.securityDeposit)}.</p><p style="margin:0 0 18px">The refundable security deposit is held throughout the event period and returned following the post-event inspection, subject to the Event Agreement.</p><a href="${checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Complete secure payment</a></div>` : '<p style="color:#756755">Luxor will follow up separately with secure payment instructions.</p>'
+  const paymentSection = checkoutUrl && paymentBreakdown ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: complete your booking payment</p><p style="margin:0 0 12px">Your secure initial booking payment due now is <strong>${formatMoney(paymentBreakdown.initialBookingPayment)}</strong>. The refundable security deposit is separate and is not included in this payment.</p><p style="margin:0 0 18px">The separate refundable security deposit is held throughout the event period and returned following the post-event inspection, subject to the Event Agreement.</p><a href="${checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Complete secure payment</a></div>` : '<p style="color:#756755">Luxor will follow up separately with secure payment instructions.</p>'
   const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
   const paymentEmailSummary = checkoutUrl && paymentBreakdown
-    ? `Your agreement is complete. Complete your secure payment of ${formatMoney(paymentBreakdown.total)}: ${formatMoney(paymentBreakdown.initialBookingPayment)} initial booking payment plus ${formatMoney(paymentBreakdown.securityDeposit)} refundable security deposit. ${checkoutUrl}`
+    ? `Your agreement is complete. Complete your secure initial booking payment of ${formatMoney(paymentBreakdown.initialBookingPayment)}. The refundable security deposit is separate and is not included in this payment. ${checkoutUrl}`
     : 'Your agreement is complete. Your fully executed copy is attached. Luxor will follow up with secure payment instructions.'
   const latestInquiry = signature.inquiry_id ? await getLuxorInquiry(signature.inquiry_id) : null
   if (latestInquiry?.status !== 'closed_lost') {

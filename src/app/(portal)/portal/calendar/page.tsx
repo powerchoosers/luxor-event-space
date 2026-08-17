@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
-import { PortalCalendar, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
+import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
@@ -170,6 +170,16 @@ export default function CalendarPage() {
     return [...tourCards, ...slotCards]
   }, [busyId, data.slots, data.tours])
 
+  const tourDayStatuses = useMemo<Record<string, PortalCalendarDayStatus>>(() => {
+    const statuses: Record<string, PortalCalendarDayStatus> = {}
+    for (const slot of data.slots) {
+      const isOpen = slot.status === 'available' && slot.booked_count < slot.capacity
+      if (isOpen) statuses[slot.slot_date] = 'open'
+      else if (!statuses[slot.slot_date]) statuses[slot.slot_date] = 'closed'
+    }
+    return statuses
+  }, [data.slots])
+
   const taskItems = useMemo<PortalCalendarItem[]>(() => {
     return data.tasks
       .filter((task) => task.status === 'pending' && task.due_date)
@@ -270,6 +280,7 @@ export default function CalendarPage() {
           items={[...tourItems, ...taskItems]}
           view={view}
           onViewChange={setView}
+          dayStatuses={tourDayStatuses}
         />
       ) : (
         <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />

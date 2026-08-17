@@ -4,7 +4,6 @@ import Stripe from 'stripe'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { isLuxorOfferExpired, luxorOfferSnapshot } from './luxorOffer'
-import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -71,20 +70,17 @@ export async function createLuxorPostContractCheckout(input: {
   }
 
   // Both scheduled invoices are exact, locked amounts. The deposit child
-  // invoice includes the initial booking payment plus the separate $750
-  // security hold; the final invoice contains only the remaining Event Price.
+  // invoice contains only the initial booking payment; the separate $750
+  // security hold has its own invoice and payment flow.
   // Never let a UI caller create an ad hoc partial payment from either one.
   const isInitialBookingPayment = invoice.invoice_kind === 'deposit'
-  if (isInitialBookingPayment) {
-    const securityDeposit = Number(invoice.line_items.find((item) =>
-      item.paymentBucket === 'security_deposit' ||
-      item.category === 'Security Deposit' ||
-      /refundable\s+security\s+deposit/i.test(item.description || ''),
-    )?.total || 0)
-    if (Math.abs(securityDeposit - LUXOR_DEFAULT_SECURITY_DEPOSIT) > 0.01) {
-      throw new Error('The initial booking invoice must include the separate $750 refundable security deposit.')
-    }
-  } else if (invoice.line_items.some((item) =>
+  if (isInitialBookingPayment && invoice.line_items.some((item) =>
+    item.paymentBucket === 'security_deposit' ||
+    item.category === 'Security Deposit' ||
+    /refundable\s+security\s+deposit/i.test(item.description || ''),
+  )) {
+    throw new Error('The initial booking payment cannot include the refundable security deposit.')
+  } else if (!isInitialBookingPayment && invoice.line_items.some((item) =>
     item.paymentBucket === 'security_deposit' ||
     item.category === 'Security Deposit' ||
     /refundable\s+security\s+deposit/i.test(item.description || ''),
@@ -96,9 +92,7 @@ export async function createLuxorPostContractCheckout(input: {
     ? Math.round(requestedAmount * 100) / 100
     : undefined
   if (explicitPaymentAmount !== undefined && Math.abs(explicitPaymentAmount - balanceDue) > 0.01) {
-    throw new Error(isInitialBookingPayment
-      ? 'The initial booking payment must include the separate refundable security deposit in full.'
-      : 'The Stripe payment must equal the remaining Final Event Price balance.')
+    throw new Error('The Stripe payment must equal the approved invoice balance.')
   }
   const paymentAmount = balanceDue
   if (paymentAmount < 0.5 || paymentAmount > balanceDue) {
@@ -106,7 +100,7 @@ export async function createLuxorPostContractCheckout(input: {
   }
 
   const paymentLabel = isInitialBookingPayment
-    ? 'Initial Booking Payment + Refundable Security Deposit'
+    ? 'Initial Booking Payment - Luxor at Las Palmas Events'
     : 'Remaining Final Event Price Balance'
   const secretKey = process.env.STRIPE_SECRET_KEY
   if (!secretKey) throw new Error('Stripe is not connected. Add STRIPE_SECRET_KEY before contract payment links can be delivered.')
@@ -173,7 +167,7 @@ export async function createLuxorPostContractCheckout(input: {
       price_data: {
         currency: 'usd',
         unit_amount: Math.round(paymentAmount * 100),
-        product_data: { name: `${paymentLabel} - Luxor Event Space` },
+      product_data: { name: paymentLabel },
       },
     }],
     metadata: {
@@ -196,7 +190,7 @@ export async function createLuxorPostContractCheckout(input: {
     invoice_creation: {
       enabled: true,
       invoice_data: {
-        description: `${paymentLabel} for ${booking.event_type || 'event'}${booking.event_date ? ` on ${booking.event_date}` : ''}`,
+        description: `${paymentLabel}${booking.event_type ? ` for ${booking.event_type}` : ''}${booking.event_date ? ` on ${booking.event_date}` : ''}`,
         metadata: {
           luxor_invoice_id: invoice.id,
           luxor_booking_id: booking.id,

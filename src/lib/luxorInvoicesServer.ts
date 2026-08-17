@@ -350,7 +350,6 @@ export async function ensureLuxorDepositInvoice(input: {
   bookingId: string
   dueDate?: string | null
   reservationDepositAmount?: number | null
-  includeSecurityDeposit?: boolean
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
   const calculated = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
@@ -359,22 +358,15 @@ export async function ensureLuxorDepositInvoice(input: {
     Math.max(0, roundMoney(Number(input.reservationDepositAmount ?? calculated.depositAmount))),
   )
   // The refundable deposit is a fixed, separate $750 hold for every booking.
-  // It is intentionally not configurable per proposal or payment method.
-  const securityDeposit = input.includeSecurityDeposit === false ? 0 : LUXOR_DEFAULT_SECURITY_DEPOSIT
+  // It is intentionally not configurable per proposal or payment method, and
+  // it must never be included in the initial booking-payment invoice.
   if (reservationPayment < 0.5) throw new Error('The configured initial booking payment must be at least $0.50 to create a payment invoice.')
-  const total = roundMoney(reservationPayment + securityDeposit)
-  const lineItems: LuxorInvoiceLineItem[] = [
-    {
-      description: 'Initial Booking Payment', quantity: 1, unitPrice: reservationPayment, total: reservationPayment,
-      category: 'Booking Payment', paymentBucket: 'venue', required: true,
-    },
-    {
-      description: 'Refundable Security Deposit', quantity: 1, unitPrice: securityDeposit, total: securityDeposit,
-      category: 'Security Deposit', paymentBucket: 'security_deposit', required: true,
-      detail: 'Held through the post-event inspection and returned subject to the Event Agreement.',
-    },
-  ]
-  const notes = 'Amount due after the signed Event Agreement: the initial booking payment plus the separate refundable security deposit. The security deposit is held through post-event inspection and is not part of the Event Price.'
+  const total = reservationPayment
+  const lineItems: LuxorInvoiceLineItem[] = [{
+    description: 'Initial Booking Payment', quantity: 1, unitPrice: reservationPayment, total: reservationPayment,
+    category: 'Booking Payment', paymentBucket: 'venue', required: true,
+  }]
+  const notes = 'Amount due after the signed Event Agreement: the initial booking payment only. The refundable security deposit is billed separately, held through post-event inspection, and is not part of the Event Price.'
   const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {
     if (existing.status === 'paid') return existing
@@ -403,7 +395,7 @@ export async function ensureLuxorDepositInvoice(input: {
     invoice_kind: 'deposit',
     client_name: input.masterInvoice.client_name,
     event_type: input.masterInvoice.event_type,
-    description: 'Initial booking payment and refundable security deposit',
+    description: 'Initial booking payment',
     line_items: lineItems,
     subtotal: total,
     tax_rate: 0,
@@ -515,8 +507,8 @@ export function calculateLuxorDepositAmounts(params: {
   }
 
   // The 50% option is still a booking payment. The separate refundable
-  // security deposit is collected with the initial booking payment instead of
-  // being added to the Final Event Price balance.
+  // security deposit is billed independently and is never added to the Final
+  // Event Price balance.
   const rentalItemsSubtotal = params.lineItems
     .filter((item) => /venue|hall|rental|space|hire/i.test(item.description) || item.category === 'Hall Hire')
     .reduce((sum, item) => sum + (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0), 0)
@@ -532,7 +524,7 @@ export function calculateLuxorDepositAmounts(params: {
     rentalDepositPortion,
     remainingBalance,
     total,
-    description: '50% booking deposit (separate refundable security deposit collected with the initial booking payment)',
+    description: '50% booking deposit (separate refundable security deposit billed independently)',
   }
 }
 
@@ -549,12 +541,12 @@ export function ensureRefundableSecurityDepositLineItem(lineItems: LuxorInvoiceL
       quantity: 1,
       unitPrice: securityDepositAmount,
       total: securityDepositAmount,
-      description: 'Refundable Security Deposit (Due with Initial Booking Payment After Signed Agreement)',
+      description: 'Refundable Security Deposit (Due separately after signed agreement)',
       category: 'Security Deposit',
     }
   } else {
     itemsCopy.push({
-      description: 'Refundable Security Deposit (Due with Initial Booking Payment After Signed Agreement)',
+      description: 'Refundable Security Deposit (Due separately after signed agreement)',
       quantity: 1,
       unitPrice: securityDepositAmount,
       total: securityDepositAmount,

@@ -17,6 +17,8 @@ export type PortalCalendarItem = {
   content?: React.ReactNode
 }
 
+export type PortalCalendarDayStatus = 'open' | 'closed'
+
 function toIsoDate(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -69,11 +71,13 @@ export function PortalCalendar({
   items,
   view,
   onViewChange,
+  dayStatuses,
 }: {
   title: string
   items: PortalCalendarItem[]
   view: PortalCalendarView
   onViewChange: (view: PortalCalendarView) => void
+  dayStatuses?: Record<string, PortalCalendarDayStatus>
 }) {
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null)
@@ -151,6 +155,11 @@ export function PortalCalendar({
                     ) : (
                       <p className="mt-1 font-mono text-sm font-bold text-[color:var(--portal-text)]">{day.getDate()}</p>
                     )}
+                    {dayStatuses ? (
+                      <p className={`mt-1 text-[9px] font-black uppercase tracking-wider ${dayStatuses[iso] === 'open' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {dayStatuses[iso] === 'open' ? 'OPEN DAY' : 'CLOSED DAY'}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"

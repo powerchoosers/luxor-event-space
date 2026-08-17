@@ -150,7 +150,7 @@ export function buildFinalPaymentReminderEmail(input: { inquiry: LuxorInquiry; i
       eyebrow: 'Final payment',
       title: 'Your remaining balance',
       greeting: `Hi ${firstName(input.inquiry.full_name)},`,
-      copy: `Your remaining Final Event Price balance can be reviewed and paid securely from your event page. The separate refundable security deposit was collected with the initial booking payment and remains held under your Event Agreement.`,
+      copy: `Your remaining Final Event Price balance can be reviewed and paid securely from your event page. The separate refundable security deposit is billed independently from the initial booking payment and remains held under your Event Agreement.`,
       detail: `${money(input.balance)} remaining Final Event Price balance${input.dueDate ? ` · due ${input.dueDate}` : ''}`,
       buttonLabel: 'Review balance & pay',
       buttonUrl: input.reviewUrl,
@@ -195,7 +195,7 @@ export async function generateAiInvoiceReminderCopy(input: {
   kind?: 'unpaid_invoice' | 'final_payment'
 }): Promise<{ copy: string; aiGenerated: boolean }> {
   const fallback = input.kind === 'final_payment'
-    ? `This is a reminder that your remaining Final Event Price balance is due on the date set out in your Event Agreement. The separate refundable security deposit was collected with your initial booking payment and remains held under the Event Agreement.`
+    ? `This is a reminder that your remaining Final Event Price balance is due on the date set out in your Event Agreement. The separate refundable security deposit is billed independently from your initial booking payment and remains held under the Event Agreement.`
     : `We are reaching out to provide a quick update regarding your invoice for ${input.inquiry.event_type || 'your upcoming event'}. Please review the payment details below and let us know if you have any questions.`
 
   const apiKey = process.env.OPEN_ROUTER_API_KEY

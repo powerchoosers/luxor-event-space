@@ -2384,11 +2384,11 @@ export default function LeadDetailPage({
           ? Math.min(suggestedDeposit, balance)
           : Number(customPaymentAmount)
     const paymentLabel = paymentRequestInvoice.invoice_kind === 'deposit'
-      ? 'Initial Booking Payment + Refundable Security Deposit'
+      ? 'Initial Booking Payment - Luxor at Las Palmas Events'
       : paymentRequestInvoice.invoice_kind === 'final_balance'
         ? 'Remaining Final Event Price Balance'
         : paymentRequestKind === 'deposit'
-          ? 'Initial Booking Payment + Refundable Security Deposit'
+          ? 'Initial Booking Payment - Luxor at Las Palmas Events'
           : paymentRequestKind === 'balance'
             ? 'Remaining Final Event Price Balance'
             : 'Custom post-signature payment installment'
@@ -5253,7 +5253,7 @@ export default function LeadDetailPage({
                               {depositBalance <= 0 ? 'Initial booking payment received' : 'Collect initial booking payment'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {depositBalance <= 0 ? 'The initial booking payment is received and the separate $750 refundable security deposit is held. The remaining event balance is due on the agreed date.' : 'The Stripe link was emailed after signature. It collects the initial booking payment and separate $750 refundable security deposit together.'}
+                              {depositBalance <= 0 ? 'The initial booking payment is received. The separate $750 refundable security deposit remains due or held independently. The remaining event balance is due on the agreed date.' : 'The Stripe link was emailed after signature for the initial booking payment only. The separate $750 refundable security deposit has its own payment.'}
                             </p>
                           </div>
                         </div>
@@ -5387,7 +5387,7 @@ export default function LeadDetailPage({
                               {finalPaymentBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} final event balance remaining. The separate $750 refundable security deposit was collected with the initial booking payment and remains held.`}
+                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} final event balance remaining. The separate $750 refundable security deposit is billed independently and remains held.`}
                             </p>
                           </div>
                         </div>
