@@ -48,9 +48,10 @@ function paymentTerms(invoiceTotal: number, context: Record<string, unknown>): P
     : null
   if (!plan) return null
 
-  const hasNewSchedule = Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count))
+  const hasNewSchedule = Number.isInteger(Number(plan.payment_count)) && Number(plan.payment_count) >= 2 && Number(plan.payment_count) <= 24
   const mode = hasNewSchedule ? 'deposit_and_balance' : plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance' ? plan.mode : null
   const percentage = hasNewSchedule ? 25 : Number(plan.booking_payment_percent)
+  const negotiatedBookingPayment = Number(plan.booking_payment_amount)
   const finalPaymentDays = hasNewSchedule ? 60 : Number(plan.final_payment_due_days_before_event)
   if (
     !mode ||
@@ -62,18 +63,18 @@ function paymentTerms(invoiceTotal: number, context: Record<string, unknown>): P
   }
 
   const venueServicesTotal = Number(context.venue_services_total)
-  const paymentCount = hasNewSchedule ? Number(plan.payment_count) : null
-  // The new schedule is venue-first. Two- and three-payment plans collect
-  // the entire Venue Services allocation at signing; four- and five-payment
-  // plans use the 25% booking deposit (subject to the existing $750 minimum
-  // and Venue Services cap).
-  const bookingPercent = paymentCount !== null && paymentCount <= 3 ? 100 : percentage
+  // The owner may approve a lower or higher booking payment for a specific
+  // family. It remains capped at Venue Services because booking money is
+  // always allocated to the venue before Event Services.
+  const bookingPercent = percentage
+  const venueCap = Number.isFinite(venueServicesTotal) ? venueServicesTotal : invoiceTotal
+  const defaultReservationPayment = Math.min(
+    venueCap,
+    Math.max(venueCap * (bookingPercent / 100), 750),
+  )
   const reservationPayment = mode === 'pay_in_full'
     ? invoiceTotal
-    : roundLuxorMoney(Math.min(
-      Number.isFinite(venueServicesTotal) ? venueServicesTotal : invoiceTotal,
-      Math.max((Number.isFinite(venueServicesTotal) ? venueServicesTotal : invoiceTotal) * (bookingPercent / 100), 750),
-    ))
+    : roundLuxorMoney(Math.min(venueCap, Number.isFinite(negotiatedBookingPayment) && negotiatedBookingPayment >= 0.5 ? negotiatedBookingPayment : defaultReservationPayment))
   return {
     mode,
     percentage,
@@ -171,6 +172,7 @@ async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) 
         final_proposal_context: context,
         reservation_payment_mode: terms.mode,
         reservation_payment_percent: terms.percentage,
+        ...(typeof context.payment_plan === 'object' && context.payment_plan ? { client_payment_preference: { method: (context.payment_plan as Record<string, unknown>).preferred_payment_method || 'card', amount: 'deposit' } } : {}),
         reservation_state: 'proposal_accepted_awaiting_contract',
       },
     })
@@ -189,6 +191,7 @@ async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) 
         final_proposal_context: context,
         reservation_payment_mode: terms.mode,
         reservation_payment_percent: terms.percentage,
+        ...(typeof context.payment_plan === 'object' && context.payment_plan ? { client_payment_preference: { method: (context.payment_plan as Record<string, unknown>).preferred_payment_method || 'card', amount: 'deposit' } } : {}),
         reservation_state: ['sent', 'viewed'].includes(booking.contract_status || '')
           ? booking.metadata?.reservation_state || 'awaiting_signature'
           : 'proposal_accepted_awaiting_contract',

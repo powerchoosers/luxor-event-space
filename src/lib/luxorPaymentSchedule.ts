@@ -1,5 +1,7 @@
 import type { LuxorProposalPaymentPlan } from './luxorInquiryTypes'
 
+export type LuxorPaymentCadence = 'evenly_spaced' | 'biweekly' | 'monthly'
+
 export type LuxorPaymentScheduleRow = {
   installment_order: number
   label: string
@@ -11,7 +13,8 @@ export type LuxorPaymentScheduleRow = {
 }
 
 export type LuxorPaymentSchedule = {
-  payment_count: 2 | 3 | 4 | 5
+  payment_count: number
+  payment_cadence: LuxorPaymentCadence
   booking_date: string
   final_payment_due_date: string
   security_deposit_due_date: string
@@ -20,16 +23,16 @@ export type LuxorPaymentSchedule = {
   venue_services_total: number
   event_services_total: number
   rows: LuxorPaymentScheduleRow[]
-  available_counts: Array<2 | 3 | 4 | 5>
+  available_counts: number[]
   warnings: string[]
 }
 
-const COUNTS: Array<2 | 3 | 4 | 5> = [2, 3, 4, 5]
-// The first payment is due at booking and the final one is due 60 days before
-// the event. A three-week minimum between scheduled payments lets events about
-// five months away support the requested 4- and 5-payment choices while still
-// producing a meaningful schedule from the actual deadline.
-const MINIMUM_PAYMENT_INTERVAL_DAYS = 21
+const MINIMUM_PAYMENT_COUNT = 2
+const MAXIMUM_PAYMENT_COUNT = 24
+// Two weeks is the shortest standard interval. This lets Arianna offer a plan
+// that follows a client's paydays while ensuring every due date still lands on
+// or before the final-payment deadline.
+const MINIMUM_PAYMENT_INTERVAL_DAYS = 14
 
 function cents(value: number) { return Math.round(value * 100) }
 function money(value: number) { return Math.round(value * 100) / 100 }
@@ -53,7 +56,7 @@ export function securityDepositDueDate(eventDate: string) {
   return event ? iso(addDays(event, -30)) : null
 }
 
-export function availablePaymentCounts(bookingDate: string, eventDate: string): Array<2 | 3 | 4 | 5> {
+export function availablePaymentCounts(bookingDate: string, eventDate: string): number[] {
   const booking = parseDate(bookingDate)
   const deadline = finalPaymentDate(eventDate)
   const finalDate = deadline ? parseDate(deadline) : null
@@ -61,7 +64,18 @@ export function availablePaymentCounts(bookingDate: string, eventDate: string): 
   const days = daysBetween(booking, finalDate)
   if (days < MINIMUM_PAYMENT_INTERVAL_DAYS) return []
 
-  return COUNTS.filter((count) => days >= ((count - 1) * MINIMUM_PAYMENT_INTERVAL_DAYS))
+  const maximum = Math.min(MAXIMUM_PAYMENT_COUNT, Math.floor(days / MINIMUM_PAYMENT_INTERVAL_DAYS) + 1)
+  return Array.from({ length: Math.max(0, maximum - MINIMUM_PAYMENT_COUNT + 1) }, (_, index) => MINIMUM_PAYMENT_COUNT + index)
+}
+
+function validCadence(value: unknown): value is LuxorPaymentCadence {
+  return value === 'evenly_spaced' || value === 'biweekly' || value === 'monthly'
+}
+
+function cadencePaymentCount(days: number, cadence: LuxorPaymentCadence) {
+  if (cadence === 'evenly_spaced') return null
+  const interval = cadence === 'biweekly' ? 14 : 30
+  return Math.min(MAXIMUM_PAYMENT_COUNT, Math.max(MINIMUM_PAYMENT_COUNT, Math.ceil(days / interval) + 1))
 }
 
 function paymentDate(booking: Date, deadline: Date, index: number, count: number) {
@@ -85,6 +99,8 @@ export function calculateLuxorPaymentSchedule(input: {
   venueServicesTotal: number
   eventServicesTotal: number
   paymentCount?: number
+  paymentCadence?: LuxorPaymentCadence
+  bookingPaymentAmount?: number | null
 }): LuxorPaymentSchedule | null {
   const event = parseDate(input.eventDate)
   const booking = parseDate(input.bookingDate)
@@ -97,19 +113,23 @@ export function calculateLuxorPaymentSchedule(input: {
   const eventTotal = Math.max(0, money(input.eventServicesTotal))
   const total = money(venueTotal + eventTotal)
   const available = availablePaymentCounts(input.bookingDate, input.eventDate)
+  const spanDays = daysBetween(booking, deadline)
+  const cadence = validCadence(input.paymentCadence) ? input.paymentCadence : 'evenly_spaced'
   const requested = Number(input.paymentCount)
-  const count = (COUNTS.includes(requested as 2 | 3 | 4 | 5) ? requested : 4) as 2 | 3 | 4 | 5
-  const selectedCount = (available.includes(count) ? count : available[available.length - 1]) as 2 | 3 | 4 | 5 | undefined
+  const requestedCount = Number.isInteger(requested) && requested >= MINIMUM_PAYMENT_COUNT && requested <= MAXIMUM_PAYMENT_COUNT ? requested : 4
+  const cadenceCount = cadencePaymentCount(spanDays, cadence)
+  const count = cadenceCount ?? requestedCount
+  const selectedCount = available.includes(count) ? count : available[available.length - 1]
   if (!selectedCount) return null
 
   const venueCents = cents(venueTotal)
   const eventCents = cents(eventTotal)
-  const bookingPaymentCents = selectedCount <= 3
-    ? venueCents
-    : Math.min(venueCents, Math.max(Math.round(venueCents * 0.25), cents(750)))
+  const defaultBookingPaymentCents = Math.min(venueCents, Math.max(Math.round(venueCents * 0.25), cents(750)))
+  const requestedBookingPayment = Number(input.bookingPaymentAmount)
+  const hasNegotiatedBookingPayment = Number.isFinite(requestedBookingPayment) && requestedBookingPayment >= 0.5
+  const bookingPaymentCents = Math.min(venueCents, hasNegotiatedBookingPayment ? cents(requestedBookingPayment) : defaultBookingPaymentCents)
   const remainingVenueCents = Math.max(0, venueCents - bookingPaymentCents)
-  const eventParts = selectedCount === 2 ? 1 : selectedCount === 3 || selectedCount === 4 ? 2 : 3
-  const eventInstallments = splitCents(eventCents, eventParts)
+  const remainingPaymentAmounts = splitCents(Math.max(0, venueCents + eventCents - bookingPaymentCents), selectedCount - 1)
   const rows: LuxorPaymentScheduleRow[] = []
   const addRow = (row: Omit<LuxorPaymentScheduleRow, 'installment_order' | 'due_at'>, order: number) => rows.push({
     ...row,
@@ -117,42 +137,32 @@ export function calculateLuxorPaymentSchedule(input: {
     due_at: paymentDate(booking, deadline, order - 1, selectedCount),
   })
 
-  if (selectedCount <= 3) {
-    addRow({
-      label: 'Venue Services',
-      description: '100% of Venue Services',
-      amount: money(venueCents / 100),
-      payment_bucket: 'venue',
-      allocation: { venue: money(venueCents / 100), event: 0 },
-    }, 1)
-  } else {
-    addRow({
-      label: 'Venue Booking Deposit',
-      description: `${Math.round((bookingPaymentCents / Math.max(1, venueCents)) * 100)}% of Venue Services`,
-      amount: money(bookingPaymentCents / 100),
-      payment_bucket: 'venue',
-      allocation: { venue: money(bookingPaymentCents / 100), event: 0 },
-    }, 1)
-    addRow({
-      label: 'Remaining Venue Services',
-      description: `${Math.round((remainingVenueCents / Math.max(1, venueCents)) * 100)}% of Venue Services`,
-      amount: money(remainingVenueCents / 100),
-      payment_bucket: 'venue',
-      allocation: { venue: money(remainingVenueCents / 100), event: 0 },
-    }, 2)
-  }
+  addRow({
+    label: 'Booking Payment',
+    description: hasNegotiatedBookingPayment
+      ? 'Owner-approved booking payment applied to Venue Services'
+      : `${Math.round((bookingPaymentCents / Math.max(1, venueCents)) * 100)}% of Venue Services`,
+    amount: money(bookingPaymentCents / 100),
+    payment_bucket: 'venue',
+    allocation: { venue: money(bookingPaymentCents / 100), event: 0 },
+  }, 1)
 
-  const eventStartOrder = selectedCount <= 3 ? 2 : 3
-  eventInstallments.forEach((amountCents, index) => {
-    const isFinal = index === eventInstallments.length - 1
-    const portion = eventParts === 1 ? '100%' : eventParts === 2 ? '50%' : '1/3'
+  let outstandingVenueCents = remainingVenueCents
+  remainingPaymentAmounts.forEach((amountCents, index) => {
+    const isFinal = index === remainingPaymentAmounts.length - 1
+    const venueAllocation = Math.min(outstandingVenueCents, amountCents)
+    const eventAllocation = amountCents - venueAllocation
+    outstandingVenueCents -= venueAllocation
+    const label = isFinal ? 'Final Payment' : venueAllocation > 0 && eventAllocation > 0 ? `Payment ${index + 2} — Venue & Event Services` : venueAllocation > 0 ? `Payment ${index + 2} — Venue Services` : `Payment ${index + 2} — Event Services`
     addRow({
-      label: isFinal ? 'Final Event Services Payment' : `Event Services — Payment ${index + 1}`,
-      description: `${portion} of Event Services${isFinal ? ' · Final payment due 60 days before the event' : ''}`,
+      label,
+      description: isFinal
+        ? 'Remaining balance due 60 days before the event'
+        : cadence === 'biweekly' ? 'Biweekly payment' : cadence === 'monthly' ? 'Monthly payment' : 'Scheduled payment',
       amount: money(amountCents / 100),
-      payment_bucket: 'event',
-      allocation: { venue: 0, event: money(amountCents / 100) },
-    }, eventStartOrder + index)
+      payment_bucket: venueAllocation > 0 ? 'venue' : 'event',
+      allocation: { venue: money(venueAllocation / 100), event: money(eventAllocation / 100) },
+    }, index + 2)
   })
 
   const bookingPayment = money(bookingPaymentCents / 100)
@@ -160,6 +170,7 @@ export function calculateLuxorPaymentSchedule(input: {
 
   return {
     payment_count: selectedCount,
+    payment_cadence: cadence,
     booking_date: iso(booking),
     final_payment_due_date: deadlineString as string,
     security_deposit_due_date: securityDue,
@@ -168,8 +179,11 @@ export function calculateLuxorPaymentSchedule(input: {
     venue_services_total: venueTotal,
     event_services_total: eventTotal,
     rows,
-    available_counts: available as Array<2 | 3 | 4 | 5>,
-    warnings: selectedCount !== count ? [`${count} payments cannot fit before the 60-day deadline; ${selectedCount} payments selected instead.`] : [],
+    available_counts: available,
+    warnings: [
+      ...(selectedCount !== count ? [`${count} payments cannot fit before the 60-day deadline; ${selectedCount} payments selected instead.`] : []),
+      ...(hasNegotiatedBookingPayment && cents(requestedBookingPayment) > venueCents ? ['The negotiated booking payment was capped at the Venue Services balance.'] : []),
+    ],
   }
 }
 
@@ -179,6 +193,8 @@ export function paymentPlanFromSchedule(schedule: LuxorPaymentSchedule): LuxorPr
     booking_payment_percent: schedule.venue_services_total > 0 ? money(schedule.booking_payment / schedule.venue_services_total * 100) : 0,
     final_payment_due_days_before_event: 60,
     payment_count: schedule.payment_count,
+    payment_cadence: schedule.payment_cadence,
+    ...(schedule.booking_payment !== Math.min(schedule.venue_services_total, Math.max(schedule.venue_services_total * 0.25, 750)) ? { booking_payment_amount: schedule.booking_payment } : {}),
     booking_date: schedule.booking_date,
     final_payment_due_date: schedule.final_payment_due_date,
     security_deposit_due_date: schedule.security_deposit_due_date,

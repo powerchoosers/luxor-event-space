@@ -532,12 +532,23 @@ function customItemSelection(items: LuxorInvoiceLineItem[]) {
  */
 function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProposalPaymentPlan> | null {
   const plan = asRecord(context.payment_plan)
-  if (plan && Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count))) {
+  const paymentCount = Number(plan?.payment_count)
+  const paymentCadence = plan?.payment_cadence === 'biweekly' || plan?.payment_cadence === 'monthly' || plan?.payment_cadence === 'evenly_spaced'
+    ? plan.payment_cadence
+    : 'evenly_spaced'
+  const bookingPaymentAmount = asNumber(plan?.booking_payment_amount)
+  const preferredPaymentMethod = plan?.preferred_payment_method === 'card' || plan?.preferred_payment_method === 'cash' || plan?.preferred_payment_method === 'zelle' || plan?.preferred_payment_method === 'check'
+    ? plan.preferred_payment_method
+    : 'card'
+  if (plan && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
     return {
       mode: 'deposit_and_balance',
-      payment_count: Number(plan.payment_count) as 2 | 3 | 4 | 5,
+      payment_count: paymentCount,
+      payment_cadence: paymentCadence,
       booking_payment_percent: asNumber(plan.booking_payment_percent) ?? 25,
       final_payment_due_days_before_event: asNumber(plan.final_payment_due_days_before_event) ?? 60,
+      ...(bookingPaymentAmount !== undefined ? { booking_payment_amount: bookingPaymentAmount } : {}),
+      preferred_payment_method: preferredPaymentMethod,
       ...(typeof plan.booking_date === 'string' ? { booking_date: plan.booking_date } : {}),
     }
   }
@@ -549,9 +560,11 @@ function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProp
   const finalPaymentDays = asNumber(plan.final_payment_due_days_before_event)
   return {
     mode,
-    ...(Number.isInteger(Number(plan.payment_count)) && [2, 3, 4, 5].includes(Number(plan.payment_count)) ? { payment_count: Number(plan.payment_count) as 2 | 3 | 4 | 5 } : {}),
+    ...(Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24 ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
     ...(bookingPaymentPercent !== undefined ? { booking_payment_percent: bookingPaymentPercent } : {}),
     ...(finalPaymentDays !== undefined ? { final_payment_due_days_before_event: finalPaymentDays } : {}),
+    ...(bookingPaymentAmount !== undefined ? { booking_payment_amount: bookingPaymentAmount } : {}),
+    preferred_payment_method: preferredPaymentMethod,
   }
 }
 
@@ -1587,8 +1600,11 @@ export function ProposalBuilderModal({
                 eventDate={eventDateValue}
                 bookingDate={new Date().toISOString().slice(0, 10)}
                 paymentCount={paymentPlanDraft?.payment_count ?? 4}
+                paymentCadence={paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'}
+                bookingPaymentAmount={paymentPlanDraft?.booking_payment_amount}
+                preferredPaymentMethod={paymentPlanDraft?.preferred_payment_method ?? 'card'}
                 editable
-                onPaymentCountChange={(count) => updatePaymentPlan({ mode: 'deposit_and_balance', payment_count: count, booking_payment_percent: 25, final_payment_due_days_before_event: 60 })}
+                onPaymentPlanChange={(patch) => updatePaymentPlan({ mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 60, ...patch })}
               />}
 
               <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">

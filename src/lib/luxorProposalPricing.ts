@@ -495,12 +495,20 @@ function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaym
   const plan = record(selection.paymentPlan || selection.payment_plan)
   if (!plan) return null
   const paymentCount = numberValue(plan.payment_count ?? plan.paymentCount)
-  if (paymentCount !== undefined && [2, 3, 4, 5].includes(paymentCount)) {
+  const cadence = plan.payment_cadence ?? plan.paymentCadence
+  const paymentCadence = cadence === 'biweekly' || cadence === 'monthly' || cadence === 'evenly_spaced' ? cadence : 'evenly_spaced'
+  const bookingPaymentAmount = numberValue(plan.booking_payment_amount ?? plan.bookingPaymentAmount)
+  const preferredMethod = plan.preferred_payment_method ?? plan.preferredPaymentMethod
+  const preferredPaymentMethod = preferredMethod === 'card' || preferredMethod === 'cash' || preferredMethod === 'zelle' || preferredMethod === 'check' ? preferredMethod : undefined
+  if (paymentCount !== undefined && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
     return {
       mode: 'deposit_and_balance',
       booking_payment_percent: 25,
       final_payment_due_days_before_event: 60,
-      payment_count: paymentCount as 2 | 3 | 4 | 5,
+      payment_count: paymentCount,
+      payment_cadence: paymentCadence,
+      ...(bookingPaymentAmount !== undefined && bookingPaymentAmount >= 0.5 ? { booking_payment_amount: rounded(bookingPaymentAmount) } : {}),
+      ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
     }
   }
   const mode = plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance' ? plan.mode : null
@@ -513,6 +521,7 @@ function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaym
     mode,
     booking_payment_percent: mode === 'pay_in_full' ? 100 : rounded(percentage),
     final_payment_due_days_before_event: finalDays,
+    ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
   }
 }
 
@@ -951,12 +960,11 @@ function calculatePackage(input: {
   const venueServicesTotal = rounded(items
     .filter((item) => item.paymentBucket === 'venue' || item.category === 'Venue Services')
     .reduce((sum, item) => sum + Math.max(0, Number(item.total || 0)), 0))
-  const paymentCount = paymentPlan ? Number(paymentPlan.payment_count) : null
   const amountDueToBook = paymentPlan
     ? paymentPlan.mode === 'pay_in_full'
       ? total
-      : paymentCount !== null && paymentCount <= 3
-        ? venueServicesTotal
+      : paymentPlan.booking_payment_amount !== undefined && paymentPlan.booking_payment_amount >= 0.5
+        ? Math.min(venueServicesTotal, rounded(paymentPlan.booking_payment_amount))
         : Math.min(venueServicesTotal, rounded(Math.max(venueServicesTotal * paymentPlan.booking_payment_percent / 100, 750)))
     : null
 

@@ -254,7 +254,13 @@ export type LuxorProposalPaymentPlan = {
   booking_payment_percent: number
   final_payment_due_days_before_event: number
   /** Number of event-price payments, including the booking payment. */
-  payment_count?: 2 | 3 | 4 | 5
+  payment_count?: number
+  /** How the payment dates are spaced before the final-payment deadline. */
+  payment_cadence?: 'evenly_spaced' | 'biweekly' | 'monthly'
+  /** Owner-approved booking payment that replaces the calculated default. */
+  booking_payment_amount?: number
+  /** The method Luxor plans to collect first; card uses Stripe, the others are recorded manually. */
+  preferred_payment_method?: 'card' | 'cash' | 'zelle' | 'check'
   /** The contract/Stripe booking date used to anchor installment dates. */
   booking_date?: string
   /** Event date minus the approved final-payment lead time. */

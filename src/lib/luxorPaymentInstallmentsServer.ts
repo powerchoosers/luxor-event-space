@@ -13,8 +13,14 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
   const venue = Number(context.venue_services_total || 0)
   const event = Number(context.event_services_total || 0)
   const count = plan && typeof plan === 'object' && Number.isInteger(Number(plan.payment_count)) ? Number(plan.payment_count) : 4
+  const cadence = plan && typeof plan === 'object' && (plan.payment_cadence === 'biweekly' || plan.payment_cadence === 'monthly' || plan.payment_cadence === 'evenly_spaced')
+    ? plan.payment_cadence
+    : 'evenly_spaced'
+  const bookingPaymentAmount = plan && typeof plan === 'object' && Number.isFinite(Number(plan.booking_payment_amount))
+    ? Number(plan.booking_payment_amount)
+    : undefined
   if (!eventDate || !Number.isFinite(venue) || !Number.isFinite(event)) return []
-  const schedule = calculateLuxorPaymentSchedule({ eventDate, bookingDate, venueServicesTotal: venue, eventServicesTotal: event, paymentCount: count })
+  const schedule = calculateLuxorPaymentSchedule({ eventDate, bookingDate, venueServicesTotal: venue, eventServicesTotal: event, paymentCount: count, paymentCadence: cadence, bookingPaymentAmount })
   if (!schedule) return []
   const existing = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(input.booking.id)}&order=installment_order.asc`)
   const rows: LuxorPaymentInstallment[] = []
