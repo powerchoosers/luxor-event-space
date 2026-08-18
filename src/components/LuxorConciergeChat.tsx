@@ -67,6 +67,9 @@ const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate', 'Oth
 const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|open[-\s]?air|interior|exterior|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
 const indoorOnlyReply =
   'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour.'
+const capacityReply =
+  'Luxor can accommodate up to 200 people. If you are planning for 200 or fewer, I can help you think through the layout and next step.'
+const overCapacityPattern = /\b(\d[\d,]*)\s*(?:guests?|people|attendees?|attendance)\b/i
 
 function createId() {
   return Math.random().toString(36).slice(2)
@@ -77,6 +80,11 @@ function fallbackResponse(input: string) {
 
   if (venueSettingQuestionPattern.test(text)) {
     return indoorOnlyReply
+  }
+
+  const capacityMatch = text.match(overCapacityPattern)
+  if (capacityMatch && Number(capacityMatch[1].replace(/,/g, '')) > 200) {
+    return capacityReply
   }
 
   if (text.includes('price') || text.includes('cost') || text.includes('package')) {

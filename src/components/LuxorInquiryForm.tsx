@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { LUXOR_EVENT_TYPES } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 
@@ -129,6 +129,10 @@ export function LuxorInquiryForm({
       setError('Please select the type of event you are planning.')
       return
     }
+    if (isGuestCountOverCapacity(guestCount)) {
+      setError(LUXOR_GUEST_CAPACITY_MESSAGE)
+      return
+    }
     setError(null)
     setStep(2)
     trackLuxorPublicEvent('form_step_completed', { source, flow, step: 'event_details', eventType, packageInterest })
@@ -146,6 +150,12 @@ export function LuxorInquiryForm({
     if (!eventType) {
       setStep(1)
       setError('Please select the type of event you are planning.')
+      return
+    }
+
+    if (isGuestCountOverCapacity(guestCount)) {
+      setStep(1)
+      setError(LUXOR_GUEST_CAPACITY_MESSAGE)
       return
     }
 
@@ -267,7 +277,10 @@ export function LuxorInquiryForm({
                 <FieldLabel label="Target event date">
                   <PortalDatePicker value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
-                <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />
+                <div>
+                  <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />
+                  {isGuestCountOverCapacity(guestCount) ? <p role="alert" className="mt-2 text-xs leading-5 text-[#f1d27a]">{LUXOR_GUEST_CAPACITY_MESSAGE}</p> : null}
+                </div>
                 <FieldLabel label="Planning budget">
                   <PortalSelect value={budget} onChange={setBudget} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a range" options={BUDGET_OPTIONS} />
                 </FieldLabel>

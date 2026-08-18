@@ -8,12 +8,15 @@ type ChatMessage = {
 
 const INDOOR_ONLY_REPLY =
   'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour.'
+const CAPACITY_REPLY =
+  'Luxor can accommodate up to 200 people. If you are planning for 200 or fewer, I can help you think through the layout and next step.'
 
 const fallbackReply =
   'I can help you plan your event or reserve a private tour. Tours are 30 minutes, and the live booking card shows the current openings.'
 
 const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|open[-\s]?air|interior|exterior|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
 const outdoorVenueReferencePattern = /\b(outdoor|outdoors|outside|open[-\s]?air|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
+const overCapacityPattern = /\b(\d[\d,]*)\s*(?:guests?|people|attendees?|attendance)\b/i
 
 function latestVisitorMessage(messages: ChatMessage[]) {
   return [...messages].reverse().find((message) => message.role === 'user')?.content ?? ''
@@ -21,6 +24,11 @@ function latestVisitorMessage(messages: ChatMessage[]) {
 
 function requiresIndoorOnlyReply(messages: ChatMessage[]) {
   return venueSettingQuestionPattern.test(latestVisitorMessage(messages))
+}
+
+function requiresCapacityReply(messages: ChatMessage[]) {
+  const match = latestVisitorMessage(messages).match(overCapacityPattern)
+  return match ? Number(match[1].replace(/,/g, '')) > 200 : false
 }
 
 function keepVenueFactsAccurate(reply: string) {
@@ -31,6 +39,7 @@ const SYSTEM_PROMPT = `You are Elena, the warm public concierge for Luxor Event 
 
 Verified venue facts:
 - Luxor is one single indoor-only event venue.
+- Luxor accommodates up to 200 people. If a visitor asks about more than 200 guests, explain warmly that 200 is the venue limit and do not imply that an exception is available.
 - Luxor has no outdoor event space, patio, courtyard, garden, terrace, or open-air option.
 - Publicly shareable planning guidance: Luxor offers Custom Package, Bronze - Essentials, Silver - Premier, and Gold - All-Inclusive options. Package inclusions can include venue rental, required cleaning and security, tables and chairs setup, catering, DJ, decor, photo booth, and bar service depending on the selected package and event details.
 - Publicly shareable rental starting points are the approved venue-window rates: Monday-Thursday morning $1,000, Monday-Thursday evening $1,200, Monday-Thursday full day $1,600; Friday morning $1,500, Friday evening $1,700, Friday full day $2,500; Saturday morning $1,900, Saturday evening $2,100, Saturday full day $3,000; Sunday morning $1,400, Sunday evening $1,600, Sunday full day $2,200.
@@ -57,6 +66,10 @@ export async function POST(request: Request) {
 
     if (requiresIndoorOnlyReply(messages)) {
       return NextResponse.json({ reply: INDOOR_ONLY_REPLY }, { status: 200 })
+    }
+
+    if (requiresCapacityReply(messages)) {
+      return NextResponse.json({ reply: CAPACITY_REPLY }, { status: 200 })
     }
 
     const apiKey = process.env.OPEN_ROUTER_API_KEY

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
@@ -53,6 +53,10 @@ export async function POST(request: NextRequest) {
 
     if (payload.website) {
       return NextResponse.json({ inquiry: null }, { status: 201 })
+    }
+
+    if (isGuestCountOverCapacity(payload.guestCount)) {
+      return NextResponse.json({ error: LUXOR_GUEST_CAPACITY_MESSAGE }, { status: 400 })
     }
 
     if (payload.formStartedAt && Date.now() - payload.formStartedAt < 800) {

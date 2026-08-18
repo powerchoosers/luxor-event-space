@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
-import { LUXOR_EVENT_TYPES, type LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, type LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 type Locale = 'en' | 'es'
@@ -61,6 +61,10 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       setError(spanish ? 'Agrega el tipo de evento, tu nombre y un correo o teléfono.' : 'Add your event type, full name, and an email or phone number.')
       return
     }
+    if (isGuestCountOverCapacity(guestCount)) {
+      setError(spanish ? LUXOR_GUEST_CAPACITY_MESSAGE_ES : LUXOR_GUEST_CAPACITY_MESSAGE)
+      return
+    }
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) {
       setError(spanish ? 'Revisa tu correo electrónico.' : 'Please check your email address.')
       return
@@ -101,7 +105,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       <div className="border-b border-[#b98a3d]/20 pb-5"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#8d672b]">{spanish ? 'Solicita un recorrido' : 'Schedule a tour'}</p><h2 className="mt-2 font-serif text-3xl text-[#241d17]">{spanish ? 'Cuéntanos cuándo te gustaría venir.' : 'Tell us when you would like to come.'}</h2></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label={spanish ? 'Tipo de evento' : 'Event type'}><PortalSelect theme="light" value={eventType} onChange={setEventType} options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} placeholder={spanish ? 'Selecciona una opción' : 'Select an event'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
-        <Field label={spanish ? 'Invitados esperados' : 'Expected guests'}><input value={guestCount} onChange={(event) => setGuestCount(event.target.value)} inputMode="numeric" placeholder="For example, 120" className={inputClass} /></Field>
+        <Field label={spanish ? 'Invitados esperados' : 'Expected guests'}><input value={guestCount} onChange={(event) => setGuestCount(event.target.value)} inputMode="numeric" placeholder="For example, 120" className={inputClass} />{isGuestCountOverCapacity(guestCount) ? <span role="alert" className="mt-2 block text-xs leading-5 text-rose-700">{spanish ? LUXOR_GUEST_CAPACITY_MESSAGE_ES : LUXOR_GUEST_CAPACITY_MESSAGE}</span> : null}</Field>
         <Field label={spanish ? 'Presupuesto estimado' : 'Planning budget'}><PortalSelect theme="light" value={budget} onChange={setBudget} options={BUDGET_OPTIONS.map(([value, label]) => ({ value, label: spanish && value === 'Not sure yet' ? 'Aún no estoy seguro' : label }))} placeholder={spanish ? 'Selecciona un rango' : 'Choose a range'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
         <Field label={spanish ? 'Fecha del evento' : 'Event date'}><PortalDatePicker theme="light" value={eventDate} onChange={setEventDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us your event date'} className="w-full" /></Field>
         <Field label={spanish ? 'Fecha preferida' : 'Preferred date'}>{slots.length ? <PortalSelect theme="light" value={targetDate} onChange={changeDate} options={dates.map(([value, label]) => ({ value, label }))} placeholder={spanish ? 'Selecciona una fecha' : 'Choose a date'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /> : <PortalDatePicker theme="light" value={targetDate} onChange={changeDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us a date'} className="w-full" />}</Field>
