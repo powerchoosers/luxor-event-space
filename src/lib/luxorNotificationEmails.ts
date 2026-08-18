@@ -38,6 +38,7 @@ async function generateAiSummary(inquiry: LuxorInquiry): Promise<string> {
   const phone = inquiry.phone || 'N/A'
   const eventType = inquiry.event_type || 'N/A'
   const guestCount = inquiry.guest_count || 'N/A'
+  const budget = inquiry.budget || 'N/A'
   const targetDate = inquiry.target_date || 'N/A'
   const notes = inquiry.message || ''
   
@@ -54,6 +55,7 @@ Inquiry Details:
 - Phone: ${phone}
 - Event Type: ${eventType}
 - Guest Count: ${guestCount}
+- Planning Budget: ${budget}
 - Target Date: ${targetDate}
 - Visitor Notes: ${notes}
 
@@ -168,6 +170,10 @@ function buildBrandedNotificationHtml(inquiry: LuxorInquiry, aiSummary: string):
                 <tr>
                   <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Guests</td>
                   <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${inquiry.guest_count || 'N/A'}</td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Planning Budget</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">${escapeHtml(inquiry.budget || 'Not provided')}</td>
                 </tr>
                 <tr>
                   <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Target Date</td>

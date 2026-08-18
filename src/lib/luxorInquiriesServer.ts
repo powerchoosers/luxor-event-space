@@ -17,6 +17,7 @@ const OPTIONAL_INQUIRY_COLUMNS = [
   'campaign_key',
   'rsvp_status',
   'marketing_opt_in',
+  'budget',
   'page_path',
   'referrer',
 ] as const

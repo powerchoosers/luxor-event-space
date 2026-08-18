@@ -103,9 +103,10 @@ export function EmailBuilderTab({
     handleStartCanvas(tpl)
   }
 
-  async function handleGenerateElenaDraft(e: React.FormEvent) {
+  async function handleGenerateElenaDraft(e: React.FormEvent, promptOverride?: string) {
     e.preventDefault()
-    if (!elenaPromptText.trim()) return
+    const prompt = (promptOverride ?? elenaPromptText).trim()
+    if (!prompt) return
 
     setGeneratingElena(true)
     try {
@@ -115,7 +116,7 @@ export function EmailBuilderTab({
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-          prompt: elenaPromptText,
+          prompt,
           tone,
           leadContext: activeLead
         })
@@ -161,7 +162,7 @@ export function EmailBuilderTab({
 
       const elenaCustomTemplate: EmailTemplate & { subject?: string } = {
         id: `elena-generated-${Date.now()}`,
-        name: data.name || `Elena: ${elenaPromptText.slice(0, 30)}...`,
+        name: data.name || `Elena: ${prompt.slice(0, 30)}...`,
         subject: data.subject || `Welcome to Luxor Event Space`,
         description: `Elena AI Generated Email Draft`,
         category: `seasonal`,
@@ -189,6 +190,18 @@ export function EmailBuilderTab({
       setGeneratingElena(false)
     }
   }
+
+  // Elena's internal chat routes campaign requests here instead of returning
+  // prose. Generate through the same block-based builder workflow the owner
+  // gets when using the Marketing page directly.
+  useEffect(() => {
+    const prompt = searchParams?.get('elenaPrompt')?.trim()
+    if (!prompt) return
+
+    setElenaPromptText(prompt)
+    setActiveSubTab('elena-ai')
+    void handleGenerateElenaDraft({ preventDefault() {} } as React.FormEvent, prompt)
+  }, [searchParams])
 
   // If live email builder canvas is activated
   if (showCanvas) {

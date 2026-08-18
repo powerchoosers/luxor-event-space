@@ -253,6 +253,7 @@ function EventTypeIcon({ eventType }: { eventType: string | null }) {
 type EditableLeadField =
   | 'event_type'
   | 'guest_count'
+  | 'budget'
   | 'target_date'
   | 'package_interest'
   | 'preferred_tour_date'
@@ -263,6 +264,15 @@ type EditableLeadField =
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
 type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
+
+const LEAD_BUDGET_OPTIONS = [
+  { value: 'Under $5,000', label: 'Under $5,000' },
+  { value: '$5,000–$10,000', label: '$5,000–$10,000' },
+  { value: '$10,000–$15,000', label: '$10,000–$15,000' },
+  { value: '$15,000–$20,000', label: '$15,000–$20,000' },
+  { value: '$20,000+', label: '$20,000+' },
+  { value: 'Not sure yet', label: 'Not sure yet' },
+]
 
 const ACTIVITY_BATCH_SIZE = 18
 const EVENT_TIME_OPTIONS = LUXOR_TIME_DROPDOWN_OPTIONS
@@ -7700,6 +7710,7 @@ function ClientSummaryCard({
     { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
     { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
     { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
+    { label: 'Planning Budget', icon: <DollarSign size={14} />, value: lead.budget || 'Budget not provided', editValue: lead.budget || '', copyValue: lead.budget || '', field: 'budget', inputType: 'select', options: LEAD_BUDGET_OPTIONS },
     { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'select', options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
   ]
 

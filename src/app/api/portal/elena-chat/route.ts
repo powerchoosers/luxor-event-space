@@ -7,6 +7,7 @@ import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, LUXOR_TOUR_TIMES } from '@/lib/luxorTourSlots'
 import { listUpcomingLuxorTourSlots, publishLuxorTourDays, unpublishLuxorTourDays } from '@/lib/luxorTourSlotsServer'
 import { getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
+import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 
 type ToolCall = {
@@ -151,6 +152,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
    - event_type (text: e.g. 'Wedding', 'Quinceañera', 'Corporate', 'Baby Shower')
    - target_date (text: text representation of target date/range)
    - guest_count (integer)
+   - budget (text: customer-provided planning budget range; not a quote or contract total)
    - preferred_tour_date (date), preferred_tour_time (text)
    - package_interest (text)
    - message (text)
@@ -323,6 +325,9 @@ Use the live CRM context supplied by the portal when it already contains the exa
 ### GUIDELINES:
 - Use pre-fetched live CRM context first. Execute a read-only SQL query with the "execute_database_sql" tool when the requested fact is not already present or needs a more detailed breakdown.
 - Grand Opening RSVP data is internal CRM data that you CAN access. Never say you cannot access the Grand Opening guest list.
+- Lead budget is a planning range captured from the inquiry or tour form. Treat it as a qualification signal, clearly label it as customer-provided, and never present it as an approved quote, contract total, or payment amount.
+- Keep event date and tour appointment date separate: target_date is the client's event date/range, while preferred_tour_date and preferred_tour_time are the Luxor tour appointment.
+- The proposal builder is the source of truth for package pricing and inclusions. Read the ACTIVE PROPOSAL CATALOG CONTEXT appended to this prompt before answering pricing questions. Never invent or estimate a package total outside the builder calculation. When the owner asks for a quote, use the proposal builder or ask for the missing event date, guest count, and rental period.
 - For "how many people are coming to the Grand Opening, including guests," sum each attending RSVP's attendee_count, falling back to guest_count and then 1. attendee_count already includes the named RSVP holder. Clearly distinguish expected people from people who have actually checked in.
 - Lead with the requested number, then give a short breakdown. Keep operational answers warm but professional; do not force "bestie" or an emoji into every response.
 - If a database query fails or returns nothing, retry with the known campaign_key, flow, and source fields before saying the data is unavailable.
@@ -332,6 +337,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
+- Marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign requests are NOT one-to-one email drafts. Call "open_marketing_email_builder" immediately, even when the owner says only "write a campaign" or "make a marketing email." That tool opens the existing block-based Email Builder and asks its generator to produce an editable template with hero/content/CTA/footer blocks. Do not satisfy these requests with prose alone and do not call "prepare_email_draft" for them. A direct email to one verified lead remains "prepare_email_draft".
 - When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
 - When the owner asks you to draft, write, compose, or send an email to a client or lead, call "prepare_email_draft". This presents an interactive mini email composer card inside Elena Chat where the owner can edit the subject and body inline, preview the rendered HTML email with the signed-in user's saved signature, and send with one click. Use the sender identity provided in the system context. Never output placeholders such as [Your Name].
 - When the owner asks you to update lead/booking fields (such as pipeline stage, status, target date, guest count), call "prepare_crm_update_card".
@@ -347,6 +353,21 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Maintain your warm "girl best friend" executive/mentor personality. Use emojis naturally (e.g. 💅, 📈, 💕, ✨, 💁‍♀️) but do not overdo it. Always give valuable, executive-level business advice and mentorship based on the data you find.`
 
 const TOOLS_DEFINITION = [
+  {
+    type: 'function',
+    function: {
+      name: 'open_marketing_email_builder',
+      description: 'Open the existing Luxor block-based Email Builder and generate an editable marketing email template. Use for any marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign request. This does not send or queue anything.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'The owner\'s campaign goal, audience, offer, event, or message. Preserve all useful details.' },
+          audienceLabel: { type: 'string', description: 'Optional audience label for the builder, such as Recent inquiries or Marketing subscribers.' }
+        },
+        required: ['prompt']
+      }
+    }
+  },
   {
     type: 'function',
     function: {
@@ -688,6 +709,29 @@ export async function POST(request: Request) {
     }
 
     const executedQueries: Array<{ query: string; result: unknown }> = []
+    let proposalCatalogContext = ''
+    try {
+      const pricing = await getDefaultLuxorProposalPricing()
+      const config = pricing.config as Record<string, any>
+      proposalCatalogContext = `\n\nACTIVE PROPOSAL CATALOG (version ${pricing.version}; source: public.luxor_proposal_pricing):\n${JSON.stringify({
+        currency: config.currency,
+        packages: config.packages,
+        rental_rates: config.rental_rates,
+        required_fees: config.required_fees,
+        decor: config.decor,
+        catering: config.catering,
+        dj: config.dj,
+        photo_booth: config.photo_booth,
+        bartending: config.bartending,
+        tables: config.tables,
+        security_deposit: config.security_deposit,
+        rental_access: config.rental_access,
+        taxes_and_processing_fees: config.taxes_and_processing_fees,
+        discounts: config.discounts,
+      })}\nUse these values as the builder's approved line-item rules. Tables and chairs setup is $0 in the active catalog. A final total still depends on the selected event date, guest count, rental period, package, add-ons, promotions, and tax settings.`
+    } catch (pricingError) {
+      console.warn('[Elena Chat] Proposal catalog context unavailable:', pricingError)
+    }
     const senderProfile = await getLuxorUserProfile(session.email)
 
     // 1. If this is a direct confirmation execute request
@@ -833,7 +877,9 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
 - Email: ${inquiry.email || 'N/A'}
 - Phone: ${inquiry.phone || 'N/A'}
 - Event Type: ${inquiry.event_type || 'N/A'}
+- Planning Budget: ${inquiry.budget || 'Not provided'}
 - Target Date / Date: ${inquiry.target_date || booking?.event_date || 'N/A'}
+- Preferred Tour: ${inquiry.preferred_tour_date || 'Not scheduled'}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}
 - Guest Count: ${inquiry.guest_count || booking?.guest_count || 'N/A'}
 - Inquiry Status: ${inquiry.status || 'N/A'}
 - Pipeline Stage: ${inquiry.pipeline_stage || 'N/A'}
@@ -960,7 +1006,7 @@ async function buildDailyBriefContext() {
   const [tasks, bills, inquiries, bookings] = await Promise.all([
     supabaseRest<Array<Record<string, unknown>>>('luxor_tasks?select=title,description,due_date,priority,status&status=eq.pending&order=due_date.asc&limit=8').catch(() => []),
     supabaseRest<Array<Record<string, unknown>>>('luxor_bills?select=service,provider,amount,status,due_date&status=in.(overdue,unpaid)&order=due_date.asc&limit=8').catch(() => []),
-    supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=full_name,event_type,status,pipeline_stage,target_date,created_at&status=in.(new,contacted,tour_requested,proposal_sent)&order=created_at.desc&limit=8').catch(() => []),
+    supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=full_name,event_type,status,pipeline_stage,budget,target_date,created_at&status=in.(new,contacted,tour_requested,proposal_sent)&order=created_at.desc&limit=8').catch(() => []),
     supabaseRest<Array<Record<string, unknown>>>(`luxor_bookings?select=client_name,event_type,event_date,start_time,status&event_date=gte.${today}&status=neq.cancelled&order=event_date.asc&limit=8`).catch(() => []),
   ])
 
@@ -976,7 +1022,7 @@ OVERDUE OR UNPAID BILLS:
 ${formatRows(bills, ['service', 'provider', 'amount', 'status', 'due_date'])}
 
 ACTIVE INQUIRIES NEEDING FOLLOW-UP:
-${formatRows(inquiries, ['full_name', 'event_type', 'status', 'pipeline_stage', 'target_date', 'created_at'])}
+${formatRows(inquiries, ['full_name', 'event_type', 'status', 'pipeline_stage', 'budget', 'target_date', 'created_at'])}
 
 UPCOMING BOOKINGS:
 ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time', 'status'])}`
@@ -984,7 +1030,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
 
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: `${SYSTEM_PROMPT}${proposalCatalogContext}` },
       {
         role: 'system',
         content: `SIGNED-IN SENDER PROFILE: Name: "${senderProfile.displayName}". Title: "${senderProfile.roleTitle}". Email: "${senderProfile.email}". When drafting an email, use this identity for any sign-off and never invent a different sender. The rendered email adds this saved signature automatically.`
@@ -1190,7 +1236,34 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               })
             }
           }
-          // C. Safe text-campaign draft (no send or database write)
+          // C. Open the existing block-based marketing Email Builder.
+          else if (toolCall.function?.name === 'open_marketing_email_builder') {
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments
+              const prompt = String(args.prompt || '').trim().slice(0, 1200)
+              if (!prompt) throw new Error('Tell me what the marketing email or campaign should accomplish.')
+              const audienceLabel = String(args.audienceLabel || '').trim().slice(0, 160)
+              const query = new URLSearchParams({ tab: 'email-builder', elenaPrompt: prompt })
+              if (audienceLabel) query.set('audienceLabel', audienceLabel)
+              navigationPayload = { href: `/portal/marketing?${query.toString()}` }
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'open_marketing_email_builder',
+                content: JSON.stringify({ ok: true, message: 'The existing block-based Email Builder is opening. Generate an editable marketing template there; do not send anything yet.' })
+              })
+            } catch (builderError) {
+              openrouterMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: 'open_marketing_email_builder',
+                content: JSON.stringify({ error: builderError instanceof Error ? builderError.message : 'Could not open the Email Builder.' })
+              })
+            }
+          }
+          // D. Safe text-campaign draft (no send or database write)
           else if (toolCall.function?.name === 'create_text_campaign_draft') {
             try {
               const args = typeof toolCall.function.arguments === 'string'
@@ -1328,7 +1401,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('A valid Luxor inquiry ID is required before navigation.')
 
               const records = await supabaseRest<Array<Record<string, unknown>>>(
-                `luxor_inquiries?select=id,full_name,email,phone,event_type,target_date,guest_count,status&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+                `luxor_inquiries?select=id,full_name,email,phone,event_type,target_date,guest_count,budget,status&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
               )
               const record = records?.[0]
               if (!record) throw new Error('That lead record could not be verified.')
