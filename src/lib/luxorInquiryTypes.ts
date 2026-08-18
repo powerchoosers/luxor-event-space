@@ -34,27 +34,6 @@ export type LuxorPipelineStage =
 
 export type LuxorTourAttendanceStatus = 'pending' | 'attended' | 'no_show' | 'rescheduled' | 'cancelled'
 
-export type LuxorGrandOpeningAttendee = {
-  id: string
-  created_at: string
-  updated_at: string
-  campaign_key: string
-  inquiry_id: string | null
-  invited_by_inquiry_id: string | null
-  full_name: string
-  phone: string | null
-  attendee_type: 'rsvp' | 'guest'
-  checked_in_at: string
-  checked_in_by: 'self' | 'staff'
-  marketing_opt_in: boolean
-  eligible: boolean
-  winner_at: string | null
-  prize_label: string | null
-  disqualified_at: string | null
-  disqualification_reason: string | null
-  metadata: Record<string, unknown>
-}
-
 export type LuxorInquiryInput = {
   fullName: string
   email?: string

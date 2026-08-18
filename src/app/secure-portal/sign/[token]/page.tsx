@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -15,6 +16,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   PenLine,
+  QrCode,
   RotateCcw,
   Type,
 } from 'lucide-react'
@@ -41,6 +43,10 @@ type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
     deposit: number
     full: number
     initial_method?: 'card' | 'cash' | 'zelle' | 'check'
+    zelle?: {
+      recipient?: string | null
+      qr_code_url?: string | null
+    }
   }
 }
 
@@ -56,16 +62,20 @@ function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorS
   const [method, setMethod] = useState<ClientPaymentMethod>(initialMethod)
   const [amount, setAmount] = useState<ClientPaymentAmount>('deposit')
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [manualHandoffComplete, setManualHandoffComplete] = useState(false)
+  const amountValue = amount === 'deposit' ? options.deposit : options.full
+  const amountLabel = amount === 'deposit' ? 'initial booking payment' : 'full event balance'
+  const zelleDetails = options.zelle
 
   const submit = async () => {
     setBusy(true)
-    setMessage('')
+    setError('')
     try {
       const response = await fetch(`/api/public/proposals/${encodeURIComponent(options.proposal_token)}/payment-preference`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method, amount }),
+        body: JSON.stringify({ method, amount, handoffComplete: method !== 'card' }),
       })
       const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string }
       if (!response.ok) throw new Error(data.error || 'We could not save your payment choice.')
@@ -73,33 +83,54 @@ function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorS
         window.location.assign(data.checkoutUrl)
         return
       }
-      setMessage(`Please hand the iPad back to Luxor once the ${method === 'zelle' ? 'Zelle' : 'cash'} payment has been received. They will record it securely before your date is reserved.`)
+      setManualHandoffComplete(true)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'We could not save your payment choice.')
+      setError(error instanceof Error ? error.message : 'We could not save your payment choice.')
     } finally {
       setBusy(false)
     }
   }
 
+  if (manualHandoffComplete && method !== 'card') {
+    return (
+      <section aria-live="polite" className="mt-6 rounded-xl border border-[#c9b583] bg-[#fbf5e9] p-5 text-[#2d251e]">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e4f1e7] text-[#2f7547]"><CheckCircle2 size={21} /></span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Next step</p>
+            <h3 className="mt-1 font-serif text-2xl font-medium">Hand the iPad back to Luxor.</h3>
+            <p className="mt-2 text-sm leading-6 text-[#6f665b]">{method === 'zelle' ? 'Your Zelle choice is ready for Luxor to verify before the payment is recorded.' : 'Luxor will take and verify the cash payment before it is recorded.'}</p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-[#ddd0b9] bg-white/70 px-4 py-3 text-xs leading-5 text-[#5f554a]">
+          <span className="font-semibold">Chosen today:</span> {method === 'zelle' ? 'Zelle' : 'Cash'} for the {amountLabel} ({money(amountValue)}). Your date is reserved only after Luxor confirms payment.
+        </div>
+        <button type="button" onClick={() => setManualHandoffComplete(false)} className="mt-4 text-xs font-semibold text-[#966f35] underline decoration-[#caa24c]/50 underline-offset-4 transition hover:text-[#5c421d]">Choose a different payment method</button>
+      </section>
+    )
+  }
+
   return (
     <section className="mt-6 rounded-xl border border-[#d7c59f] bg-[#faf7f2] p-4">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Choose payment</p>
-      <p className="mt-1 text-xs leading-5 text-[#6f665b]">Choose Card, Zelle, or Cash. Card opens secure checkout; Luxor confirms Cash and Zelle only after it is received.</p>
+      <p className="mt-1 text-xs leading-5 text-[#6f665b]">Choose Card, Zelle, or Cash. Card opens secure checkout for the initial booking payment; Luxor confirms Cash and Zelle only after they are received.</p>
       <div role="radiogroup" aria-label="Payment method" className="mt-4 grid grid-cols-3 gap-2">
         {([
           ['card', 'Card'],
           ['zelle', 'Zelle'],
           ['cash', 'Cash'],
         ] as Array<[ClientPaymentMethod, string]>).map(([value, label]) => (
-          <button key={value} type="button" role="radio" aria-checked={method === value} onClick={() => setMethod(value)} className={`min-h-11 rounded-lg border px-2 text-xs font-semibold transition ${method === value ? 'border-[#b98a3e] bg-[#f5ead2] text-[#5c421d]' : 'border-[#ded5c8] bg-white text-[#5f554a] hover:border-[#caa24c]/60'}`}>{label}</button>
+          <button key={value} type="button" role="radio" aria-checked={method === value} onClick={() => { setMethod(value); setAmount(value === 'card' ? 'deposit' : amount); setError('') }} className={`min-h-11 rounded-lg border px-2 text-xs font-semibold transition ${method === value ? 'border-[#b98a3e] bg-[#f5ead2] text-[#5c421d]' : 'border-[#ded5c8] bg-white text-[#5f554a] hover:border-[#caa24c]/60'}`}>{label}</button>
         ))}
       </div>
-      <div role="radiogroup" aria-label="Payment amount" className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div role="radiogroup" aria-label="Payment amount" className={`mt-3 grid gap-2 ${method === 'card' ? '' : 'sm:grid-cols-2'}`}>
         <button type="button" role="radio" aria-checked={amount === 'deposit'} onClick={() => setAmount('deposit')} className={`rounded-lg border p-3 text-left transition ${amount === 'deposit' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white hover:border-[#caa24c]/60'}`}><span className="block text-xs font-semibold">Initial booking payment</span><span className="mt-1 block font-mono text-sm font-bold text-[#8c6529]">{money(options.deposit)}</span></button>
-        <button type="button" role="radio" aria-checked={amount === 'full'} onClick={() => setAmount('full')} className={`rounded-lg border p-3 text-left transition ${amount === 'full' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white hover:border-[#caa24c]/60'}`}><span className="block text-xs font-semibold">Full event balance</span><span className="mt-1 block font-mono text-sm font-bold text-[#8c6529]">{money(options.full)}</span></button>
+        {method !== 'card' ? <button type="button" role="radio" aria-checked={amount === 'full'} onClick={() => setAmount('full')} className={`rounded-lg border p-3 text-left transition ${amount === 'full' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white hover:border-[#caa24c]/60'}`}><span className="block text-xs font-semibold">Full event balance</span><span className="mt-1 block font-mono text-sm font-bold text-[#8c6529]">{money(options.full)}</span></button> : null}
       </div>
-      <button type="button" disabled={busy} onClick={() => void submit()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#c89d4b] px-4 text-xs font-bold text-[#20170d] transition hover:bg-[#d7ae60] disabled:cursor-wait disabled:opacity-60"><CreditCard size={15} />{busy ? 'Saving…' : method === 'card' ? 'Continue to secure card payment' : `Confirm ${method === 'zelle' ? 'Zelle' : 'Cash'} choice`}</button>
-      {message ? <p role="status" className="mt-3 text-xs leading-5 text-[#6f665b]">{message}</p> : null}
+      {method === 'card' ? <p className="mt-3 text-[11px] leading-5 text-[#6f665b]">Need to pay more by card today? Luxor can arrange that after the initial booking payment is complete.</p> : null}
+      {method === 'zelle' ? <div className="mt-4 rounded-xl border border-[#d7c59f] bg-white/70 p-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#f5ead2] text-[#8c6529]"><QrCode size={18} /></span><div><p className="text-xs font-semibold text-[#2d251e]">Send {money(amountValue)} with Zelle</p><p className="mt-1 text-[11px] leading-5 text-[#6f665b]">{zelleDetails?.recipient ? <>Send it to <span className="font-semibold text-[#2d251e]">{zelleDetails.recipient}</span>, then come back here to hand the iPad to Luxor.</> : 'Luxor will confirm the Zelle recipient with you before you send anything.'}</p></div></div>{zelleDetails?.qr_code_url ? <div className="mt-4 flex items-center gap-4 rounded-lg border border-[#e1d7c8] bg-[#faf7f2] p-3"><div className="grid h-20 w-20 shrink-0 place-items-center rounded-md bg-white p-1.5"><Image src={zelleDetails.qr_code_url} alt="Luxor Zelle QR code" width={80} height={80} unoptimized referrerPolicy="no-referrer" className="h-full w-full object-contain" /></div><p className="text-[11px] leading-5 text-[#6f665b]">Open Zelle on your phone and scan this code to start the transfer.</p></div> : null}</div> : null}
+      <button type="button" disabled={busy} onClick={() => void submit()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#c89d4b] px-4 text-xs font-bold text-[#20170d] transition hover:bg-[#d7ae60] disabled:cursor-wait disabled:opacity-60"><CreditCard size={15} />{busy ? 'Saving choice…' : method === 'card' ? 'Continue to secure card payment' : method === 'zelle' ? 'I sent the Zelle — hand iPad back' : 'Hand iPad back to Luxor'}</button>
+      {error ? <p role="alert" className="mt-3 text-xs leading-5 text-[#a04b39]">{error}</p> : null}
     </section>
   )
 }

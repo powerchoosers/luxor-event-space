@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
 import {
   ArrowUpRight,
   CalendarClock,
@@ -172,9 +171,8 @@ export function MarketingOverviewTab({
           <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
             <div>
               <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Grand Opening history</h3>
-              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Legacy RSVP records are read-only; use the private attendance report for check-ins.</p>
+              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Legacy RSVP records are read-only and retained for historical reference.</p>
             </div>
-            <Link href="/portal/attendance" className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Attendance report</Link>
           </div>
 
           {grandOpeningRsvps.length ? (

@@ -1304,6 +1304,7 @@ export function ProposalBuilderModal({
                     <p className="mt-1 text-base font-bold">{clientName}</p>
                     <p className="mt-0.5 text-sm text-[color:var(--portal-muted)]">{clientEmail || 'Add an email before publishing.'}</p>
                   </div>
+                  {!clientEmail ? <div role="status" className="flex gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3 text-xs leading-5 text-amber-900 dark:text-amber-100"><Mail size={16} className="mt-0.5 shrink-0" /><div><p className="font-bold">Client email required</p><p className="mt-0.5">Add it in the client summary before the handoff. Luxor needs it to deliver the executed agreement copy after signing.</p></div></div> : null}
                   <div className="border-t border-[color:var(--portal-border)] pt-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal valid through</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_108px] lg:grid-cols-1">

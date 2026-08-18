@@ -40,6 +40,7 @@ import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'
 import { useToast } from '@/components/portal/ToastProvider'
 import { TwilioNumberManager } from '@/components/portal/TwilioNumberManager'
 import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSettings'
+import { PortalPaymentSettings } from '@/components/portal/PortalPaymentSettings'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PromotionManager } from '@/components/portal/PromotionManager'
 
@@ -340,7 +341,7 @@ export default function SettingsPage() {
           <PortalTabTransition activeKey={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
           {activeTab === 'business' && (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)_minmax(20rem,0.85fr)]">
               <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-5">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Venue Record</h3>
@@ -363,6 +364,7 @@ export default function SettingsPage() {
               <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
                 <PortalPhoneRoleSettings mode="venue" />
               </div>
+              <PortalPaymentSettings />
             </div>
           )}
 

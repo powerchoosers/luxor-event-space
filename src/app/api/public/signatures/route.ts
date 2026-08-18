@@ -8,6 +8,7 @@ import { getInvoice, getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServe
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -42,12 +43,21 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   const initialMethod = ['card', 'cash', 'zelle', 'check'].includes(String(preference?.method || '').toLowerCase())
     ? String(preference?.method).toLowerCase()
     : 'card'
+  const zelleDetails = await getLuxorPaymentSettings()
+    .then((settings) => settings.zelle_recipient || settings.zelle_qr_code_url
+      ? { recipient: settings.zelle_recipient, qr_code_url: settings.zelle_qr_code_url }
+      : null)
+    .catch((error) => {
+      console.error('Unable to load configured Zelle payment details:', error)
+      return null
+    })
   const paymentOptions = masterInvoice?.public_token
     ? {
         proposal_token: masterInvoice.public_token,
         deposit: Number(invoice.total || 0),
         full: Number(masterInvoice.total || invoice.total || 0),
         initial_method: initialMethod,
+        ...(zelleDetails ? { zelle: zelleDetails } : {}),
       }
     : null
   // The signature flow creates Checkout only after it has verified the signed
