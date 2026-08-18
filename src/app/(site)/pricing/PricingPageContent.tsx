@@ -6,14 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Check, Minus } from 'lucide-react'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { Reveal } from '@/components/Reveal'
-import { LUXOR_PACKAGE_PRESETS, getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
-
-const rentalRows = [
-  { day: 'Monday–Thursday', ids: ['rental-weekday-morning', 'rental-weekday-evening', 'rental-weekday-full'] },
-  { day: 'Friday', ids: ['rental-friday-morning', 'rental-friday-evening', 'rental-friday-full'] },
-  { day: 'Saturday', ids: ['rental-saturday-morning', 'rental-saturday-evening', 'rental-saturday-full'] },
-  { day: 'Sunday', ids: ['rental-sunday-morning', 'rental-sunday-evening', 'rental-sunday-full'] },
-]
+import { LUXOR_PACKAGE_PRESETS } from '@/lib/luxorServiceCatalog'
 
 const packageFit: Record<string, string> = {
   rental_only: 'Best when you already have your own vendor team and want a polished venue foundation.',
@@ -130,18 +123,6 @@ export default function PricingPageContent() {
               <Link href="#quote" data-conversion="inquiry_cta_click" data-conversion-label="Pricing hero" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em]">Get my final proposal</Link>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="bg-[#080706] py-16 sm:py-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Venue rental · from $1,000</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Start with the room. Add only what your celebration needs.</h2><p className="mt-5 text-base leading-7 text-[#d7c29a]/72">Morning is 8am–3pm, evening is 5pm–12am, and full day is 11am–11pm. These are the actual base rental rates; availability and required services are confirmed in your final proposal.</p></Reveal>
-          <Reveal delay={100}>
-            <div className="mt-10 overflow-hidden rounded-md border border-[#caa24c]/22">
-              <div className="hidden grid-cols-4 bg-[#120d0c] px-6 py-4 font-mono text-xs uppercase tracking-[.2em] text-[#caa24c] sm:grid"><span>Day</span><span>Morning</span><span>Evening</span><span>Full day</span></div>
-              {rentalRows.map((row) => <div key={row.day} className="grid gap-4 border-t border-[#caa24c]/16 bg-[#0a0807] px-6 py-5 first:border-t-0 sm:grid-cols-4 sm:items-center"><strong className="font-serif text-2xl font-normal">{row.day}</strong>{row.ids.map((id, index) => { const rate = getLuxorCatalogItem(id)?.unitPrice || 0; return <div key={id}><span className="mr-2 font-mono text-[10px] uppercase tracking-[.18em] text-[#caa24c] sm:hidden">{['Morning','Evening','Full day'][index]}</span><span className="text-lg text-[#eadcc8]">{money.format(rate)}</span></div> })}</div>)}
-            </div>
-          </Reveal>
         </div>
       </section>
 
