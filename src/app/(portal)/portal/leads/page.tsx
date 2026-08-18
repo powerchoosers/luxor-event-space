@@ -97,7 +97,7 @@ const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
   { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
-type LeadSortKey = 'name' | 'stage' | 'event' | 'intake' | 'source' | 'engagement'
+type LeadSortKey = 'name' | 'stage' | 'event' | 'intake' | 'source'
 type ClientSortKey = 'name' | 'event' | 'guests' | 'targetDate'
 type SortDirection = 'asc' | 'desc'
 type TableSort<Key extends string> = { key: Key; direction: SortDirection }
@@ -396,7 +396,6 @@ export default function LeadsPage() {
         case 'stage': comparison = stageA.localeCompare(stageB); break
         case 'event': comparison = (a.event_type || '').localeCompare(b.event_type || '') || ((a.guest_count || 0) - (b.guest_count || 0)); break
         case 'source': comparison = formatSourceLabel(a).localeCompare(formatSourceLabel(b)); break
-        case 'engagement': comparison = new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime(); break
         case 'intake': comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime(); break
       }
       return leadSort.direction === 'asc' ? comparison : -comparison
@@ -703,7 +702,7 @@ export default function LeadsPage() {
                 <SortableHeader label="Event Parameters" sortKey="event" sort={leadSort} onSort={updateLeadSort} className="min-w-[185px]" />
                 <SortableHeader label="Intake Date" sortKey="intake" sort={leadSort} onSort={updateLeadSort} className="min-w-[145px]" />
                 <SortableHeader label="Source Node" sortKey="source" sort={leadSort} onSort={updateLeadSort} className="min-w-[150px]" />
-                <SortableHeader label="Engagement & Actions" sortKey="engagement" sort={leadSort} onSort={updateLeadSort} align="right" className="min-w-[235px]" />
+                <th scope="col" className="min-w-[235px] whitespace-nowrap px-8 py-3.5 text-right">Engagement &amp; Actions</th>
               </tr>
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
@@ -788,7 +787,7 @@ export default function LeadsPage() {
                       </span>
                     </td>
                     <td className="px-8 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-100 transition-all duration-300 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:translate-x-4 sm:group-hover:translate-x-0 sm:group-focus-within:translate-x-0">
+                      <div className="flex items-center justify-end gap-2">
                         {lead.phone ? (
                           <button
                             type="button"

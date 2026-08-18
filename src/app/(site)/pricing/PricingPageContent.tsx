@@ -2,8 +2,8 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
-import { ArrowRight, Check } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight, Check, Minus } from 'lucide-react'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { Reveal } from '@/components/Reveal'
 import { LUXOR_PACKAGE_PRESETS, getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
@@ -15,13 +15,6 @@ const rentalRows = [
   { day: 'Sunday', ids: ['rental-sunday-morning', 'rental-sunday-evening', 'rental-sunday-full'] },
 ]
 
-const packageHighlights: Record<string, string[]> = {
-  rental_only: ['Venue rental for your selected window', 'Required cleaning and security', 'Tables and chairs setup'],
-  bronze_essentials: ['Essential Decor', 'Buffet catering', 'Six-hour DJ'],
-  silver_premier: ['Full Decor & Planning', 'Buffet catering and six-hour DJ', 'Signature Photo Booth'],
-  gold_all_inclusive: ['Full Decor & Planning', 'Buffet, DJ, and Signature Photo Booth', 'Bartender service up to five hours'],
-}
-
 const packageFit: Record<string, string> = {
   rental_only: 'Best when you already have your own vendor team and want a polished venue foundation.',
   bronze_essentials: 'Best when you want the core celebration pieces coordinated together.',
@@ -31,8 +24,90 @@ const packageFit: Record<string, string> = {
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
+type PackageComparison = {
+  id: string
+  name: string
+  price: number
+  error: string | null
+  items: { key: string; label: string; category: string }[]
+}
+
+type PackageComparisonResponse = {
+  guestCount: number
+  reference: { label: string }
+  packages: PackageComparison[]
+  features: { key: string; label: string; category: string }[]
+}
+
+function PackageComparisonTable({ comparison, error }: { comparison: PackageComparisonResponse | null; error: string | null }) {
+  return (
+    <section aria-labelledby="package-comparison-title" className="mt-16 border-t border-[#caa24c]/20 pt-10 sm:mt-20 sm:pt-14">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Included at a glance</p>
+          <h3 id="package-comparison-title" className="mt-3 font-serif text-4xl leading-none sm:text-5xl">Compare what comes with each package.</h3>
+        </div>
+        <p className="max-w-sm text-sm leading-6 text-[#d7c29a]/68">{comparison ? `Package pricing based on ${comparison.guestCount} guests · ${comparison.reference.label}.` : error || 'Loading the exact 100-guest package comparison…'}</p>
+      </div>
+
+      <div className="mt-8 overflow-x-auto rounded-md border border-[#caa24c]/22 bg-[#0a0807]">
+        <table className="min-w-[780px] w-full border-collapse text-left">
+          <caption className="sr-only">Package comparison based on 100 guests</caption>
+          <thead>
+            <tr className="border-b border-[#caa24c]/20 bg-[#17100d]">
+              <th scope="col" className="sticky left-0 z-10 min-w-[245px] bg-[#17100d] px-5 py-5 text-xs font-bold uppercase tracking-[.16em] text-[#d7c29a]/75">Included</th>
+              {(comparison?.packages || [
+                { id: 'rental_only', name: 'Rental Only', price: 0 },
+                { id: 'bronze_essentials', name: 'Bronze Package', price: 0 },
+                { id: 'silver_premier', name: 'Silver Package', price: 0 },
+                { id: 'gold_all_inclusive', name: 'Gold Package', price: 0 },
+              ]).map((plan) => (
+                <th key={plan.id} scope="col" className={`min-w-[180px] px-5 py-5 align-top ${plan.id === 'gold_all_inclusive' ? 'bg-[#caa24c]/10' : ''}`}>
+                  <span className="block text-[10px] font-bold uppercase tracking-[.16em] text-[#caa24c]">{plan.name}</span>
+                  <span className="mt-2 block font-mono text-xl text-[#f1d27a]">{plan.price ? money.format(plan.price) : '—'}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(comparison?.features || []).map((feature) => (
+              <tr key={feature.key} className="border-b border-[#caa24c]/12 last:border-b-0">
+                <th scope="row" className="sticky left-0 z-10 bg-[#0a0807] px-5 py-4 text-sm font-medium text-[#eadcc8]/86">{feature.label}</th>
+                {(comparison?.packages || []).map((plan) => {
+                  const included = plan.items.some((item) => item.key === feature.key)
+                  return <td key={plan.id} className={`px-5 py-4 text-center ${plan.id === 'gold_all_inclusive' ? 'bg-[#caa24c]/[.045]' : ''}`}>{included ? <Check aria-label="Included" className="mx-auto h-5 w-5 text-[#f1d27a]" /> : <Minus aria-label="Not included" className="mx-auto h-4 w-4 text-[#d7c29a]/28" />}</td>
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!comparison && !error ? <p className="px-5 py-8 text-sm text-[#d7c29a]/60">Loading the Builder’s current package inclusions…</p> : null}
+      </div>
+      <p className="mt-4 text-xs leading-5 text-[#d7c29a]/52">Reference prices are event-service totals only; the refundable security deposit is separate. Final proposals recalculate from the selected date, access window, guest count, and approved services.</p>
+    </section>
+  )
+}
+
 export default function PricingPageContent() {
   const [selectedPackage, setSelectedPackage] = useState('')
+  const [comparison, setComparison] = useState<PackageComparisonResponse | null>(null)
+  const [comparisonError, setComparisonError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/public/package-comparison')
+      .then(async (response) => {
+        const payload = await response.json() as PackageComparisonResponse & { error?: string }
+        if (!response.ok) throw new Error(payload.error || 'Package pricing is temporarily unavailable.')
+        if (active) setComparison(payload)
+      })
+      .catch((error: unknown) => {
+        if (active) setComparisonError(error instanceof Error ? error.message : 'Package pricing is temporarily unavailable.')
+      })
+    return () => { active = false }
+  }, [])
+
+  const packageById = useMemo(() => new Map(comparison?.packages.map((item) => [item.id, item]) || []), [comparison])
 
   function choosePackage(packageName: string) {
     setSelectedPackage(packageName)
@@ -76,19 +151,23 @@ export default function PricingPageContent() {
           <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             {LUXOR_PACKAGE_PRESETS.map((plan, index) => (
               <Reveal key={plan.id} delay={index * 70}>
-                <article className={`flex h-full flex-col rounded-md border p-6 ${plan.id === 'silver_premier' ? 'border-[#f1d27a]/55 bg-[#17100d] shadow-[0_28px_80px_-52px_rgba(202,162,76,.7)]' : 'border-[#caa24c]/22 bg-[#0a0807]'}`}>
+                <article className={`flex h-full flex-col rounded-md border p-6 ${plan.id === 'gold_all_inclusive' ? 'border-[#f1d27a]/65 bg-[#17100d] shadow-[0_28px_80px_-52px_rgba(202,162,76,.7)]' : 'border-[#caa24c]/22 bg-[#0a0807]'}`}>
                   <p className="font-mono text-xs uppercase tracking-[.24em] text-[#caa24c]">{plan.eyebrow}</p>
                   <h3 className="mt-5 font-serif text-4xl">{plan.name}</h3>
-                  <p className="mt-4 text-sm font-semibold text-[#f1d27a]">Final price calculated for your event</p>
-                  <p className="mt-1 text-xs text-[#d7c29a]/56">No fixed package totals</p>
+                  <p className="mt-4 text-[10px] font-bold uppercase tracking-[.16em] text-[#caa24c]">100-guest reference price</p>
+                  {packageById.get(plan.id)?.price !== undefined ? <p className="mt-1 font-mono text-2xl font-bold text-[#f1d27a]">{money.format(packageById.get(plan.id)!.price)}</p> : <p className="mt-1 text-sm text-[#d7c29a]/56">{comparisonError || 'Loading exact price…'}</p>}
                   <p className="mt-5 text-sm leading-6 text-[#d7c29a]/72">{plan.description}</p>
                   <p className="mt-4 border-l border-[#caa24c]/35 pl-4 text-xs leading-5 text-[#eadcc8]/68">{packageFit[plan.id]}</p>
-                  <ul className="mt-6 flex-1 space-y-3">{packageHighlights[plan.id].map((item) => <li key={item} className="flex gap-3 text-sm leading-6 text-[#eadcc8]/82"><Check className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />{item}</li>)}</ul>
+                  <div className="mt-6 flex-1" />
                   <button type="button" onClick={() => choosePackage(plan.name)} data-conversion="package_cta_click" data-conversion-label={plan.name} className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[.14em] text-[#050505] transition hover:bg-[#dfbd68] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f1d27a]">Choose {plan.name} <ArrowRight className="h-4 w-4" /></button>
                 </article>
               </Reveal>
             ))}
           </div>
+
+          <Reveal delay={120}>
+            <PackageComparisonTable comparison={comparison} error={comparisonError} />
+          </Reveal>
         </div>
       </section>
 
