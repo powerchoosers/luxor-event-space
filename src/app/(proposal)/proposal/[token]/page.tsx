@@ -41,6 +41,13 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const context = (invoice.proposal_context && typeof invoice.proposal_context === 'object'
     ? invoice.proposal_context
     : {}) as Record<string, unknown>
+  const deliverySnapshot = context.delivery_snapshot && typeof context.delivery_snapshot === 'object'
+    ? context.delivery_snapshot as Record<string, unknown>
+    : null
+  const inPersonHandoff = deliverySnapshot?.in_person && typeof deliverySnapshot.in_person === 'object'
+    ? deliverySnapshot.in_person as Record<string, unknown>
+    : null
+  const reviewTogether = inPersonHandoff?.handoff_state === 'ready'
   const offerExpired = isLuxorOfferExpired(invoice)
   const isPublished = invoice.status === 'sent' && Boolean(invoice.price_locked_at)
   const isAccepted = Boolean(invoice.proposal_accepted_at) || Boolean(booking)
@@ -104,12 +111,20 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const status = offerExpired
     ? { eyebrow: 'Proposal expired', title: 'Please request a refreshed proposal', copy: 'This final proposal is no longer available at the prior price. Please contact Luxor for a revised proposal.', tone: 'amber' }
     : contractSigned
-      ? { eyebrow: 'Agreement complete', title: 'Your secure payment link is on its way', copy: 'Luxor has sent the next payment link after your signed Event Agreement. The refundable security deposit remains separately tracked.', tone: 'emerald' }
+      ? reviewTogether
+        ? { eyebrow: 'Agreement complete', title: 'Choose your payment method', copy: 'Your Event Agreement is signed. Choose Card, Zelle, or Cash with Luxor to complete the next payment step.', tone: 'emerald' }
+        : { eyebrow: 'Agreement complete', title: 'Your secure payment link is on its way', copy: 'Luxor has sent the next payment link after your signed Event Agreement. The refundable security deposit remains separately tracked.', tone: 'emerald' }
       : isAccepted
         ? agreementReady
-          ? { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is ready', copy: 'Review and sign the agreement now. Luxor will open the secure payment step only after the agreement is signed.', tone: 'gold' }
-          : { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is being prepared', copy: 'Luxor is preparing your secure signing step now. The payment link will be created only after the agreement is signed.', tone: 'gold' }
-        : { eyebrow: 'Final proposal', title: 'Review and select your package', copy: 'This is the final calculated price for the services shown below. Selecting it creates your Event Agreement; it does not charge you.', tone: 'gold' }
+          ? reviewTogether
+            ? { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is ready', copy: 'Review and sign the agreement on this device, then choose Card, Zelle, or Cash.', tone: 'gold' }
+            : { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is ready', copy: 'Review and sign the agreement now. Luxor will open the secure payment step only after the agreement is signed.', tone: 'gold' }
+          : reviewTogether
+            ? { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is being prepared', copy: 'Luxor is preparing the signing step on this device. You will choose Card, Zelle, or Cash after signing.', tone: 'gold' }
+            : { eyebrow: 'Proposal accepted', title: 'Your Event Agreement is being prepared', copy: 'Luxor is preparing your secure signing step now. The payment link will be created only after the agreement is signed.', tone: 'gold' }
+        : reviewTogether
+          ? { eyebrow: 'Review together', title: 'Review and select your package', copy: 'This is the final calculated price for the services shown below. Selecting it moves directly to your Event Agreement on this device; it does not charge you.', tone: 'gold' }
+          : { eyebrow: 'Final proposal', title: 'Review and select your package', copy: 'This is the final calculated price for the services shown below. Selecting it creates your Event Agreement; it does not charge you.', tone: 'gold' }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(202,162,76,0.16),transparent_35%),#050505] px-4 py-8 sm:px-6 sm:py-14">
@@ -169,10 +184,10 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[#f1d27a]" size={18} /><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Refundable Security Deposit</p><p className="mt-2 text-sm leading-6 text-zinc-200">Separate refundable security deposit required for all bookings. Deposit is held throughout the event period and is returned following the post-event inspection, subject to the terms of the Event Agreement.</p></div></div></section>
 
-          {isPublished && !offerExpired && !isAccepted ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Ready to move forward?</p><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-200">Selecting this final proposal does not charge you. Luxor will email your Event Agreement next; your secure Stripe payment link comes only after the agreement is signed.</p></div><AcceptProposalButton token={token} /></div></section> : null}
+          {isPublished && !offerExpired && !isAccepted ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Ready to move forward?</p><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-200">{reviewTogether ? 'Selecting this final proposal does not charge you. Your Event Agreement opens next on this device; after signing, choose Card, Zelle, or Cash.' : 'Selecting this final proposal does not charge you. Luxor will email your Event Agreement next; your secure Stripe payment link comes only after the agreement is signed.'}</p></div><AcceptProposalButton token={token} continueToSigning={reviewTogether} /></div></section> : null}
           {isAccepted ? <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"><div className="flex gap-3"><FileCheck2 className="mt-0.5 shrink-0 text-[#f1d27a]" size={19} /><div><p className="text-sm font-bold text-white">{status.title}</p><p className="mt-2 text-sm leading-6 text-zinc-300">{status.copy}</p></div></div></section> : null}
 
-          <footer className="mt-8 text-center text-[11px] leading-5 text-zinc-500">Final proposals are separate from the Event Agreement and payment. Questions? Email booking@luxoratlaspalmas.com.</footer>
+          <footer className="mt-8 text-center text-[11px] leading-5 text-zinc-500">{reviewTogether ? 'This handoff continues to your Event Agreement and payment choice. Questions? Email booking@luxoratlaspalmas.com.' : 'Final proposals are separate from the Event Agreement and payment. Questions? Email booking@luxoratlaspalmas.com.'}</footer>
         </div>
       </div>
     </main>
