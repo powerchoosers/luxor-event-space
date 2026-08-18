@@ -379,6 +379,7 @@ export default function LeadDetailPage({
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
   const [customPaymentAmount, setCustomPaymentAmount] = useState('')
   const [inPersonCloseInvoice, setInPersonCloseInvoice] = useState<LuxorInvoice | null>(null)
+  const [inPersonHandoffUrl, setInPersonHandoffUrl] = useState<string | null>(null)
   const [inPersonCloseBusy, setInPersonCloseBusy] = useState(false)
   const [manualSignedAgreementFile, setManualSignedAgreementFile] = useState<File | null>(null)
 
@@ -2005,8 +2006,9 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleCreateInvoice = async (action: 'save' | 'email') => {
+  const handleCreateInvoice = async (action: 'save' | 'email' | 'in_person') => {
     if (!lead) return
+    const handoffWindow = action === 'in_person' ? window.open('about:blank', 'luxor-client-handoff') : null
 
     try {
       if (!invoiceDueDate) {
@@ -2066,17 +2068,21 @@ export default function LeadDetailPage({
       setIsInvoiceModalOpen(false)
       setEditingInvoiceId(null)
       const displayedPriceLabel = displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)
-      notify({
-        title: createRevision ? 'Final proposal revision saved' : updateExistingDraft ? 'Final proposal updated' : 'Final proposal saved',
-        description: createRevision
-          ? displayedPriceLabel + ' was saved as a new revision; the previous final proposal remains in the audit history.'
-          : displayedPriceLabel + ' is ready to review or publish.',
-        variant: 'success',
-      })
+      if (action !== 'in_person') {
+        notify({
+          title: createRevision ? 'Final proposal revision saved' : updateExistingDraft ? 'Final proposal updated' : 'Final proposal saved',
+          description: createRevision
+            ? displayedPriceLabel + ' was saved as a new revision; the previous final proposal remains in the audit history.'
+            : displayedPriceLabel + ' is ready to review or publish.',
+          variant: 'success',
+        })
+      }
       if (action === 'email') await handleSendFinalProposal(invoice)
       if (action === 'save') setProposalDeliveryPreview({ invoice, initialTab: 'email' })
+      if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
       if (createRevision) void fetchAllData(false)
     } catch (err) {
+      handoffWindow?.close()
       console.error(err)
       notify({ title: 'Final proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
     } finally {
@@ -2489,6 +2495,47 @@ export default function LeadDetailPage({
     }
   }
 
+  const openClientProposalHandoff = (invoice: LuxorInvoice, handoffWindow?: Window | null, reviewUrl?: string | null) => {
+    const destination = reviewUrl || (invoice.public_token ? `/proposal/${encodeURIComponent(invoice.public_token)}` : null)
+    if (!destination) {
+      handoffWindow?.close()
+      notify({ title: 'Client handoff unavailable', description: 'This final proposal does not have a secure client link yet. Open the proposal builder and prepare it for review together.', variant: 'error' })
+      return
+    }
+    setManualSignedAgreementFile(null)
+    setInPersonCloseInvoice(invoice)
+    setInPersonHandoffUrl(destination)
+    if (handoffWindow) {
+      handoffWindow.location.assign(destination)
+      return
+    }
+    const clientWindow = window.open(destination, 'luxor-client-handoff')
+    if (!clientWindow) window.location.assign(destination)
+  }
+
+  const prepareClientProposalHandoff = async (invoice: LuxorInvoice, handoffWindow: Window | null) => {
+    try {
+      setSendingInvoiceId(invoice.id)
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'proposal_in_person' }),
+      })
+      const data = await response.json().catch(() => ({})) as { invoice?: LuxorInvoice; inquiry?: LuxorInquiry; reviewUrl?: string; error?: string }
+      if (!response.ok || !data.invoice || !data.reviewUrl) throw new Error(data.error || 'The client handoff could not be prepared.')
+      setInvoices((current) => current.map((item) => item.id === data.invoice!.id ? data.invoice! : item))
+      if (data.inquiry) setLead(data.inquiry)
+      openClientProposalHandoff(data.invoice, handoffWindow, data.reviewUrl)
+      await fetchAllData(false)
+      notify({ title: 'Ready for the client', description: 'Hand over the iPad for proposal review, acceptance, agreement signing, and payment choice.', variant: 'success' })
+    } catch (error) {
+      handoffWindow?.close()
+      notify({ title: 'Client handoff not started', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setSendingInvoiceId(null)
+    }
+  }
+
   const startInPersonSignature = async () => {
     if (!inPersonCloseInvoice) return
     const handoffWindow = window.open('about:blank', 'luxor-in-person-signing')
@@ -2505,7 +2552,7 @@ export default function LeadDetailPage({
       notify({ title: 'Ready to hand over', description: 'The client can review and sign the agreement on the iPad. Stripe opens next for card payment.', variant: 'success' })
     } catch (error) {
       handoffWindow?.close()
-      notify({ title: 'In-person close not started', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+      notify({ title: 'Client handoff not started', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     } finally {
       setInPersonCloseBusy(false)
     }
@@ -2944,6 +2991,13 @@ export default function LeadDetailPage({
   const proposalDeliveryState = proposalDeliveryEmail && typeof proposalDeliveryEmail === 'object' && !Array.isArray(proposalDeliveryEmail)
     ? (proposalDeliveryEmail as Record<string, unknown>).delivery_state
     : null
+  const proposalInPersonDelivery = proposalDelivery && typeof proposalDelivery === 'object' && !Array.isArray(proposalDelivery)
+    ? (proposalDelivery as Record<string, unknown>).in_person
+    : null
+  const proposalReviewTogetherReady = Boolean(
+    proposalInPersonDelivery && typeof proposalInPersonDelivery === 'object' && !Array.isArray(proposalInPersonDelivery)
+    && (proposalInPersonDelivery as Record<string, unknown>).handoff_state === 'ready',
+  )
   const proposalDeliveryConfirmed = proposalDeliveryState === 'delivered'
   const proposalDeliveryPrepared = proposalDeliveryState === 'prepared'
   const proposalSentAt = proposalInvoice?.proposal_sent_at || (proposalDeliveryConfirmed ? (
@@ -4788,43 +4842,47 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? 'Await final proposal acceptance' : !agreementBooking ? 'Agreement delivery pending' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'Await agreement signature' : 'Agreement delivery pending' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
+                              {!proposalInvoice ? 'Build final proposal' : !proposalSentAt && proposalPublicationBlocker ? 'Set payment plan' : proposalDeliveryPrepared ? 'Retry final proposal delivery' : !proposalSentAt ? 'Send final proposal' : !proposalAcceptedAt ? proposalReviewTogetherReady ? 'Ready to review together' : 'Await final proposal acceptance' : !agreementBooking ? 'Agreement delivery pending' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'Await agreement signature' : 'Agreement delivery pending' : depositPaidTotal <= 0 ? 'Stripe link sent after signature' : 'Date officially reserved'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? 'The client accepts through the private proposal page.' : !agreementBooking ? 'The proposal is accepted, but the matching agreement record has not been confirmed yet. Prepare the agreement before asking the client to sign.' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'The Event Agreement was delivered after proposal acceptance. Stripe is not available until it is signed.' : 'The agreement is not confirmed as delivered yet. Do not treat it as sent until delivery is confirmed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
+                              {!proposalInvoice ? 'Choose the event facts and package to calculate the exact price.' : !proposalSentAt && proposalPublicationBlocker ? 'The package price is already calculated. Set the owner-approved payment plan before publishing.' : proposalDeliveryPrepared ? 'The private proposal is safely prepared, but email delivery was not confirmed. Review it, correct the lead details if needed, then retry the same locked version.' : !proposalSentAt ? 'Publish the final proposal with its locked itemized price.' : !proposalAcceptedAt ? proposalReviewTogetherReady ? 'Open the client handoff to review the selected package, accept it, sign, and choose payment on the spot.' : 'The client accepts through the private proposal page.' : !agreementBooking ? 'The proposal is accepted, but the matching agreement record has not been confirmed yet. Prepare the agreement before asking the client to sign.' : agreementBooking.contract_status !== 'signed' ? agreementDeliveryConfirmed ? 'The Event Agreement was delivered after proposal acceptance. Stripe is not available until it is signed.' : 'The agreement is not confirmed as delivered yet. Do not treat it as sent until delivery is confirmed.' : depositPaidTotal <= 0 ? 'The signed agreement triggered the Stripe email for the initial booking payment and refundable security deposit.' : 'The signed agreement and initial booking payment are both recorded.'}
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {proposalInvoice && proposalSentAt && agreementBooking?.contract_status !== 'signed' ? (
-                            <button type="button" onClick={() => { setManualSignedAgreementFile(null); setInPersonCloseInvoice(proposalInvoice) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#8c6529] transition-colors hover:bg-[#caa24c]/20 dark:text-[#f1d27a]">
-                              <FileSignature size={13} /> Close in person
-                            </button>
-                          ) : null}
-                          {proposalInvoice ? (
-                            <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={14} /> Preview delivery</button>
-                          ) : null}
-                          {proposalInvoice ? (
-                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/15 cursor-pointer">Edit Proposal</button>
-                          ) : null}
-                          {!proposalInvoice ? (
-                            <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
-                          ) : !proposalSentAt && proposalPublicationBlocker ? (
-                            <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Set payment plan</button>
-                          ) : !proposalSentAt ? (
-                            <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}</button>
-                          ) : !proposalAcceptedAt ? (
-                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Awaiting client acceptance</span>
-                          ) : !agreementBooking ? (
-                            <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
-                              {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />}
-                              {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare Agreement'}
-                            </button>
-                          ) : agreementBooking.contract_status !== 'signed' ? (
-                            <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}</span>
-                          ) : (
-                            <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
-                          )}
+                        <div className="flex flex-nowrap items-center justify-end gap-2">
+                          {proposalInvoice && proposalSentAt && !proposalAcceptedAt ? (
+                            <>
+                              <button type="button" onClick={() => openClientProposalHandoff(proposalInvoice)} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68]">
+                                <Users size={14} /> Review together
+                              </button>
+                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#8c6529] transition-all hover:bg-[#caa24c]/15 dark:text-[#f1d27a]">
+                                <Pencil size={13} /> Edit proposal
+                              </button>
+                            </>
+                          ) : <>
+                            {proposalInvoice ? (
+                              <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={14} /> Preview delivery</button>
+                            ) : null}
+                            {proposalInvoice ? (
+                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/15 cursor-pointer">Edit Proposal</button>
+                            ) : null}
+                            {!proposalInvoice ? (
+                              <button type="button" onClick={() => openProposalBuilder()} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Build Proposal</button>
+                            ) : !proposalSentAt && proposalPublicationBlocker ? (
+                              <button type="button" onClick={() => openProposalBuilder(proposalInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Set payment plan</button>
+                            ) : !proposalSentAt ? (
+                              <button type="button" onClick={() => handleSendFinalProposal(proposalInvoice)} disabled={!lead.email || sendingInvoiceId === proposalInvoice.id} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{sendingInvoiceId === proposalInvoice.id ? 'Sending…' : proposalDeliveryPrepared ? 'Retry delivery' : 'Send final proposal'}</button>
+                            ) : !agreementBooking ? (
+                              <button type="button" onClick={() => handlePrepareAgreement(proposalInvoice)} disabled={preparingAgreementInvoiceId === proposalInvoice.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45">
+                                {preparingAgreementInvoiceId === proposalInvoice.id ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />}
+                                {preparingAgreementInvoiceId === proposalInvoice.id ? 'Preparing…' : 'Prepare Agreement'}
+                              </button>
+                            ) : agreementBooking.contract_status !== 'signed' ? (
+                              <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}</span>
+                            ) : (
+                              <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
+                            )}
+                          </>}
                         </div>
                       </div>
                       {agreementBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment method</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Pre-fill payment amount</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /></div></div> : null}
@@ -4839,12 +4897,12 @@ export default function LeadDetailPage({
                             proposalSentAt ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalDeliveryPrepared ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
                           }`}>
                             <Send size={10} />
-                            {proposalSentAt ? 'Sent' : proposalDeliveryPrepared ? 'Delivery pending' : 'Draft'}
+                            {proposalSentAt ? proposalReviewTogetherReady ? 'In person' : 'Sent' : proposalDeliveryPrepared ? 'Delivery pending' : 'Draft'}
                           </span>
                         </div>
                         <div className="mt-3">
                           <p className="text-sm font-bold text-[color:var(--portal-text)]">{proposalSentAt ? formatDisplayDate(proposalSentAt) : proposalDeliveryPrepared ? 'Retry required' : 'Not Sent Yet'}</p>
-                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? 'Client delivery completed' : proposalDeliveryPrepared ? 'Private link is saved; email delivery was not confirmed' : 'Send proposal to advance lead'}</p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{proposalSentAt ? proposalReviewTogetherReady ? 'Ready for review on this device' : 'Client delivery completed' : proposalDeliveryPrepared ? 'Private link is saved; email delivery was not confirmed' : 'Send proposal to advance lead'}</p>
                         </div>
                       </div>
 
@@ -7283,45 +7341,56 @@ export default function LeadDetailPage({
         ) : null}
       </PortalModal>
 
-      <PortalModal isOpen={Boolean(inPersonCloseInvoice)} onClose={() => !inPersonCloseBusy && setInPersonCloseInvoice(null)} maxWidth="max-w-xl">
+      <PortalModal isOpen={Boolean(inPersonCloseInvoice)} onClose={() => { if (!inPersonCloseBusy) { setInPersonCloseInvoice(null); setInPersonHandoffUrl(null) } }} maxWidth="max-w-xl">
         {inPersonCloseInvoice ? (
           <div className="bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]">
             <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8c6529] dark:text-[#f1d27a]">In-person close</p>
-                <h3 className="mt-1 text-sm font-black">A simple handoff for {lead?.full_name || inPersonCloseInvoice.client_name}</h3>
-                <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">You choose the path; the screen tells you when to hand over the iPad. Payment stays locked until the agreement is signed.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8c6529] dark:text-[#f1d27a]">Client handoff</p>
+                <h3 className="mt-1 text-sm font-black">Review, sign, and choose payment with {lead?.full_name || inPersonCloseInvoice.client_name}</h3>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Keep the choices simple: review the final proposal together, hand over the iPad for signing, then confirm the payment method.</p>
               </div>
-              <PortalCloseButton onClick={() => setInPersonCloseInvoice(null)} aria-label="Close in-person closeout" />
+              <PortalCloseButton onClick={() => { setInPersonCloseInvoice(null); setInPersonHandoffUrl(null) }} aria-label="Close client handoff" />
             </div>
             {agreementBooking?.contract_status === 'signed' ? (
               <div className="space-y-4 p-5 sm:p-6">
-                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs leading-5 text-emerald-800 dark:text-emerald-200"><CheckCircle2 className="mb-2" size={17} /> Agreement is recorded as signed. Choose how the client is paying the initial booking payment.</div>
-                <button type="button" disabled={inPersonCloseBusy} onClick={() => void openInPersonCardCheckout(agreementBooking)} className="flex w-full items-center justify-between rounded-xl bg-[#caa24c] px-4 py-3.5 text-left text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:opacity-45"><span><CreditCard className="mr-2 inline" size={15} />Hand over iPad for card payment</span><span>Stripe</span></button>
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs leading-5 text-emerald-800 dark:text-emerald-200"><CheckCircle2 className="mb-2" size={17} /> The agreement is signed. Confirm the payment only after the client has chosen a method and the funds have been received.</div>
                 <div className="grid gap-2 sm:grid-cols-3">
-                  <button type="button" disabled={updatingStatus || inPersonCloseBusy} onClick={() => void handleRecordManualPayment(agreementBooking, 'deposit', 'cash')} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)] disabled:opacity-45">Record cash received</button>
+                  <button type="button" disabled={inPersonCloseBusy} onClick={() => void openInPersonCardCheckout(agreementBooking)} className="rounded-xl bg-[#caa24c] px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:opacity-45"><CreditCard className="mr-1.5 inline" size={15} /> Card via Stripe</button>
                   <button type="button" disabled={updatingStatus || inPersonCloseBusy} onClick={() => void handleRecordManualPayment(agreementBooking, 'deposit', 'zelle')} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)] disabled:opacity-45">Record Zelle received</button>
-                  <button type="button" onClick={() => { setActiveLeadTab('documents'); setInPersonCloseInvoice(null) }} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)]">View signed documents</button>
+                  <button type="button" disabled={updatingStatus || inPersonCloseBusy} onClick={() => void handleRecordManualPayment(agreementBooking, 'deposit', 'cash')} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)] disabled:opacity-45">Record cash received</button>
                 </div>
-                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Only record cash or Zelle after it has actually been received. The signed agreement is always available in Documents.</p>
+                <button type="button" onClick={() => { setActiveLeadTab('documents'); setInPersonCloseInvoice(null); setInPersonHandoffUrl(null) }} className="text-xs font-semibold text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-4 dark:text-[#f1d27a]">View signed documents</button>
+                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Card opens the secure Stripe step on the iPad. Only record Cash or Zelle after it has actually been received.</p>
+              </div>
+            ) : inPersonHandoffUrl ? (
+              <div className="space-y-5 p-5 sm:p-6">
+                <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] p-4">
+                  <p className="text-xs font-bold">The client handoff is ready.</p>
+                  <ol className="mt-3 space-y-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">
+                    <li><span className="mr-2 font-black text-[#8c6529] dark:text-[#f1d27a]">1.</span>Review the selected package and final price together.</li>
+                    <li><span className="mr-2 font-black text-[#8c6529] dark:text-[#f1d27a]">2.</span>Hand over the iPad so the client can accept and sign.</li>
+                    <li><span className="mr-2 font-black text-[#8c6529] dark:text-[#f1d27a]">3.</span>They choose Card, Zelle, or Cash; this screen then unlocks the correct payment step.</li>
+                  </ol>
+                </div>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <button type="button" onClick={() => void fetchAllData(false)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]"><RefreshCw size={13} /> Check signature</button>
+                  <button type="button" onClick={() => openClientProposalHandoff(inPersonCloseInvoice, undefined, inPersonHandoffUrl)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68]"><Users size={14} /> Open client handoff</button>
+                </div>
+                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">After the client signs, return here and choose Check signature to reveal the payment controls.</p>
               </div>
             ) : (
               <div className="space-y-5 p-5 sm:p-6">
                 <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/5 p-4">
-                  <p className="text-xs font-bold">1. Client verbally accepts the final proposal</p>
-                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Starting either path records that owner-witnessed acceptance against this locked proposal.</p>
+                  <p className="text-xs font-bold">Use the proposal builder to start a client handoff.</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Choose Review together at the end of the builder to open the client-facing proposal, agreement signature, and payment choice in one guided sequence.</p>
                 </div>
-                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                  <p className="text-xs font-bold">2. Sign on the iPad</p>
-                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Click below, then hand the iPad to the client. They review, sign, and move straight to secure Stripe payment if paying by card.</p>
-                  <button type="button" disabled={inPersonCloseBusy} onClick={() => void startInPersonSignature()} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:opacity-45">{inPersonCloseBusy ? <Loader2 className="animate-spin" size={15} /> : <FileSignature size={15} />} Start client signature</button>
-                </div>
-                <div className="border-t border-[color:var(--portal-border)] pt-5">
-                  <p className="text-xs font-bold">Or upload a paper-signed agreement</p>
-                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Use this only after both parties have signed a printed agreement. The PDF is saved privately in Documents and unlocks payment collection.</p>
-                  <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50"><span className="truncate">{manualSignedAgreementFile ? manualSignedAgreementFile.name : 'Choose signed agreement PDF'}</span><Upload size={15} className="ml-3 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /><input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => setManualSignedAgreementFile(event.target.files?.[0] || null)} /></label>
+                <details className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                  <summary className="cursor-pointer text-xs font-bold text-[color:var(--portal-text)]">Use a paper-signed agreement instead</summary>
+                  <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">Choose a PDF only after both parties have signed a printed agreement. It is saved privately and unlocks the payment step.</p>
+                  <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50"><span className="truncate">{manualSignedAgreementFile ? manualSignedAgreementFile.name : 'Choose signed agreement PDF'}</span><Upload size={15} className="ml-3 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /><input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => setManualSignedAgreementFile(event.target.files?.[0] || null)} /></label>
                   <button type="button" disabled={!manualSignedAgreementFile || inPersonCloseBusy} onClick={() => void uploadManualSignedAgreement()} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-[#8c6529] transition hover:bg-[#caa24c]/20 disabled:opacity-45 dark:text-[#f1d27a]">{inPersonCloseBusy ? <Loader2 className="animate-spin" size={15} /> : <Upload size={15} />} Save signed PDF</button>
-                </div>
+                </details>
               </div>
             )}
           </div>

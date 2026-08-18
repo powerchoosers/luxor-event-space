@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'This lead is marked Deal Lost. The proposal, contract, and payment links have been withdrawn.' }, { status: 409 })
     }
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
-    const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string }
+    const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_in_person' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string }
 
     // A final proposal is selected first. It is deliberately a distinct event
     // from contract signature, and neither legacy route is allowed to create
@@ -273,7 +273,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
     }
 
-    if (body.mode === 'proposal') {
+    if (body.mode === 'proposal' || body.mode === 'proposal_in_person') {
+      const inPersonHandoff = body.mode === 'proposal_in_person'
       if (invoice.invoice_kind !== 'event') return NextResponse.json({ error: 'Only a final event proposal can be published from this action.' }, { status: 409 })
       const proposalContext = invoice.proposal_context && typeof invoice.proposal_context === 'object' ? invoice.proposal_context : null
       const calculationErrors = Array.isArray(proposalContext?.calculation_errors) ? proposalContext.calculation_errors.filter(Boolean) : []
@@ -359,6 +360,65 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ? await downloadLuxorDocument(existingPdf)
         : await buildLuxorInvoicePdf(frozenInvoice, inquiry)
       if (!existingPdf) await saveLuxorProposalPdf({ invoice: frozenInvoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
+      if (inPersonHandoff) {
+        const priorDeliverySnapshot = frozenInvoice.proposal_context?.delivery_snapshot
+        const deliverySnapshot = {
+          ...(priorDeliverySnapshot && typeof priorDeliverySnapshot === 'object' && !Array.isArray(priorDeliverySnapshot)
+            ? priorDeliverySnapshot as Record<string, unknown>
+            : {}),
+          in_person: {
+            review_url: persistedReviewUrl,
+            prepared_at: now,
+            prepared_by: session.email,
+            handoff_state: 'ready',
+          },
+        }
+        const updated = await updateInvoice(frozenInvoice.id, {
+          public_token: persistedPublicToken,
+          price_locked_at: frozenInvoice.price_locked_at || now,
+          proposal_version: Math.max(1, Number(frozenInvoice.proposal_version || 1)),
+          status: 'sent',
+          proposal_sent_at: now,
+          proposal_context: {
+            ...(frozenInvoice.proposal_context || {}),
+            version: Number(frozenInvoice.proposal_context?.version || 1),
+            delivery_snapshot: deliverySnapshot,
+          },
+        })
+        if (!updated || updated.public_token !== persistedPublicToken) {
+          throw new Error('The final proposal could not be prepared for client review. Please try again.')
+        }
+        if (booking) {
+          booking = await updateLuxorBooking(booking.id, {
+            metadata: {
+              ...booking.metadata,
+              proposal_sent_at: now,
+              proposal_delivery_channel: 'in_person',
+              reservation_state: 'awaiting_proposal_selection',
+              proposalLineItems: frozenInvoice.line_items,
+              proposalInvoiceId: frozenInvoice.id,
+            },
+          }) || booking
+        }
+        if (updated.supersedes_invoice_id) {
+          const prior = await getInvoice(updated.supersedes_invoice_id)
+          if (prior && prior.status !== 'cancelled') {
+            await updateInvoice(prior.id, { status: 'cancelled', offer_status: 'withdrawn', stripe_checkout_session_id: null, stripe_checkout_url: null, stripe_checkout_opened_at: null, payment_requested_at: null, payment_requested_amount: null, payment_requested_label: null })
+          }
+        }
+        const updatedInquiry = await updateLuxorInquiry(inquiry.id, {
+          status: 'proposal_sent',
+          pipeline_stage: 'proposal',
+          metadata: {
+            ...inquiry.metadata,
+            proposal_sent_at: now,
+            latest_proposal_invoice_id: updated.id,
+            proposal_delivery_channel: 'in_person',
+          },
+        }) || inquiry
+        await createNote(inquiry.id, 'Final proposal prepared for a private in-person client review. The client will accept the locked proposal on the shared device before signing the Event Agreement.', 'status_change', session.email)
+        return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, reviewUrl: persistedReviewUrl, mode: 'proposal_in_person' })
+      }
       const attachmentFileName = `Luxor-Final-Proposal-${frozenInvoice.id.slice(0, 8)}.pdf`
       const priorDeliverySnapshot = frozenInvoice.proposal_context?.delivery_snapshot
       const priorProposalEmail = priorDeliverySnapshot && typeof priorDeliverySnapshot === 'object' && !Array.isArray(priorDeliverySnapshot)

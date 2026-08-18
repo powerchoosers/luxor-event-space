@@ -23,7 +23,8 @@ import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageIt
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 
-type ProposalSubmitAction = 'save' | 'email'
+type ProposalSubmitAction = 'save' | 'email' | 'in_person'
+type ProposalPresentationMode = 'email' | 'in_person'
 
 type ProposalPackageId = 'rent_only' | 'bronze' | 'silver' | 'gold'
 
@@ -620,6 +621,7 @@ export function ProposalBuilderModal({
   const [promotionCreatorOpen, setPromotionCreatorOpen] = useState(false)
   const [promotionDraft, setPromotionDraft] = useState<{ name: string; discount_type: 'percent' | 'fixed'; value: string }>({ name: '', discount_type: 'percent', value: '' })
   const [savingPromotion, setSavingPromotion] = useState(false)
+  const [presentationMode, setPresentationMode] = useState<ProposalPresentationMode>('email')
   const calculationCallbackRef = useRef(onCalculationChange)
   const contextKey = JSON.stringify(proposalContext || {})
 
@@ -639,6 +641,7 @@ export function ProposalBuilderModal({
     setValidationMessage(null)
     setPendingPackageChange(null)
     setPromotionCreatorOpen(false)
+    setPresentationMode('email')
   }, [isOpen])
 
   useEffect(() => {
@@ -1099,6 +1102,17 @@ export function ProposalBuilderModal({
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
+  const reviewTogether = presentationMode === 'in_person'
+  const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
+  const publishTitle = hasUnmigratedLegacyDiscount
+    ? 'Save the legacy adjustment as a promotion first.'
+    : !canPublish
+      ? paymentPlanRequired
+        ? 'Set the payment plan in Step 5 before publishing.'
+        : 'Complete the required event details and final pricing before publishing.'
+      : !clientEmail
+        ? 'Add the client email before starting the signing flow.'
+        : undefined
 
   const advance = () => {
     if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
@@ -1607,6 +1621,22 @@ export function ProposalBuilderModal({
                 onPaymentPlanChange={(patch) => updatePaymentPlan({ mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 60, ...patch })}
               />}
 
+              <section aria-labelledby="proposal-presentation-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+                <p id="proposal-presentation-title" className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Finish the proposal</p>
+                <p className="mt-1 text-sm leading-6 text-[color:var(--portal-muted)]">Choose how the client will see this final version.</p>
+                <div role="radiogroup" aria-label="How the client will review this proposal" className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <button type="button" role="radio" aria-checked={presentationMode === 'email'} onClick={() => setPresentationMode('email')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'email' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                    <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Mail size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Send for later</span>
+                    <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Email the final proposal so the client can review it on their own time.</span>
+                  </button>
+                  <button type="button" role="radio" aria-checked={presentationMode === 'in_person'} onClick={() => setPresentationMode('in_person')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'in_person' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                    <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Users size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Review together</span>
+                    <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Open a clean client handoff on the iPad for review, acceptance, signing, and payment choice.</span>
+                  </button>
+                </div>
+                {reviewTogether ? <p className="mt-4 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] px-4 py-3 text-xs leading-5 text-[color:var(--portal-text)]">No proposal email is sent now. After the client accepts, they sign the agreement and can choose Card, Zelle, or Cash. Luxor records Cash or Zelle only after it is actually received.</p> : null}
+              </section>
+
               <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
                 <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Payment &amp; refund policy</p>
                 <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--portal-muted)]">
@@ -1635,8 +1665,8 @@ export function ProposalBuilderModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
-              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft &amp; preview</button>
-              <button type="button" onClick={() => onSubmit('email')} disabled={submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : !canPublish ? paymentPlanRequired ? 'Set the payment plan in Step 5 before publishing.' : 'Complete the required event details and final pricing before publishing.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]"><Mail size={14} /> {submitting ? 'Publishing…' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft</button>
+              <button type="button" onClick={() => onSubmit(reviewTogether ? 'in_person' : 'email')} disabled={publishDisabled} title={publishTitle} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]">{reviewTogether ? <Users size={14} /> : <Mail size={14} />}{submitting ? reviewTogether ? 'Preparing…' : 'Publishing…' : reviewTogether ? 'Begin client handoff' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>

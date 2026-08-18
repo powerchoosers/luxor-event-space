@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id: inquiryId } = await params
     const { invoiceId } = await request.json().catch(() => ({})) as { invoiceId?: string }
     const inquiry = await getLuxorInquiry(inquiryId)
-    if (!inquiry || inquiry.status === 'closed_lost') return NextResponse.json({ error: 'This lead is not available for an in-person close.' }, { status: 409 })
+    if (!inquiry || inquiry.status === 'closed_lost') return NextResponse.json({ error: 'This lead is not available for a client handoff.' }, { status: 409 })
     const invoice = invoiceId ? await getInvoice(invoiceId) : null
     if (!invoice || invoice.inquiry_id !== inquiry.id || invoice.invoice_kind !== 'event' || invoice.status !== 'sent' || !invoice.price_locked_at || invoice.offer_status === 'withdrawn') {
       return NextResponse.json({ error: 'A published, price-locked final proposal is required before recording an in-person acceptance.' }, { status: 409 })
@@ -54,6 +54,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ bookingId: result.booking.id, signatureId: result.signature.id, signingUrl, alreadyAccepted: Boolean(invoice.proposal_accepted_at) })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to start the in-person close.' }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to start the client handoff.' }, { status: 500 })
   }
 }

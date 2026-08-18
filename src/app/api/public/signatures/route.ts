@@ -38,14 +38,27 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
   if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return {}
-  // The signature flow creates this Checkout session only after it has
-  // verified the booking's signed agreement. Return the direct Stripe URL;
-  // never send the client back to a page with a pre-contract payment chooser.
-  if (!invoice.stripe_checkout_url) return {}
+  const preference = booking.metadata?.client_payment_preference as { method?: unknown } | undefined
+  const initialMethod = ['card', 'cash', 'zelle', 'check'].includes(String(preference?.method || '').toLowerCase())
+    ? String(preference?.method).toLowerCase()
+    : 'card'
+  const paymentOptions = masterInvoice?.public_token
+    ? {
+        proposal_token: masterInvoice.public_token,
+        deposit: Number(invoice.total || 0),
+        full: Number(masterInvoice.total || invoice.total || 0),
+        initial_method: initialMethod,
+      }
+    : null
+  // The signature flow creates Checkout only after it has verified the signed
+  // agreement. The client may now choose Card, Cash, or Zelle; only Card
+  // continues to Stripe, while the other methods remain owner-confirmed.
+  if (!invoice.stripe_checkout_url) return paymentOptions ? { payment_options: paymentOptions } : {}
   return {
     payment_url: invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
     payment_label: invoice.payment_requested_label || 'Initial Booking Payment - Luxor at Las Palmas Events',
+    ...(paymentOptions ? { payment_options: paymentOptions } : {}),
   }
 }
 

@@ -36,6 +36,72 @@ type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
   payment_url?: string
   payment_amount?: number
   payment_label?: string
+  payment_options?: {
+    proposal_token: string
+    deposit: number
+    full: number
+    initial_method?: 'card' | 'cash' | 'zelle' | 'check'
+  }
+}
+
+type ClientPaymentMethod = 'card' | 'cash' | 'zelle'
+type ClientPaymentAmount = 'deposit' | 'full'
+
+function money(value: number) {
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorSignatureRequest['payment_options']> }) {
+  const initialMethod: ClientPaymentMethod = options.initial_method === 'cash' || options.initial_method === 'zelle' ? options.initial_method : 'card'
+  const [method, setMethod] = useState<ClientPaymentMethod>(initialMethod)
+  const [amount, setAmount] = useState<ClientPaymentAmount>('deposit')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const submit = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      const response = await fetch(`/api/public/proposals/${encodeURIComponent(options.proposal_token)}/payment-preference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method, amount }),
+      })
+      const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string }
+      if (!response.ok) throw new Error(data.error || 'We could not save your payment choice.')
+      if (data.checkoutUrl) {
+        window.location.assign(data.checkoutUrl)
+        return
+      }
+      setMessage(`Please hand the iPad back to Luxor once the ${method === 'zelle' ? 'Zelle' : 'cash'} payment has been received. They will record it securely before your date is reserved.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'We could not save your payment choice.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-xl border border-[#d7c59f] bg-[#faf7f2] p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Choose payment</p>
+      <p className="mt-1 text-xs leading-5 text-[#6f665b]">Choose Card, Zelle, or Cash. Card opens secure checkout; Luxor confirms Cash and Zelle only after it is received.</p>
+      <div role="radiogroup" aria-label="Payment method" className="mt-4 grid grid-cols-3 gap-2">
+        {([
+          ['card', 'Card'],
+          ['zelle', 'Zelle'],
+          ['cash', 'Cash'],
+        ] as Array<[ClientPaymentMethod, string]>).map(([value, label]) => (
+          <button key={value} type="button" role="radio" aria-checked={method === value} onClick={() => setMethod(value)} className={`min-h-11 rounded-lg border px-2 text-xs font-semibold transition ${method === value ? 'border-[#b98a3e] bg-[#f5ead2] text-[#5c421d]' : 'border-[#ded5c8] bg-white text-[#5f554a] hover:border-[#caa24c]/60'}`}>{label}</button>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="Payment amount" className="mt-3 grid gap-2 sm:grid-cols-2">
+        <button type="button" role="radio" aria-checked={amount === 'deposit'} onClick={() => setAmount('deposit')} className={`rounded-lg border p-3 text-left transition ${amount === 'deposit' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white hover:border-[#caa24c]/60'}`}><span className="block text-xs font-semibold">Initial booking payment</span><span className="mt-1 block font-mono text-sm font-bold text-[#8c6529]">{money(options.deposit)}</span></button>
+        <button type="button" role="radio" aria-checked={amount === 'full'} onClick={() => setAmount('full')} className={`rounded-lg border p-3 text-left transition ${amount === 'full' ? 'border-[#b98a3e] bg-[#f5ead2]' : 'border-[#ded5c8] bg-white hover:border-[#caa24c]/60'}`}><span className="block text-xs font-semibold">Full event balance</span><span className="mt-1 block font-mono text-sm font-bold text-[#8c6529]">{money(options.full)}</span></button>
+      </div>
+      <button type="button" disabled={busy} onClick={() => void submit()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#c89d4b] px-4 text-xs font-bold text-[#20170d] transition hover:bg-[#d7ae60] disabled:cursor-wait disabled:opacity-60"><CreditCard size={15} />{busy ? 'Saving…' : method === 'card' ? 'Continue to secure card payment' : `Confirm ${method === 'zelle' ? 'Zelle' : 'Cash'} choice`}</button>
+      {message ? <p role="status" className="mt-3 text-xs leading-5 text-[#6f665b]">{message}</p> : null}
+    </section>
+  )
 }
 
 function createTypedSignature(name: string) {
@@ -290,7 +356,6 @@ export default function SignaturePage() {
       setSignature(data)
       if (data.payment_url) {
         setPaymentPreparing(false)
-        window.location.assign(data.payment_url)
         return
       }
       await recoverPaymentLink(attempt + 1)
@@ -320,7 +385,8 @@ export default function SignaturePage() {
       setPageNumber(1)
       setNumPages(0)
       if (data.payment_url) {
-        window.location.assign(data.payment_url)
+        setPaymentPreparing(false)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
       setPaymentPreparing(true)
@@ -439,7 +505,7 @@ export default function SignaturePage() {
                 <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">You’re all set.</h2>
                 <p className="mt-4 text-sm leading-6 text-[#6f665b]">
                   Your signature and Luxor’s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
-                  {signature.payment_url ? ' Your secure booking-payment link is ready below.' : ''}
+                  {signature.payment_options ? ' Choose how you would like to make the initial booking payment below.' : signature.payment_url ? ' Your secure booking-payment link is ready below.' : ''}
                   {paymentPreparing && !signature.payment_url ? ' Your secure booking-payment link is being prepared now.' : ''}
                 </p>
                 {error && (
@@ -456,9 +522,10 @@ export default function SignaturePage() {
                     </div>
                   </div>
                 </div>
+                {signature.payment_options ? <SignaturePaymentChoice options={signature.payment_options} /> : null}
               </div>
               <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
-                {signature.payment_url ? (
+                {signature.payment_url && !signature.payment_options ? (
                   <a href={signature.payment_url} className="mb-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c89d4b] px-4 text-sm font-semibold text-[#20170d] transition hover:bg-[#d7ae60]">
                     <CreditCard size={16} /> Complete secure booking payment
                   </a>
