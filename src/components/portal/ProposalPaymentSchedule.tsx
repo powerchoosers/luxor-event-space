@@ -50,7 +50,12 @@ export function calculateProposalPaymentSchedule(input: ProposalPaymentScheduleP
   const event = typeof input.eventServicesTotal === 'number' ? input.eventServicesTotal : null
   const empty = (errors: string[]): ProposalPaymentScheduleCalculation => ({ finalEventPrice, venueServicesTotal: venue, eventServicesTotal: event, refundableSecurityDeposit: input.refundableSecurityDeposit ?? 750, initialContractPayment: null, finalEventBalance: null, amountDueAfterSignature: null, finalPaymentDueDate: null, rows: [], errors })
   if (finalEventPrice === null || venue === null || event === null || !input.eventDate) return empty(['Complete event details and pricing to calculate the payment schedule.'])
-  const schedule = calculateLuxorPaymentSchedule({ eventDate: String(input.eventDate).slice(0, 10), bookingDate: String(input.bookingDate || input.paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: venue, eventServicesTotal: event, paymentCount: input.paymentCount ?? input.paymentPlan?.payment_count ?? 4, paymentCadence: input.paymentCadence ?? input.paymentPlan?.payment_cadence, bookingPaymentAmount: input.bookingPaymentAmount ?? input.paymentPlan?.booking_payment_amount })
+  // Taxes and other proposal-level adjustments belong to the event balance,
+  // even though they are not individual service rows. Without this adjustment,
+  // the schedule can appear to leave part of the Final Event Price unpaid.
+  const scheduledVenueTotal = Math.min(venue, finalEventPrice)
+  const scheduledEventTotal = Math.max(0, finalEventPrice - scheduledVenueTotal)
+  const schedule = calculateLuxorPaymentSchedule({ eventDate: String(input.eventDate).slice(0, 10), bookingDate: String(input.bookingDate || input.paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: scheduledVenueTotal, eventServicesTotal: scheduledEventTotal, paymentCount: input.paymentCount ?? input.paymentPlan?.payment_count ?? 4, paymentCadence: input.paymentCadence ?? input.paymentPlan?.payment_cadence, bookingPaymentAmount: input.bookingPaymentAmount ?? input.paymentPlan?.booking_payment_amount })
   if (!schedule) return empty(['The event date is too close to the final-payment deadline for a payment schedule.'])
   return { finalEventPrice, venueServicesTotal: venue, eventServicesTotal: event, refundableSecurityDeposit: input.refundableSecurityDeposit ?? 750, initialContractPayment: schedule.booking_payment, finalEventBalance: schedule.remaining_event_balance, amountDueAfterSignature: schedule.booking_payment, finalPaymentDueDate: schedule.final_payment_due_date, rows: schedule.rows.map((row) => ({ id: `installment-${row.installment_order}`, number: row.installment_order, label: row.label, description: row.description, dueDate: row.due_at, dueTiming: row.installment_order === 1 ? 'after_signature' : 'final_due_date', amount: row.amount, collection: 'Stripe after signature' })), errors: schedule.warnings }
 }
@@ -63,7 +68,9 @@ export function ProposalPaymentSchedule({ finalEventPrice, venueServicesTotal, e
   const schedule = calculateProposalPaymentSchedule({ finalEventPrice, venueServicesTotal, eventServicesTotal, refundableSecurityDeposit, paymentPlan, eventDate, bookingDate, paymentCount, paymentCadence, bookingPaymentAmount })
   const selectedCount = schedule.rows.length || paymentCount || paymentPlan?.payment_count || 4
   const selectedCadence = paymentCadence ?? paymentPlan?.payment_cadence ?? 'evenly_spaced'
-  const availability = eventDate ? calculateLuxorPaymentSchedule({ eventDate: String(eventDate).slice(0, 10), bookingDate: String(bookingDate || paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: venueServicesTotal || 0, eventServicesTotal: eventServicesTotal || 0, paymentCount: selectedCount, paymentCadence: selectedCadence, bookingPaymentAmount }) : null
+  const scheduledVenueTotal = Math.min(Number(venueServicesTotal || 0), Number(finalEventPrice || 0))
+  const scheduledEventTotal = Math.max(0, Number(finalEventPrice || 0) - scheduledVenueTotal)
+  const availability = eventDate ? calculateLuxorPaymentSchedule({ eventDate: String(eventDate).slice(0, 10), bookingDate: String(bookingDate || paymentPlan?.booking_date || today()).slice(0, 10), venueServicesTotal: scheduledVenueTotal, eventServicesTotal: scheduledEventTotal, paymentCount: selectedCount, paymentCadence: selectedCadence, bookingPaymentAmount }) : null
   const loading = schedule.finalEventPrice === null
   const persistedByOrder = new Map((installments || []).map((item) => [item.installment_order, item]))
   const availableCountOptions = (availability?.available_counts || []).map((count) => ({ value: String(count), label: `${count} payments` }))

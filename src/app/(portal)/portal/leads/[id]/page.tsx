@@ -48,6 +48,7 @@ import {
   Heart,
   PartyPopper,
   Loader2,
+  Upload,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
@@ -377,6 +378,9 @@ export default function LeadDetailPage({
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
   const [paymentRequestKind, setPaymentRequestKind] = useState<'deposit' | 'balance' | 'custom'>('deposit')
   const [customPaymentAmount, setCustomPaymentAmount] = useState('')
+  const [inPersonCloseInvoice, setInPersonCloseInvoice] = useState<LuxorInvoice | null>(null)
+  const [inPersonCloseBusy, setInPersonCloseBusy] = useState(false)
+  const [manualSignedAgreementFile, setManualSignedAgreementFile] = useState<File | null>(null)
 
   useEffect(() => {
     proposalEditorOpenRef.current = isInvoiceModalOpen
@@ -2485,6 +2489,72 @@ export default function LeadDetailPage({
     }
   }
 
+  const startInPersonSignature = async () => {
+    if (!inPersonCloseInvoice) return
+    const handoffWindow = window.open('about:blank', 'luxor-in-person-signing')
+    try {
+      setInPersonCloseBusy(true)
+      const response = await fetch(`/api/leads/${encodeURIComponent(id)}/in-person-close`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: inPersonCloseInvoice.id }),
+      })
+      const data = await response.json().catch(() => ({})) as { signingUrl?: string; error?: string }
+      if (!response.ok || !data.signingUrl) throw new Error(data.error || 'The in-person agreement could not be prepared.')
+      if (handoffWindow) handoffWindow.location.href = data.signingUrl
+      else window.location.assign(data.signingUrl)
+      await fetchAllData(false)
+      notify({ title: 'Ready to hand over', description: 'The client can review and sign the agreement on the iPad. Stripe opens next for card payment.', variant: 'success' })
+    } catch (error) {
+      handoffWindow?.close()
+      notify({ title: 'In-person close not started', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setInPersonCloseBusy(false)
+    }
+  }
+
+  const uploadManualSignedAgreement = async () => {
+    if (!inPersonCloseInvoice || !manualSignedAgreementFile) return
+    try {
+      setInPersonCloseBusy(true)
+      const acceptance = await fetch(`/api/leads/${encodeURIComponent(id)}/in-person-close`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: inPersonCloseInvoice.id }),
+      })
+      const acceptanceData = await acceptance.json().catch(() => ({})) as { bookingId?: string; error?: string }
+      if (!acceptance.ok || !acceptanceData.bookingId) throw new Error(acceptanceData.error || 'Proposal acceptance could not be recorded.')
+      const form = new FormData()
+      form.append('bookingId', acceptanceData.bookingId)
+      form.append('file', manualSignedAgreementFile)
+      const response = await fetch(`/api/leads/${encodeURIComponent(id)}/manual-signed-agreement`, { method: 'POST', body: form })
+      const data = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(data.error || 'The signed agreement could not be uploaded.')
+      setManualSignedAgreementFile(null)
+      await fetchAllData(false)
+      notify({ title: 'Signed agreement saved', description: 'The paper agreement is in Documents and the booking can now collect its initial payment.', variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Agreement not uploaded', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setInPersonCloseBusy(false)
+    }
+  }
+
+  const openInPersonCardCheckout = async (booking: LuxorBooking) => {
+    const handoffWindow = window.open('about:blank', 'luxor-in-person-payment')
+    try {
+      setInPersonCloseBusy(true)
+      const response = await fetch('/api/payments/in-person-checkout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: booking.id }),
+      })
+      const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string }
+      if (!response.ok || !data.checkoutUrl) throw new Error(data.error || 'Secure card payment could not be opened.')
+      if (handoffWindow) handoffWindow.location.href = data.checkoutUrl
+      else window.location.assign(data.checkoutUrl)
+    } catch (error) {
+      handoffWindow?.close()
+      notify({ title: 'Card payment not opened', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      setInPersonCloseBusy(false)
+    }
+  }
+
   const previewInvoiceEmail = async (invoice: LuxorInvoice, mode: 'proposal' | 'proposal_contract' = 'proposal') => {
     try {
       const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/email-preview?mode=${mode}`, { cache: 'no-store' })
@@ -2601,8 +2671,8 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final') => {
-    const preferredMethod = ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final', receivedMethod?: 'cash' | 'zelle' | 'check') => {
+    const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
     try {
       setUpdatingStatus(true)
       const paymentRes = await fetch('/api/payments/manual', {
@@ -4726,6 +4796,11 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
+                          {proposalInvoice && proposalSentAt && agreementBooking?.contract_status !== 'signed' ? (
+                            <button type="button" onClick={() => { setManualSignedAgreementFile(null); setInPersonCloseInvoice(proposalInvoice) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-wider text-[#8c6529] transition-colors hover:bg-[#caa24c]/20 dark:text-[#f1d27a]">
+                              <FileSignature size={13} /> Close in person
+                            </button>
+                          ) : null}
                           {proposalInvoice ? (
                             <button type="button" onClick={() => openProposalDeliveryPreview(proposalInvoice)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"><Eye size={14} /> Preview delivery</button>
                           ) : null}
@@ -7204,6 +7279,51 @@ export default function LeadDetailPage({
               </div>
             </div>
             <PortalPdfViewer url={`/api/invoices/${pdfPreviewInvoice.id}/pdf?disposition=inline`} title={pdfPreviewInvoice.status === 'draft' ? 'final proposal draft' : 'invoice'} />
+          </div>
+        ) : null}
+      </PortalModal>
+
+      <PortalModal isOpen={Boolean(inPersonCloseInvoice)} onClose={() => !inPersonCloseBusy && setInPersonCloseInvoice(null)} maxWidth="max-w-xl">
+        {inPersonCloseInvoice ? (
+          <div className="bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8c6529] dark:text-[#f1d27a]">In-person close</p>
+                <h3 className="mt-1 text-sm font-black">A simple handoff for {lead?.full_name || inPersonCloseInvoice.client_name}</h3>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">You choose the path; the screen tells you when to hand over the iPad. Payment stays locked until the agreement is signed.</p>
+              </div>
+              <PortalCloseButton onClick={() => setInPersonCloseInvoice(null)} aria-label="Close in-person closeout" />
+            </div>
+            {agreementBooking?.contract_status === 'signed' ? (
+              <div className="space-y-4 p-5 sm:p-6">
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-xs leading-5 text-emerald-800 dark:text-emerald-200"><CheckCircle2 className="mb-2" size={17} /> Agreement is recorded as signed. Choose how the client is paying the initial booking payment.</div>
+                <button type="button" disabled={inPersonCloseBusy} onClick={() => void openInPersonCardCheckout(agreementBooking)} className="flex w-full items-center justify-between rounded-xl bg-[#caa24c] px-4 py-3.5 text-left text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:opacity-45"><span><CreditCard className="mr-2 inline" size={15} />Hand over iPad for card payment</span><span>Stripe</span></button>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button type="button" disabled={updatingStatus || inPersonCloseBusy} onClick={() => void handleRecordManualPayment(agreementBooking, 'deposit', 'cash')} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)] disabled:opacity-45">Record cash received</button>
+                  <button type="button" disabled={updatingStatus || inPersonCloseBusy} onClick={() => void handleRecordManualPayment(agreementBooking, 'deposit', 'zelle')} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)] disabled:opacity-45">Record Zelle received</button>
+                  <button type="button" onClick={() => { setActiveLeadTab('documents'); setInPersonCloseInvoice(null) }} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-bold text-[color:var(--portal-text)]">View signed documents</button>
+                </div>
+                <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Only record cash or Zelle after it has actually been received. The signed agreement is always available in Documents.</p>
+              </div>
+            ) : (
+              <div className="space-y-5 p-5 sm:p-6">
+                <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/5 p-4">
+                  <p className="text-xs font-bold">1. Client verbally accepts the final proposal</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Starting either path records that owner-witnessed acceptance against this locked proposal.</p>
+                </div>
+                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                  <p className="text-xs font-bold">2. Sign on the iPad</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Click below, then hand the iPad to the client. They review, sign, and move straight to secure Stripe payment if paying by card.</p>
+                  <button type="button" disabled={inPersonCloseBusy} onClick={() => void startInPersonSignature()} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:opacity-45">{inPersonCloseBusy ? <Loader2 className="animate-spin" size={15} /> : <FileSignature size={15} />} Start client signature</button>
+                </div>
+                <div className="border-t border-[color:var(--portal-border)] pt-5">
+                  <p className="text-xs font-bold">Or upload a paper-signed agreement</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Use this only after both parties have signed a printed agreement. The PDF is saved privately in Documents and unlocks payment collection.</p>
+                  <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50"><span className="truncate">{manualSignedAgreementFile ? manualSignedAgreementFile.name : 'Choose signed agreement PDF'}</span><Upload size={15} className="ml-3 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /><input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => setManualSignedAgreementFile(event.target.files?.[0] || null)} /></label>
+                  <button type="button" disabled={!manualSignedAgreementFile || inPersonCloseBusy} onClick={() => void uploadManualSignedAgreement()} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-[#8c6529] transition hover:bg-[#caa24c]/20 disabled:opacity-45 dark:text-[#f1d27a]">{inPersonCloseBusy ? <Loader2 className="animate-spin" size={15} /> : <Upload size={15} />} Save signed PDF</button>
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </PortalModal>

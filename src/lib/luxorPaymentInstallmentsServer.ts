@@ -11,7 +11,8 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
   const eventDate = typeof context.event_date === 'string' ? context.event_date : input.booking.event_date
   const bookingDate = input.booking.created_at.slice(0, 10)
   const venue = Number(context.venue_services_total || 0)
-  const event = Number(context.event_services_total || 0)
+  const scheduledVenue = Math.min(venue, Number(input.invoice.total || 0))
+  const event = Math.max(0, Number(input.invoice.total || 0) - scheduledVenue)
   const count = plan && typeof plan === 'object' && Number.isInteger(Number(plan.payment_count)) ? Number(plan.payment_count) : 4
   const cadence = plan && typeof plan === 'object' && (plan.payment_cadence === 'biweekly' || plan.payment_cadence === 'monthly' || plan.payment_cadence === 'evenly_spaced')
     ? plan.payment_cadence
@@ -20,7 +21,7 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
     ? Number(plan.booking_payment_amount)
     : undefined
   if (!eventDate || !Number.isFinite(venue) || !Number.isFinite(event)) return []
-  const schedule = calculateLuxorPaymentSchedule({ eventDate, bookingDate, venueServicesTotal: venue, eventServicesTotal: event, paymentCount: count, paymentCadence: cadence, bookingPaymentAmount })
+  const schedule = calculateLuxorPaymentSchedule({ eventDate, bookingDate, venueServicesTotal: scheduledVenue, eventServicesTotal: event, paymentCount: count, paymentCadence: cadence, bookingPaymentAmount })
   if (!schedule) return []
   const existing = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(input.booking.id)}&order=installment_order.asc`)
   const rows: LuxorPaymentInstallment[] = []
