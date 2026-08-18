@@ -213,10 +213,8 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
       full_decor_and_planning: { retail: 160, all_inclusive: 120 },
     },
   },
-  // The supporting package workbook prices this setup at $500 for the
-  // Custom Package and Bronze packages. Keeping it explicit here prevents the
-  // component from disappearing into a made-up package total.
-  tables_and_chairs_setup: { retail: 500, all_inclusive: 0 },
+  // Tables and chairs setup is included at no additional charge in every package.
+  tables_and_chairs_setup: { retail: 0, all_inclusive: 0 },
   decor: {
     essential: { retail: 700, all_inclusive: 700 },
     full_decor_and_planning: { retail: 5250, all_inclusive: 4350 },

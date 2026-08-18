@@ -25,6 +25,8 @@ import {
   ListMinus,
   ArrowUp,
   ArrowDown,
+  LayoutGrid,
+  List,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -101,6 +103,7 @@ type LeadSortKey = 'name' | 'stage' | 'event' | 'intake' | 'source'
 type ClientSortKey = 'name' | 'event' | 'guests' | 'targetDate'
 type SortDirection = 'asc' | 'desc'
 type TableSort<Key extends string> = { key: Key; direction: SortDirection }
+type ScheduledTourCategory = 'today' | 'upcoming' | 'past'
 
 const DEFAULT_LEAD_SORT: TableSort<LeadSortKey> = { key: 'intake', direction: 'desc' }
 const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direction: 'asc' }
@@ -1389,6 +1392,12 @@ function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   return 'inquiry'
 }
 
+function getScheduledTourCategory(tour: LuxorInquiry, todayKey: string): ScheduledTourCategory {
+  if (!tour.preferred_tour_date || tour.preferred_tour_date > todayKey) return 'upcoming'
+  if (tour.preferred_tour_date === todayKey) return 'today'
+  return 'past'
+}
+
 function stageForBulkStatus(status: LuxorInquiryStatus): LuxorPipelineStage {
   if (status === 'tour_requested' || status === 'tour_confirmed') return 'tour'
   if (status === 'proposal_sent') return 'proposal'
@@ -1976,44 +1985,186 @@ function LeadsToursTab({
   onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
+  type TourView = 'all' | 'today' | 'upcoming' | 'past'
+  type TourViewMode = 'cards' | 'list'
+  type TourSortKey = 'client' | 'date' | 'event' | 'stage'
+  type TourCategory = ScheduledTourCategory
+
+  const [view, setView] = useState<TourView>(() => {
+    if (typeof window === 'undefined') return 'all'
+    const saved = window.localStorage.getItem('luxor_leads_tours_view')
+    return saved && ['all', 'today', 'upcoming', 'past'].includes(saved) ? saved as TourView : 'all'
+  })
+  const [viewMode, setViewMode] = useState<TourViewMode>(() => {
+    if (typeof window === 'undefined') return 'cards'
+    const saved = window.localStorage.getItem('luxor_leads_tours_view_mode')
+    return saved && ['cards', 'list'].includes(saved) ? saved as TourViewMode : 'cards'
+  })
+  const [sort, setSort] = useState<TableSort<TourSortKey>>(() => {
+    if (typeof window === 'undefined') return { key: 'date', direction: 'asc' }
+    const saved = window.localStorage.getItem('luxor_leads_tours_sort')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as TableSort<TourSortKey>
+        if (['client', 'date', 'event', 'stage'].includes(parsed.key) && ['asc', 'desc'].includes(parsed.direction)) return parsed
+      } catch {
+        // Ignore malformed browser preferences and retain the default.
+      }
+    }
+    return { key: 'date', direction: 'asc' }
+  })
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const saveView = (nextView: TourView) => {
+    setView(nextView)
+    setCurrentPage(1)
+    window.localStorage.setItem('luxor_leads_tours_view', nextView)
+  }
+
+  const saveViewMode = (nextMode: TourViewMode) => {
+    setViewMode(nextMode)
+    window.localStorage.setItem('luxor_leads_tours_view_mode', nextMode)
+  }
+
+  const handleSort = (key: TourSortKey) => {
+    const nextSort = sort.key === key
+      ? { key, direction: sort.direction === 'asc' ? 'desc' : 'asc' } as TableSort<TourSortKey>
+      : { key, direction: 'asc' } as TableSort<TourSortKey>
+    setSort(nextSort)
+    setCurrentPage(1)
+    window.localStorage.setItem('luxor_leads_tours_sort', JSON.stringify(nextSort))
+  }
+
   const tours = leads.filter((lead) => (
     (lead.status === 'tour_requested' || lead.status === 'tour_confirmed')
     && !['cancelled', 'attended', 'no_show'].includes(lead.tour_attendance_status || '')
   ))
+
+  const [todayKey, setTodayKey] = useState(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+
+  useEffect(() => {
+    const refreshToday = () => {
+      const today = new Date()
+      setTodayKey(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)
+    }
+    const timer = window.setInterval(refreshToday, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const grouped = useMemo(() => {
+    const result: Record<TourCategory, LuxorInquiry[]> = { today: [], upcoming: [], past: [] }
+    tours.forEach((tour) => result[getScheduledTourCategory(tour, todayKey)].push(tour))
+    const compare = (a: LuxorInquiry, b: LuxorInquiry) => {
+      const values: Record<TourSortKey, number> = {
+        client: a.full_name.localeCompare(b.full_name),
+        date: (a.preferred_tour_date || '9999-12-31').localeCompare(b.preferred_tour_date || '9999-12-31') || (a.preferred_tour_time || '').localeCompare(b.preferred_tour_time || ''),
+        event: (a.event_type || '').localeCompare(b.event_type || ''),
+        stage: getPipelineStage(a).localeCompare(getPipelineStage(b)),
+      }
+      const value = values[sort.key]
+      return sort.direction === 'asc' ? value : -value
+    }
+    Object.values(result).forEach((items) => items.sort(compare))
+    return result
+  }, [sort, todayKey, tours])
+
+  const visibleTours = view === 'all' ? [...grouped.today, ...grouped.upcoming, ...grouped.past] : grouped[view]
+  const pageSize = 25
+  const totalPages = Math.max(1, Math.ceil(visibleTours.length / pageSize))
+  const activePage = Math.min(currentPage, totalPages)
+  const pageTours = visibleTours.slice((activePage - 1) * pageSize, activePage * pageSize)
+  const firstShown = visibleTours.length === 0 ? 0 : (activePage - 1) * pageSize + 1
+  const lastShown = Math.min(activePage * pageSize, visibleTours.length)
+  const categoryLabels: Record<TourCategory, string> = { today: 'Tours Today', upcoming: 'Upcoming Tours', past: 'Past Tours' }
+  const categoryOrder: TourCategory[] = ['today', 'upcoming', 'past']
+  const listFooter = viewMode === 'list' ? (
+    <div className="flex w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
+      <span>{visibleTours.length ? `Showing ${firstShown}–${lastShown} of ${visibleTours.length} tours` : 'No tours to show'}</span>
+      <PortalPagination currentPage={activePage} totalPages={totalPages} onPageChange={setCurrentPage} />
+    </div>
+  ) : null
+
+  const renderTourCard = (tour: LuxorInquiry) => (
+    <article key={tour.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link href={`/portal/leads/${tour.id}`} className="font-bold text-[color:var(--portal-text)] hover:text-[#caa24c]">{tour.full_name}</Link>
+          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{tour.email || tour.phone || 'No contact details'}</p>
+        </div>
+        <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
+        <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Tour date</p><p className="mt-1 font-bold text-[#caa24c]">{tour.preferred_tour_date || 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'}</p></div>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Event type</p><p className="mt-1 font-medium text-[color:var(--portal-text)]">{tour.event_type || 'Quinceañera'}</p></div>
+      </div>
+      <div className="mt-5 flex items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
+        <PortalSelect value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
+        <Link href={`/portal/leads/${tour.id}`} className="ml-auto whitespace-nowrap text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
+      </div>
+    </article>
+  )
+
   return (
     <PortalTableCard
       controls={
-        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({tours.length})</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({tours.length})</h3>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" role="tablist" aria-label="Tour date filter">
+              {(['all', 'today', 'upcoming', 'past'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option}</button>)}
+            </div>
+            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" aria-label="Tour view mode">
+              <button type="button" aria-pressed={viewMode === 'cards'} aria-label="Card view" onClick={() => saveViewMode('cards')} className={`rounded-md p-1.5 ${viewMode === 'cards' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><LayoutGrid size={15} /></button>
+              <button type="button" aria-pressed={viewMode === 'list'} aria-label="List view" onClick={() => saveViewMode('list')} className={`rounded-md p-1.5 ${viewMode === 'list' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><List size={15} /></button>
+            </div>
+          </div>
+        </div>
       }
+      footer={listFooter}
     >
-      <div className="overflow-x-auto">
-        <PortalStickyTable minWidth="900px">
+      {viewMode === 'cards' ? (
+        <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+          {(view === 'all' ? categoryOrder : [view]).map((category) => (
+            <section key={category} aria-labelledby={`tour-${category}-heading`}>
+              <div className="mb-3 flex items-center gap-3"><h4 id={`tour-${category}-heading`} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+              {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
+            </section>
+          ))}
+        </div>
+      ) : (
+      <div className="min-h-0 flex-1 overflow-auto">
+        <PortalStickyTable minWidth="1060px">
           <PortalStickyThead>
-            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
-              <th className="px-8 py-5">Client Name</th>
-              <th className="px-6 py-5">Tour Time Preference</th>
-              <th className="px-6 py-5">Event Type</th>
-              <th className="px-6 py-5">Lifecycle Step</th>
+            <tr className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+              <SortableHeader label="Client Name" sortKey="client" sort={sort} onSort={handleSort} className="px-8 py-5" />
+              <SortableHeader label="Tour Time Preference" sortKey="date" sort={sort} onSort={handleSort} className="px-6 py-5" />
+              <SortableHeader label="Event Type" sortKey="event" sort={sort} onSort={handleSort} className="px-6 py-5" />
+              <SortableHeader label="Lifecycle Step" sortKey="stage" sort={sort} onSort={handleSort} className="px-6 py-5" />
               <th className="px-8 py-5 text-right">Action</th>
             </tr>
           </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/30">
-            {tours.length === 0 ? (
+          <tbody className="divide-y divide-[color:var(--portal-border)]">
+            {pageTours.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No tours currently scheduled.</td>
+                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No tours in this category.</td>
               </tr>
             ) : (
-              tours.map((t) => (
-                <tr key={t.id} className="hover:bg-zinc-950/20 transition-colors">
+              pageTours.map((t, index) => (
+                <React.Fragment key={t.id}>
+                  {(view === 'all' && (index === 0 || getScheduledTourCategory(pageTours[index - 1], todayKey) !== getScheduledTourCategory(t, todayKey))) ? <tr><th colSpan={5} className="bg-[#caa24c]/5 px-8 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#9a712e] dark:text-[#f1d27a]">{categoryLabels[getScheduledTourCategory(t, todayKey)]}</th></tr> : null}
+                <tr className="hover:bg-[#caa24c]/5 transition-colors">
                   <td className="px-8 py-5">
-                    <Link href={`/portal/leads/${t.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{t.full_name}</Link>
-                    <p className="text-[10px] text-zinc-550 mt-0.5">{t.email || t.phone}</p>
+                    <Link href={`/portal/leads/${t.id}`} className="font-bold text-[color:var(--portal-text)] hover:text-[#caa24c]">{t.full_name}</Link>
+                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{t.email || t.phone || 'No contact details'}</p>
                   </td>
                   <td className="px-6 py-5">
                     <p className="text-xs font-bold text-[#caa24c]">{t.preferred_tour_date || 'Date Pending'}</p>
-                    <p className="text-[10px] text-zinc-550 mt-0.5">{t.preferred_tour_time || 'Time TBD'}</p>
+                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{t.preferred_tour_time || 'Time TBD'}</p>
                   </td>
-                  <td className="px-6 py-5 text-zinc-350 font-medium">{t.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{t.event_type || 'Quinceañera'}</td>
                   <td className="px-6 py-5 font-mono">
                     <PortalSelect
                       value={getPipelineStage(t)}
@@ -2023,16 +2174,18 @@ function LeadsToursTab({
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                    <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
+                      <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
                       <LeadLifecycleActionsMenu lead={t} onAction={(action) => onLifecycleAction(t, action)} />
                     </div>
                   </td>
                 </tr>
+                </React.Fragment>
               ))
             )}
           </tbody>
         </PortalStickyTable>
       </div>
+      )}
     </PortalTableCard>
   )
 }

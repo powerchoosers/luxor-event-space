@@ -62,6 +62,7 @@ export type LuxorInquiryInput = {
   eventType?: string
   targetDate?: string
   guestCount?: string
+  budget?: string
   preferredTourDate?: string
   preferredTourTime?: string
   packageInterest?: string
@@ -112,6 +113,7 @@ export type LuxorInquiry = {
   event_type: string | null
   target_date: string | null
   guest_count: number | null
+  budget: string | null
   preferred_tour_date: string | null
   preferred_tour_time: string | null
   package_interest: string | null

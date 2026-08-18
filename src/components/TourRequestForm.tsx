@@ -16,12 +16,23 @@ const WINDOWS = [
   ['Flexible', 'I am flexible'],
 ] as const
 
+const BUDGET_OPTIONS = [
+  ['Under $5,000', 'Under $5,000'],
+  ['$5,000–$10,000', '$5,000–$10,000'],
+  ['$10,000–$15,000', '$10,000–$15,000'],
+  ['$15,000–$20,000', '$15,000–$20,000'],
+  ['$20,000+', '$20,000+'],
+  ['Not sure yet', 'Not sure yet'],
+] as const
+
 export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const spanish = locale === 'es'
   const { slots, loading: slotsLoading, error: slotsError } = useLuxorTourSlots()
   const [eventType, setEventType] = useState('')
   const [targetDate, setTargetDate] = useState('')
+  const [eventDate, setEventDate] = useState('')
   const [guestCount, setGuestCount] = useState('')
+  const [budget, setBudget] = useState('')
   const [slotId, setSlotId] = useState('')
   const [tourWindow, setTourWindow] = useState('')
   const [tourLanguage, setTourLanguage] = useState<Locale | 'none'>(locale)
@@ -59,7 +70,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     const preferredTourTime = selectedSlot?.time || tourWindow
     const payload: LuxorInquiryInput = {
       fullName: fullName.trim(), email: email.trim(), phone: phone.trim(), eventType,
-      targetDate, guestCount, preferredTourDate, preferredTourTime, message: message.trim(),
+      targetDate: eventDate, guestCount, budget, preferredTourDate, preferredTourTime, message: message.trim(),
       source: 'tour_page', flow: 'tour_request', marketingOptIn,
       pagePath: typeof window === 'undefined' ? '/tour' : window.location.pathname,
       metadata: {
@@ -91,6 +102,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label={spanish ? 'Tipo de evento' : 'Event type'}><PortalSelect theme="light" value={eventType} onChange={setEventType} options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} placeholder={spanish ? 'Selecciona una opción' : 'Select an event'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
         <Field label={spanish ? 'Invitados esperados' : 'Expected guests'}><input value={guestCount} onChange={(event) => setGuestCount(event.target.value)} inputMode="numeric" placeholder="For example, 120" className={inputClass} /></Field>
+        <Field label={spanish ? 'Presupuesto estimado' : 'Planning budget'}><PortalSelect theme="light" value={budget} onChange={setBudget} options={BUDGET_OPTIONS.map(([value, label]) => ({ value, label: spanish && value === 'Not sure yet' ? 'Aún no estoy seguro' : label }))} placeholder={spanish ? 'Selecciona un rango' : 'Choose a range'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
+        <Field label={spanish ? 'Fecha del evento' : 'Event date'}><PortalDatePicker theme="light" value={eventDate} onChange={setEventDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us your event date'} className="w-full" /></Field>
         <Field label={spanish ? 'Fecha preferida' : 'Preferred date'}>{slots.length ? <PortalSelect theme="light" value={targetDate} onChange={changeDate} options={dates.map(([value, label]) => ({ value, label }))} placeholder={spanish ? 'Selecciona una fecha' : 'Choose a date'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /> : <PortalDatePicker theme="light" value={targetDate} onChange={changeDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us a date'} className="w-full" />}</Field>
         <Field label={spanish ? 'Hora preferida' : 'Preferred time'}>{slots.length ? <PortalSelect theme="light" value={slotId} onChange={setSlotId} disabled={!targetDate || slotsLoading} options={dateSlots.map((slot) => ({ value: slot.id, label: slot.time }))} placeholder={targetDate ? (spanish ? 'Selecciona una hora' : 'Choose a time') : (spanish ? 'Primero elige una fecha' : 'Choose a date first')} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /> : <PortalSelect theme="light" value={tourWindow} onChange={setTourWindow} options={WINDOWS.map(([value, label]) => ({ value, label: spanish && value === 'Flexible' ? 'Soy flexible' : label }))} placeholder={spanish ? 'Selecciona una ventana' : 'Choose a window'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" />}</Field>
         <Field label={spanish ? 'Idioma del recorrido' : 'Tour language'}><PortalSelect theme="light" value={tourLanguage} onChange={(value) => setTourLanguage(value as Locale | 'none')} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }, { value: 'none', label: spanish ? 'Sin preferencia' : 'No preference' }]} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>

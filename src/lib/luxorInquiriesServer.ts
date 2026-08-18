@@ -80,6 +80,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     event_type: compactText(input.eventType) || null,
     target_date: compactText(input.targetDate) || null,
     guest_count: parseGuestCount(input.guestCount),
+    budget: compactText(input.budget) || null,
     preferred_tour_date: compactText(input.preferredTourDate) || null,
     preferred_tour_time: compactText(input.preferredTourTime) || compactText(input.metadata?.preferredTourWindow) || null,
     package_interest: compactText(input.packageInterest) || null,

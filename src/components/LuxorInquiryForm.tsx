@@ -29,6 +29,15 @@ const TOUR_WINDOWS = [
   { value: 'Flexible', label: 'I am flexible' },
 ]
 
+const BUDGET_OPTIONS = [
+  { value: 'Under $5,000', label: 'Under $5,000' },
+  { value: '$5,000–$10,000', label: '$5,000–$10,000' },
+  { value: '$10,000–$15,000', label: '$10,000–$15,000' },
+  { value: '$15,000–$20,000', label: '$15,000–$20,000' },
+  { value: '$20,000+', label: '$20,000+' },
+  { value: 'Not sure yet', label: 'Not sure yet' },
+]
+
 const PUBLIC_SELECT_BUTTON_CLASS = '!h-12 !rounded-md !px-4 !py-0 !text-left !text-sm'
 const PUBLIC_DATE_PICKER_CLASS = 'w-full [&>button]:h-12 [&>button]:rounded-md [&>button]:px-4 [&>button]:py-0'
 const FORM_TRANSITION = { duration: 0.38, ease: [0.23, 1, 0.32, 1] as const }
@@ -50,6 +59,7 @@ export function LuxorInquiryForm({
   const [eventType, setEventType] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [guestCount, setGuestCount] = useState('')
+  const [budget, setBudget] = useState('')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -171,6 +181,7 @@ export function LuxorInquiryForm({
       eventType,
       targetDate,
       guestCount,
+      budget,
       preferredTourDate,
       preferredTourTime,
       packageInterest,
@@ -257,6 +268,9 @@ export function LuxorInquiryForm({
                   <PortalDatePicker value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
                 <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />
+                <FieldLabel label="Planning budget">
+                  <PortalSelect value={budget} onChange={setBudget} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a range" options={BUDGET_OPTIONS} />
+                </FieldLabel>
                 <FieldLabel label="Which package fits best?">
                   <PortalSelect value={packageInterest} onChange={setPackageInterest} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Choose a package" options={LUXOR_PACKAGE_INTEREST_OPTIONS} />
                 </FieldLabel>
