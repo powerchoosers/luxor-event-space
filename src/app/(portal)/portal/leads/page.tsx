@@ -22,7 +22,9 @@ import {
   Trash2,
   ArrowRightLeft,
   ListPlus,
-  ListMinus
+  ListMinus,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -95,6 +97,14 @@ const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
   { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
+type LeadSortKey = 'name' | 'stage' | 'event' | 'intake' | 'source' | 'engagement'
+type ClientSortKey = 'name' | 'event' | 'guests' | 'targetDate'
+type SortDirection = 'asc' | 'desc'
+type TableSort<Key extends string> = { key: Key; direction: SortDirection }
+
+const DEFAULT_LEAD_SORT: TableSort<LeadSortKey> = { key: 'intake', direction: 'desc' }
+const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direction: 'asc' }
+
 export default function LeadsPage() {
   const { notify } = useToast()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
@@ -116,7 +126,8 @@ export default function LeadsPage() {
   const [eventTypeFilter, setEventTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [contactFilter, setContactFilter] = useState<'all' | 'email' | 'phone' | 'complete' | 'missing'>('all')
-  const [sortBy, setSortBy] = useState<'active' | 'name' | 'guests'>('active')
+  const [leadSort, setLeadSort] = useState<TableSort<LeadSortKey>>(DEFAULT_LEAD_SORT)
+  const [clientSort, setClientSort] = useState<TableSort<ClientSortKey>>(DEFAULT_CLIENT_SORT)
   const [currentPage, setCurrentPage] = useState<number>(1)
 
   // New lead drawer state
@@ -161,6 +172,8 @@ export default function LeadsPage() {
       const savedTab = localStorage.getItem('luxor_leads_active_tab')
       const savedViewMode = localStorage.getItem('luxor_leads_view_mode')
       const savedPage = localStorage.getItem('luxor_leads_current_page')
+      const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
+      const savedClientSort = localStorage.getItem('luxor_clients_table_sort')
       if (savedTab) {
         setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost')
       }
@@ -169,6 +182,12 @@ export default function LeadsPage() {
       }
       if (savedPage) {
         setCurrentPage(parseInt(savedPage, 10))
+      }
+      try {
+        if (savedLeadSort) setLeadSort({ ...DEFAULT_LEAD_SORT, ...JSON.parse(savedLeadSort) })
+        if (savedClientSort) setClientSort({ ...DEFAULT_CLIENT_SORT, ...JSON.parse(savedClientSort) })
+      } catch {
+        // Ignore stale or malformed local preferences and use the defaults.
       }
     }
   }, [])
@@ -369,16 +388,38 @@ export default function LeadsPage() {
 
   const sortedLeads = useMemo(() => {
     return [...filteredLeads].sort((a, b) => {
-      if (sortBy === 'name') {
-        return a.full_name.localeCompare(b.full_name)
+      const stageA = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(a))?.label || getPipelineStage(a)
+      const stageB = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(b))?.label || getPipelineStage(b)
+      let comparison = 0
+      switch (leadSort.key) {
+        case 'name': comparison = a.full_name.localeCompare(b.full_name); break
+        case 'stage': comparison = stageA.localeCompare(stageB); break
+        case 'event': comparison = (a.event_type || '').localeCompare(b.event_type || '') || ((a.guest_count || 0) - (b.guest_count || 0)); break
+        case 'source': comparison = formatSourceLabel(a).localeCompare(formatSourceLabel(b)); break
+        case 'engagement': comparison = new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime(); break
+        case 'intake': comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime(); break
       }
-      if (sortBy === 'guests') {
-        return (b.guest_count || 0) - (a.guest_count || 0)
-      }
-      // Default: recently active (created_at desc)
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      return leadSort.direction === 'asc' ? comparison : -comparison
     })
-  }, [filteredLeads, sortBy])
+  }, [filteredLeads, leadSort])
+
+  const updateLeadSort = useCallback((key: LeadSortKey) => {
+    setLeadSort((current) => {
+      const next = { key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' } as TableSort<LeadSortKey>
+      localStorage.setItem('luxor_leads_table_sort', JSON.stringify(next))
+      return next
+    })
+    setCurrentPage(1)
+    localStorage.setItem('luxor_leads_current_page', '1')
+  }, [])
+
+  const updateClientSort = useCallback((key: ClientSortKey) => {
+    setClientSort((current) => {
+      const next = { key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' } as TableSort<ClientSortKey>
+      localStorage.setItem('luxor_clients_table_sort', JSON.stringify(next))
+      return next
+    })
+  }, [])
 
   // Computed Metrics
   const totalCount = sortedLeads.length
@@ -584,7 +625,7 @@ export default function LeadsPage() {
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
-        {activeTab === 'clients' && <LeadsClientsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={leads} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
@@ -634,16 +675,6 @@ export default function LeadsPage() {
                     { value: 'missing', label: 'Missing contact details' },
                   ]}
                 />
-                <PortalSelect
-                  value={sortBy}
-                  onChange={(value) => setSortBy(value as typeof sortBy)}
-                  className="w-full"
-                  options={[
-                    { value: 'active', label: 'Sort: Recently active' },
-                    { value: 'name', label: 'Sort: Name' },
-                    { value: 'guests', label: 'Sort: Guest count' },
-                  ]}
-                />
               </div>
             </PortalFilterBar>
           }
@@ -663,16 +694,16 @@ export default function LeadsPage() {
           <div className="hidden overflow-x-auto md:block">
           <PortalStickyTable minWidth="1060px">
             <PortalStickyThead>
-              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+              <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
                 <th className="w-14 px-4 py-3.5 text-center">
                   <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(pageLeadIds)} onChange={() => bulkSelection.selectPage(pageLeadIds)} />
                 </th>
-                <th className="px-4 py-3.5">Full Name & Contact</th>
-                <th className="px-6 py-3.5">Step</th>
-                <th className="px-6 py-3.5">Event Parameters</th>
-                <th className="px-6 py-3.5">Intake Date</th>
-                <th className="px-6 py-3.5">Source Node</th>
-                <th className="px-8 py-3.5 text-right">Engagement & Actions</th>
+                <SortableHeader label="Full Name & Contact" sortKey="name" sort={leadSort} onSort={updateLeadSort} className="min-w-[255px]" />
+                <SortableHeader label="Step" sortKey="stage" sort={leadSort} onSort={updateLeadSort} className="min-w-[190px]" />
+                <SortableHeader label="Event Parameters" sortKey="event" sort={leadSort} onSort={updateLeadSort} className="min-w-[185px]" />
+                <SortableHeader label="Intake Date" sortKey="intake" sort={leadSort} onSort={updateLeadSort} className="min-w-[145px]" />
+                <SortableHeader label="Source Node" sortKey="source" sort={leadSort} onSort={updateLeadSort} className="min-w-[150px]" />
+                <SortableHeader label="Engagement & Actions" sortKey="engagement" sort={leadSort} onSort={updateLeadSort} align="right" className="min-w-[235px]" />
               </tr>
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
@@ -1623,14 +1654,58 @@ function StatsCard({
   )
 }
 
+function SortableHeader<Key extends string>({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  align = 'left',
+  className = '',
+}: {
+  label: string
+  sortKey: Key
+  sort: TableSort<Key>
+  onSort: (key: Key) => void
+  align?: 'left' | 'right'
+  className?: string
+}) {
+  const active = sort.key === sortKey
+  return (
+    <th scope="col" aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} className={`px-6 py-3.5 ${align === 'right' ? 'text-right' : ''} ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex max-w-full items-center gap-2 whitespace-nowrap rounded-md py-1 text-inherit transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${align === 'right' ? 'justify-end' : ''} ${active ? 'text-[#9a712e] dark:text-[#f1d27a]' : 'hover:text-[color:var(--portal-text)]'}`}
+        aria-label={`Sort by ${label} ${active && sort.direction === 'asc' ? 'descending' : 'ascending'}`}
+      >
+        <span>{label}</span>
+        {active ? (sort.direction === 'asc' ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <span className="text-[color:var(--portal-faint)]" aria-hidden="true">↕</span>}
+      </button>
+    </th>
+  )
+}
+
 function LeadsClientsTab({
   leads,
+  sort,
+  onSort,
   onLifecycleAction,
 }: {
   leads: LuxorInquiry[]
+  sort: TableSort<ClientSortKey>
+  onSort: (key: ClientSortKey) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
-  const clients = leads.filter(l => l.status === 'booked')
+  const clients = useMemo(() => leads.filter(l => l.status === 'booked').sort((a, b) => {
+    let comparison = 0
+    switch (sort.key) {
+      case 'name': comparison = a.full_name.localeCompare(b.full_name); break
+      case 'event': comparison = (a.event_type || '').localeCompare(b.event_type || ''); break
+      case 'guests': comparison = (a.guest_count || 0) - (b.guest_count || 0); break
+      case 'targetDate': comparison = (a.target_date || '9999-12-31').localeCompare(b.target_date || '9999-12-31'); break
+    }
+    return sort.direction === 'asc' ? comparison : -comparison
+  }), [leads, sort])
   return (
     <PortalTableCard
       mobilePageScroll
@@ -1641,12 +1716,12 @@ function LeadsClientsTab({
       <div className="hidden overflow-x-auto md:block">
         <PortalStickyTable minWidth="900px">
           <PortalStickyThead>
-            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
-              <th className="px-8 py-5">Client Name</th>
-              <th className="px-6 py-5">Event Type</th>
-              <th className="px-6 py-5">Guest Count</th>
-              <th className="px-6 py-5">Target Event Date</th>
-              <th className="px-8 py-5 text-right">Action</th>
+            <tr className="whitespace-nowrap text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+              <SortableHeader label="Client Name" sortKey="name" sort={sort} onSort={onSort} className="min-w-[260px] px-8 py-5" />
+              <SortableHeader label="Event Type" sortKey="event" sort={sort} onSort={onSort} className="min-w-[180px] py-5" />
+              <SortableHeader label="Guest Count" sortKey="guests" sort={sort} onSort={onSort} className="min-w-[150px] py-5" />
+              <SortableHeader label="Target Event Date" sortKey="targetDate" sort={sort} onSort={onSort} className="min-w-[190px] py-5" />
+              <th className="min-w-[220px] whitespace-nowrap px-8 py-5 text-right">Action</th>
             </tr>
           </PortalStickyThead>
           <tbody className="divide-y divide-zinc-900/30">
