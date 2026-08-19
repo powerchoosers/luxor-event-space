@@ -1,9 +1,13 @@
 import 'server-only'
 
 import crypto from 'crypto'
+import { createUniqueLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
+import { normalizeEmailAddress } from './zohoMailServer'
+import type { LuxorEmailJob } from './luxorInquiryTypes'
 import type {
+  LayoutReviewEmailDelivery,
   LayoutReviewSnapshot,
   LayoutReviewSnapshotItem,
   LuxorLayoutReview,
@@ -421,6 +425,134 @@ export function toPublicLayoutReview(review: LuxorLayoutReview, feedback: LuxorL
         }
       : null,
   }
+}
+
+function layoutReviewIdFromEmailJob(job: Pick<LuxorEmailJob, 'metadata'>) {
+  const reviewId = job.metadata && typeof job.metadata.layout_review_id === 'string'
+    ? job.metadata.layout_review_id
+    : ''
+  return UUID_PATTERN.test(reviewId) ? reviewId : null
+}
+
+export function toLayoutReviewEmailDelivery(job: Pick<LuxorEmailJob, 'id' | 'created_at' | 'recipient_email' | 'status' | 'sent_at' | 'last_error' | 'metadata'>): LayoutReviewEmailDelivery | null {
+  const reviewId = layoutReviewIdFromEmailJob(job)
+  if (!reviewId) return null
+  return {
+    review_id: reviewId,
+    id: job.id,
+    created_at: job.created_at,
+    recipient_email: job.recipient_email,
+    status: job.status,
+    sent_at: job.sent_at,
+    last_error: job.last_error,
+  }
+}
+
+export async function listLuxorLayoutReviewEmailDeliveries(reviewIds: string[]) {
+  const ids = Array.from(new Set(reviewIds.filter((id) => UUID_PATTERN.test(id))))
+  if (!ids.length) return []
+
+  const jobs = await supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&job_type=eq.layout_review&metadata->>layout_review_id=in.(${ids.join(',')})&order=created_at.desc&limit=100`,
+  )
+  const latestByReviewId = new Map<string, LayoutReviewEmailDelivery>()
+  for (const job of jobs) {
+    const delivery = toLayoutReviewEmailDelivery(job)
+    if (delivery && !latestByReviewId.has(delivery.review_id)) latestByReviewId.set(delivery.review_id, delivery)
+  }
+  return [...latestByReviewId.values()]
+}
+
+function firstName(value: string) {
+  return value.trim().split(/\s+/)[0] || 'there'
+}
+
+function formattedExpiry(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '30 days from now'
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+}
+
+export function buildLuxorLayoutReviewEmail(input: {
+  clientName: string
+  review: Pick<LuxorLayoutReview, 'layout_name' | 'expires_at'>
+  reviewUrl: string
+}) {
+  return {
+    subject: 'Your Luxor event layout is ready to review',
+    body: [
+      `Hi ${firstName(input.clientName)},`,
+      `Your saved event layout, “${input.review.layout_name},” is ready to review. Open the private link below to explore the 3D setup, approve the plan, or send us any requested changes.`,
+      input.reviewUrl,
+      `This private link expires ${formattedExpiry(input.review.expires_at)}.`,
+      'We look forward to bringing your celebration to life.',
+      'Luxor Event Space',
+    ].join('\n\n'),
+  }
+}
+
+export async function queueLuxorLayoutReviewEmail(input: {
+  inquiryId: string
+  review: Pick<LuxorLayoutReview, 'id'>
+  recipientEmail: string
+  subject: string
+  body: string
+  requestedBy: string
+}) {
+  const recipientEmail = normalizeEmailAddress(input.recipientEmail)
+  if (!recipientEmail) throw new Error('Add a valid client email before sending this layout review.')
+  const automationKey = `layout-review:${input.review.id}`
+  const existing = await supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&job_type=eq.layout_review&inquiry_id=eq.${encodeURIComponent(input.inquiryId)}&metadata->>layout_review_id=eq.${encodeURIComponent(input.review.id)}&order=created_at.desc&limit=1`,
+  )
+  const latest = existing[0]
+
+  if (latest && ['queued', 'sending', 'sent'].includes(latest.status)) {
+    const delivery = toLayoutReviewEmailDelivery(latest)
+    if (!delivery) throw new Error('Unable to load layout review email delivery.')
+    return { delivery, queued: false }
+  }
+
+  if (latest) {
+    const retried = await updateLuxorEmailJob(latest.id, {
+      status: 'queued',
+      recipient_email: recipientEmail,
+      subject: input.subject,
+      body: input.body,
+      scheduled_for: new Date().toISOString(),
+      last_error: null,
+      metadata: {
+        ...latest.metadata,
+        automation_key: automationKey,
+        layout_review_id: input.review.id,
+        requested_by: input.requestedBy,
+        sender_from: 'booking@luxoratlaspalmas.com',
+        sender_name: 'Luxor Event Space',
+      },
+    })
+    const delivery = retried && toLayoutReviewEmailDelivery(retried)
+    if (!delivery) throw new Error('Unable to queue the layout review email.')
+    return { delivery, queued: true }
+  }
+
+  const job = await createUniqueLuxorEmailJob({
+    inquiryId: input.inquiryId,
+    jobType: 'layout_review',
+    recipientEmail,
+    subject: input.subject,
+    body: input.body,
+    scheduledFor: new Date().toISOString(),
+    automationKey,
+    metadata: {
+      layout_review_id: input.review.id,
+      requested_by: input.requestedBy,
+      sender_from: 'booking@luxoratlaspalmas.com',
+      sender_name: 'Luxor Event Space',
+    },
+  })
+  const delivery = toLayoutReviewEmailDelivery(job)
+  if (!delivery) throw new Error('Unable to queue the layout review email.')
+  return { delivery, queued: job.status === 'queued' }
 }
 
 export async function listLuxorLayoutReviewNotifications(limit = 50) {

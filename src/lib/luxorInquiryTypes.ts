@@ -503,6 +503,7 @@ export type LuxorEmailJobKind =
   | 'post_event_follow_up'
   | 'marketing_campaign'
   | 'grand_opening_rsvp_confirmation'
+  | 'layout_review'
 
 
 export type LuxorEmailJob = {

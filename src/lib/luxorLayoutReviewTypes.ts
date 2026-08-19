@@ -1,3 +1,5 @@
+import type { LuxorEmailJobStatus } from './luxorInquiryTypes'
+
 export type LuxorLayoutReviewStatus = 'open' | 'approved' | 'feedback' | 'revoked' | 'expired'
 export type LuxorLayoutReviewAction = 'approved' | 'feedback'
 
@@ -53,8 +55,19 @@ export type LuxorLayoutReviewFeedback = {
   user_agent: string | null
 }
 
+export type LayoutReviewEmailDelivery = {
+  review_id: string
+  id: string
+  created_at: string
+  recipient_email: string
+  status: LuxorEmailJobStatus
+  sent_at: string | null
+  last_error: string | null
+}
+
 export type PortalLayoutReview = Omit<LuxorLayoutReview, 'token_hash' | 'token_ciphertext'> & {
   share_url: string | null
+  email_delivery: LayoutReviewEmailDelivery | null
 }
 
 export type PublicLayoutReview = {

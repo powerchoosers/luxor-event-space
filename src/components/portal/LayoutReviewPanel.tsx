@@ -1,17 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ClipboardCheck, Copy, ExternalLink, Link2, Loader2, MessageSquareText, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, ClipboardCheck, Copy, ExternalLink, Link2, Loader2, Mail, MessageSquareText, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import type { EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
-import type { LuxorLayoutReviewFeedback, PortalLayoutReview } from '@/lib/luxorLayoutReviewTypes'
+import type { LayoutReviewEmailDelivery, LuxorLayoutReviewFeedback, PortalLayoutReview } from '@/lib/luxorLayoutReviewTypes'
 
 type Props = {
   inquiryId: string
   leadEventId: string | null
   layout: EventLayoutDocument | null
+  clientEmail: string | null
   onOpenLayoutBuilder: () => void
+  refreshKey?: number
 }
 
 type ReviewResponse = {
@@ -46,13 +48,22 @@ function reviewState(review: PortalLayoutReview, feedback: LuxorLayoutReviewFeed
   return { label: 'Waiting for response', tone: 'text-sky-700 dark:text-sky-300 bg-sky-500/10 border-sky-500/20' }
 }
 
-export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayoutBuilder }: Props) {
+function deliveryLabel(delivery: LayoutReviewEmailDelivery) {
+  if (delivery.status === 'sent') return `Email sent ${formatTimestamp(delivery.sent_at || delivery.created_at)}`
+  if (delivery.status === 'sending') return 'Email is sending'
+  if (delivery.status === 'queued') return 'Email queued for delivery'
+  if (delivery.status === 'failed') return 'Email delivery failed — retry available'
+  return 'Email was cancelled — retry available'
+}
+
+export function LayoutReviewPanel({ inquiryId, leadEventId, layout, clientEmail, onOpenLayoutBuilder, refreshKey = 0 }: Props) {
   const { notify } = useToast()
   const [reviews, setReviews] = useState<PortalLayoutReview[]>([])
   const [feedback, setFeedback] = useState<LuxorLayoutReviewFeedback[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [sendingId, setSendingId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,7 +90,7 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayout
 
   useEffect(() => {
     void loadReviews()
-  }, [loadReviews])
+  }, [loadReviews, refreshKey])
 
   useEffect(() => {
     const supabase = getPortalSupabaseClient()
@@ -182,6 +193,36 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayout
     }
   }
 
+  const sendReviewEmail = async (review: PortalLayoutReview) => {
+    if (!clientEmail) {
+      setError('Add a client email to this lead before sending the layout review.')
+      return
+    }
+    if (!window.confirm(`Send this private layout review to ${clientEmail}?`)) return
+
+    setSendingId(review.id)
+    setError(null)
+    try {
+      const response = await fetch(`/api/portal/layout-reviews/${encodeURIComponent(review.id)}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ inquiryId }),
+      })
+      const data = await response.json() as { delivery?: LayoutReviewEmailDelivery; queued?: boolean; error?: string }
+      if (!response.ok || !data.delivery) throw new Error(data.error || 'Unable to queue the layout review email.')
+      await loadReviews(true)
+      notify({
+        title: data.queued ? 'Layout review email queued' : 'Layout review email already in progress',
+        description: data.queued ? `The private link will be sent to ${clientEmail}.` : deliveryLabel(data.delivery),
+        variant: data.queued ? 'success' : 'info',
+      })
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : 'Unable to queue the layout review email.')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
@@ -228,6 +269,21 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayout
             const response = feedbackByReviewId.get(review.id)
             const state = reviewState(review, response)
             const isCurrent = currentReview?.id === review.id
+            const delivery = review.email_delivery
+            const isOpenForResponse = isCurrent && !response && !review.revoked_at && review.status === 'open' && !isExpired(review.expires_at)
+            const deliveryIsRetryable = delivery?.status === 'failed' || delivery?.status === 'cancelled'
+            const deliveryIsBusy = sendingId === review.id || delivery?.status === 'queued' || delivery?.status === 'sending' || delivery?.status === 'sent'
+            const sendLabel = sendingId === review.id
+              ? 'Queueing…'
+              : delivery?.status === 'sent'
+                ? 'Email sent'
+                : delivery?.status === 'queued'
+                  ? 'Email queued'
+                  : delivery?.status === 'sending'
+                    ? 'Sending…'
+                    : deliveryIsRetryable
+                      ? 'Retry email'
+                      : 'Send email'
             return (
               <article key={review.id} className={`rounded-xl border p-4 ${isCurrent ? 'border-[#caa24c]/35 bg-[#caa24c]/5' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -239,6 +295,7 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayout
                     <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Created {formatTimestamp(review.created_at)} · Expires {formatTimestamp(review.expires_at)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {isOpenForResponse ? <button type="button" onClick={() => void sendReviewEmail(review)} disabled={!clientEmail || deliveryIsBusy} title={!clientEmail ? 'Add a client email before sending this review.' : undefined} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 text-[10px] font-bold text-[#9a6e21] hover:border-[#caa24c]/60 hover:bg-[#caa24c]/16 dark:text-[#e5c370] disabled:cursor-not-allowed disabled:opacity-50"><Mail size={13} />{sendLabel}</button> : null}
                     {review.share_url ? <button type="button" onClick={() => void copyLink(review)} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 text-[10px] font-bold text-[color:var(--portal-text)] hover:border-[#caa24c]/45 hover:text-[#b9872f] dark:hover:text-[#e5c370]">{copiedId === review.id ? <CheckCircle2 size={13} /> : <Copy size={13} />}{copiedId === review.id ? 'Copied' : 'Copy link'}</button> : null}
                     {review.share_url ? <button type="button" onClick={() => window.open(review.share_url!, '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 text-[10px] font-bold text-[color:var(--portal-text)] hover:border-[#caa24c]/45 hover:text-[#b9872f] dark:hover:text-[#e5c370]"><ExternalLink size={13} /> Preview</button> : null}
                     {!review.revoked_at && review.status !== 'revoked' ? <button type="button" onClick={() => void revokeReview(review)} disabled={revokingId === review.id} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 disabled:opacity-50">{revokingId === review.id ? <Loader2 className="animate-spin" size={13} /> : <XCircle size={13} />}Revoke</button> : null}
@@ -246,6 +303,8 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, onOpenLayout
                 </div>
 
                 {review.share_url && isCurrent ? <input aria-label="Private layout review link" readOnly value={review.share_url} onFocus={(event) => event.currentTarget.select()} className="mt-3 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 font-mono text-[10px] text-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/55" /> : null}
+
+                {isCurrent ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">{delivery ? <span title={delivery.last_error || undefined}>{deliveryLabel(delivery)} to <span className="font-semibold text-[color:var(--portal-text)]">{delivery.recipient_email}</span>.</span> : clientEmail ? <>Ready to email this private link to <span className="font-semibold text-[color:var(--portal-text)]">{clientEmail}</span>.</> : 'Add a client email on the lead to send this private link.'}</p> : null}
 
                 {response ? (
                   <div className="mt-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-3">

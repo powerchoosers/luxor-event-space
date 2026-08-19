@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Armchair, Ban, CircleDot, Copy, Grid2X2, LampDesk,
-  PanelTop, RectangleHorizontal, Redo2, Save, Sofa, Trash2,
+  Link2, PanelTop, RectangleHorizontal, Redo2, Save, Sofa, Trash2,
   Undo2, Users, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { EventLayout3D } from './EventLayout3D'
@@ -43,6 +43,7 @@ type Props = {
   eventDate?: string | null
   guestCount?: number | null
   onSave: (layout: EventLayoutDocument) => Promise<boolean>
+  onCreateReview?: (layout: EventLayoutDocument) => Promise<string | null>
 }
 
 const CATALOG: Array<{ kind: LayoutItemKind; label: string; group: string; icon: typeof CircleDot; width: number; height: number; seats?: number }> = [
@@ -225,7 +226,7 @@ function templateFor(name: string): LayoutItem[] {
   return [...Array.from({ length: 6 }, (_, i) => makeItem('rectangle-table', 15 + (i % 2) * 40, 17 + Math.floor(i / 2) * 24, i)), { ...makeItem('stage'), x: 38, y: 82 }]
 }
 
-export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, eventType, eventDate, guestCount, onSave }: Props) {
+export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, eventType, eventDate, guestCount, onSave, onCreateReview }: Props) {
   const [name, setName] = useState(initialLayout?.name || 'Classic Banquet Layout')
   const [items, setItems] = useState<LayoutItem[]>(() => initialLayout?.items?.length ? initialLayout.items : banquetTemplate())
   const [roomWidthFeet, setRoomWidthFeet] = useState(initialLayout?.roomWidthFeet || 33)
@@ -238,6 +239,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const [zoom, setZoom] = useState(100)
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d')
   const [saving, setSaving] = useState(false)
+  const [creatingReview, setCreatingReview] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(initialLayout?.updatedAt || null)
   const [placementMessage, setPlacementMessage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -388,16 +390,65 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
     dragRef.current = null
   }
 
-  const save = async () => {
+  const layoutDocument = (updatedAt: string): EventLayoutDocument => ({
+    version: 1,
+    name: name.trim() || 'Event layout',
+    items,
+    roomWidthFeet,
+    roomHeightFeet,
+    secondaryRoomWidthFeet,
+    secondaryRoomDepthFeet,
+    updatedAt,
+  })
+
+  const save = async (): Promise<EventLayoutDocument | null> => {
     if (hasPlacementIssues) {
       setPlacementMessage('Resolve overlapping or out-of-room items before saving this layout.')
-      return
+      return null
     }
     setSaving(true)
     const now = new Date().toISOString()
-    const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, roomWidthFeet, roomHeightFeet, secondaryRoomWidthFeet, secondaryRoomDepthFeet, updatedAt: now })
-    setSaving(false)
-    if (ok) setSavedAt(now)
+    const document = layoutDocument(now)
+    try {
+      const ok = await onSave(document)
+      if (!ok) return null
+      setSavedAt(now)
+      return document
+    } catch {
+      setPlacementMessage('Unable to save this layout. Please try again.')
+      return null
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const createReview = async () => {
+    if (!onCreateReview) return
+    const document = await save()
+    if (!document) return
+
+    setCreatingReview(true)
+    try {
+      const shareUrl = await onCreateReview(document)
+      if (!shareUrl) {
+        setPlacementMessage('The layout is saved, but a private review link could not be created. Please try again.')
+        return
+      }
+      let copied = false
+      try {
+        await navigator.clipboard.writeText(shareUrl)
+        copied = true
+      } catch {
+        // The Planning review card retains the link for browsers that block clipboard access.
+      }
+      setPlacementMessage(copied
+        ? 'Private review link created and copied. Close the builder to email it to the client.'
+        : 'Private review link created. Close the builder to email it to the client.')
+    } catch {
+      setPlacementMessage('The layout is saved, but a private review link could not be created. Please try again.')
+    } finally {
+      setCreatingReview(false)
+    }
   }
 
   const groups = useMemo(() => Array.from(new Set(CATALOG.map((item) => item.group))), [])
@@ -414,6 +465,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
           <button type="button" onClick={redo} disabled={!future.length} className="layout-action"><Redo2 size={14} /> Redo</button>
           {hasPlacementIssues ? <button type="button" onClick={resolveOverlaps} className="layout-action">Resolve overlaps</button> : null}
           <button type="button" onClick={() => { if (confirm('Clear every item from this layout?')) commit([]) }} className="layout-action hidden sm:inline-flex"><Trash2 size={14} /> Clear</button>
+          {onCreateReview ? <button type="button" onClick={() => void createReview()} disabled={saving || creatingReview} className="layout-action"><Link2 size={14} /> {creatingReview ? 'Creating link…' : 'Save & create review link'}</button> : null}
           <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#b9872f] px-4 text-[10px] font-black uppercase tracking-[0.15em] text-white hover:bg-[#caa24c] disabled:opacity-50"><Save size={14} /> {saving ? 'Saving…' : 'Save layout'}</button>
         </div>
       </header>

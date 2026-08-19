@@ -419,6 +419,7 @@ export default function LeadDetailPage({
   const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
   const [planningColors, setPlanningColors] = useState<string[]>([])
   const [layoutDesignerOpen, setLayoutDesignerOpen] = useState(false)
+  const [layoutReviewRefreshKey, setLayoutReviewRefreshKey] = useState(0)
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [activitySearch, setActivitySearch] = useState('')
   const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
@@ -4795,7 +4796,9 @@ export default function LeadDetailPage({
                           inquiryId={lead.id}
                           leadEventId={selectedLeadEvent?.id || null}
                           layout={(activeEventMetadata.event_layout as EventLayoutDocument | undefined) || null}
+                          clientEmail={lead.email}
                           onOpenLayoutBuilder={() => setLayoutDesignerOpen(true)}
+                          refreshKey={layoutReviewRefreshKey}
                         />
 
                         {/* Planning Checklist Summary */}
@@ -7567,6 +7570,23 @@ export default function LeadDetailPage({
           }) : handleMetadataUpdate({ event_layout: layout, floor_plan_layout: layout.name }))
           if (saved) notify({ title: 'Layout saved', description: 'The editable floor plan is saved with this lead.', variant: 'success' })
           return saved
+        }}
+        onCreateReview={async (layout) => {
+          try {
+            const response = await fetch('/api/portal/layout-reviews', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id || null, layout }),
+            })
+            const data = await response.json() as { review?: { share_url?: string | null }; error?: string }
+            if (!response.ok || !data.review) throw new Error(data.error || 'Unable to create a private layout link.')
+            setLayoutReviewRefreshKey((value) => value + 1)
+            notify({ title: 'Private layout link created', description: 'Close the builder to preview or email it to the client.', variant: 'success' })
+            return typeof data.review.share_url === 'string' ? data.review.share_url : null
+          } catch (error) {
+            notify({ title: 'Could not create the review link', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+            return null
+          }
         }}
       /> : null}
 

@@ -5,13 +5,14 @@ import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
 import {
   createLuxorLayoutReview,
   getLuxorLayoutReviewForInquiry,
+  listLuxorLayoutReviewEmailDeliveries,
   listLuxorLayoutReviewFeedback,
   listLuxorLayoutReviews,
   normalizeLayoutReviewSnapshot,
   revealLuxorLayoutReviewToken,
   revokeLuxorLayoutReview,
 } from '@/lib/luxorLayoutReviewsServer'
-import type { LuxorLayoutReview, PortalLayoutReview } from '@/lib/luxorLayoutReviewTypes'
+import type { LayoutReviewEmailDelivery, LuxorLayoutReview, PortalLayoutReview } from '@/lib/luxorLayoutReviewTypes'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -29,7 +30,11 @@ function reviewOrigin(request: NextRequest) {
   return (configuredOrigin || request.nextUrl.origin).replace(/\/$/, '')
 }
 
-function portalReview(review: LuxorLayoutReview, request: NextRequest): PortalLayoutReview {
+function portalReview(
+  review: LuxorLayoutReview,
+  request: NextRequest,
+  emailDeliveryByReviewId: ReadonlyMap<string, LayoutReviewEmailDelivery> = new Map(),
+): PortalLayoutReview {
   const { token_hash: _tokenHash, token_ciphertext: _tokenCiphertext, ...safeReview } = review
   let shareUrl: string | null = null
   try {
@@ -39,7 +44,7 @@ function portalReview(review: LuxorLayoutReview, request: NextRequest): PortalLa
     // an old encrypted recovery value is no longer decryptable.
     console.error('Unable to reveal a saved layout review link:', error)
   }
-  return { ...safeReview, share_url: shareUrl }
+  return { ...safeReview, share_url: shareUrl, email_delivery: emailDeliveryByReviewId.get(review.id) || null }
 }
 
 async function assertReviewScope(inquiryId: string, leadEventId: string | null) {
@@ -59,9 +64,13 @@ export async function GET(request: NextRequest) {
     await assertReviewScope(inquiryId, leadEventId)
 
     const reviews = await listLuxorLayoutReviews({ inquiryId, leadEventId })
-    const feedback = await listLuxorLayoutReviewFeedback(reviews.map((review) => review.id))
+    const [feedback, deliveries] = await Promise.all([
+      listLuxorLayoutReviewFeedback(reviews.map((review) => review.id)),
+      listLuxorLayoutReviewEmailDeliveries(reviews.map((review) => review.id)),
+    ])
+    const emailDeliveryByReviewId = new Map(deliveries.map((delivery) => [delivery.review_id, delivery]))
     return NextResponse.json({
-      reviews: reviews.map((review) => portalReview(review, request)),
+      reviews: reviews.map((review) => portalReview(review, request, emailDeliveryByReviewId)),
       feedback,
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
