@@ -64,7 +64,7 @@ const CATALOG: Array<{ kind: LayoutItemKind; label: string; group: string; icon:
   { kind: 'florals', label: 'Decor', group: 'Décor & more', icon: CircleDot, width: 2, height: 2 },
 ]
 
-const TABLE_COLORS = ['#f5ead8', '#d9be8b', '#2b2926', '#314536', '#24354d', '#743f3d']
+const TABLE_COLORS = ['#252321', '#f5ead8', '#d9be8b', '#314536', '#24354d', '#743f3d']
 
 function uid() {
   return `layout-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
