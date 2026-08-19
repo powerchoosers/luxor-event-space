@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     let publicPricingContext = ''
     try {
       const pricing = await getDefaultLuxorProposalPricing()
-      const config = pricing.config as Record<string, any>
+      const config = pricing.config as Record<string, unknown>
       publicPricingContext = `\n\nCURRENT PUBLIC PRICING GUIDANCE (active catalog version ${pricing.version}): ${JSON.stringify({ rental_rates: config.rental_rates, packages: config.packages })}. Use these only as approved rental starting points; exact totals require a tailored proposal.`
     } catch {
       // Public chat still works from the verified venue facts if pricing is unavailable.

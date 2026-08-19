@@ -760,13 +760,13 @@ function PortalPhonePanel({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 22, scale: 0.97 }}
       transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed right-4 top-20 z-[80] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[#caa24c]/20 bg-[#080807]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.7)] backdrop-blur-xl"
+      className="fixed right-4 top-20 z-[80] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 text-[color:var(--portal-text)] shadow-[0_30px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:shadow-[0_30px_80px_rgba(0,0,0,0.7)]"
     >
-      <div className="flex items-center justify-between border-b border-[#caa24c]/10 pb-4">
+      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Luxor Browser Phone</p>
-          <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
-            <span className={`h-2 w-2 rounded-full ${phoneState === 'ready' ? 'bg-emerald-400' : phoneState === 'error' ? 'bg-red-400' : 'bg-zinc-600'}`} />
+          <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--portal-muted)]">
+            <span className={`h-2 w-2 rounded-full ${phoneState === 'ready' ? 'bg-emerald-500' : phoneState === 'error' ? 'bg-red-500' : 'bg-[color:var(--portal-faint)]'}`} />
             {phoneState === 'ready' ? 'Ready for calls' : phoneState === 'starting' ? 'Connecting...' : phoneState === 'error' ? 'Needs attention' : 'Not enabled'}
           </div>
         </div>
@@ -785,27 +785,27 @@ function PortalPhonePanel({
           {activeCall.inquiryId ? (
             <Link
               href={`/portal/leads/${activeCall.inquiryId}`}
-              className="mt-4 inline-block text-lg font-black text-white hover:text-[#caa24c] hover:underline transition-colors"
+              className="mt-4 inline-block text-lg font-black text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#caa24c] hover:underline transition-colors"
             >
               {activeCall.contactName}
             </Link>
           ) : (
-            <p className="mt-4 text-lg font-black text-white">{activeCall.contactName}</p>
+            <p className="mt-4 text-lg font-black text-[color:var(--portal-text)]">{activeCall.contactName}</p>
           )}
-          <p className="mt-1 font-mono text-xs text-zinc-500">{formatPhoneDisplay(activeCall.phoneNumber)}</p>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+          <p className="mt-1 font-mono text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(activeCall.phoneNumber)}</p>
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
             {activeCall.phase === 'active' ? formatDuration(Math.floor((Math.max(now, activeCall.startedAt) - activeCall.startedAt) / 1000)) : activeCall.phase}
           </p>
           {activeCall.phase === 'active' && !reduceMotion && (
             <div className="mt-3 flex h-4 items-end justify-center gap-1" aria-hidden="true">
-              {[0, 1, 2, 3, 4].map((bar) => <motion.span key={bar} className="w-1 rounded-full bg-emerald-400/70" animate={{ height: [4, 14 - Math.abs(2 - bar) * 2, 5] }} transition={{ duration: 0.7, repeat: Infinity, delay: bar * 0.08 }} />)}
+              {[0, 1, 2, 3, 4].map((bar) => <motion.span key={bar} className="w-1 rounded-full bg-emerald-500/70 dark:bg-emerald-400/70" animate={{ height: [4, 14 - Math.abs(2 - bar) * 2, 5] }} transition={{ duration: 0.7, repeat: Infinity, delay: bar * 0.08 }} />)}
             </div>
           )}
 
           {activeCall.phase === 'active' && showKeypad && (
             <div className="mt-5 grid grid-cols-3 gap-2">
               {['1','2','3','4','5','6','7','8','9','*','0','#'].map((digit) => (
-                <button key={digit} type="button" onClick={() => onSendDigit(digit)} className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 text-sm font-bold text-zinc-300 hover:border-[#caa24c]/30 hover:text-white">
+                <button key={digit} type="button" onClick={() => onSendDigit(digit)} className="h-10 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-sm font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[#caa24c]/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
                   {digit}
                 </button>
               ))}
@@ -813,7 +813,7 @@ function PortalPhonePanel({
           )}
 
           <div className="mt-6 flex items-center justify-center gap-3">
-            <button type="button" onClick={onToggleMute} className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white" aria-label={isMuted ? 'Unmute' : 'Mute'}>
+            <button type="button" onClick={onToggleMute} className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isMuted ? 'border-[#caa24c]/45 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'}`} aria-label={isMuted ? 'Unmute' : 'Mute'} aria-pressed={isMuted}>
               {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
             
@@ -824,8 +824,8 @@ function PortalPhonePanel({
                 className={`flex h-11 w-11 items-center justify-center rounded-full border transition-all ${
                   showKeypad
                     ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#caa24c]'
-                    : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:border-zinc-700'
-                }`}
+                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'
+                } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45`}
                 aria-label={showKeypad ? 'Hide keypad' : 'Show keypad'}
                 title={showKeypad ? 'Hide keypad' : 'Show keypad'}
               >
@@ -833,7 +833,7 @@ function PortalPhonePanel({
               </button>
             )}
 
-            <button type="button" onClick={onHangUp} className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-400" aria-label="Hang up">
+            <button type="button" onClick={onHangUp} className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-sm transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)]" aria-label="Hang up">
               <PhoneOff size={19} />
             </button>
           </div>
@@ -845,21 +845,21 @@ function PortalPhonePanel({
               <div className="flex gap-3">
                 {phoneState === 'starting' ? <Loader2 size={17} className="mt-0.5 animate-spin text-[#caa24c]" /> : <BellRing size={17} className="mt-0.5 text-[#caa24c]" />}
                 <div>
-                  <p className="text-xs font-bold text-white">Enable this browser to receive calls</p>
-                  <p className="mt-1 text-[11px] leading-5 text-zinc-500">Keep the portal open. Your browser may ask for notification and microphone permission.</p>
-                  {phoneError && <p className="mt-2 text-[10px] text-red-400">{phoneError}</p>}
+                  <p className="text-xs font-bold text-[color:var(--portal-text)]">Enable this browser to receive calls</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Keep the portal open. Your browser may ask for notification and microphone permission.</p>
+                  {phoneError && <p className="mt-2 text-[10px] text-red-600 dark:text-red-400">{phoneError}</p>}
                 </div>
               </div>
-              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-50">
+              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3d] text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50">
                 {phoneState === 'starting' ? <Loader2 size={14} className="animate-spin" /> : <Phone size={14} />}
                 {phoneState === 'starting' ? 'Connecting' : 'Enable Phone'}
               </button>
             </div>
           )}
 
-          <label className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Phone number</label>
-          <div className="mt-2 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3">
-            <Phone size={15} className="text-zinc-600" />
+          <label className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Phone number</label>
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3">
+            <Phone size={15} className="text-[color:var(--portal-muted)]" />
             <input
               type="tel"
               value={dialNumber}
@@ -868,10 +868,10 @@ function PortalPhonePanel({
                 if (event.key === 'Enter' && validDialNumber) onDial()
               }}
               placeholder="Type number..."
-              className="portal-input-transparent h-12 min-w-0 flex-1 bg-transparent font-mono text-sm text-white outline-none placeholder:text-zinc-700"
+              className="portal-input-transparent h-12 min-w-0 flex-1 bg-transparent font-mono text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
             />
             {dialNumber && (
-              <button type="button" onClick={() => onDialNumberChange(removeLastDialDigit(dialNumber))} className="p-1 text-zinc-600 hover:text-white" aria-label="Delete digit">
+              <button type="button" onClick={() => onDialNumberChange(removeLastDialDigit(dialNumber))} className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Delete digit">
                 <Delete size={15} />
               </button>
             )}
@@ -885,7 +885,7 @@ function PortalPhonePanel({
                     <div>
                       <Link
                         href={`/portal/leads/${dialMatch.id}`}
-                        className="block text-xs font-bold text-white hover:text-[#caa24c] hover:underline transition-colors"
+                        className="block text-xs font-bold text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#caa24c] hover:underline transition-colors"
                       >
                         {dialMatch.fullName}
                       </Link>
@@ -893,14 +893,14 @@ function PortalPhonePanel({
                     </div>
                   </div>
                 ) : (
-                  <p className="flex items-center gap-2 text-[10px] text-zinc-550">
+                  <p className="flex items-center gap-2 text-[10px] text-[color:var(--portal-muted)]">
                     <Loader2 size={11} className="animate-spin" /> Checking Luxor contacts...
                   </p>
                 )}
               </motion.div>
             )}
           </AnimatePresence>
-          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="portal-call-btn mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 text-xs font-black uppercase tracking-wider text-black transition-all hover:bg-emerald-400 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none">
+          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="portal-call-btn mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-xs font-black uppercase tracking-wider text-white transition-all hover:bg-emerald-500 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-faint)] disabled:shadow-none">
             <PhoneCall size={16} /> Call from Luxor
           </button>
         </div>
