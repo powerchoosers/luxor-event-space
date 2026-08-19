@@ -54,11 +54,11 @@ export function EventLayout3D({ items, selectedId, onSelect, roomWidthFeet, room
 }
 
 function Room({ dark, roomWidthFeet, roomDepthFeet, mainRoomDepthFeet, secondaryRoomWidthFeet }: { dark: boolean; roomWidthFeet: number; roomDepthFeet: number; mainRoomDepthFeet: number; secondaryRoomWidthFeet: number }) {
-  const floor = useLoader(THREE.TextureLoader, '/images/portal/luxor-layout-gray-floor.png')
+  const floor = useLoader(THREE.TextureLoader, '/images/portal/luxor-layout-gray-floor-v2.png')
   const tiledFloor = useMemo(() => {
     const texture = floor.clone()
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-    texture.repeat.set(Math.max(1, roomWidthFeet / 8), Math.max(1, roomDepthFeet / 12))
+    texture.repeat.set(Math.max(1, roomWidthFeet / 4), Math.max(1, roomDepthFeet / 12))
     texture.colorSpace = THREE.SRGBColorSpace
     texture.anisotropy = 8
     texture.needsUpdate = true
@@ -73,19 +73,45 @@ function Room({ dark, roomWidthFeet, roomDepthFeet, mainRoomDepthFeet, secondary
   const mainCenterZ = -depth / 2 + mainDepth / 2
   const lowerCenterZ = -depth / 2 + mainDepth + lowerDepth / 2
   return <group>
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, mainCenterZ]}><planeGeometry args={[width, mainDepth]} /><meshStandardMaterial map={tiledFloor} roughness={0.56} metalness={0.03} /></mesh>
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, lowerCenterZ]}><planeGeometry args={[lowerWidth, lowerDepth]} /><meshStandardMaterial map={tiledFloor} roughness={0.56} metalness={0.03} /></mesh>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, mainCenterZ]}><planeGeometry args={[width, mainDepth]} /><meshStandardMaterial map={tiledFloor} color="#c0c7c8" roughness={0.5} metalness={0.03} /></mesh>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, lowerCenterZ]}><planeGeometry args={[lowerWidth, lowerDepth]} /><meshStandardMaterial map={tiledFloor} color="#c0c7c8" roughness={0.5} metalness={0.03} /></mesh>
     <RoomWalls dark={dark} width={width} depth={mainDepth} centerZ={mainCenterZ} />
     <RoomWalls dark={dark} width={lowerWidth} depth={lowerDepth} centerZ={lowerCenterZ} omitTop />
-    <mesh position={[0, 2.15, -depth / 2 + 0.1]}><boxGeometry args={[Math.min(width * .52, 5.2), 0.12, 0.12]} /><meshStandardMaterial color="#b78a3d" metalness={0.55} roughness={0.24} /></mesh>
-    {[-0.3, 0, 0.3].map((ratio) => <spotLight key={ratio} castShadow position={[width * ratio, 4.6, -depth / 2 + 1.2]} angle={0.68} penumbra={0.72} intensity={9} distance={13} color="#ffd99a" shadow-mapSize={[512, 512]} />)}
+    {[-0.3, 0, 0.3].map((ratio) => <VenueChandelier key={ratio} position={[0, 2.68, mainCenterZ + mainDepth * ratio]} />)}
   </group>
 }
 
 function RoomWalls({ dark, width, depth, centerZ, omitTop = false }: { dark: boolean; width: number; depth: number; centerZ: number; omitTop?: boolean }) {
   const wallColor = dark ? '#252729' : '#f1f2f0'
+  const baseboardColor = dark ? '#111315' : '#292826'
   const wallHeight = 2.35
-  return <group><mesh receiveShadow position={[-width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh><mesh receiveShadow position={[width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>{!omitTop && <mesh receiveShadow position={[0, wallHeight / 2, centerZ - depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>}<mesh receiveShadow position={[0, wallHeight / 2, centerZ + depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh></group>
+  const baseboardHeight = 0.13
+  return <group>
+    <mesh receiveShadow position={[-width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>
+    <mesh receiveShadow position={[width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>
+    {!omitTop && <mesh receiveShadow position={[0, wallHeight / 2, centerZ - depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>}
+    <mesh receiveShadow position={[0, wallHeight / 2, centerZ + depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>
+    {[-1, 1].map((side) => <mesh key={`side-${side}`} position={[side * (width / 2 - 0.04), baseboardHeight / 2, centerZ]}><boxGeometry args={[0.08, baseboardHeight, Math.max(depth - 0.12, 0.1)]} /><meshStandardMaterial color={baseboardColor} roughness={0.56} /></mesh>)}
+    {!omitTop && <mesh position={[0, baseboardHeight / 2, centerZ - depth / 2 + 0.04]}><boxGeometry args={[width, baseboardHeight, 0.08]} /><meshStandardMaterial color={baseboardColor} roughness={0.56} /></mesh>}
+    <mesh position={[0, baseboardHeight / 2, centerZ + depth / 2 - 0.04]}><boxGeometry args={[width, baseboardHeight, 0.08]} /><meshStandardMaterial color={baseboardColor} roughness={0.56} /></mesh>
+  </group>
+}
+
+function VenueChandelier({ position }: { position: [number, number, number] }) {
+  const bulbs = 18
+  return <group position={position}>
+    <mesh position={[0, 0.48, 0]}><cylinderGeometry args={[0.018, 0.018, 0.96, 10]} /><meshStandardMaterial color="#24211e" metalness={0.68} roughness={0.24} /></mesh>
+    <mesh position={[0, 0.98, 0]}><cylinderGeometry args={[0.16, 0.16, 0.06, 20]} /><meshStandardMaterial color="#24211e" metalness={0.68} roughness={0.24} /></mesh>
+    <mesh rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.76, 0.045, 10, 48]} /><meshStandardMaterial color="#201e1b" metalness={0.72} roughness={0.22} /></mesh>
+    <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}><torusGeometry args={[0.61, 0.025, 8, 48]} /><meshStandardMaterial color="#b58a43" metalness={0.72} roughness={0.22} /></mesh>
+    {Array.from({ length: bulbs }, (_, index) => {
+      const angle = (index / bulbs) * Math.PI * 2
+      return <group key={index} position={[Math.cos(angle) * 0.76, -0.06, Math.sin(angle) * 0.76]}>
+        <mesh><sphereGeometry args={[0.06, 12, 12]} /><meshStandardMaterial color="#fff0c8" emissive="#f3bb5c" emissiveIntensity={1.8} roughness={0.34} /></mesh>
+      </group>
+    })}
+    <pointLight color="#ffd58d" intensity={1.65} distance={8} decay={2} />
+  </group>
 }
 
 function LayoutModel({ item, roomWidthFeet, roomDepthFeet, selected, onSelect }: { item: LayoutItem; roomWidthFeet: number; roomDepthFeet: number; selected: boolean; onSelect: () => void }) {
@@ -126,7 +152,7 @@ function RoundTable({ radius, seats, color }: { radius: number; seats: number; c
     <mesh castShadow receiveShadow position={[0, 0.79, 0]}><cylinderGeometry args={[radius, radius, 0.12, 56]} /><meshPhysicalMaterial color={color} roughness={0.58} clearcoat={0.08} clearcoatRoughness={0.42} /></mesh>
     <mesh castShadow position={[0, 0.38, 0]}><cylinderGeometry args={[radius * 0.11, radius * 0.18, 0.76, 24]} /><meshStandardMaterial color="#705239" metalness={0.32} roughness={0.42} /></mesh>
     <mesh castShadow position={[0, 0.02, 0]}><cylinderGeometry args={[radius * 0.44, radius * 0.44, 0.05, 32]} /><meshStandardMaterial color="#62432d" metalness={0.24} roughness={0.48} /></mesh>
-    {Array.from({ length: count }, (_, i) => { const angle = (i / count) * Math.PI * 2; return <group key={i} position={[Math.cos(angle) * radius * 1.5, 0, Math.sin(angle) * radius * 1.5]} rotation={[0, -angle + Math.PI / 2, 0]}><Chair color="#b98d54" scale={0.42}/></group> })}
+    {Array.from({ length: count }, (_, i) => { const angle = (i / count) * Math.PI * 2; return <group key={i} position={[Math.cos(angle) * radius * 1.5, 0, Math.sin(angle) * radius * 1.5]} rotation={[0, -angle + Math.PI / 2, 0]}><Chair color="#242321" scale={0.42}/></group> })}
     <Centerpiece />
   </group>
 }
@@ -137,12 +163,12 @@ function RectangleTable({ width, depth, seats, color }: { width: number; depth: 
     <RoundedBox castShadow receiveShadow args={[width * 1.03, 0.66, depth * 1.12]} radius={0.08} smoothness={4} position={[0, 0.42, 0]}><meshStandardMaterial color={color} roughness={0.94}/></RoundedBox>
     <RoundedBox castShadow receiveShadow args={[width, 0.1, depth]} radius={0.06} smoothness={4} position={[0, 0.79, 0]}><meshPhysicalMaterial color={color} roughness={0.58} clearcoat={0.08} clearcoatRoughness={0.42}/></RoundedBox>
     {[-1, 1].flatMap((side) => [-1, 1].map((end) => <mesh key={`${side}-${end}`} castShadow position={[side * width * 0.4, 0.37, end * depth * 0.34]}><cylinderGeometry args={[0.055, 0.08, 0.72, 12]}/><meshStandardMaterial color="#6c4e35" metalness={0.32} roughness={0.42}/></mesh>))}
-    {[-1,1].flatMap((side) => Array.from({ length: perSide }, (_, i) => <group key={`${side}-${i}`} position={[-width / 2 + (i + .5) * width / perSide, 0, side * depth * 1.08]} rotation={[0, side > 0 ? Math.PI : 0, 0]}><Chair color="#b98d54" scale={0.4}/></group>))}
+    {[-1,1].flatMap((side) => Array.from({ length: perSide }, (_, i) => <group key={`${side}-${i}`} position={[-width / 2 + (i + .5) * width / perSide, 0, side * depth * 1.08]} rotation={[0, side > 0 ? Math.PI : 0, 0]}><Chair color="#242321" scale={0.4}/></group>))}
   </group>
 }
 
 function CocktailTable({ radius, color }: { radius: number; color: string }) { return <group><mesh castShadow receiveShadow position={[0,1.05,0]}><cylinderGeometry args={[radius,radius,0.09,40]}/><meshPhysicalMaterial color={color} roughness={.38} clearcoat={.2}/></mesh><mesh castShadow position={[0,.54,0]}><cylinderGeometry args={[.055,.11,1.05,24]}/><meshStandardMaterial color="#8b6a4a" metalness={.62} roughness={.26}/></mesh><mesh castShadow position={[0,.02,0]}><cylinderGeometry args={[radius*.36,radius*.36,.04,30]}/><meshStandardMaterial color="#8b6a4a" metalness={.62} roughness={.26}/></mesh></group> }
-function Chair({ color, scale = 0.5 }: { color: string; scale?: number }) { return <group scale={scale}><RoundedBox castShadow args={[.74,.13,.7]} radius={.055} smoothness={3} position={[0,.43,0]}><meshStandardMaterial color={color} roughness={.57}/></RoundedBox><RoundedBox castShadow args={[.68,.82,.12]} radius={.06} smoothness={3} position={[0,.91,.28]} rotation={[-.08,0,0]}><meshStandardMaterial color={color} roughness={.57}/></RoundedBox>{[[-.27,-.25],[.27,-.25],[-.27,.25],[.27,.25]].map(([x,z],i)=><mesh key={i} castShadow position={[x,.2,z]} rotation={[0,0,(x > 0 ? -.04 : .04)]}><cylinderGeometry args={[.035,.045,.43,10]}/><meshStandardMaterial color="#534235" metalness={.58} roughness={.3}/></mesh>)}</group> }
+function Chair({ color, scale = 0.5 }: { color: string; scale?: number }) { return <group scale={scale}><RoundedBox castShadow args={[.74,.13,.7]} radius={.055} smoothness={3} position={[0,.43,0]}><meshStandardMaterial color={color} roughness={.62}/></RoundedBox><RoundedBox castShadow args={[.68,.82,.12]} radius={.06} smoothness={3} position={[0,.91,.28]} rotation={[-.08,0,0]}><meshStandardMaterial color={color} roughness={.62}/></RoundedBox>{[[-.27,-.25],[.27,-.25],[-.27,.25],[.27,.25]].map(([x,z],i)=><mesh key={i} castShadow position={[x,.2,z]} rotation={[0,0,(x > 0 ? -.04 : .04)]}><cylinderGeometry args={[.035,.045,.43,10]}/><meshStandardMaterial color="#191a1b" metalness={.62} roughness={.28}/></mesh>)}</group> }
 function SofaModel({ width, color }: { width: number; color: string }) { return <group><RoundedBox castShadow args={[width,.42,.82]} radius={.14} smoothness={5} position={[0,.31,0]}><meshStandardMaterial color={color} roughness={.78}/></RoundedBox><RoundedBox castShadow args={[width*.9,.3,.56]} radius={.11} smoothness={5} position={[0,.59,-.04]}><meshStandardMaterial color="#e7d8bf" roughness={.76}/></RoundedBox><RoundedBox castShadow args={[width,.78,.2]} radius={.11} smoothness={5} position={[0,.76,.31]}><meshStandardMaterial color={color} roughness={.8}/></RoundedBox>{[-1,1].map(side=><RoundedBox key={side} castShadow args={[.2,.52,.82]} radius={.09} smoothness={4} position={[side * width / 2,.45,0]}><meshStandardMaterial color={color} roughness={.8}/></RoundedBox>)}{[-1,1].flatMap(side=>[-1,1].map(depth=> <mesh key={`${side}-${depth}`} castShadow position={[side * width*.4,.08,depth*.27]}><cylinderGeometry args={[.055,.07,.16,12]}/><meshStandardMaterial color="#5d4330" metalness={.5} roughness={.34}/></mesh>))}</group> }
 function Platform({ width, depth, height, color, label }: { width: number; depth: number; height: number; color: string; label: string }) { return <group><RoundedBox castShadow receiveShadow args={[width,height,depth]} radius={.06} smoothness={3} position={[0,height/2,0]}><meshStandardMaterial color={color} roughness={.5} metalness={.08}/></RoundedBox>{Array.from({length:Math.max(2, Math.floor(width/.6))},(_,i)=><mesh key={i} position={[-width/2+(i+.5)*width/Math.max(2,Math.floor(width/.6)),height+.004,0]}><boxGeometry args={[.018,.01,depth*.92]}/><meshBasicMaterial color="#2c211b" transparent opacity={.36}/></mesh>)}<Html position={[0,height+.04,0]} center transform rotation={[-Math.PI/2,0,0]} distanceFactor={10}><span className="text-[7px] font-black tracking-[.22em] text-white">{label}</span></Html></group> }
 function DanceFloor({ width, depth, selected }: { width: number; depth: number; selected: boolean }) { const panel = selected ? '#d4aa58' : '#b98755'; return <group><RoundedBox receiveShadow args={[width+.12,.1,depth+.12]} radius={.04} smoothness={3} position={[0,.05,0]}><meshStandardMaterial color="#4b3224" roughness={.38} metalness={.08}/></RoundedBox><mesh receiveShadow position={[0,.107,0]}><boxGeometry args={[width,.03,depth]}/><meshPhysicalMaterial color={panel} roughness={.32} clearcoat={.22} clearcoatRoughness={.28}/></mesh>{Array.from({length:5},(_,i)=><mesh key={`x${i}`} position={[-width/2+(i+1)*width/6,.13,0]}><boxGeometry args={[.018,.012,depth]}/><meshBasicMaterial color="#6f4930"/></mesh>)}{Array.from({length:4},(_,i)=><mesh key={`z${i}`} position={[0,.13,-depth/2+(i+1)*depth/5]}><boxGeometry args={[width,.012,.018]}/><meshBasicMaterial color="#6f4930"/></mesh>)}</group> }
