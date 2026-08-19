@@ -301,6 +301,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
         booking: 'success',
         contract: 'success',
         email_open: 'info',
+        layout_feedback: 'info',
       }
       notify({
         title: item.title,

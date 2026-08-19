@@ -181,21 +181,28 @@ export async function storeZohoEmailEvent(event: LuxorEmailWebhookEvent) {
   return rows?.[0] || null
 }
 
-export async function broadcastLuxorEmailArrival(eventKey: string) {
+export async function broadcastLuxorPortalNotification(event: string, payload: Record<string, unknown> = {}) {
+  const eventName = event.trim()
+  if (!/^[a-z0-9-]{1,80}$/.test(eventName)) throw new Error('Invalid portal notification event.')
+
   const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '')
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   if (!url || !serviceRoleKey) throw new Error('Missing Supabase configuration for webhook broadcast.')
 
   const topic = encodeURIComponent(getLuxorNotificationChannelName())
-  const response = await fetch(`${url}/realtime/v1/api/broadcast/${topic}/events/email-arrived`, {
+  const response = await fetch(`${url}/realtime/v1/api/broadcast/${topic}/events/${encodeURIComponent(eventName)}`, {
     method: 'POST',
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ eventKey }),
+    body: JSON.stringify(payload),
     cache: 'no-store',
   })
   if (!response.ok) throw new Error(`Supabase Realtime broadcast failed with ${response.status}.`)
+}
+
+export async function broadcastLuxorEmailArrival(eventKey: string) {
+  return broadcastLuxorPortalNotification('email-arrived', { eventKey })
 }

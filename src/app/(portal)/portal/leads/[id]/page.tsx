@@ -69,6 +69,7 @@ import {
   type ProposalPricingCalculation,
 } from '@/components/portal/ProposalBuilderModal'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
+import { LayoutReviewPanel } from '@/components/portal/LayoutReviewPanel'
 import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
@@ -4789,6 +4790,13 @@ export default function LeadDetailPage({
                             </div>
                           </section>
                         </div>
+
+                        <LayoutReviewPanel
+                          inquiryId={lead.id}
+                          leadEventId={selectedLeadEvent?.id || null}
+                          layout={(activeEventMetadata.event_layout as EventLayoutDocument | undefined) || null}
+                          onOpenLayoutBuilder={() => setLayoutDesignerOpen(true)}
+                        />
 
                         {/* Planning Checklist Summary */}
                         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">

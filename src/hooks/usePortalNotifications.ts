@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback'
 
 export interface PortalNotificationItem {
   id: string
@@ -136,7 +136,7 @@ export function usePortalNotifications() {
 
       const shouldFetchEmails = !silent || refreshEmails
 
-      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes] = await Promise.allSettled([
+      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes, layoutReviewsRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         shouldFetchEmails
           ? fetch('/api/email/events?limit=25', { headers: { Accept: 'application/json' }, cache: 'no-store' })
@@ -149,6 +149,7 @@ export function usePortalNotifications() {
         fetch('/api/payments', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/signatures?limit=100', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/marketing/events?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/portal/layout-reviews/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
       ])
 
       const aggregated: PortalNotificationItem[] = []
@@ -201,7 +202,34 @@ export function usePortalNotifications() {
               targetUrl: leadUrl(inqId),
               metadata: { inquiryId: inqId, email: inq.email, phone: inq.phone, source },
             })
+        })
+      }
+
+      // Layout approvals and change notes use a protected portal API instead of
+      // direct browser database access. The recipient link never receives lead data.
+      if (layoutReviewsRes.status === 'fulfilled' && layoutReviewsRes.value.ok) {
+        const data = await layoutReviewsRes.value.json() as { feedback?: RawRecord[] }
+        const layoutFeedback = Array.isArray(data.feedback) ? data.feedback : []
+        layoutFeedback.forEach((entry) => {
+          const feedbackId = String(entry.id || '').trim()
+          const inquiryId = String(entry.inquiry_id || '').trim()
+          if (!feedbackId || !inquiryId) return
+          const action = String(entry.action || '')
+          const layoutName = String(entry.layout_name || 'Saved layout')
+          const note = String(entry.note || '').trim()
+          const isApproved = action === 'approved'
+          const notificationId = `layout_feedback_${feedbackId}`
+          aggregated.push({
+            id: notificationId,
+            type: 'layout_feedback',
+            title: isApproved ? `Layout approved: ${layoutName}` : `Layout feedback: ${layoutName}`,
+            subtitle: note ? note.slice(0, 220) : 'The recipient approved the saved layout.',
+            timestamp: String(entry.created_at || new Date().toISOString()),
+            isRead: currentReadIds.has(notificationId),
+            targetUrl: leadUrl(inquiryId, 'planning'),
+            metadata: { inquiryId, reviewId: entry.review_id, action },
           })
+        })
       }
 
       // 2. Incoming Emails (filter out internal/sent emails)
@@ -620,15 +648,15 @@ export function usePortalNotifications() {
     fetchNotifications(false)
   }, [fetchNotifications])
 
-  // Zoho posts incoming mail to the server, which stores the protected details in
-  // Supabase and broadcasts only an opaque arrival signal to authenticated portal pages.
+  // Server-side integrations broadcast only opaque signals to authenticated portal
+  // pages. The browser then reloads protected data through portal APIs.
   useEffect(() => {
     const supabase = getPortalSupabaseClient()
     if (!supabase) return
     let channel: ReturnType<typeof supabase.channel> | null = null
     let active = true
 
-    void fetch('/api/portal/zoho-webhook-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+    void fetch('/api/portal/realtime-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => {
         if (!active || typeof data?.realtimeChannel !== 'string') return
@@ -637,9 +665,12 @@ export function usePortalNotifications() {
           .on('broadcast', { event: 'email-arrived' }, () => {
             void fetchNotifications(true, true)
           })
+          .on('broadcast', { event: 'layout-review-feedback' }, () => {
+            void fetchNotifications(true)
+          })
           .subscribe()
       })
-      .catch((error) => console.warn('Failed to connect email arrival notifications:', error))
+      .catch((error) => console.warn('Failed to connect portal realtime notifications:', error))
 
     return () => {
       active = false
@@ -776,6 +807,7 @@ export function usePortalNotifications() {
       bill_due: 0,
       contract: 0,
       email_open: 0,
+      layout_feedback: 0,
     }
     items.forEach((item) => {
       if (!item.isRead) {
