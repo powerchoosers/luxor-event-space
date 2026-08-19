@@ -100,10 +100,13 @@ function normalizeEmail(value: unknown) {
   return match?.[0] || ''
 }
 
-function leadUrl(inquiryId: unknown, section?: string) {
+function leadUrl(inquiryId: unknown, section?: string, stage?: string) {
   const id = String(inquiryId || '').trim()
   if (!id) return '/portal/leads'
-  const query = section ? `?tab=${encodeURIComponent(section)}` : ''
+  const params = new URLSearchParams()
+  if (section) params.set('tab', section)
+  if (stage) params.set('stage', stage)
+  const query = params.size ? `?${params.toString()}` : ''
   return `/portal/leads/${encodeURIComponent(id)}${query}`
 }
 
@@ -226,7 +229,7 @@ export function usePortalNotifications() {
             subtitle: note ? note.slice(0, 220) : 'The recipient approved the saved layout.',
             timestamp: String(entry.created_at || new Date().toISOString()),
             isRead: currentReadIds.has(notificationId),
-            targetUrl: leadUrl(inquiryId, 'planning'),
+            targetUrl: leadUrl(inquiryId, 'overview', 'planning'),
             metadata: { inquiryId, reviewId: entry.review_id, action },
           })
         })
