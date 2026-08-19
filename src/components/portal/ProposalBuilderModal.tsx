@@ -184,7 +184,7 @@ const PACKAGE_OPTIONS: Array<{
     name: 'Custom Package',
     eyebrow: 'Venue access',
     description: 'A clear venue foundation with the required event services calculated for this guest count.',
-    inclusions: ['Venue rental', 'Security', 'Cleaning', 'Tables & chairs setup'],
+    inclusions: ['Venue rental', 'Security', 'Cleaning', 'Tables & chairs included with rental'],
   },
   {
     id: 'bronze',
@@ -230,7 +230,7 @@ const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
   { id: 'venue_rental', name: 'Venue rental', category: 'Venue & rental', detail: 'The selected date and rental period set this exact price.', locked: true, required: true },
   { id: 'required_security', name: 'Security', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
   { id: 'required_cleaning', name: 'Cleaning', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
-  { id: 'tables_chairs_setup', name: 'Tables & chairs setup', category: 'Setup & rentals', detail: 'Included or required according to the selected package.', locked: true, required: true },
+  { id: 'tables_chairs_setup', name: 'Tables & chairs included with rental', category: 'Setup & rentals', detail: 'Included with the venue rental at no additional charge.', locked: true, required: true },
   { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Basic decor collection for the event.', exclusiveGroup: 'decor', serviceLevel: 'basic' },
   { id: 'full_decor', name: 'Full decor & planning', category: 'Decor', detail: 'Upgrade to the full decor collection and planning service.', exclusiveGroup: 'decor', serviceLevel: 'upgrade' },
   { id: 'buffet_catering', name: 'Buffet catering', category: 'Catering', detail: 'Basic catering style, calculated from the expected guest count.', exclusiveGroup: 'catering', serviceLevel: 'basic' },

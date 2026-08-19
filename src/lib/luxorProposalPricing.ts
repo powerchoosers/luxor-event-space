@@ -550,10 +550,6 @@ function selectedTaxRate(selection: LuxorProposalSelection) {
   return rate > 1 ? rate / 100 : rate
 }
 
-function requiresTableSetup(packageId: LuxorProposalPackageId) {
-  return packageId === 'rental_only' || packageId === 'bronze_essentials'
-}
-
 function addDecorInclusions(
   items: LuxorInvoiceLineItem[],
   decor: 'essential' | 'full',
@@ -780,24 +776,16 @@ function calculatePackage(input: {
     }))
   }
 
-  if (requiresTableSetup(packageId)) {
-    const setupAmount = readNumber(config, 'tables_and_chairs_setup', rateTier)
-    if (setupAmount === undefined) {
-      errors.push(CONFIGURATION_ERROR)
-      warnings.push('Tables and chairs setup needs an approved pricing rule before this package can be published.')
-    } else {
-      items.push(lineItem({
-        id: 'tables-chairs-setup', category: 'Venue Services', description: 'Tables & chairs setup', unitPrice: setupAmount,
-        included: setupAmount === 0, required: true, pricingRuleId: `tables_and_chairs_setup.${rateTier}`, paymentBucket: 'venue',
-        quoteBreakdown: { quantity: 1, unit_price: setupAmount, subtotal: setupAmount },
-      }))
-    }
-  } else {
-    items.push(lineItem({
-      id: 'tables-chairs-setup', category: 'What’s Included', description: 'Tables & chairs setup', unitPrice: 0,
-      included: true, required: true, isChecklistItem: true, detail: `Included with ${PACKAGE_NAMES[packageId]}`,
-    }))
-  }
+  // Tables and chairs are part of the venue rental for every package. The
+  // zero-dollar rule is intentional and should not block a proposal if an
+  // older pricing record predates the explicit config entry.
+  const setupAmount = readNumber(config, 'tables_and_chairs_setup', rateTier) ?? 0
+  items.push(lineItem({
+    id: 'tables-chairs-setup', category: 'Venue Services', description: 'Tables & chairs included with rental', unitPrice: setupAmount,
+    included: true, required: true, isChecklistItem: true, detail: 'Included with venue rental',
+    pricingRuleId: `tables_and_chairs_setup.${rateTier}`, paymentBucket: 'venue',
+    quoteBreakdown: { quantity: 1, unit_price: setupAmount, subtotal: setupAmount },
+  }))
 
   const addDecor = (kind: DecorChoice) => {
     const optionId = optionIdFor('decor', kind)
