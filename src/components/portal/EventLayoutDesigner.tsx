@@ -65,6 +65,127 @@ const CATALOG: Array<{ kind: LayoutItemKind; label: string; group: string; icon:
 ]
 
 const TABLE_COLORS = ['#252321', '#f5ead8', '#d9be8b', '#314536', '#24354d', '#743f3d']
+const PLACEMENT_GRID_FEET = 0.5
+const ITEM_CLEARANCE_FEET = 0.35
+
+type LayoutDimensions = {
+  roomWidthFeet: number
+  mainRoomDepthFeet: number
+  secondaryRoomWidthFeet: number
+  secondaryRoomDepthFeet: number
+}
+
+type ItemBounds = {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+const DEFAULT_LAYOUT_DIMENSIONS: LayoutDimensions = {
+  roomWidthFeet: 33,
+  mainRoomDepthFeet: 75,
+  secondaryRoomWidthFeet: 20.83,
+  secondaryRoomDepthFeet: 21.58,
+}
+
+function planDepthFeet(dimensions: LayoutDimensions) {
+  return dimensions.mainRoomDepthFeet + dimensions.secondaryRoomDepthFeet
+}
+
+function itemBounds(item: LayoutItem, dimensions: LayoutDimensions): ItemBounds {
+  const radians = (item.rotation * Math.PI) / 180
+  const visualWidth = Math.abs(Math.cos(radians)) * item.width + Math.abs(Math.sin(radians)) * item.height
+  const visualHeight = Math.abs(Math.sin(radians)) * item.width + Math.abs(Math.cos(radians)) * item.height
+  const centerX = (item.x / 100) * dimensions.roomWidthFeet + item.width / 2
+  const centerY = (item.y / 100) * planDepthFeet(dimensions) + item.height / 2
+  return {
+    left: centerX - visualWidth / 2,
+    top: centerY - visualHeight / 2,
+    right: centerX + visualWidth / 2,
+    bottom: centerY + visualHeight / 2,
+  }
+}
+
+function itemFitsVenue(item: LayoutItem, dimensions: LayoutDimensions) {
+  const bounds = itemBounds(item, dimensions)
+  const depth = planDepthFeet(dimensions)
+  const lowerRoomLeft = (dimensions.roomWidthFeet - dimensions.secondaryRoomWidthFeet) / 2
+  const lowerRoomRight = lowerRoomLeft + dimensions.secondaryRoomWidthFeet
+  const epsilon = 0.01
+
+  if (
+    bounds.left < -epsilon ||
+    bounds.right > dimensions.roomWidthFeet + epsilon ||
+    bounds.top < -epsilon ||
+    bounds.bottom > depth + epsilon
+  ) {
+    return false
+  }
+
+  if (bounds.bottom <= dimensions.mainRoomDepthFeet + epsilon) return true
+
+  return bounds.left >= lowerRoomLeft - epsilon && bounds.right <= lowerRoomRight + epsilon
+}
+
+function itemsOverlap(first: LayoutItem, second: LayoutItem, dimensions: LayoutDimensions) {
+  const a = itemBounds(first, dimensions)
+  const b = itemBounds(second, dimensions)
+  return (
+    a.left < b.right + ITEM_CLEARANCE_FEET &&
+    a.right + ITEM_CLEARANCE_FEET > b.left &&
+    a.top < b.bottom + ITEM_CLEARANCE_FEET &&
+    a.bottom + ITEM_CLEARANCE_FEET > b.top
+  )
+}
+
+function placementIsClear(item: LayoutItem, placedItems: LayoutItem[], dimensions: LayoutDimensions) {
+  return itemFitsVenue(item, dimensions) && !placedItems.some((other) => other.id !== item.id && itemsOverlap(item, other, dimensions))
+}
+
+function withPositionInFeet(item: LayoutItem, x: number, y: number, dimensions: LayoutDimensions): LayoutItem {
+  return {
+    ...item,
+    x: (x / dimensions.roomWidthFeet) * 100,
+    y: (y / planDepthFeet(dimensions)) * 100,
+  }
+}
+
+function findOpenPlacement(item: LayoutItem, placedItems: LayoutItem[], dimensions: LayoutDimensions): LayoutItem | null {
+  if (placementIsClear(item, placedItems, dimensions)) return item
+
+  const preferredX = (item.x / 100) * dimensions.roomWidthFeet
+  const preferredY = (item.y / 100) * planDepthFeet(dimensions)
+  const candidates: Array<{ item: LayoutItem; distance: number }> = []
+  const depth = planDepthFeet(dimensions)
+
+  for (let y = 0; y <= depth; y += PLACEMENT_GRID_FEET) {
+    for (let x = 0; x <= dimensions.roomWidthFeet; x += PLACEMENT_GRID_FEET) {
+      const candidate = withPositionInFeet(item, x, y, dimensions)
+      if (!itemFitsVenue(candidate, dimensions)) continue
+      candidates.push({
+        item: candidate,
+        distance: (x - preferredX) ** 2 + (y - preferredY) ** 2,
+      })
+    }
+  }
+
+  candidates.sort((first, second) => first.distance - second.distance)
+  return candidates.find((candidate) => placementIsClear(candidate.item, placedItems, dimensions))?.item || null
+}
+
+function resolveLayoutConflicts(items: LayoutItem[], dimensions: LayoutDimensions) {
+  const placed: LayoutItem[] = []
+  for (const item of items) {
+    const placement = findOpenPlacement(item, placed, dimensions)
+    placed.push(placement || item)
+  }
+  return placed
+}
+
+function layoutHasPlacementIssues(items: LayoutItem[], dimensions: LayoutDimensions) {
+  return items.some((item, index) => !placementIsClear(item, items.slice(0, index), dimensions))
+}
 
 function uid() {
   return `layout-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -75,15 +196,22 @@ function makeItem(kind: LayoutItemKind, x = 42, y = 44, index = 0): LayoutItem {
   return { id: uid(), kind, x, y, width: entry.width, height: entry.height, rotation: 0, label: entry.kind.includes('table') ? `${entry.label} ${index + 1}` : entry.label, seats: entry.seats || 0, color: kind.includes('table') ? TABLE_COLORS[0] : undefined }
 }
 
-function banquetTemplate(): LayoutItem[] {
-  const tables = Array.from({ length: 8 }, (_, index) => makeItem('round-table', 27 + (index % 3) * 22, 19 + Math.floor(index / 3) * 22, index))
+function banquetTemplate(dimensions = DEFAULT_LAYOUT_DIMENSIONS): LayoutItem[] {
+  const position = (item: LayoutItem, x: number, y: number) => withPositionInFeet(item, x, y, dimensions)
+  const tablePositions = [
+    [1, 10], [27, 10],
+    [1, 25], [27, 25],
+    [1, 40], [27, 40],
+    [1, 55], [27, 55],
+  ]
+  const tables = tablePositions.map(([x, y], index) => position(makeItem('round-table', 0, 0, index), x, y))
   return [
     ...tables,
-    { ...makeItem('bar'), x: 70, y: 6 },
-    { ...makeItem('dance-floor'), x: 35, y: 62 },
-    { ...makeItem('stage'), x: 72, y: 65 },
-    { ...makeItem('vip-area'), x: 4, y: 77 },
-    { ...makeItem('sofa'), x: 48, y: 88 },
+    position(makeItem('bar'), 12.5, 4),
+    position(makeItem('dance-floor'), 8.5, 29.5),
+    position(makeItem('stage'), 8.5, 63),
+    position(makeItem('vip-area'), 10, 77),
+    position(makeItem('sofa'), 12.5, 90),
   ]
 }
 
@@ -111,6 +239,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(initialLayout?.updatedAt || null)
+  const [placementMessage, setPlacementMessage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null)
 
@@ -123,6 +252,16 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const selected = items.find((item) => item.id === selectedId) || null
   const capacity = items.reduce((sum, item) => sum + (item.seats || 0), 0)
   const planDepthFeet = roomHeightFeet + secondaryRoomDepthFeet
+  const layoutDimensions = useMemo<LayoutDimensions>(() => ({
+    roomWidthFeet,
+    mainRoomDepthFeet: roomHeightFeet,
+    secondaryRoomWidthFeet,
+    secondaryRoomDepthFeet,
+  }), [roomHeightFeet, roomWidthFeet, secondaryRoomDepthFeet, secondaryRoomWidthFeet])
+  const hasPlacementIssues = useMemo(
+    () => layoutHasPlacementIssues(items, layoutDimensions),
+    [items, layoutDimensions],
+  )
 
   const commit = useCallback((next: LayoutItem[] | ((current: LayoutItem[]) => LayoutItem[])) => {
     setItems((current) => {
@@ -133,16 +272,54 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
     })
   }, [])
 
+  const resolveOverlaps = () => {
+    const resolved = resolveLayoutConflicts(items, layoutDimensions)
+    commit(resolved)
+    setSelectedId(null)
+    setPlacementMessage(
+      layoutHasPlacementIssues(resolved, layoutDimensions)
+        ? 'Some items still need more room. Remove an item or enlarge the floor plan, then try again.'
+        : 'Items were moved into clear space.',
+    )
+  }
+
   const addItem = (kind: LayoutItemKind) => {
-    const offset = items.length % 6
-    const item = makeItem(kind, 38 + offset * 2, 38 + offset * 2, items.filter((entry) => entry.kind.includes('table')).length)
-    commit((current) => [...current, item])
-    setSelectedId(item.id)
+    const item = makeItem(kind, 42, 44, items.filter((entry) => entry.kind.includes('table')).length)
+    const placement = findOpenPlacement(item, items, layoutDimensions)
+    if (!placement) {
+      setPlacementMessage('There is not enough clear space for that item. Move or remove an item first.')
+      return
+    }
+    commit([...items, placement])
+    setSelectedId(placement.id)
+    setPlacementMessage(null)
   }
 
   const updateSelected = (updates: Partial<LayoutItem>) => {
-    if (!selectedId) return
-    commit((current) => current.map((item) => item.id === selectedId ? { ...item, ...updates } : item))
+    if (!selectedId || !selected) return
+    const placement = findOpenPlacement({ ...selected, ...updates }, items.filter((item) => item.id !== selectedId), layoutDimensions)
+    if (!placement) {
+      setPlacementMessage('That change would overlap another item or leave the room. Try a smaller size or a different position.')
+      return
+    }
+    commit(items.map((item) => item.id === selectedId ? placement : item))
+    setPlacementMessage(null)
+  }
+
+  const duplicateSelected = () => {
+    if (!selected) return
+    const clone = findOpenPlacement(
+      { ...selected, id: uid(), label: `${selected.label} copy`, x: selected.x + 3, y: selected.y + 3 },
+      items,
+      layoutDimensions,
+    )
+    if (!clone) {
+      setPlacementMessage('There is not enough clear space to duplicate this item.')
+      return
+    }
+    commit([...items, clone])
+    setSelectedId(clone.id)
+    setPlacementMessage(null)
   }
 
   const removeSelected = () => {
@@ -197,7 +374,13 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
     const snapY = 100 / Math.max(1, planDepthFeet * 2)
     const x = Math.max(0, Math.min(100 - itemWidthPercent, Math.round((((event.clientX - bounds.left) / bounds.width) * 100 - drag.dx) / snapX) * snapX))
     const y = Math.max(0, Math.min(100 - itemHeightPercent, Math.round((((event.clientY - bounds.top) / bounds.height) * 100 - drag.dy) / snapY) * snapY))
-    setItems((current) => current.map((entry) => entry.id === drag.id ? { ...entry, x, y } : entry))
+    const candidate = { ...item, x, y }
+    if (!placementIsClear(candidate, items.filter((entry) => entry.id !== drag.id), layoutDimensions)) {
+      setPlacementMessage('Items cannot overlap. Move it into a clear part of the room.')
+      return
+    }
+    setItems((current) => current.map((entry) => entry.id === drag.id ? candidate : entry))
+    setPlacementMessage(null)
   }
 
   const endDrag = () => {
@@ -206,6 +389,10 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   }
 
   const save = async () => {
+    if (hasPlacementIssues) {
+      setPlacementMessage('Resolve overlapping or out-of-room items before saving this layout.')
+      return
+    }
     setSaving(true)
     const now = new Date().toISOString()
     const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, roomWidthFeet, roomHeightFeet, secondaryRoomWidthFeet, secondaryRoomDepthFeet, updatedAt: now })
@@ -225,6 +412,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
         <div className="flex items-center gap-2">
           <button type="button" onClick={undo} disabled={!history.length} className="layout-action"><Undo2 size={14} /> Undo</button>
           <button type="button" onClick={redo} disabled={!future.length} className="layout-action"><Redo2 size={14} /> Redo</button>
+          {hasPlacementIssues ? <button type="button" onClick={resolveOverlaps} className="layout-action">Resolve overlaps</button> : null}
           <button type="button" onClick={() => { if (confirm('Clear every item from this layout?')) commit([]) }} className="layout-action hidden sm:inline-flex"><Trash2 size={14} /> Clear</button>
           <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#b9872f] px-4 text-[10px] font-black uppercase tracking-[0.15em] text-white hover:bg-[#caa24c] disabled:opacity-50"><Save size={14} /> {saving ? 'Saving…' : 'Save layout'}</button>
         </div>
@@ -241,6 +429,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
             <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1"><button type="button" onClick={() => setViewMode('2d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '2d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>2D layout</button><button type="button" onClick={() => setViewMode('3d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '3d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>3D preview</button></div>
             {viewMode === '2d' ? <div className="flex items-center gap-1"><button type="button" onClick={() => setZoom((value) => Math.max(70, value - 10))} className="layout-icon" aria-label="Zoom out"><ZoomOut size={15}/></button><span className="w-12 text-center text-[10px] font-bold">{zoom}%</span><button type="button" onClick={() => setZoom((value) => Math.min(130, value + 10))} className="layout-icon" aria-label="Zoom in"><ZoomIn size={15}/></button></div> : <p className="hidden text-[9px] font-bold text-[color:var(--portal-muted)] sm:block">Interactive room preview</p>}
           </div>
+          {placementMessage ? <p role="status" className="border-b border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2 text-[10px] font-semibold text-[#8b6525] dark:text-[#e7c97e]">{placementMessage}</p> : null}
           {viewMode === '3d' ? <div className="min-h-0 flex-1"><EventLayout3D items={items} selectedId={selectedId} onSelect={setSelectedId} roomWidthFeet={roomWidthFeet} roomDepthFeet={planDepthFeet} mainRoomDepthFeet={roomHeightFeet} secondaryRoomWidthFeet={secondaryRoomWidthFeet}/></div> : <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
             <div className="mx-auto flex min-h-full max-w-[900px] items-center justify-center">
               <div className="relative w-full origin-center border-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)] shadow-xl transition-transform" style={{ aspectRatio: `${roomWidthFeet}/${planDepthFeet}`, transform: `scale(${zoom / 100})`, backgroundImage: 'linear-gradient(var(--portal-border) 1px, transparent 1px), linear-gradient(90deg, var(--portal-border) 1px, transparent 1px)', backgroundSize: '24px 24px' }} ref={canvasRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null) }}>
@@ -257,8 +446,8 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
         <aside className="hidden overflow-y-auto border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] lg:block">
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Layout details</p><label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Layout name<input value={name} onChange={(event) => setName(event.target.value)} className="planning-editor-input mt-2"/></label><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Main width (ft)<input type="number" min="10" value={roomWidthFeet} onChange={(event) => setRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Main depth (ft)<input type="number" min="10" value={roomHeightFeet} onChange={(event) => setRoomHeightFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Lower width (ft)<input type="number" min="10" step="0.01" value={secondaryRoomWidthFeet} onChange={(event) => setSecondaryRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Lower depth (ft)<input type="number" min="10" step="0.01" value={secondaryRoomDepthFeet} onChange={(event) => setSecondaryRoomDepthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label></div><p className="mt-2 text-[9px] leading-4 text-[color:var(--portal-muted)]">Based on the supplied blueprint: 33′ × 75′ main room with a 20′10″ × 21′7″ lower room. Items snap to six-inch increments.</p>{savedAt && <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">Last saved {new Date(savedAt).toLocaleString()}</p>}</section>
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Capacity estimate</p><div className="mt-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-sm font-black"><Users size={16}/>{capacity} seats</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">{guestCount ? `${guestCount} guests expected` : 'No guest count recorded'}</p></div><div className={`flex h-14 w-14 items-center justify-center rounded-full border-[5px] ${guestCount && capacity < guestCount ? 'border-red-400 text-red-500' : 'border-[#caa24c] text-[#a8792f]'}`}><span className="text-[10px] font-black">{guestCount ? Math.round((capacity / guestCount) * 100) : 0}%</span></div></div></section>
-          {selected ? <Inspector item={selected} roomWidthFeet={roomWidthFeet} roomHeightFeet={planDepthFeet} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={() => { const clone = { ...selected, id: uid(), x: Math.min(selected.x + 3, 100 - (selected.width / roomWidthFeet) * 100), y: Math.min(selected.y + 3, 100 - (selected.height / planDepthFeet) * 100), label: `${selected.label} copy` }; commit((current) => [...current, clone]); setSelectedId(clone.id) }}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
-          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Quick templates</p><div className="mt-3 space-y-2">{['Classic banquet','Ceremony + reception','Cocktail hour','Conference / meeting'].map((template) => <button key={template} type="button" onClick={() => { if (!items.length || confirm('Replace the current floor plan with this template?')) { commit(templateFor(template)); setName(`${template} layout`); setSelectedId(null) } }} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left text-[10px] font-bold hover:border-[#caa24c]/50">{template}</button>)}</div></section>
+          {selected ? <Inspector item={selected} roomWidthFeet={roomWidthFeet} roomHeightFeet={planDepthFeet} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={duplicateSelected}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
+          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Quick templates</p><div className="mt-3 space-y-2">{['Classic banquet','Ceremony + reception','Cocktail hour','Conference / meeting'].map((template) => <button key={template} type="button" onClick={() => { if (!items.length || confirm('Replace the current floor plan with this template?')) { commit(resolveLayoutConflicts(templateFor(template), layoutDimensions)); setName(`${template} layout`); setSelectedId(null); setPlacementMessage(null) } }} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left text-[10px] font-bold hover:border-[#caa24c]/50">{template}</button>)}</div></section>
           <section className="p-5"><p className="layout-kicker">Event info</p><dl className="mt-4 space-y-3 text-[10px]"><Info label="Client" value={leadName}/><Info label="Event" value={eventType || 'Not selected'}/><Info label="Date" value={eventDate ? new Date(`${eventDate}T12:00:00`).toLocaleDateString() : 'Not scheduled'}/><Info label="Guests" value={guestCount ? String(guestCount) : 'Not recorded'}/></dl></section>
         </aside>
       </div>
