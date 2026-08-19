@@ -10,12 +10,15 @@ type Props = {
   items: LayoutItem[]
   selectedId: string | null
   onSelect: (id: string | null) => void
+  roomWidthFeet: number
+  roomDepthFeet: number
+  mainRoomDepthFeet: number
+  secondaryRoomWidthFeet: number
 }
 
-const ROOM_WIDTH = 16
-const ROOM_DEPTH = 12
+const FEET_TO_SCENE = 0.34
 
-export function EventLayout3D({ items, selectedId, onSelect }: Props) {
+export function EventLayout3D({ items, selectedId, onSelect, roomWidthFeet, roomDepthFeet, mainRoomDepthFeet, secondaryRoomWidthFeet }: Props) {
   const [dark, setDark] = useState(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
   useEffect(() => {
     const observer = new MutationObserver(() => setDark(document.documentElement.classList.contains('dark')))
@@ -23,32 +26,34 @@ export function EventLayout3D({ items, selectedId, onSelect }: Props) {
     return () => observer.disconnect()
   }, [])
   const backdrop = dark ? '#12100e' : '#e9e3d8'
+  const sceneWidth = roomWidthFeet * FEET_TO_SCENE
+  const sceneDepth = roomDepthFeet * FEET_TO_SCENE
   return (
     <div className="relative h-full min-h-[460px] w-full overflow-hidden bg-[#e9e3d8] dark:bg-[#12100e]">
       <Canvas
         shadows
         dpr={[1, 1.5]}
-        camera={{ position: [13, 12, 16], fov: 42, near: 0.1, far: 100 }}
+        camera={{ position: [sceneWidth * 1.08, Math.max(10, sceneDepth * 0.52), sceneDepth * 0.72], fov: 48, near: 0.1, far: 100 }}
         onPointerMissed={() => onSelect(null)}
       >
         <color attach="background" args={[backdrop]} />
-        <fog attach="fog" args={[backdrop, 24, 42]} />
-        <ambientLight intensity={1.25} />
-        <hemisphereLight args={['#fff8e9', '#75634c', 1.15]} />
-        <directionalLight castShadow position={[7, 14, 5]} intensity={2.2} color="#fff2d4" shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={12} shadow-camera-bottom={-12} />
+        <fog attach="fog" args={[backdrop, 48, 92]} />
+        <ambientLight intensity={0.82} />
+        <hemisphereLight args={['#fff8e9', '#75634c', 0.9]} />
+        <directionalLight castShadow position={[7, 14, 5]} intensity={1.65} color="#fff2d4" shadow-mapSize={[1024, 1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} />
         <Suspense fallback={null}>
-          <Room dark={dark} />
-          {items.map((item) => <LayoutModel key={item.id} item={item} selected={selectedId === item.id} onSelect={() => onSelect(item.id)} />)}
-          <ContactShadows position={[0, 0.015, 0]} opacity={0.42} scale={22} blur={2.6} far={10} />
+          <Room dark={dark} roomWidthFeet={roomWidthFeet} roomDepthFeet={roomDepthFeet} mainRoomDepthFeet={mainRoomDepthFeet} secondaryRoomWidthFeet={secondaryRoomWidthFeet} />
+          {items.map((item) => <LayoutModel key={item.id} item={item} roomWidthFeet={roomWidthFeet} roomDepthFeet={roomDepthFeet} selected={selectedId === item.id} onSelect={() => onSelect(item.id)} />)}
+          <ContactShadows position={[0, 0.015, 0]} opacity={0.42} scale={roomWidthFeet * FEET_TO_SCENE} blur={2.6} far={roomDepthFeet * FEET_TO_SCENE} />
         </Suspense>
-        <OrbitControls makeDefault target={[0, 0.75, 0]} minDistance={8} maxDistance={30} minPolarAngle={0.25} maxPolarAngle={Math.PI / 2.08} enableDamping dampingFactor={0.08} />
+        <OrbitControls makeDefault target={[0, 0.55, 0]} minDistance={6} maxDistance={48} minPolarAngle={0.25} maxPolarAngle={Math.PI / 2.08} enableDamping dampingFactor={0.08} />
       </Canvas>
       <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[9px] font-bold text-stone-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/60 dark:text-stone-300">Drag to orbit · Scroll to zoom · Right-drag to move</div>
     </div>
   )
 }
 
-function Room({ dark }: { dark: boolean }) {
+function Room({ dark, roomWidthFeet, roomDepthFeet, mainRoomDepthFeet, secondaryRoomWidthFeet }: { dark: boolean; roomWidthFeet: number; roomDepthFeet: number; mainRoomDepthFeet: number; secondaryRoomWidthFeet: number }) {
   const floor = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 256
@@ -61,28 +66,42 @@ function Room({ dark }: { dark: boolean }) {
     for (let i = 0; i <= 256; i += 64) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke() }
     const texture = new THREE.CanvasTexture(canvas)
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-    texture.repeat.set(4, 3)
+    texture.repeat.set(8, 18)
     texture.colorSpace = THREE.SRGBColorSpace
     return texture
   }, [])
 
+  const width = roomWidthFeet * FEET_TO_SCENE
+  const depth = roomDepthFeet * FEET_TO_SCENE
+  const mainDepth = mainRoomDepthFeet * FEET_TO_SCENE
+  const lowerWidth = secondaryRoomWidthFeet * FEET_TO_SCENE
+  const lowerDepth = depth - mainDepth
+  const mainCenterZ = -depth / 2 + mainDepth / 2
+  const lowerCenterZ = -depth / 2 + mainDepth + lowerDepth / 2
   return <group>
-    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}><planeGeometry args={[ROOM_WIDTH, ROOM_DEPTH]} /><meshStandardMaterial map={floor} color="#eadfcf" roughness={0.82} /></mesh>
-    <mesh receiveShadow position={[0, 2, -ROOM_DEPTH / 2]}><boxGeometry args={[ROOM_WIDTH, 4, 0.18]} /><meshStandardMaterial color={dark ? '#28231e' : '#f3ede4'} roughness={0.9} /></mesh>
-    <mesh receiveShadow position={[-ROOM_WIDTH / 2, 2, 0]}><boxGeometry args={[0.18, 4, ROOM_DEPTH]} /><meshStandardMaterial color={dark ? '#211d19' : '#eee7de'} roughness={0.9} /></mesh>
-    <mesh position={[0, 3.55, -ROOM_DEPTH / 2 + 0.1]}><boxGeometry args={[5.2, 0.12, 0.12]} /><meshStandardMaterial color="#b78a3d" metalness={0.55} roughness={0.3} /></mesh>
-    {[-5.7, -1.9, 1.9, 5.7].map((x) => <pointLight key={x} position={[x, 3.5, -4.8]} intensity={6} distance={7} color="#ffd99a" />)}
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, mainCenterZ]}><planeGeometry args={[width, mainDepth]} /><meshStandardMaterial map={floor} color="#eadfcf" roughness={0.76} /></mesh>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, lowerCenterZ]}><planeGeometry args={[lowerWidth, lowerDepth]} /><meshStandardMaterial map={floor} color="#eadfcf" roughness={0.76} /></mesh>
+    <RoomWalls dark={dark} width={width} depth={mainDepth} centerZ={mainCenterZ} />
+    <RoomWalls dark={dark} width={lowerWidth} depth={lowerDepth} centerZ={lowerCenterZ} omitTop />
+    <mesh position={[0, 2.15, -depth / 2 + 0.1]}><boxGeometry args={[Math.min(width * .52, 5.2), 0.12, 0.12]} /><meshStandardMaterial color="#b78a3d" metalness={0.55} roughness={0.24} /></mesh>
+    {[-0.3, 0, 0.3].map((ratio) => <pointLight key={ratio} position={[width * ratio, 2.1, -depth / 2 + 1.2]} intensity={7} distance={7} color="#ffd99a" />)}
   </group>
 }
 
-function LayoutModel({ item, selected, onSelect }: { item: LayoutItem; selected: boolean; onSelect: () => void }) {
-  const x = ((item.x + item.width / 2) / 100) * ROOM_WIDTH - ROOM_WIDTH / 2
-  const z = ((item.y + item.height / 2) / 100) * ROOM_DEPTH - ROOM_DEPTH / 2
-  const width = Math.max((item.width / 100) * ROOM_WIDTH, 0.45)
-  const depth = Math.max((item.height / 100) * ROOM_DEPTH, 0.45)
+function RoomWalls({ dark, width, depth, centerZ, omitTop = false }: { dark: boolean; width: number; depth: number; centerZ: number; omitTop?: boolean }) {
+  const wallColor = dark ? '#28231e' : '#f3ede4'
+  const wallHeight = 2.35
+  return <group><mesh receiveShadow position={[-width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh><mesh receiveShadow position={[width / 2, wallHeight / 2, centerZ]}><boxGeometry args={[0.12, wallHeight, depth]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>{!omitTop && <mesh receiveShadow position={[0, wallHeight / 2, centerZ - depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh>}<mesh receiveShadow position={[0, wallHeight / 2, centerZ + depth / 2]}><boxGeometry args={[width, wallHeight, 0.12]} /><meshStandardMaterial color={wallColor} roughness={0.86} /></mesh></group>
+}
+
+function LayoutModel({ item, roomWidthFeet, roomDepthFeet, selected, onSelect }: { item: LayoutItem; roomWidthFeet: number; roomDepthFeet: number; selected: boolean; onSelect: () => void }) {
+  const width = Math.max(item.width * FEET_TO_SCENE, 0.22)
+  const depth = Math.max(item.height * FEET_TO_SCENE, 0.22)
+  const x = ((item.x / 100) * roomWidthFeet + item.width / 2) * FEET_TO_SCENE - (roomWidthFeet * FEET_TO_SCENE) / 2
+  const z = ((item.y / 100) * roomDepthFeet + item.height / 2) * FEET_TO_SCENE - (roomDepthFeet * FEET_TO_SCENE) / 2
   return <group position={[x, 0, z]} rotation={[0, -THREE.MathUtils.degToRad(item.rotation), 0]} onClick={(event) => { event.stopPropagation(); onSelect() }}>
     <Furniture item={item} width={width} depth={depth} selected={selected} />
-    {selected && <Html position={[0, 2.15, 0]} center distanceFactor={12}><div className="whitespace-nowrap rounded-md bg-[#1e1812]/90 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-[#f3d486] shadow-lg">{item.label}</div></Html>}
+    {selected && <Html position={[0, Math.max(2.15, depth), 0]} center distanceFactor={12}><div className="whitespace-nowrap rounded-md bg-[#1e1812]/90 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-[#f3d486] shadow-lg">{item.label} · {item.width}′ × {item.height}′</div></Html>}
   </group>
 }
 
@@ -92,12 +111,16 @@ function Furniture({ item, width, depth, selected }: { item: LayoutItem; width: 
   if (item.kind === 'cocktail-table') return <CocktailTable radius={Math.min(width, depth) * 0.3} color={accent} />
   if (item.kind === 'rectangle-table') return <RectangleTable width={width * 0.72} depth={depth * 0.58} seats={item.seats} color={accent} />
   if (item.kind === 'chair') return <Chair color={accent} scale={Math.min(width, depth) * 1.35} />
+  if (item.kind === 'throne-chair') return <ThroneChair color={accent} scale={Math.min(width, depth) * 0.88} />
   if (item.kind === 'sofa') return <SofaModel width={width * 0.82} color={selected ? '#c69a48' : '#d8c5a5'} />
   if (item.kind === 'stage') return <Platform width={width} depth={depth} height={0.45} color={selected ? '#c99a43' : '#4c4035'} label="STAGE" />
   if (item.kind === 'dance-floor') return <DanceFloor width={width} depth={depth} selected={selected} />
   if (item.kind === 'bar') return <Bar width={width} depth={depth} selected={selected} />
   if (item.kind === 'dj-booth') return <DjBooth width={width} depth={depth} selected={selected} />
   if (item.kind === 'backdrop') return <Backdrop width={width} selected={selected} />
+  if (item.kind === 'balloon-arch') return <BalloonArch width={width} depth={depth} selected={selected} />
+  if (item.kind === 'pipe-drape') return <PipeDrape width={width} selected={selected} />
+  if (item.kind === 'stanchions') return <Stanchions width={width} />
   if (item.kind === 'vip-area') return <VipArea width={width} depth={depth} selected={selected} />
   return <Florals selected={selected} />
 }
@@ -120,6 +143,10 @@ function DanceFloor({ width, depth, selected }: { width: number; depth: number; 
 function Bar({ width, depth, selected }: { width: number; depth: number; selected: boolean }) { return <group><RoundedBox castShadow args={[width,1.05,depth]} radius={.08} smoothness={3} position={[0,.53,0]}><meshStandardMaterial color={selected ? '#c69a48' : '#6a4d33'} roughness={.48}/></RoundedBox><mesh castShadow position={[0,1.1,0]}><boxGeometry args={[width+.16,.1,depth+.12]}/><meshStandardMaterial color="#d0b17e" roughness={.35}/></mesh></group> }
 function DjBooth({ width, depth, selected }: { width: number; depth: number; selected: boolean }) { return <group><RoundedBox castShadow args={[width,.9,depth]} radius={.08} smoothness={3} position={[0,.45,0]}><meshStandardMaterial color={selected ? '#bd9147' : '#2d2926'} roughness={.44}/></RoundedBox>{[-.28,.28].map(x=><mesh key={x} position={[x*width,.95,0]}><cylinderGeometry args={[.16,.16,.08,32]}/><meshStandardMaterial color="#caa24c" metalness={.55}/></mesh>)}</group> }
 function Backdrop({ width, selected }: { width: number; selected: boolean }) { return <group><RoundedBox castShadow args={[width,2.6,.18]} radius={.08} smoothness={3} position={[0,1.3,0]}><meshStandardMaterial color={selected ? '#d6af65' : '#e8ddca'} roughness={.82}/></RoundedBox><mesh position={[0,1.45,.11]}><torusGeometry args={[.64,.035,16,50]}/><meshStandardMaterial color="#b88b42" metalness={.4}/></mesh></group> }
+function ThroneChair({ color, scale = 0.7 }: { color: string; scale?: number }) { return <group scale={scale}><RoundedBox castShadow args={[1.15,.18,.95]} radius={.12} smoothness={4} position={[0,.55,0]}><meshStandardMaterial color={color} roughness={.38} metalness={.08}/></RoundedBox><RoundedBox castShadow args={[1.08,1.45,.2]} radius={.16} smoothness={4} position={[0,1.22,.34]}><meshStandardMaterial color={color} roughness={.38} metalness={.08}/></RoundedBox><mesh castShadow position={[0,1.98,.34]}><sphereGeometry args={[.18,20,20]}/><meshStandardMaterial color="#caa24c" metalness={.5} roughness={.26}/></mesh>{[-.42,.42].map((x) => <mesh key={x} castShadow position={[x,.32,0]}><cylinderGeometry args={[.07,.09,.6,16]}/><meshStandardMaterial color="#b78a3d" metalness={.4} roughness={.3}/></mesh>)}</group> }
+function BalloonArch({ width, depth, selected }: { width: number; depth: number; selected: boolean }) { return <group>{[...Array(11)].map((_, i) => { const t = i / 10; const angle = Math.PI * t; return <mesh key={i} castShadow position={[(t - .5) * width, .65 + Math.sin(angle) * Math.max(width * .42, 1.1), 0]}><sphereGeometry args={[Math.max(depth * .22, .16), 18, 18]}/><meshStandardMaterial color={selected ? '#e5b75e' : i % 3 === 0 ? '#f2e4c9' : i % 3 === 1 ? '#caa24c' : '#b87f79'} roughness={.52}/></mesh> })}</group> }
+function PipeDrape({ width, selected }: { width: number; selected: boolean }) { return <group><mesh castShadow position={[-width / 2, 1.4, 0]}><cylinderGeometry args={[.045,.055,2.8,14]}/><meshStandardMaterial color="#b78a3d" metalness={.6} roughness={.22}/></mesh><mesh castShadow position={[width / 2, 1.4, 0]}><cylinderGeometry args={[.045,.055,2.8,14]}/><meshStandardMaterial color="#b78a3d" metalness={.6} roughness={.22}/></mesh><RoundedBox castShadow args={[width,2.55,.08]} radius={.02} smoothness={2} position={[0,1.35,0]}><meshStandardMaterial color={selected ? '#dfbd73' : '#d9d0c3'} roughness={.94} transparent opacity={.92}/></RoundedBox></group> }
+function Stanchions({ width }: { width: number }) { return <group>{[-width / 2, width / 2].map((x) => <group key={x} position={[x,0,0]}><mesh castShadow position={[0,.52,0]}><cylinderGeometry args={[.16,.2,1.04,20]}/><meshStandardMaterial color="#b78a3d" metalness={.65} roughness={.24}/></mesh><mesh castShadow position={[0,1.03,0]}><sphereGeometry args={[.2,18,18]}/><meshStandardMaterial color="#caa24c" metalness={.65} roughness={.22}/></mesh></group>)}<mesh castShadow position={[0,.72,0]} rotation={[0,0,Math.atan2(.18, Math.max(width, .2))]}><cylinderGeometry args={[.025,.025,Math.max(width, .2),10]}/><meshStandardMaterial color="#8b6b4c" roughness={.62}/></mesh></group> }
 function VipArea({ width, depth, selected }: { width: number; depth: number; selected: boolean }) { return <group><mesh receiveShadow position={[0,.025,0]}><boxGeometry args={[width,.05,depth]}/><meshStandardMaterial color={selected ? '#c99b48' : '#896a54'} roughness={.95}/></mesh><group position={[0,0,-depth*.25]}><SofaModel width={Math.min(width*.75,3.1)} color="#d8c4a1"/></group></group> }
 function Florals({ selected }: { selected: boolean }) { return <group><mesh castShadow position={[0,.35,0]}><cylinderGeometry args={[.11,.16,.7,16]}/><meshStandardMaterial color="#b99155"/></mesh>{Array.from({length:8},(_,i)=>{const a=i/8*Math.PI*2; return <mesh key={i} castShadow position={[Math.cos(a)*.27,.78+Math.sin(i*2)*.08,Math.sin(a)*.27]}><sphereGeometry args={[.18,18,18]}/><meshStandardMaterial color={selected ? '#e0b85f' : i%2 ? '#f1e6d1':'#788866'} roughness={.9}/></mesh>})}</group> }
 function Centerpiece() { return <group position={[0,.88,0]}><mesh castShadow position={[0,.14,0]}><cylinderGeometry args={[.05,.08,.28,12]}/><meshStandardMaterial color="#b5935c"/></mesh>{[0,1,2,3,4].map(i=><mesh key={i} castShadow position={[Math.cos(i*1.25)*.12,.34+Math.sin(i)*.05,Math.sin(i*1.25)*.12]}><sphereGeometry args={[.1,12,12]}/><meshStandardMaterial color={i%2 ? '#f0e4cf':'#83906f'}/></mesh>)}</group> }

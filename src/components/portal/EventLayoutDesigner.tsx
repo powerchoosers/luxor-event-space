@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Armchair, Ban, CircleDot, Copy, Grid2X2, LampDesk, Minus, MousePointer2,
-  PanelTop, Plus, RectangleHorizontal, Redo2, RotateCcw, Save, Sofa, Trash2,
+  Armchair, Ban, CircleDot, Copy, Grid2X2, LampDesk,
+  PanelTop, RectangleHorizontal, Redo2, Save, Sofa, Trash2,
   Undo2, Users, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { EventLayout3D } from './EventLayout3D'
 
-export type LayoutItemKind = 'round-table' | 'rectangle-table' | 'cocktail-table' | 'chair' | 'sofa' | 'stage' | 'dj-booth' | 'dance-floor' | 'bar' | 'backdrop' | 'vip-area' | 'florals'
+export type LayoutItemKind = 'round-table' | 'rectangle-table' | 'cocktail-table' | 'chair' | 'throne-chair' | 'sofa' | 'stage' | 'dj-booth' | 'dance-floor' | 'bar' | 'backdrop' | 'balloon-arch' | 'pipe-drape' | 'stanchions' | 'vip-area' | 'florals'
 
 export type LayoutItem = {
   id: string
@@ -29,6 +29,8 @@ export type EventLayoutDocument = {
   items: LayoutItem[]
   roomWidthFeet?: number
   roomHeightFeet?: number
+  secondaryRoomWidthFeet?: number
+  secondaryRoomDepthFeet?: number
   updatedAt?: string
 }
 
@@ -44,18 +46,22 @@ type Props = {
 }
 
 const CATALOG: Array<{ kind: LayoutItemKind; label: string; group: string; icon: typeof CircleDot; width: number; height: number; seats?: number }> = [
-  { kind: 'round-table', label: 'Round table', group: 'Tables', icon: CircleDot, width: 14, height: 14, seats: 8 },
-  { kind: 'rectangle-table', label: 'Rectangle table', group: 'Tables', icon: RectangleHorizontal, width: 19, height: 9, seats: 8 },
-  { kind: 'cocktail-table', label: 'Cocktail table', group: 'Tables', icon: LampDesk, width: 9, height: 9, seats: 4 },
-  { kind: 'chair', label: 'Chair', group: 'Seating', icon: Armchair, width: 7, height: 7, seats: 1 },
-  { kind: 'sofa', label: 'Sofa / lounge', group: 'Seating', icon: Sofa, width: 18, height: 8, seats: 3 },
-  { kind: 'stage', label: 'Stage', group: 'Features', icon: PanelTop, width: 24, height: 12 },
-  { kind: 'dj-booth', label: 'DJ booth', group: 'Features', icon: RectangleHorizontal, width: 15, height: 8 },
-  { kind: 'dance-floor', label: 'Dance floor', group: 'Features', icon: Grid2X2, width: 34, height: 30 },
-  { kind: 'bar', label: 'Bar', group: 'Features', icon: RectangleHorizontal, width: 22, height: 8 },
-  { kind: 'backdrop', label: 'Backdrop', group: 'Features', icon: PanelTop, width: 22, height: 5 },
-  { kind: 'vip-area', label: 'VIP area', group: 'Décor & more', icon: Users, width: 22, height: 16 },
-  { kind: 'florals', label: 'Florals / décor', group: 'Décor & more', icon: CircleDot, width: 8, height: 8 },
+  { kind: 'round-table', label: '60 in round table', group: 'Tables', icon: CircleDot, width: 5, height: 5, seats: 8 },
+  { kind: 'rectangle-table', label: '72 × 27 in table', group: 'Tables', icon: RectangleHorizontal, width: 6, height: 2.25, seats: 8 },
+  { kind: 'cocktail-table', label: 'Cocktail table', group: 'Tables', icon: LampDesk, width: 3, height: 3, seats: 4 },
+  { kind: 'chair', label: 'Regular chair', group: 'Seating', icon: Armchair, width: 2, height: 2, seats: 1 },
+  { kind: 'throne-chair', label: 'Throne chair', group: 'Seating', icon: Armchair, width: 3.5, height: 3.5, seats: 1 },
+  { kind: 'sofa', label: 'Couch', group: 'Seating', icon: Sofa, width: 8, height: 3, seats: 3 },
+  { kind: 'stage', label: 'Stage', group: 'Features', icon: PanelTop, width: 16, height: 8 },
+  { kind: 'dj-booth', label: 'DJ booth', group: 'Features', icon: RectangleHorizontal, width: 6, height: 3 },
+  { kind: 'dance-floor', label: 'Dance floor', group: 'Features', icon: Grid2X2, width: 16, height: 16 },
+  { kind: 'bar', label: 'Bar', group: 'Features', icon: RectangleHorizontal, width: 8, height: 3 },
+  { kind: 'backdrop', label: '10 ft pipe & drape', group: 'Features', icon: PanelTop, width: 10, height: 1 },
+  { kind: 'balloon-arch', label: 'Balloon arch', group: 'Décor & more', icon: PanelTop, width: 8, height: 3 },
+  { kind: 'pipe-drape', label: 'Pipe & drape backdrop', group: 'Décor & more', icon: PanelTop, width: 10, height: 1 },
+  { kind: 'stanchions', label: 'Stanchions & rope', group: 'Décor & more', icon: Ban, width: 6, height: 2 },
+  { kind: 'vip-area', label: 'VIP area', group: 'Décor & more', icon: Users, width: 12, height: 8 },
+  { kind: 'florals', label: 'Decor', group: 'Décor & more', icon: CircleDot, width: 2, height: 2 },
 ]
 
 const TABLE_COLORS = ['#f5ead8', '#d9be8b', '#2b2926', '#314536', '#24354d', '#743f3d']
@@ -66,7 +72,7 @@ function uid() {
 
 function makeItem(kind: LayoutItemKind, x = 42, y = 44, index = 0): LayoutItem {
   const entry = CATALOG.find((item) => item.kind === kind)!
-  return { id: uid(), kind, x, y, width: entry.width, height: entry.height, rotation: 0, label: entry.kind.includes('table') ? `Table ${index + 1}` : entry.label, seats: entry.seats || 0, color: kind.includes('table') ? TABLE_COLORS[0] : undefined }
+  return { id: uid(), kind, x, y, width: entry.width, height: entry.height, rotation: 0, label: entry.kind.includes('table') ? `${entry.label} ${index + 1}` : entry.label, seats: entry.seats || 0, color: kind.includes('table') ? TABLE_COLORS[0] : undefined }
 }
 
 function banquetTemplate(): LayoutItem[] {
@@ -94,8 +100,10 @@ function templateFor(name: string): LayoutItem[] {
 export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, eventType, eventDate, guestCount, onSave }: Props) {
   const [name, setName] = useState(initialLayout?.name || 'Classic Banquet Layout')
   const [items, setItems] = useState<LayoutItem[]>(() => initialLayout?.items?.length ? initialLayout.items : banquetTemplate())
-  const [roomWidthFeet, setRoomWidthFeet] = useState(initialLayout?.roomWidthFeet || 60)
-  const [roomHeightFeet, setRoomHeightFeet] = useState(initialLayout?.roomHeightFeet || 45)
+  const [roomWidthFeet, setRoomWidthFeet] = useState(initialLayout?.roomWidthFeet || 33)
+  const [roomHeightFeet, setRoomHeightFeet] = useState(initialLayout?.roomHeightFeet || 75)
+  const [secondaryRoomWidthFeet, setSecondaryRoomWidthFeet] = useState(initialLayout?.secondaryRoomWidthFeet || 20.83)
+  const [secondaryRoomDepthFeet, setSecondaryRoomDepthFeet] = useState(initialLayout?.secondaryRoomDepthFeet || 21.58)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [history, setHistory] = useState<LayoutItem[][]>([])
   const [future, setFuture] = useState<LayoutItem[][]>([])
@@ -114,6 +122,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
 
   const selected = items.find((item) => item.id === selectedId) || null
   const capacity = items.reduce((sum, item) => sum + (item.seats || 0), 0)
+  const planDepthFeet = roomHeightFeet + secondaryRoomDepthFeet
 
   const commit = useCallback((next: LayoutItem[] | ((current: LayoutItem[]) => LayoutItem[])) => {
     setItems((current) => {
@@ -183,9 +192,11 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
     const item = items.find((entry) => entry.id === drag.id)
     if (!item) return
     const snapX = 100 / Math.max(1, roomWidthFeet * 2)
-    const snapY = 100 / Math.max(1, roomHeightFeet * 2)
-    const x = Math.max(0, Math.min(100 - item.width, Math.round((((event.clientX - bounds.left) / bounds.width) * 100 - drag.dx) / snapX) * snapX))
-    const y = Math.max(0, Math.min(100 - item.height, Math.round((((event.clientY - bounds.top) / bounds.height) * 100 - drag.dy) / snapY) * snapY))
+    const itemWidthPercent = (item.width / roomWidthFeet) * 100
+    const itemHeightPercent = (item.height / planDepthFeet) * 100
+    const snapY = 100 / Math.max(1, planDepthFeet * 2)
+    const x = Math.max(0, Math.min(100 - itemWidthPercent, Math.round((((event.clientX - bounds.left) / bounds.width) * 100 - drag.dx) / snapX) * snapX))
+    const y = Math.max(0, Math.min(100 - itemHeightPercent, Math.round((((event.clientY - bounds.top) / bounds.height) * 100 - drag.dy) / snapY) * snapY))
     setItems((current) => current.map((entry) => entry.id === drag.id ? { ...entry, x, y } : entry))
   }
 
@@ -197,7 +208,7 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   const save = async () => {
     setSaving(true)
     const now = new Date().toISOString()
-    const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, roomWidthFeet, roomHeightFeet, updatedAt: now })
+    const ok = await onSave({ version: 1, name: name.trim() || 'Event layout', items, roomWidthFeet, roomHeightFeet, secondaryRoomWidthFeet, secondaryRoomDepthFeet, updatedAt: now })
     setSaving(false)
     if (ok) setSavedAt(now)
   }
@@ -230,11 +241,12 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
             <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1"><button type="button" onClick={() => setViewMode('2d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '2d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>2D layout</button><button type="button" onClick={() => setViewMode('3d')} className={`rounded-md px-4 py-2 text-[9px] font-black uppercase tracking-wider transition-colors ${viewMode === '3d' ? 'bg-[#b9872f] text-white' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>3D preview</button></div>
             {viewMode === '2d' ? <div className="flex items-center gap-1"><button type="button" onClick={() => setZoom((value) => Math.max(70, value - 10))} className="layout-icon" aria-label="Zoom out"><ZoomOut size={15}/></button><span className="w-12 text-center text-[10px] font-bold">{zoom}%</span><button type="button" onClick={() => setZoom((value) => Math.min(130, value + 10))} className="layout-icon" aria-label="Zoom in"><ZoomIn size={15}/></button></div> : <p className="hidden text-[9px] font-bold text-[color:var(--portal-muted)] sm:block">Interactive room preview</p>}
           </div>
-          {viewMode === '3d' ? <div className="min-h-0 flex-1"><EventLayout3D items={items} selectedId={selectedId} onSelect={setSelectedId}/></div> : <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+          {viewMode === '3d' ? <div className="min-h-0 flex-1"><EventLayout3D items={items} selectedId={selectedId} onSelect={setSelectedId} roomWidthFeet={roomWidthFeet} roomDepthFeet={planDepthFeet} mainRoomDepthFeet={roomHeightFeet} secondaryRoomWidthFeet={secondaryRoomWidthFeet}/></div> : <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
             <div className="mx-auto flex min-h-full max-w-[900px] items-center justify-center">
-              <div className="relative aspect-[4/3] w-full origin-center border-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)] shadow-xl transition-transform" style={{ transform: `scale(${zoom / 100})`, backgroundImage: 'linear-gradient(var(--portal-border) 1px, transparent 1px), linear-gradient(90deg, var(--portal-border) 1px, transparent 1px)', backgroundSize: '24px 24px' }} ref={canvasRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null) }}>
-                <div className="pointer-events-none absolute inset-x-[36%] top-[-2px] h-3 border-x-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)]"/><div className="pointer-events-none absolute inset-x-[41%] bottom-[-2px] h-3 border-x-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)]"/>
-                {items.map((item) => <CanvasItem key={item.id} item={item} selected={selectedId === item.id} onPointerDown={(event) => startDrag(event, item)} />)}
+              <div className="relative w-full origin-center border-2 border-[color:var(--portal-text)] bg-[color:var(--portal-card)] shadow-xl transition-transform" style={{ aspectRatio: `${roomWidthFeet}/${planDepthFeet}`, transform: `scale(${zoom / 100})`, backgroundImage: 'linear-gradient(var(--portal-border) 1px, transparent 1px), linear-gradient(90deg, var(--portal-border) 1px, transparent 1px)', backgroundSize: '24px 24px' }} ref={canvasRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null) }}>
+                <div className="pointer-events-none absolute inset-x-0 top-0 border-b-2 border-[color:var(--portal-text)]" style={{ height: `${(roomHeightFeet / planDepthFeet) * 100}%` }}><span className="absolute left-2 top-2 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Main room · {roomWidthFeet}′ × {roomHeightFeet}′</span></div>
+                <div className="pointer-events-none absolute bottom-0 border-2 border-t-0 border-[color:var(--portal-text)] bg-[color:var(--portal-card)]" style={{ left: `${((roomWidthFeet - secondaryRoomWidthFeet) / roomWidthFeet) * 50}%`, width: `${(secondaryRoomWidthFeet / roomWidthFeet) * 100}%`, height: `${(secondaryRoomDepthFeet / planDepthFeet) * 100}%` }}><span className="absolute left-2 top-2 text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Lower room · {secondaryRoomWidthFeet}′ × {secondaryRoomDepthFeet}′</span></div>
+                {items.map((item) => <CanvasItem key={item.id} item={item} roomWidthFeet={roomWidthFeet} planDepthFeet={planDepthFeet} selected={selectedId === item.id} onPointerDown={(event) => startDrag(event, item)} />)}
                 {!items.length && <div className="absolute inset-0 flex flex-col items-center justify-center text-center"><Ban size={28} className="text-[color:var(--portal-faint)]"/><p className="mt-3 text-sm font-bold">The floor plan is empty</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Add items from the toolbox or choose a quick template.</p></div>}
               </div>
             </div>
@@ -243,9 +255,9 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
         </main>
 
         <aside className="hidden overflow-y-auto border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] lg:block">
-          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Layout details</p><label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Layout name<input value={name} onChange={(event) => setName(event.target.value)} className="planning-editor-input mt-2"/></label><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Room width (ft)<input type="number" min="10" value={roomWidthFeet} onChange={(event) => setRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Room depth (ft)<input type="number" min="10" value={roomHeightFeet} onChange={(event) => setRoomHeightFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label></div><p className="mt-2 text-[9px] leading-4 text-[color:var(--portal-muted)]">Items snap to six-inch increments. Add exact walls and fixtures after the blueprint is supplied.</p>{savedAt && <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">Last saved {new Date(savedAt).toLocaleString()}</p>}</section>
+          <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Layout details</p><label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Layout name<input value={name} onChange={(event) => setName(event.target.value)} className="planning-editor-input mt-2"/></label><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Main width (ft)<input type="number" min="10" value={roomWidthFeet} onChange={(event) => setRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Main depth (ft)<input type="number" min="10" value={roomHeightFeet} onChange={(event) => setRoomHeightFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Lower width (ft)<input type="number" min="10" step="0.01" value={secondaryRoomWidthFeet} onChange={(event) => setSecondaryRoomWidthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label><label className="text-[9px] font-bold text-[color:var(--portal-muted)]">Lower depth (ft)<input type="number" min="10" step="0.01" value={secondaryRoomDepthFeet} onChange={(event) => setSecondaryRoomDepthFeet(Math.max(10, Number(event.target.value) || 10))} className="planning-editor-input mt-2"/></label></div><p className="mt-2 text-[9px] leading-4 text-[color:var(--portal-muted)]">Based on the supplied blueprint: 33′ × 75′ main room with a 20′10″ × 21′7″ lower room. Items snap to six-inch increments.</p>{savedAt && <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">Last saved {new Date(savedAt).toLocaleString()}</p>}</section>
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Capacity estimate</p><div className="mt-4 flex items-center justify-between"><div><p className="flex items-center gap-2 text-sm font-black"><Users size={16}/>{capacity} seats</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">{guestCount ? `${guestCount} guests expected` : 'No guest count recorded'}</p></div><div className={`flex h-14 w-14 items-center justify-center rounded-full border-[5px] ${guestCount && capacity < guestCount ? 'border-red-400 text-red-500' : 'border-[#caa24c] text-[#a8792f]'}`}><span className="text-[10px] font-black">{guestCount ? Math.round((capacity / guestCount) * 100) : 0}%</span></div></div></section>
-          {selected ? <Inspector item={selected} roomWidthFeet={roomWidthFeet} roomHeightFeet={roomHeightFeet} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={() => { const clone = { ...selected, id: uid(), x: Math.min(selected.x + 3, 100 - selected.width), y: Math.min(selected.y + 3, 100 - selected.height), label: `${selected.label} copy` }; commit((current) => [...current, clone]); setSelectedId(clone.id) }}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
+          {selected ? <Inspector item={selected} roomWidthFeet={roomWidthFeet} roomHeightFeet={planDepthFeet} onUpdate={updateSelected} onDelete={removeSelected} onDuplicate={() => { const clone = { ...selected, id: uid(), x: Math.min(selected.x + 3, 100 - (selected.width / roomWidthFeet) * 100), y: Math.min(selected.y + 3, 100 - (selected.height / planDepthFeet) * 100), label: `${selected.label} copy` }; commit((current) => [...current, clone]); setSelectedId(clone.id) }}/>: <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Customize item</p><p className="mt-3 text-[10px] leading-5 text-[color:var(--portal-muted)]">Select an item on the floor plan to change its name, size, color, seats, or rotation.</p></section>}
           <section className="border-b border-[color:var(--portal-border)] p-5"><p className="layout-kicker">Quick templates</p><div className="mt-3 space-y-2">{['Classic banquet','Ceremony + reception','Cocktail hour','Conference / meeting'].map((template) => <button key={template} type="button" onClick={() => { if (!items.length || confirm('Replace the current floor plan with this template?')) { commit(templateFor(template)); setName(`${template} layout`); setSelectedId(null) } }} className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left text-[10px] font-bold hover:border-[#caa24c]/50">{template}</button>)}</div></section>
           <section className="p-5"><p className="layout-kicker">Event info</p><dl className="mt-4 space-y-3 text-[10px]"><Info label="Client" value={leadName}/><Info label="Event" value={eventType || 'Not selected'}/><Info label="Date" value={eventDate ? new Date(`${eventDate}T12:00:00`).toLocaleDateString() : 'Not scheduled'}/><Info label="Guests" value={guestCount ? String(guestCount) : 'Not recorded'}/></dl></section>
         </aside>
@@ -254,10 +266,10 @@ export function EventLayoutDesigner({ open, onClose, initialLayout, leadName, ev
   )
 }
 
-function CanvasItem({ item, selected, onPointerDown }: { item: LayoutItem; selected: boolean; onPointerDown: (event: React.PointerEvent) => void }) {
+function CanvasItem({ item, roomWidthFeet, planDepthFeet, selected, onPointerDown }: { item: LayoutItem; roomWidthFeet: number; planDepthFeet: number; selected: boolean; onPointerDown: (event: React.PointerEvent) => void }) {
   const table = item.kind.includes('table')
   const round = item.kind === 'round-table' || item.kind === 'cocktail-table' || item.kind === 'florals'
-  return <button type="button" onPointerDown={onPointerDown} className={`absolute flex touch-none select-none items-center justify-center border text-center shadow-sm transition-[box-shadow] ${round ? 'rounded-full' : 'rounded-sm'} ${selected ? 'z-20 border-[#caa24c] ring-2 ring-[#caa24c]/35' : 'border-[#90744d]/65 hover:border-[#caa24c]'}`} style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.width}%`, height: `${item.height}%`, transform: `rotate(${item.rotation}deg)`, backgroundColor: item.color || (item.kind === 'dance-floor' ? '#ead9c1' : item.kind === 'stage' || item.kind === 'bar' ? '#ded1bd' : 'var(--portal-card)') }} aria-label={`Select ${item.label}`}>
+  return <button type="button" onPointerDown={onPointerDown} className={`absolute flex touch-none select-none items-center justify-center border text-center shadow-sm transition-[box-shadow] ${round ? 'rounded-full' : 'rounded-sm'} ${selected ? 'z-20 border-[#caa24c] ring-2 ring-[#caa24c]/35' : 'border-[#90744d]/65 hover:border-[#caa24c]'}`} style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${(item.width / roomWidthFeet) * 100}%`, height: `${(item.height / planDepthFeet) * 100}%`, transform: `rotate(${item.rotation}deg)`, backgroundColor: item.color || (item.kind === 'dance-floor' ? '#ead9c1' : item.kind === 'stage' || item.kind === 'bar' ? '#ded1bd' : 'var(--portal-card)') }} aria-label={`Select ${item.label}`}>
     {table && <span className="absolute inset-[-13%] rounded-[inherit] border border-dashed border-[#8b7555]/45"/>}<span className="relative truncate px-1 text-[clamp(6px,0.65vw,10px)] font-black uppercase tracking-tight text-[#342c23] dark:text-[#f1e8d9]">{item.label}</span>
   </button>
 }
@@ -267,10 +279,10 @@ function Inspector({ item, roomWidthFeet, roomHeightFeet, onUpdate, onDelete, on
     <label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Name<input value={item.label} onChange={(event) => onUpdate({ label: event.target.value })} className="planning-editor-input mt-2"/></label>
     {item.seats > 0 && <label className="mt-3 block text-[9px] font-bold text-[color:var(--portal-muted)]">Seats<input type="number" min="0" max="24" value={item.seats} onChange={(event) => onUpdate({ seats: Number(event.target.value) })} className="planning-editor-input mt-2"/></label>}
     {item.kind.includes('table') && <div className="mt-4"><p className="text-[9px] font-bold text-[color:var(--portal-muted)]">Table color</p><div className="mt-2 flex gap-2">{TABLE_COLORS.map((color) => <button key={color} type="button" onClick={() => onUpdate({ color })} className={`h-7 w-7 rounded-md border ${item.color === color ? 'ring-2 ring-[#caa24c] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'border-[color:var(--portal-border)]'}`} style={{ backgroundColor: color }} aria-label={`Use ${color}`}/>)}</div></div>}
-    <div className="mt-4 grid grid-cols-2 gap-3"><Range label={`Width (${Math.round((item.width / 100) * roomWidthFeet * 12)} in)`} value={Math.round((item.width / 100) * roomWidthFeet * 12)} min={6} max={roomWidthFeet * 12} onChange={(inches) => onUpdate({ width: Math.min(95, (inches / (roomWidthFeet * 12)) * 100) })}/><Range label={`Depth (${Math.round((item.height / 100) * roomHeightFeet * 12)} in)`} value={Math.round((item.height / 100) * roomHeightFeet * 12)} min={6} max={roomHeightFeet * 12} onChange={(inches) => onUpdate({ height: Math.min(95, (inches / (roomHeightFeet * 12)) * 100) })}/></div>
+    <div className="mt-4 grid grid-cols-2 gap-3"><Range label="Width (ft)" value={item.width} min={0.5} max={roomWidthFeet} step={0.25} onChange={(feet) => onUpdate({ width: Math.min(roomWidthFeet, feet) })}/><Range label="Depth (ft)" value={item.height} min={0.5} max={roomHeightFeet} step={0.25} onChange={(feet) => onUpdate({ height: Math.min(roomHeightFeet, feet) })}/></div>
     <label className="mt-4 block text-[9px] font-bold text-[color:var(--portal-muted)]">Rotation · {item.rotation}°<input type="range" min="0" max="345" step="15" value={item.rotation} onChange={(event) => onUpdate({ rotation: Number(event.target.value) })} className="mt-2 w-full accent-[#caa24c]"/></label>
   </section>
 }
 
-function Range({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) { return <label className="text-[9px] font-bold text-[color:var(--portal-muted)]">{label}<input type="number" min={min} max={max} value={Math.round(value)} onChange={(event) => onChange(Number(event.target.value))} className="planning-editor-input mt-2"/></label> }
+function Range({ label, value, min, max, step = 0.25, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) { return <label className="text-[9px] font-bold text-[color:var(--portal-muted)]">{label}<input type="number" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} className="planning-editor-input mt-2"/></label> }
 function Info({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-4"><dt className="font-bold text-[color:var(--portal-muted)]">{label}</dt><dd className="text-right font-semibold">{value}</dd></div> }
