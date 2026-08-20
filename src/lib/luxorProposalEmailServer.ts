@@ -450,7 +450,9 @@ export async function buildLuxorPaymentRequestEmail(input: {
   const finalDueDate = booking.final_payment_due_date
     ? displayEventDate(booking.final_payment_due_date)
     : 'the due date in your Event Agreement'
-  const scopedCollection = invoice.proposal_context?.payment_collection_scope === 'luxor_services_only'
+  const bookingContext = booking.metadata?.final_proposal_context
+  const scopedCollection = invoice.proposal_context?.payment_collection_scope === 'luxor_services_only' ||
+    (bookingContext && typeof bookingContext === 'object' && !Array.isArray(bookingContext) && (bookingContext as Record<string, unknown>).payment_collection_scope === 'luxor_services_only')
   const securityDueDate = booking.event_date
     ? (() => {
       const date = new Date(`${booking.event_date}T12:00:00Z`)
