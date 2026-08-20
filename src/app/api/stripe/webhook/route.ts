@@ -7,6 +7,7 @@ import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
+import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorBooking, LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { saveLuxorInvoicePdf } from '@/lib/luxorDocumentsServer'
@@ -14,6 +15,7 @@ import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
 function paymentKind(label: string | undefined, invoiceKind?: string) {
+  if (invoiceKind === 'security_deposit') return 'security_deposit'
   if (invoiceKind === 'deposit') return 'deposit'
   if (invoiceKind === 'final_balance') return 'final'
   const normalized = String(label || '').toLowerCase()
@@ -57,6 +59,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     console.error(`Stripe payment ${session.id} references an invoice that no longer exists: ${invoiceId}`)
     return
   }
+  const collectionMasterInvoice = invoice.invoice_kind === 'event'
+    ? invoice
+    : invoice.parent_invoice_id ? await getInvoice(invoice.parent_invoice_id) : null
+  const luxorOnlyCollection = Boolean(collectionMasterInvoice && luxorCollectionAmounts(collectionMasterInvoice).scoped)
 
   const bookingId = session.metadata?.booking_id || invoice.booking_id || null
   const booking = bookingId ? await getLuxorBooking(bookingId) : null
@@ -164,15 +170,16 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   if (booking) {
       paymentContact ||= { phone: booking.phone, name: booking.client_name, inquiryId: booking.inquiry_id }
       // New bookings can only reach Stripe after the agreement is signed. The
-      // deposit child invoice contains two separate amounts: the initial booking
-      // payment and the refundable security deposit. Keep them separate in the
-      // booking record even though Stripe collects them in one checkout.
+      // Luxor booking payment and the refundable security deposit are separate
+      // child invoices for new proposals; legacy invoices may still contain
+      // both historical amounts and are handled without rewriting them.
       const fullEventPaymentCoversDeposit = invoice.id === booking.invoice_id && paidTotal + 0.005 >= Number(booking.deposit_required || 0)
+      const securityDepositCovered = kind === 'security_deposit' && paidTotal + 0.005 >= Number(invoice.total || 0)
       const depositCovered = (kind === 'deposit' && paidTotal + 0.005 >= Number(invoice.total || 0)) || fullEventPaymentCoversDeposit
-      const finalCovered = kind === 'final' && paidTotal + 0.005 >= Number(invoice.total || 0)
+      const finalCovered = kind === 'final' && paidTotal + 0.005 >= Number(invoice.total || 0) && !luxorOnlyCollection
       const reservationConfirmed = (depositCovered || Boolean(booking.metadata?.deposit_paid_at)) && booking.contract_status === 'signed'
       const masterInvoiceId = session.metadata?.master_invoice_id || booking.invoice_id
-      const masterInvoice = masterInvoiceId ? await getInvoice(masterInvoiceId) : null
+      const masterInvoice = (masterInvoiceId ? await getInvoice(masterInvoiceId) : null) || collectionMasterInvoice
       const finalPaymentDueDate = configuredFinalPaymentDueDate(booking)
       const finalPaymentScheduleMissing = reservationConfirmed && Boolean(masterInvoice) && !finalPaymentDueDate
       // Legacy bookings may have no approved final-payment date. The Stripe
@@ -191,7 +198,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
       const updatedBooking = await updateLuxorBooking(booking.id, {
         // The security deposit is already part of the completed deposit child
         // invoice. It is held after receipt; the final balance never includes it.
-        security_deposit_status: kind === 'deposit' && depositCovered ? 'held' : booking.security_deposit_status,
+        security_deposit_status: securityDepositCovered || (kind === 'deposit' && depositCovered) ? 'held' : booking.security_deposit_status,
         status: reservationConfirmed ? 'confirmed' : booking.status === 'draft' ? 'tentative' : booking.status,
         booked_at: reservationConfirmed ? booking.booked_at || paidAt : booking.booked_at,
         metadata: {
@@ -202,12 +209,18 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             security_deposit_held_at: paidAt,
             security_deposit_payment_invoice_id: invoice.id,
           } : {}),
+          ...(securityDepositCovered ? {
+            security_deposit_collected_at: booking.metadata?.security_deposit_collected_at || paidAt,
+            security_deposit_held_at: booking.metadata?.security_deposit_held_at || paidAt,
+            security_deposit_payment_invoice_id: invoice.id,
+          } : {}),
           ...(reservationConfirmed ? { reservation_confirmed_at: booking.metadata?.reservation_confirmed_at || paidAt, reservation_state: 'confirmed' } : {}),
           ...(finalInvoice ? { final_balance_invoice_id: finalInvoice.id } : {}),
           ...(finalPaymentScheduleMissing ? {
             final_payment_schedule_configuration_required_at: booking.metadata?.final_payment_schedule_configuration_required_at || paidAt,
           } : {}),
           ...(finalCovered ? { final_payment_paid_at: paidAt } : {}),
+          ...(kind === 'final' && luxorOnlyCollection ? { luxor_services_paid_at: paidAt, luxor_services_payment_invoice_id: invoice.id } : {}),
         },
       })
       if (finalPaymentScheduleMissing && inquiryId && !booking.metadata?.final_payment_schedule_configuration_required_at) {
@@ -230,10 +243,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
         const inquiry = await getLuxorInquiry(inquiryId)
         if (inquiry && inquiry.status !== 'closed_lost') {
           const planningComplete = Boolean(updatedBooking.metadata?.planning_completed_at) || updatedBooking.status === 'confirmed'
-          const nextStage = updatedBooking.contract_status !== 'signed'
-            ? 'contract'
-            : finalCovered
-              ? 'event'
+            const nextStage = updatedBooking.contract_status !== 'signed'
+              ? 'contract'
+              : finalCovered
+                ? 'event'
               : planningComplete
                 ? 'final_payment'
                 : reservationConfirmed

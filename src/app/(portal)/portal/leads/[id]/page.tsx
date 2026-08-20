@@ -2943,8 +2943,13 @@ export default function LeadDetailPage({
   const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
   const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
   const bookingDepositAmount = Number(agreementBooking?.deposit_required || 0)
-  const depositInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'deposit')
-  const finalBalanceInvoice = sortedInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
+  const currentBookingInvoices = agreementBooking
+    ? sortedInvoices.filter((invoice) => invoice.booking_id === agreementBooking.id)
+    : []
+  const depositInvoice = currentBookingInvoices.find((invoice) => invoice.invoice_kind === 'deposit')
+  const finalBalanceInvoice = currentBookingInvoices.find((invoice) => invoice.invoice_kind === 'final_balance')
+  const paymentCollectionScope = proposalInvoice?.proposal_context?.payment_collection_scope
+  const luxorOnlyCollection = paymentCollectionScope === 'luxor_services_only'
   const refundableSecurityDepositAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'security_deposit' || item.category === 'Security Deposit' || /refundable security deposit/i.test(item.description))?.total || agreementBooking?.security_deposit_amount || LUXOR_DEFAULT_SECURITY_DEPOSIT)
   const initialBookingPaymentAmount = Number(depositInvoice?.line_items.find((item) => item.paymentBucket === 'venue' || /initial booking payment/i.test(item.description))?.total || bookingDepositAmount)
   const initialPaymentInvoiceTotal = Number(depositInvoice?.total || (initialBookingPaymentAmount + refundableSecurityDepositAmount))
@@ -2954,6 +2959,8 @@ export default function LeadDetailPage({
   const finalPaymentBalance = finalBalanceInvoice
     ? getInvoiceBalance(finalBalanceInvoice)
     : Math.max(0, finalPaymentTotal - getPaidTotal(sortedPayments, 'final'))
+  const finalPaymentDueDate = agreementBooking?.final_payment_due_date || null
+  const finalBalanceInvoiceId = finalBalanceInvoice?.id || null
   const clientPaymentPreference = agreementBooking?.metadata?.client_payment_preference as {
     method?: unknown
     amount?: unknown
@@ -5552,10 +5559,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {finalPaymentBalance <= 0 ? 'Balance paid in full' : 'Collect final event payment balance'}
+                              {finalPaymentBalance <= 0 ? 'Luxor services settled' : luxorOnlyCollection ? 'Collect remaining Luxor services' : 'Collect final event payment balance'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {finalPaymentBalance <= 0 ? 'All invoice balances settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} final event balance remaining. The separate $750 refundable security deposit is billed independently and remains held.`}
+                              {finalPaymentBalance <= 0 ? 'Luxor-controlled services are settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} ${luxorOnlyCollection ? 'Luxor services' : 'final event'} balance remaining. Planner-managed services remain outside Luxor Stripe collection.`}
                             </p>
                           </div>
                         </div>
@@ -5565,8 +5572,8 @@ export default function LeadDetailPage({
                               Send Secure Payment Link
                             </button>
                           ) : null}
-                          {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking!, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
+                          {agreementBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(agreementBooking!, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
                               Mark Paid Manually
                             </button>
                           ) : null}
@@ -5588,7 +5595,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
-                              <span className="font-bold text-white">{latestBooking?.final_payment_due_date ? formatDisplayDate(latestBooking!.final_payment_due_date) : 'No due date set'}</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{finalPaymentDueDate ? formatDisplayDate(finalPaymentDueDate) : 'No due date set'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Late Status</span>
@@ -5596,7 +5603,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
-                              <span className="font-bold text-white">{finalBalanceInvoice ? finalBalanceInvoice!.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{finalBalanceInvoiceId?.slice(0, 8).toUpperCase() || 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
@@ -5608,8 +5615,8 @@ export default function LeadDetailPage({
                           {finalBalanceInvoice && finalPaymentBalance > 0 ? (
                             <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice!)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
                           ) : null}
-                          {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking!, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
+                          {agreementBooking ? (
+                            <button type="button" onClick={() => handleRecordManualPayment(agreementBooking!, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
                           ) : null}
                           <button type="button" onClick={() => setActiveLeadTab('tasks')} className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Create Reminder Task</button>
                         </div>

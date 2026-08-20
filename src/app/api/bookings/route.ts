@@ -8,6 +8,7 @@ import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob } from '@/lib/lux
 import { buildEventEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { queueBookingTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT, parseLuxorCurrency } from '@/lib/luxorBookingMoney'
+import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
@@ -121,9 +122,10 @@ export async function POST(request: NextRequest) {
     const dueDate = new Date(`${eventDate}T12:00:00`)
     dueDate.setDate(dueDate.getDate() - finalPaymentDays)
     const contractTotal = Number(proposal.total || 0)
+    const luxorServicesTotal = luxorCollectionAmounts(proposal).luxorServicesTotal
     const reservationPayment = paymentMode === 'pay_in_full'
-      ? contractTotal
-      : Math.round(contractTotal * bookingPaymentPercent) / 100
+      ? luxorServicesTotal
+      : Math.min(luxorServicesTotal, Math.round(luxorServicesTotal * bookingPaymentPercent) / 100)
     const normalizedBody = {
       ...body,
       inquiry_id: proposal.inquiry_id,
@@ -149,6 +151,9 @@ export async function POST(request: NextRequest) {
         final_proposal_context: context,
         reservation_payment_mode: paymentMode,
         reservation_payment_percent: paymentMode === 'pay_in_full' ? 100 : bookingPaymentPercent,
+        payment_collection_scope: proposal.proposal_context?.payment_collection_scope || 'legacy_full_event',
+        luxor_services_total: luxorServicesTotal,
+        planner_services_total: Math.max(0, contractTotal - luxorServicesTotal),
         reservation_state: 'proposal_accepted_awaiting_contract',
       },
     }

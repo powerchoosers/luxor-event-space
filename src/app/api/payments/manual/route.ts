@@ -4,6 +4,7 @@ import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import {
   ensureLuxorDepositInvoice,
   ensureLuxorFinalBalanceInvoice,
+  ensureLuxorSecurityDepositInvoice,
   getInvoice,
   listPaidPaymentsByInvoice,
   luxorFinalPaymentDueDate,
@@ -15,9 +16,10 @@ import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 
-type ManualPaymentKind = 'deposit' | 'final'
+type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
 const MONEY_EPSILON = 0.005
 
@@ -99,17 +101,18 @@ async function resolveManualPaymentInvoice(bookingId: string, kind: ManualPaymen
     throw new Error('This signed booking needs its finalized event proposal before a payment can be recorded.')
   }
 
+  const securityDueDate = booking.event_date
+    ? (() => { const date = new Date(`${booking.event_date}T12:00:00Z`); date.setUTCDate(date.getUTCDate() - 30); return date.toISOString().slice(0, 10) })()
+    : new Date().toISOString().slice(0, 10)
+  const securityInvoice = await ensureLuxorSecurityDepositInvoice({ masterInvoice, bookingId: booking.id, dueDate: securityDueDate })
+  if (kind === 'security_deposit') return { booking, masterInvoice, invoice: securityInvoice }
+
   const depositInvoice = await ensureLuxorDepositInvoice({
     masterInvoice,
     bookingId: booking.id,
     dueDate: booking.contract_signed_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     reservationDepositAmount: booking.deposit_required,
   })
-  const securityDeposit = securityDepositAmount(depositInvoice)
-  if (Math.abs(securityDeposit - LUXOR_DEFAULT_SECURITY_DEPOSIT) >= MONEY_EPSILON) {
-    throw new Error('The initial booking invoice must include the required $750 refundable security deposit.')
-  }
-
   if (kind === 'deposit') return { booking, masterInvoice, invoice: depositInvoice }
 
   const depositPayments = await listPaidPaymentsByInvoice(depositInvoice.id)
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest) {
       paymentMethod?: string
     }
     const bookingId = typeof body.bookingId === 'string' ? body.bookingId : ''
-    const kind: ManualPaymentKind | null = body.paymentKind === 'deposit' || body.paymentKind === 'final'
+    const kind: ManualPaymentKind | null = body.paymentKind === 'deposit' || body.paymentKind === 'final' || body.paymentKind === 'security_deposit'
       ? body.paymentKind
       : null
     if (!bookingId || !kind) {
@@ -160,6 +163,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { booking, masterInvoice, invoice } = await resolveManualPaymentInvoice(bookingId, kind)
+    const luxorOnlyCollection = luxorCollectionAmounts(masterInvoice).scoped
     const inquiryId = booking.inquiry_id || masterInvoice.inquiry_id || null
     const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
     if (booking.status === 'cancelled' || masterInvoice.status === 'cancelled' || inquiry?.status === 'closed_lost') {
@@ -174,7 +178,18 @@ export async function POST(request: NextRequest) {
         ? await ensureConfiguredFinalBalanceInvoice(booking, masterInvoice)
         : null
       const finalPaymentScheduleMissing = kind === 'deposit' && !finalBalanceInvoice && !configuredFinalPaymentDueDate(booking)
-      const bookingUpdate = kind === 'deposit'
+      const bookingUpdate = kind === 'security_deposit'
+        ? {
+          security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
+          security_deposit_status: 'held' as const,
+          metadata: {
+            ...booking.metadata,
+            security_deposit_collected_at: booking.metadata?.security_deposit_collected_at || now,
+            security_deposit_held_at: booking.metadata?.security_deposit_held_at || now,
+            security_deposit_payment_invoice_id: invoice.id,
+          },
+        }
+        : kind === 'deposit'
         ? {
           status: 'confirmed' as const,
           security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
@@ -196,7 +211,7 @@ export async function POST(request: NextRequest) {
         : {
           metadata: {
             ...booking.metadata,
-            final_payment_paid_at: booking.metadata?.final_payment_paid_at || now,
+            ...(luxorOnlyCollection ? { luxor_services_paid_at: booking.metadata?.luxor_services_paid_at || now, luxor_services_payment_invoice_id: invoice.id } : { final_payment_paid_at: booking.metadata?.final_payment_paid_at || now }),
             final_payment_recorded_manually_at: booking.metadata?.final_payment_recorded_manually_at || now,
             final_payment_invoice_id: invoice.id,
           },
@@ -225,8 +240,10 @@ export async function POST(request: NextRequest) {
         paid_at: now,
         processor: 'manual',
         processor_reference: 'manual:' + invoice.id + ':full-balance',
-        notes: kind === 'deposit'
-          ? 'Initial booking payment and the separate refundable security deposit recorded manually in owner portal.'
+        notes: kind === 'security_deposit'
+          ? 'Separate $750 refundable security deposit recorded manually in owner portal.'
+          : kind === 'deposit'
+          ? 'Initial booking payment recorded manually in owner portal. The separate refundable security deposit remains due 30 days before the event.'
           : 'Final Event Price balance recorded manually in owner portal. The refundable security deposit remains held separately.',
         metadata: paymentMetadata(kind, invoice, body.paymentMethod),
       }),
@@ -238,7 +255,18 @@ export async function POST(request: NextRequest) {
       ? await ensureConfiguredFinalBalanceInvoice(booking, masterInvoice)
       : null
     const finalPaymentScheduleMissing = kind === 'deposit' && !finalBalanceInvoice && !configuredFinalPaymentDueDate(booking)
-    const updatedBooking = await updateLuxorBooking(booking.id, kind === 'deposit'
+    const updatedBooking = await updateLuxorBooking(booking.id, kind === 'security_deposit'
+      ? {
+        security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
+        security_deposit_status: 'held',
+        metadata: {
+          ...booking.metadata,
+          security_deposit_collected_at: now,
+          security_deposit_held_at: now,
+          security_deposit_payment_invoice_id: invoice.id,
+        },
+      }
+      : kind === 'deposit'
       ? {
         status: 'confirmed',
         security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
@@ -260,7 +288,7 @@ export async function POST(request: NextRequest) {
       : {
         metadata: {
           ...booking.metadata,
-          final_payment_paid_at: now,
+            ...(luxorOnlyCollection ? { luxor_services_paid_at: now, luxor_services_payment_invoice_id: invoice.id } : { final_payment_paid_at: now }),
           final_payment_recorded_manually_at: now,
           final_payment_invoice_id: invoice.id,
         },
@@ -270,7 +298,7 @@ export async function POST(request: NextRequest) {
       if (inquiry) {
         await updateLuxorInquiry(inquiry.id, {
           status: 'booked',
-          pipeline_stage: kind === 'deposit' ? 'planning' : 'event',
+          pipeline_stage: kind === 'deposit' ? 'planning' : luxorOnlyCollection ? 'final_payment' : 'event',
           metadata: {
             ...inquiry.metadata,
             latest_payment_at: now,
@@ -280,10 +308,12 @@ export async function POST(request: NextRequest) {
       }
       await createNote(
         inquiryId,
-        kind === 'deposit'
+        kind === 'security_deposit'
+          ? 'The separate $750 refundable security deposit was recorded manually for ' + booking.client_name + ' and is held through post-event inspection.'
+          : kind === 'deposit'
           ? finalPaymentScheduleMissing
-            ? 'Initial booking payment and the separate $750 refundable security deposit recorded manually for ' + booking.client_name + '. The security deposit is held through post-event inspection, but the approved proposal is missing its final payment due date. Configure that date before sending the final balance request.'
-            : 'Initial booking payment and the separate $750 refundable security deposit recorded manually for ' + booking.client_name + '. The security deposit is held through post-event inspection.'
+            ? 'Initial booking payment recorded manually for ' + booking.client_name + '. The separate $750 refundable security deposit remains due 30 days before the event, but the approved proposal is missing its final payment due date. Configure that date before sending the final balance request.'
+            : 'Initial booking payment recorded manually for ' + booking.client_name + '. The separate $750 refundable security deposit remains due 30 days before the event.'
           : 'Final Event Price balance recorded manually for ' + booking.client_name + '. The $750 refundable security deposit remains held separately.',
         'status_change',
         session.email,

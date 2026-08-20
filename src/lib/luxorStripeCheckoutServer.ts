@@ -74,13 +74,14 @@ export async function createLuxorPostContractCheckout(input: {
   // security hold has its own invoice and payment flow.
   // Never let a UI caller create an ad hoc partial payment from either one.
   const isInitialBookingPayment = invoice.invoice_kind === 'deposit'
+  const isSecurityDeposit = invoice.invoice_kind === 'security_deposit'
   if (isInitialBookingPayment && invoice.line_items.some((item) =>
     item.paymentBucket === 'security_deposit' ||
     item.category === 'Security Deposit' ||
     /refundable\s+security\s+deposit/i.test(item.description || ''),
   )) {
     throw new Error('The initial booking payment cannot include the refundable security deposit.')
-  } else if (!isInitialBookingPayment && invoice.line_items.some((item) =>
+  } else if (!isInitialBookingPayment && !isSecurityDeposit && invoice.line_items.some((item) =>
     item.paymentBucket === 'security_deposit' ||
     item.category === 'Security Deposit' ||
     /refundable\s+security\s+deposit/i.test(item.description || ''),
@@ -99,7 +100,9 @@ export async function createLuxorPostContractCheckout(input: {
     throw new Error(`Payment must be between $0.50 and $${balanceDue.toFixed(2)}.`)
   }
 
-  const paymentLabel = isInitialBookingPayment
+  const paymentLabel = isSecurityDeposit
+    ? 'Refundable Security Deposit - Luxor at Las Palmas Events'
+    : isInitialBookingPayment
     ? 'Initial Booking Payment - Luxor at Las Palmas Events'
     : 'Remaining Final Event Price Balance'
   const secretKey = process.env.STRIPE_SECRET_KEY

@@ -41,6 +41,7 @@ type ContractProposalSummary = {
   tax: number | null
   finalEventPrice: number
   promotion: ContractPromotion | null
+  paymentCollectionScope: 'luxor_services_only' | 'legacy_full_event' | null
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -141,6 +142,7 @@ function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSumma
     tax,
     finalEventPrice,
     promotion: promotionFromContext(context, metadata, discount),
+    paymentCollectionScope: context.payment_collection_scope === 'luxor_services_only' ? 'luxor_services_only' : context.payment_collection_scope === 'legacy_full_event' ? 'legacy_full_event' : null,
   }
 }
 
@@ -413,7 +415,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.feeRow('Final Event Price', money(proposalSummary.finalEventPrice))
   w.fieldPair('Initial booking payment', money(booking.deposit_required), 'Remaining balance', money(balance))
   w.fieldPair('Final payment due', displayDate(finalPaymentDueDate), 'Payment timing', 'After agreement signature')
-  w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', 'Separate payment after signed agreement')
+  w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', proposalSummary.paymentCollectionScope === 'luxor_services_only' ? `${displayDate(new Date(`${booking.event_date}T12:00:00Z`).toISOString().slice(0, 10))} (30 days before event)` : 'Separate payment after signed agreement')
   if (proposalSummary.promotion) w.paragraph(`${proposalSummary.promotion.name} is already reflected in the locked Final Event Price for this Agreement. The secure booking-payment link is sent only after this Agreement is signed.`)
   if (proposalSummary.lines.length) {
     w.subheading('Accepted package')
@@ -422,12 +424,16 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
       w.checklistItem(`${item.category ? `${item.category}: ` : ''}${item.description}${quantity}`)
     }
   }
-  w.paragraph(`The event date is not reserved until the initial booking payment and separate refundable security deposit have been received after this Agreement has been fully executed. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`)
+  w.paragraph(proposalSummary.paymentCollectionScope === 'luxor_services_only'
+    ? `The event date is reserved after this Agreement is fully executed and the initial Luxor services payment is received. The separate refundable security deposit is due ${displayDate(new Date(`${booking.event_date}T12:00:00Z`).toISOString().slice(0, 10))}, 30 days before the Event. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`
+    : `The event date is not reserved until the initial booking payment and separate refundable security deposit have been received after this Agreement has been fully executed. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`)
   w.paragraph('Luxor accepts the payment methods shown on the invoice or payment request. Returned checks are subject to a $35.00 fee.')
   w.paragraph('Payments not received by the due date may incur a late fee equal to five percent (5%) of the overdue amount or $50.00, whichever is greater. Nonpayment may suspend planning services or result in cancellation of the Event.')
   w.paragraph('The Client agrees not to initiate a chargeback for amounts properly due under this Agreement. An unauthorized chargeback is a material breach, and the Client remains responsible for unpaid balances, chargeback fees, and reasonable collection costs to the extent permitted by Texas law.')
   w.heading('Security deposit')
-  w.paragraph(`Client shall pay the separate ${money(securityDeposit)} refundable security deposit after this Agreement is signed. It is a separate payment from the initial booking payment. The security deposit is held throughout the event period and secures Client obligations under this Agreement. It may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`)
+  w.paragraph(proposalSummary.paymentCollectionScope === 'luxor_services_only'
+    ? `Client shall pay the separate ${money(securityDeposit)} refundable security deposit 30 days before the Event. It is a separate payment from the initial Luxor services payment and is held throughout the event period. It may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`
+    : `Client shall pay the separate ${money(securityDeposit)} refundable security deposit after this Agreement is signed. It is a separate payment from the initial booking payment. The security deposit is held throughout the event period and secures Client obligations under this Agreement. It may be applied toward authorized charges, including property damage, excessive cleaning, missing or damaged Venue property, overtime, false alarm or emergency-response charges, prohibited materials, policy violations, and other authorized Event-related costs.`)
   w.paragraph('Luxor may inspect and document the Premises and Venue property before, during, and after the Event. If deductions are necessary, Luxor may provide Client with an itemized statement. Any undisputed remaining security-deposit balance will be returned within fourteen (14) business days following the Event, subject to any pending damage, repair, insurance, or other authorized claim that reasonably requires additional time to determine. If authorized charges exceed the security deposit, Client remains responsible for the full remaining balance; the security deposit does not limit Client liability.')
   w.heading('Overtime and additional charges')
   w.paragraph('Overtime is not guaranteed and depends on venue availability. If approved or incurred because the Client, guests, vendors, equipment, or property remain after the contracted rental period, overtime is billed at $150.00 per 30-minute increment and is due upon invoice.')

@@ -450,9 +450,19 @@ export async function buildLuxorPaymentRequestEmail(input: {
   const finalDueDate = booking.final_payment_due_date
     ? displayEventDate(booking.final_payment_due_date)
     : 'the due date in your Event Agreement'
+  const scopedCollection = invoice.proposal_context?.payment_collection_scope === 'luxor_services_only'
+  const securityDueDate = booking.event_date
+    ? (() => {
+      const date = new Date(`${booking.event_date}T12:00:00Z`)
+      date.setUTCDate(date.getUTCDate() - 30)
+      return displayEventDate(date.toISOString().slice(0, 10))
+    })()
+    : '30 days before your event'
   const paymentScheduleNote = invoice.invoice_kind === 'final_balance'
     ? `This payment covers the remaining event balance due ${finalDueDate}. The refundable security deposit is billed separately from the initial booking payment and remains held under the Event Agreement.`
-    : `This initial booking payment and the separate ${money(Number(booking.security_deposit_amount ?? 750))} refundable security deposit are due only after the agreement is signed. The remaining event balance is due ${finalDueDate}.`
+    : scopedCollection
+      ? `This initial Luxor services payment is due after the agreement is signed. The separate ${money(Number(booking.security_deposit_amount ?? 750))} refundable security deposit is due ${securityDueDate}, 30 days before your event. The remaining event balance is due ${finalDueDate}.`
+      : `This initial booking payment and the separate ${money(Number(booking.security_deposit_amount ?? 750))} refundable security deposit are due only after the agreement is signed. The remaining event balance is due ${finalDueDate}.`
   const itemRows = invoice.line_items.map((item) => `
     <tr>
       <td style="padding:12px 0;border-bottom:1px solid rgba(202,162,76,0.1);font-size:12px;line-height:1.5;color:rgba(247,239,227,0.82);">${escapeHtml(item.description)}</td>

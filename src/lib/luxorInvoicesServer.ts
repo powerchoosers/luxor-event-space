@@ -3,6 +3,7 @@ import 'server-only'
 import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment, LuxorProposalContext, LuxorProposalPromotionSnapshot } from './luxorInquiryTypes'
 import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
+import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 
 type SupabaseError = {
   message?: string
@@ -352,10 +353,13 @@ export async function ensureLuxorDepositInvoice(input: {
   reservationDepositAmount?: number | null
 }) {
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'deposit')
-  const calculated = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
+  const collection = luxorCollectionAmounts(input.masterInvoice)
+  const luxorServicesTotal = collection.luxorServicesTotal
+  const legacyDefault = calculateLuxorThirtyPercentDeposit(input.masterInvoice).depositAmount
+  const scopedDefault = Math.min(luxorServicesTotal, Math.max(luxorServicesTotal * 0.25, LUXOR_DEFAULT_SECURITY_DEPOSIT))
   const reservationPayment = Math.min(
-    Math.max(0, Number(input.masterInvoice.total || 0) - calculated.refundableSecurityDeposit),
-    Math.max(0, roundMoney(Number(input.reservationDepositAmount ?? calculated.depositAmount))),
+    Math.max(0, luxorServicesTotal),
+    Math.max(0, roundMoney(Number(input.reservationDepositAmount ?? (collection.scoped ? scopedDefault : legacyDefault)))),
   )
   // The refundable deposit is a fixed, separate $750 hold for every booking.
   // It is intentionally not configurable per proposal or payment method, and
@@ -366,7 +370,9 @@ export async function ensureLuxorDepositInvoice(input: {
     description: 'Initial Booking Payment', quantity: 1, unitPrice: reservationPayment, total: reservationPayment,
     category: 'Booking Payment', paymentBucket: 'venue', required: true,
   }]
-  const notes = 'Amount due after the signed Event Agreement: the initial booking payment only. The refundable security deposit is billed separately, held through post-event inspection, and is not part of the Event Price.'
+  const notes = collection.scoped
+    ? `Internal collection note: Stripe collects Luxor-controlled services only (rental, cleaning, security, and Essential Decor). Planner-managed event services remain on the complete contract total and are collected separately. Luxor-controlled total: ${luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}. The refundable security deposit is billed separately.`
+    : 'Amount due after the signed Event Agreement: the initial booking payment only. The refundable security deposit is billed separately, held through post-event inspection, and is not part of the Event Price.'
   const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {
     if (existing.status === 'paid') return existing
@@ -442,13 +448,12 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   // New proposals collect the separate refundable security deposit with the
   // signed-agreement booking payment. Keep it out of the final event balance
   // so it can never be charged twice.
-  const eventTotal = Math.max(0, roundMoney(Number(input.masterInvoice.total || 0) - refundableSecurityDeposit))
+  const collection = luxorCollectionAmounts(input.masterInvoice)
+  const eventTotal = Math.max(0, roundMoney(collection.luxorServicesTotal - (collection.scoped ? 0 : refundableSecurityDeposit)))
   const depositAmount = Math.min(eventTotal, Math.max(0, roundMoney(input.depositPaid ?? defaultDepositAmount)))
   const remainingEventBalance = Math.max(0, roundMoney(eventTotal - depositAmount))
   const finalBalance = remainingEventBalance
-  const lineItems: LuxorInvoiceLineItem[] = [
-    { description: 'Remaining Event Balance After Initial Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance', paymentBucket: 'event', required: true },
-  ]
+  const lineItems: LuxorInvoiceLineItem[] = [{ description: collection.scoped ? 'Remaining Luxor-Controlled Services Balance' : 'Remaining Event Balance After Initial Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance', paymentBucket: 'event', required: true }]
   const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {
     if (existing.status === 'paid') return existing
@@ -459,7 +464,9 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
       total: finalBalance,
       ...promotion,
       due_date: dueDate,
-      notes: `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
+      notes: collection.scoped
+        ? `Internal collection note: this Stripe balance settles Luxor-controlled services only. Planner-managed services remain on the complete contract total and are collected separately. Luxor-controlled total: ${collection.luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}.`
+        : `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
     }) || existing
   }
   return createInvoice({
@@ -476,7 +483,9 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
     total: finalBalance,
     ...promotion,
     due_date: dueDate,
-    notes: `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
+    notes: collection.scoped
+      ? `Internal collection note: this Stripe balance settles Luxor-controlled services only. Planner-managed services remain on the complete contract total and are collected separately. Luxor-controlled total: ${collection.luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}.`
+      : `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
   })
 }
 

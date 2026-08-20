@@ -281,8 +281,13 @@ export type LuxorProposalContext = {
   event_access?: string
   venue_services_total?: number
   event_services_total?: number
+  /** Internal collection split for new proposals; the client still sees final_event_price. */
+  luxor_services_total?: number
+  planner_services_total?: number
   final_event_price?: number
   refundable_security_deposit?: number
+  /** New proposals collect only Luxor-controlled services through Stripe. */
+  payment_collection_scope?: 'luxor_services_only' | 'legacy_full_event'
   /** Legacy record retained for historic proposals; no longer required to publish. */
   payment_policy_acknowledged?: boolean
   amount_due_to_book?: number | null

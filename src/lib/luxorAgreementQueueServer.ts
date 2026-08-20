@@ -18,6 +18,7 @@ import {
 } from './luxorSignaturesServer'
 import { LUXOR_AGREEMENT_ATTACHMENT_MANIFEST } from './luxorAgreementDeliveryServer'
 import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
+import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 
 export type LuxorAgreementQueueDelivery = 'queued' | 'already_sent' | 'already_signed' | 'preparing'
 
@@ -124,7 +125,7 @@ async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) 
   const context = proposalContext(invoice)
   const eventDate = typeof context.event_date === 'string' ? context.event_date : inquiry.target_date
   const guestCount = Number(context.expected_guest_count ?? inquiry.guest_count)
-  const terms = paymentTerms(Number(invoice.total || 0), context)
+  const terms = paymentTerms(luxorCollectionAmounts(invoice).luxorServicesTotal, context)
   const refundableSecurityDeposit = Number(context.refundable_security_deposit)
 
   if (!eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !Number.isInteger(guestCount) || guestCount < 1 || guestCount > 200) {

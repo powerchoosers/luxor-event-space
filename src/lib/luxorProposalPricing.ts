@@ -5,6 +5,7 @@ import type {
   LuxorProposalPromotionSnapshot,
   LuxorProposalPriceBreakdown,
 } from './luxorInquiryTypes'
+import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -1186,6 +1187,9 @@ export function calculateLuxorProposal(
     ...(paymentPlan ? [] : ['Set the payment plan in Step 5 before publishing this final proposal.']),
   ])]
   const packageName = selected.name
+  const luxorServicesTotal = rounded(selected.lineItems
+    .filter((item) => item.paymentBucket !== 'security_deposit' && item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && !item.isChecklistItem && isLuxorCollectedLineItem(item))
+    .reduce((sum, item) => sum + item.total, 0))
   const finalContext: LuxorProposalContext = {
     version: 1,
     pricing_config_version: numberValue(config.version),
@@ -1208,9 +1212,12 @@ export function calculateLuxorProposal(
     event_services_total: rounded(selected.lineItems
       .filter((item) => item.pricingRole === 'custom' ? item.paymentBucket === 'event' : item.category === 'Event Services')
       .reduce((sum, item) => sum + item.total, 0)),
+    luxor_services_total: luxorServicesTotal,
+    planner_services_total: rounded(selected.finalEventPrice - luxorServicesTotal),
     final_event_price: selected.finalEventPrice,
     tax_rate: selected.taxRate,
     refundable_security_deposit: securityDeposit || 750,
+    payment_collection_scope: 'luxor_services_only',
     payment_policy_acknowledged: selection.paymentPolicyAcknowledged === true || selection.payment_policy_acknowledged === true,
     amount_due_to_book: selected.amountDueToBook,
     ...(paymentPlan ? { payment_plan: paymentPlan } : {}),
