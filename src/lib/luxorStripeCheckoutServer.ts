@@ -1,5 +1,6 @@
 import 'server-only'
 
+import crypto from 'node:crypto'
 import Stripe from 'stripe'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
@@ -163,6 +164,7 @@ export async function createLuxorPostContractCheckout(input: {
 
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
+    integration_identifier: `luxor-post-contract-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
     customer_email: inquiry.email || booking.email || undefined,
     client_reference_id: invoice.id,
     line_items: [{
