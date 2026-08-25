@@ -756,7 +756,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
         transition={PANEL_TRANSITION}
-        className="w-full [--message-list-width:100%] md:w-80 md:[--message-list-width:20rem] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden rounded-l-2xl md:rounded-l-none"
+        className={`w-full [--message-list-width:100%] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden rounded-l-2xl md:rounded-l-none ${
+          folderPaneOpen
+            ? 'md:w-[calc(100%-16rem)] md:[--message-list-width:calc(100%-16rem)]'
+            : 'md:w-full md:[--message-list-width:100%]'
+        }`}
       >
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
