@@ -54,6 +54,11 @@ export function CashFlowSparkline({ data }: CashFlowSparklineProps) {
 
   const activePoint = activeIndex !== null ? points[activeIndex] : null
   const activeData = activeIndex !== null ? data[activeIndex] : null
+  const tooltipTransform = activePoint && activePoint.x <= 12
+    ? 'translate(0, -125%)'
+    : activePoint && activePoint.x >= 88
+      ? 'translate(-100%, -125%)'
+      : 'translate(-50%, -125%)'
 
   return (
     <div
@@ -104,17 +109,17 @@ export function CashFlowSparkline({ data }: CashFlowSparklineProps) {
       {/* Tooltip Overlay */}
       {activePoint && activeData && (
         <div
-          className="absolute z-30 pointer-events-none bg-[#0b0a08] border border-[#caa24c]/30 rounded px-2 py-1 text-[10px] shadow-xl text-white font-mono flex flex-col gap-0.5"
+          className="pointer-events-none absolute z-30 flex w-36 max-w-full flex-col gap-0.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 font-mono text-[10px] text-[color:var(--portal-text)] shadow-lg ring-1 ring-black/5"
           style={{
             left: `${activePoint.x}%`,
             top: `${(activePoint.y / 30) * 100}%`,
-            transform: 'translate(-50%, -125%)',
+            transform: tooltipTransform,
           }}
         >
-          <span className="text-[8px] text-[color:var(--portal-muted)] uppercase tracking-wider font-sans font-bold">
+          <span className="whitespace-nowrap font-sans text-[8px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
             {activeData.dateStr}
           </span>
-          <span className={`font-bold ${activeData.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`font-bold ${activeData.profit >= 0 ? 'text-[#188a42] dark:text-emerald-400' : 'text-[#b93c3c] dark:text-red-400'}`}>
             {activeData.profit >= 0 ? '+' : '-'}
             {Math.abs(activeData.profit).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
           </span>
