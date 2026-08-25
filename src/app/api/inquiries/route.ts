@@ -7,6 +7,7 @@ import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { countRecentInquiryAttempts, getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
+import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -122,6 +123,15 @@ export async function POST(request: NextRequest) {
         },
       }).catch((eventError) => {
         console.error('Inquiry created but conversion event failed:', eventError)
+      })
+
+      await sendLuxorWebPush('booking', {
+        title: 'New booking inquiry',
+        body: 'A new inquiry is ready to review in the owner portal.',
+        url: `/portal/leads/${inquiry.id}`,
+        tag: `luxor-inquiry-${inquiry.id}`,
+      }).catch((pushError) => {
+        console.error('Inquiry created, but Web Push delivery failed:', pushError)
       })
     }
 

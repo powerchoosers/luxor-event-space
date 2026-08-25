@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import React from "react";
 import { PortalShell } from "@/components/portal/PortalShell";
@@ -24,6 +24,22 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: 'Luxor | Owner Portal',
   description: 'Luxor event space owner command center.',
+  manifest: '/luxor-portal.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Luxor Portal',
+    statusBarStyle: 'black-translucent',
+  },
+  icons: {
+    apple: [{ url: '/apple-icon.png', sizes: '1024x1024', type: 'image/png' }],
+  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#050505',
 }
 
 export default function PortalLayout({

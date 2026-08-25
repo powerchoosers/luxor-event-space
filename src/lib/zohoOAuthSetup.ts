@@ -1,9 +1,13 @@
 import 'server-only'
 
-const DEFAULT_SCOPES = [
+const LOGIN_SCOPES = [
   'openid',
   'email',
   'profile',
+]
+
+const SETUP_SCOPES = [
+  ...LOGIN_SCOPES,
   'ZohoMail.messages.CREATE',
   'ZohoMail.messages.READ',
   'ZohoMail.accounts.READ',
@@ -35,14 +39,14 @@ export function getZohoAuthUrl(request: Request) {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
-    scope: DEFAULT_SCOPES.join(' '),
+    scope: (setupMode ? SETUP_SCOPES : LOGIN_SCOPES).join(' '),
     redirect_uri: redirectUri,
-    access_type: 'offline',
-    prompt: 'consent',
   })
 
   if (setupMode) {
     params.set('state', 'setup')
+    params.set('access_type', 'offline')
+    params.set('prompt', 'consent')
   }
 
   return `${accountsServer}/oauth/v2/auth?${params.toString()}`
@@ -62,7 +66,7 @@ function decodeZohoEmailFromIdToken(idToken: string | undefined) {
   }
 }
 
-export async function exchangeZohoCodeForSetup(request: Request, code: string) {
+export async function exchangeZohoCodeForSetup(request: Request, code: string, setupMode = false) {
   const clientId = process.env.ZOHO_CLIENT_ID
   const clientSecret = process.env.ZOHO_CLIENT_SECRET
   const accountsServer = (process.env.ZOHO_ACCOUNTS_SERVER || 'https://accounts.zoho.com').replace(/\/$/, '')
@@ -99,6 +103,18 @@ export async function exchangeZohoCodeForSetup(request: Request, code: string) {
     })
     const userData = await userResponse.json().catch(() => ({})) as { Email?: string; email?: string; email_id?: string; principal_name?: string }
     userEmail = String(userData.Email || userData.email || userData.email_id || userData.principal_name || '').trim().toLowerCase()
+  }
+
+  if (!setupMode) {
+    return {
+      redirectUri,
+      refreshToken: '',
+      accountId: null,
+      calendarUid: null,
+      calendarName: null,
+      mailboxAddress: null,
+      userEmail,
+    }
   }
 
   const accountsResponse = await fetch('https://mail.zoho.com/api/v1/accounts', {

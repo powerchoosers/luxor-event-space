@@ -12,6 +12,7 @@ import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 
 function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
   return Boolean(
@@ -200,6 +201,16 @@ export async function POST(request: NextRequest) {
           console.error('Booking created, but its text reminders could not be queued:', automationError)
         }
       }
+    }
+    if (booking) {
+      await sendLuxorWebPush('booking', {
+        title: 'New Luxor event booking',
+        body: 'A new event booking is ready to review in the owner portal.',
+        url: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}` : '/portal/events',
+        tag: `luxor-booking-${booking.id}`,
+      }).catch((pushError) => {
+        console.error('Booking created, but Web Push delivery failed:', pushError)
+      })
     }
     return NextResponse.json(booking, { status: 201 })
   } catch (error) {

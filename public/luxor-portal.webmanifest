@@ -1,0 +1,22 @@
+{
+  "id": "/portal",
+  "name": "Luxor Owner Portal",
+  "short_name": "Luxor Portal",
+  "description": "Private owner workspace for Luxor Event Space.",
+  "start_url": "/portal",
+  "scope": "/portal/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/apple-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

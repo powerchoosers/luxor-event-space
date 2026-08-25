@@ -28,7 +28,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const setup = await exchangeZohoCodeForSetup(request, code)
+    const setup = await exchangeZohoCodeForSetup(request, code, setupMode)
+
+    if (!setup.userEmail || !isAuthorizedLuxorPortalEmail(setup.userEmail)) {
+      return NextResponse.redirect(new URL('/portal/login?error=unauthorized', request.url))
+    }
 
     if (setupMode) {
       const refreshTokenLine = setup.refreshToken
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
               <h1>Luxor Zoho Mail + Calendar connected</h1>
               <p>Copy these values into Vercel and your local <strong>.env.local</strong> if they are missing or outdated.</p>
               <pre>${escapeHtml(envBlock)}</pre>
-              <p class="small">Redirect URI used: ${escapeHtml(setup.redirectUri)}${setup.mailboxAddress ? ` | Mailbox: ${escapeHtml(setup.mailboxAddress)}` : ''} | Calendar: ${escapeHtml(setup.calendarName)}</p>
+              <p class="small">Redirect URI used: ${escapeHtml(setup.redirectUri)}${setup.mailboxAddress ? ` | Mailbox: ${escapeHtml(setup.mailboxAddress)}` : ''} | Calendar: ${escapeHtml(setup.calendarName || 'Default calendar')}</p>
             </main>
           </body>
         </html>`, {
@@ -71,10 +75,6 @@ export async function GET(request: Request) {
           'Cache-Control': 'no-store',
         },
       })
-    }
-
-    if (!setup.userEmail || !isAuthorizedLuxorPortalEmail(setup.userEmail)) {
-      return NextResponse.redirect(new URL('/portal/login?error=unauthorized', request.url))
     }
 
     const response = NextResponse.redirect(new URL('/portal', request.url))

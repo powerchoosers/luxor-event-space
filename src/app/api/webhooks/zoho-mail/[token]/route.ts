@@ -8,6 +8,7 @@ import {
   storeZohoEmailEvent,
   verifyZohoWebhookSignature,
 } from '@/lib/luxorZohoWebhookServer'
+import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 
 export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
   const startedAt = Date.now()
@@ -51,7 +52,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
     const event = parseZohoEmailWebhook(rawBody)
     const stored = await storeZohoEmailEvent(event)
-    if (stored) await broadcastLuxorEmailArrival(stored.event_key)
+    if (stored) {
+      await broadcastLuxorEmailArrival(stored.event_key)
+      await sendLuxorWebPush('email', {
+        title: 'New Luxor email',
+        body: 'A new message arrived in the owner inbox.',
+        url: '/portal/emails',
+        tag: `luxor-email-${stored.event_key}`,
+      }).catch((pushError) => {
+        console.error('Zoho email stored, but Web Push delivery failed:', pushError)
+      })
+    }
 
     console.log(JSON.stringify({
       level: 'info',

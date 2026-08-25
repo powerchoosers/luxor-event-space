@@ -53,6 +53,16 @@ The local site runs at `http://localhost:3000`.
 - Run the Supabase SQL in [supabase/luxor_portal_operations_upgrade.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_portal_operations_upgrade.sql), [supabase/luxor_marketing_machine.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_marketing_machine.sql), and [supabase/luxor_email_jobs_cron.sql](/C:/Users/Lap3p/OneDrive/Documents/luxor-event-space/supabase/luxor_email_jobs_cron.sql).
 - `luxor_claim_due_email_jobs` atomically claims due rows before sending so overlapping cron runs do not send the same email twice.
 
+## Portal Web Push
+
+The owner portal is installable from Safari with **Add to Home Screen**. Web Push delivery requires one stable VAPID key pair in the deployment environment:
+
+- `LUXOR_WEB_PUSH_PUBLIC_KEY`
+- `LUXOR_WEB_PUSH_PRIVATE_KEY`
+- `LUXOR_WEB_PUSH_SUBJECT` (a `mailto:` address or HTTPS URL)
+
+Generate the VAPID keys once, keep the private key server-only, and retain the same pair across deployments. Apply the `luxor_web_push_subscriptions` migration before enabling notifications in Portal Settings.
+
 ## Useful Files
 
 - `src/app/(site)/layout.tsx`

@@ -43,6 +43,7 @@ import { PortalPhoneRoleSettings } from '@/components/portal/PortalPhoneRoleSett
 import { PortalPaymentSettings } from '@/components/portal/PortalPaymentSettings'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PromotionManager } from '@/components/portal/PromotionManager'
+import { PortalPushNotifications } from '@/components/portal/PortalPushNotifications'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -616,6 +617,7 @@ export default function SettingsPage() {
           {/* NOTIFICATION PREFERENCES */}
           {activeTab === 'notifications' && (
             <div className="grid gap-6 xl:grid-cols-2">
+              <PortalPushNotifications />
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Notifications</h3>
                 <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
@@ -746,7 +748,7 @@ export default function SettingsPage() {
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">External API Channels</h3>
               <div className="space-y-4">
                 {[
-                  { name: 'Zoho Mail & Login', status: 'Available', desc: 'Used for portal login and email when server credentials are configured.' },
+                  { name: 'Zoho Mail & Login', status: 'Available', desc: 'Used for portal login, mailbox delivery, and calendar invitations.', actionHref: '/api/auth/zoho/login?setup=1', actionLabel: 'Reconnect Zoho' },
                   { name: 'Stripe Payment Processor', status: 'Not connected', desc: 'Online card and ACH collection has not been implemented.' },
                   { name: 'QuickBooks Bookkeeping Link', status: 'Not connected', desc: 'Bookkeeping synchronization has not been implemented.' }
                 ].map((api, idx) => (
@@ -755,11 +757,22 @@ export default function SettingsPage() {
                       <p className="text-xs font-bold text-[color:var(--portal-text)]">{api.name}</p>
                       <p className="mt-1 max-w-sm text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{api.desc}</p>
                     </div>
-                    <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded border ${
-                      api.status === 'Available' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-                    }`}>
-                      {api.status}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {'actionHref' in api && api.actionHref ? (
+                        <a
+                          href={api.actionHref}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-wider text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35 dark:text-[#f1d27a]"
+                        >
+                          <RefreshCw size={12} aria-hidden="true" />
+                          {api.actionLabel}
+                        </a>
+                      ) : null}
+                      <span className={`rounded border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                        api.status === 'Available' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+                      }`}>
+                        {api.status}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
