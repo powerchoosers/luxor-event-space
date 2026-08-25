@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { CheckCircle2, AlertTriangle, RefreshCw, Mail, Activity } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { PortalCloseButton } from '@/components/portal/PortalUI'
 
 type QueueStatusData = {
   status: 'healthy' | 'warning'
@@ -24,9 +26,11 @@ type QueueStatusData = {
 }
 
 export function EmailQueueHealthWidget() {
+  const reduceMotion = useReducedMotion()
   const [data, setData] = useState<QueueStatusData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   const fetchStatus = async (isManual = false) => {
     if (isManual) setRefreshing(true)
@@ -50,17 +54,6 @@ export function EmailQueueHealthWidget() {
     return () => clearInterval(timer)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex h-16 items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 shadow-sm animate-pulse">
-        <div className="flex items-center gap-3">
-          <div className="h-4 w-4 rounded-full bg-[color:var(--portal-soft)]" />
-          <div className="h-3 w-44 rounded bg-[color:var(--portal-soft)]" />
-        </div>
-      </div>
-    )
-  }
-
   const isHealthy = data?.status !== 'warning'
   const warningMessage = data?.worker.stalled
     ? `Delivery worker has stopped responding while ${data.dueQueued} due email${data.dueQueued === 1 ? ' is' : 's are'} waiting.`
@@ -70,7 +63,14 @@ export function EmailQueueHealthWidget() {
         ? `${data.failed} recent email${data.failed === 1 ? ' needs' : 's need'} attention.`
         : null
 
-  return (
+  const content = loading ? (
+      <div className="flex h-16 items-center justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 shadow-sm animate-pulse">
+        <div className="flex items-center gap-3">
+          <div className="h-4 w-4 rounded-full bg-[color:var(--portal-soft)]" />
+          <div className="h-3 w-44 rounded bg-[color:var(--portal-soft)]" />
+        </div>
+      </div>
+  ) : (
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -122,6 +122,11 @@ export function EmailQueueHealthWidget() {
           >
             <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
           </button>
+          <PortalCloseButton
+            onClick={() => setDismissed(true)}
+            aria-label="Dismiss email queue status"
+            title="Dismiss email queue status"
+          />
         </div>
       </div>
       {warningMessage && (
@@ -131,5 +136,24 @@ export function EmailQueueHealthWidget() {
         </div>
       )}
     </div>
+  )
+
+  return (
+    <AnimatePresence initial={false}>
+      {!dismissed ? (
+        <motion.div
+          key="email-queue-health"
+          initial={false}
+          animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
+          exit={reduceMotion
+            ? { opacity: 0, marginBottom: 0 }
+            : { height: 0, opacity: 0, y: -8, marginBottom: 0 }}
+          transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+          className="shrink-0 overflow-hidden"
+        >
+          {content}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

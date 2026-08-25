@@ -656,7 +656,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
 
   return (
-    <div className="flex h-full w-full flex-col gap-4">
+    <div className="flex h-full min-h-0 w-full flex-col">
       <EmailQueueHealthWidget />
       <div className="portal-surface flex min-h-0 flex-1 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm font-sans text-[color:var(--portal-text)]">
       {/* PANE 1: Mailbox Folders & Navigation */}

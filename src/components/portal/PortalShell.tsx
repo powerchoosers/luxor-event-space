@@ -169,6 +169,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   )
   const usesInternalTableScroll =
     (!isMobileViewport && pathname === '/portal/leads') ||
+    pathname === '/portal/emails' ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
