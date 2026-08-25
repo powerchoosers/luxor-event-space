@@ -27,6 +27,7 @@ export function CashFlowSparkline({ data }: CashFlowSparklineProps) {
   const minVal = Math.min(...data.map((d) => d.profit))
   const maxVal = Math.max(...data.map((d) => d.profit))
   const valRange = maxVal - minVal
+  const isFlat = valRange === 0
 
   // Compute SVG coordinates (viewBox 0 0 100 30)
   const points = data.map((d, i) => {
@@ -69,11 +70,19 @@ export function CashFlowSparkline({ data }: CashFlowSparklineProps) {
           </linearGradient>
         </defs>
 
-        {/* Gradient fill */}
-        <path d={areaPath} fill="url(#sparklineGrad)" />
+        {/* A filled area implies movement, so keep flat months visually quiet. */}
+        {!isFlat ? <path d={areaPath} fill="url(#sparklineGrad)" /> : null}
 
         {/* Sparkline stroke */}
-        <path d={sparklinePath} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d={sparklinePath}
+          stroke="currentColor"
+          strokeWidth={isFlat ? 1.25 : 2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={isFlat ? '2 2' : undefined}
+          opacity={isFlat ? 0.55 : 1}
+        />
 
         {/* Hover vertical line and active dot inside SVG */}
         {activePoint && (

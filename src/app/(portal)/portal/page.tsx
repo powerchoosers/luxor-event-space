@@ -490,9 +490,9 @@ export default async function PortalOverview() {
       )}
 
       {/* TOP ROW: 4 Metric Cards */}
-      <PortalStaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {/* Bookings Card */}
-        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Calendar size={22} strokeWidth={1.5} />
@@ -513,7 +513,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Cash Flow Card */}
-        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[180px] overflow-hidden relative">
+        <PortalStaggerCard className="luxor-glass-card relative flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between overflow-hidden rounded-2xl p-6">
           <div className="flex justify-between items-start z-10 relative">
             <div>
               <span className="text-[#caa24c] mb-4 block">
@@ -531,10 +531,8 @@ export default async function PortalOverview() {
           </div>
           
           {/* Integrated Real Line Graph / Sparkline */}
-          <div className="h-14 w-full mt-3 -mx-6 z-20 overflow-visible relative">
-            <div className="px-6 w-full h-full">
-              <CashFlowSparkline data={sparklineData} />
-            </div>
+          <div className="relative z-20 mt-3 h-14 w-full overflow-visible">
+            <CashFlowSparkline data={sparklineData} />
           </div>
 
           <div className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold z-10 relative">
@@ -545,7 +543,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Next Event Card */}
-        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
           {nextBooking ? (
             <>
               <div>
@@ -582,7 +580,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Needs Attention Card */}
-        <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[160px]">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Bell size={22} strokeWidth={1.5} />
