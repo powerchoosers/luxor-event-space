@@ -44,6 +44,7 @@ import { PortalPaymentSettings } from '@/components/portal/PortalPaymentSettings
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PromotionManager } from '@/components/portal/PromotionManager'
 import { PortalPushNotifications } from '@/components/portal/PortalPushNotifications'
+import { PortalSettingsSearch } from '@/components/portal/PortalSettingsSearch'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -317,6 +318,8 @@ export default function SettingsPage() {
         icon={<Settings size={18} />}
         title="System Settings"
       />
+
+      <PortalSettingsSearch onSelect={setActiveTab} />
 
       {/* Sub-tab navigation */}
       <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
