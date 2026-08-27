@@ -989,18 +989,18 @@ export async function downloadLuxorZohoAttachment(input: {
 }
 
 // A shared, bounded mailbox index resolves folder IDs omitted by limited-data webhooks.
-let messageFolderIndex: { folders: Map<string, string>; expiresAt: number } | null = null
-let messageFolderIndexRequest: Promise<Map<string, string>> | null = null
+let messageFolderIndex: { messages: Map<string, ZohoMessageSummary>; expiresAt: number } | null = null
+let messageFolderIndexRequest: Promise<Map<string, ZohoMessageSummary>> | null = null
 
-async function resolveZohoMessageFolder(messageId: string, force = false) {
+async function getZohoMessageIndex(force = false) {
   if (!force && messageFolderIndex && messageFolderIndex.expiresAt > Date.now()) {
-    return messageFolderIndex.folders.get(messageId)
+    return messageFolderIndex.messages
   }
   if (!messageFolderIndexRequest) {
     messageFolderIndexRequest = (async () => {
       const { accountId, baseUrl } = getZohoConfig()
       const accessToken = await getZohoAccessToken()
-      const folders = new Map<string, string>()
+      const messages = new Map<string, ZohoMessageSummary>()
       for (let start = 1; start <= 4000; start += 200) {
         const params = new URLSearchParams({
           start: String(start), limit: '200', includesent: 'true',
@@ -1012,19 +1012,42 @@ async function resolveZohoMessageFolder(messageId: string, force = false) {
         if (!Array.isArray(data)) throw new Error('Zoho returned an unreadable mailbox index.')
         for (const message of data) {
           const id = String(message.messageId || message.message_id || '')
-          if (id && message.folderId) folders.set(id, String(message.folderId))
+          if (id && message.folderId) messages.set(id, message)
         }
         if (data.length < 200) break
       }
-      messageFolderIndex = { folders, expiresAt: Date.now() + 60_000 }
-      return folders
+      messageFolderIndex = { messages, expiresAt: Date.now() + 60_000 }
+      return messages
     })()
   }
   try {
-    return (await messageFolderIndexRequest).get(messageId)
+    return await messageFolderIndexRequest
   } finally {
     messageFolderIndexRequest = null
   }
+}
+
+async function resolveZohoMessageFolder(messageId: string, force = false) {
+  return (await getZohoMessageIndex(force)).get(messageId)?.folderId
+}
+
+export type ArchivedZohoIdentity = { subject: string; sender_email: string | null; received_at: string }
+
+export async function resolveArchivedZohoMessage(messageId: string, identity: ArchivedZohoIdentity) {
+  const index = await getZohoMessageIndex()
+  const exact = index.get(messageId)
+  if (exact) return { id: messageId, folderId: exact.folderId }
+  // Old numeric webhook IDs may have been rounded. Never guess by subject alone:
+  // require the same rounded ID AND sender/subject/time, and reject ambiguous matches.
+  if (!/^\d+$/.test(messageId) || Number.isSafeInteger(Number(messageId))) return null
+  const candidates = [...index.entries()].filter(([id, item]) => (
+    Number(id).toString() === messageId
+    && normalizeEmailAddress(item.fromAddress || item.sender || '') === identity.sender_email
+    && decodeHtmlEntities(item.subject || '').trim() === decodeHtmlEntities(identity.subject).trim()
+    && Math.abs(new Date(normalizeZohoDate(item.receivedTime || item.receivedtime || item.sentDateInGMT) || '').getTime()
+      - new Date(identity.received_at).getTime()) <= 60_000
+  ))
+  return candidates.length === 1 ? { id: candidates[0][0], folderId: candidates[0][1].folderId } : null
 }
 
 export class ZohoMessageReadError extends Error {
