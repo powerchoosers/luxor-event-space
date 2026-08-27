@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   Loader2,
   MessageSquare,
-  RefreshCw,
   Send,
   FilePenLine,
   Trash2,
@@ -186,6 +184,18 @@ export function TextCampaignsTab() {
     return () => window.removeEventListener('luxor:text-campaign-draft', receiveElenaDraft)
   }, [])
 
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void load()
+    }
+    const timer = window.setInterval(refreshWhenVisible, 45_000)
+    window.addEventListener('focus', refreshWhenVisible)
+    return () => {
+      if (timer) window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+    }
+  }, [load])
+
   const statuses = useMemo(
     () => Array.from(new Set(dashboard.audience.map((recipient) => recipient.status).filter(Boolean))).sort(),
     [dashboard.audience],
@@ -279,8 +289,9 @@ export function TextCampaignsTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+    <div className="space-y-7 pb-8">
+      <div className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <div className="grid grid-cols-2 divide-x divide-y divide-[color:var(--portal-border)] md:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
         {[
           ['Campaigns', dashboard.stats.campaigns],
           ['Eligible', dashboard.stats.eligibleRecipients],
@@ -289,28 +300,31 @@ export function TextCampaignsTab() {
           ['Replies', dashboard.stats.replies],
           ['Opt-outs', dashboard.stats.optOuts],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+          <div key={label} className="p-4 transition-colors hover:bg-[color:var(--portal-soft)]/45">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
             <p className="mt-2 font-mono text-xl font-bold text-[color:var(--portal-text)]">{loading ? '—' : value}</p>
           </div>
         ))}
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,.85fr)]">
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--portal-text)]">
-                <MessageSquare size={17} className="text-[#caa24c]" /> Build a text campaign
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-accent)]">
+                Build a text campaign
               </h3>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">Reach the right people with a message they can trust.</p>
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Only contacts with recorded SMS consent are eligible.</p>
             </div>
-            <PortalButton size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
-            </PortalButton>
           </div>
 
           <div className="mt-6 grid gap-4">
+            <div className="flex items-center gap-3 border-b border-[color:var(--portal-border)] pb-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--portal-accent)] font-mono text-xs font-bold text-white">1</span>
+              <div><p className="text-sm font-bold text-[color:var(--portal-text)]">Audience and consent</p><p className="text-[10px] text-[color:var(--portal-muted)]">Choose who should receive this message.</p></div>
+            </div>
             <label className="space-y-1.5">
               <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Campaign name</span>
               <input className={FIELD_CLASS} value={name} onChange={(event) => setName(event.target.value)} placeholder="Tour reminder — August" />
@@ -357,6 +371,11 @@ export function TextCampaignsTab() {
               </label>
             </div>
 
+            <div className="flex items-center gap-3 border-b border-[color:var(--portal-border)] pb-3 pt-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] font-mono text-xs font-bold text-[color:var(--portal-text)]">2</span>
+              <div><p className="text-sm font-bold text-[color:var(--portal-text)]">Write the message</p><p className="text-[10px] text-[color:var(--portal-muted)]">Keep it clear, useful, and compliant.</p></div>
+            </div>
+
             <label className="space-y-1.5">
               <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Message</span>
               <textarea className={`${FIELD_CLASS} min-h-32 resize-y leading-6`} value={bodyTemplate} onChange={(event) => setBodyTemplate(event.target.value)} maxLength={480} />
@@ -366,14 +385,19 @@ export function TextCampaignsTab() {
               </span>
             </label>
 
-            <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.06] p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-[color:var(--portal-text)]"><FilePenLine size={14} className="text-[#caa24c]" /> Draft with Elena</div>
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-[color:var(--portal-text)]"><FilePenLine size={14} className="text-[color:var(--portal-accent)]" /> Optional drafting help</div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input className={FIELD_CLASS} value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Remind upcoming tour guests to confirm their time" />
                 <PortalButton onClick={() => void askElena()} disabled={generating}>
                   {generating ? <Loader2 size={14} className="animate-spin" /> : <FilePenLine size={14} />} Draft
                 </PortalButton>
               </div>
+            </div>
+
+            <div className="flex items-center gap-3 border-b border-[color:var(--portal-border)] pb-3 pt-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] font-mono text-xs font-bold text-[color:var(--portal-text)]">3</span>
+              <div><p className="text-sm font-bold text-[color:var(--portal-text)]">Choose delivery</p><p className="text-[10px] text-[color:var(--portal-muted)]">Queue now or schedule for later.</p></div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -415,7 +439,7 @@ export function TextCampaignsTab() {
 
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="flex items-center gap-2 text-base font-bold text-[color:var(--portal-text)]"><CalendarClock size={17} className="text-[#caa24c]" /> Recent campaigns</h3>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Recent campaigns</h3>
             {recentCampaignIds.length ? (
               <PortalBulkHeaderSelector
                 state={bulkSelection.pageSelectionState(recentCampaignIds)}
