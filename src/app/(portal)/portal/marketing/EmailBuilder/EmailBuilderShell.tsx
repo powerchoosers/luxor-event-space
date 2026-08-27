@@ -600,7 +600,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Save size={13} /> Save</button>
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Eye size={13} /> Preview</button>
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
-        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review</button>
+        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} title="Review the email, audience, and delivery details before sending" aria-label="Review email before sending" className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review &amp; prepare</button>
         {onClose ? (
           <button type="button" onClick={onClose} aria-label="Close builder" title="Close builder" className="grid size-9 place-items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:border-[#b88732]/50 hover:bg-[#b88732]/10 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b88732]/40">
             <X size={16} />
@@ -630,7 +630,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
               blocks={blocks}
               selectedId={selectedId}
               onSelect={(id) => { setSelectedId(id); setActiveField(null); setInspectorTab('content') }}
-              onActivateField={(id, field) => { setSelectedId(id); setActiveField(field); setInspectorTab('content') }}
+              onActivateField={(id, field) => { setSelectedId(id); setActiveField(field); setInspectorTab('design') }}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onReorder={handleReorder}
@@ -663,7 +663,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
-            {inspectorTab === 'design' ? <EmailStylePanel theme={theme} onChange={setTheme} /> : selectedBlock ? (
+            {inspectorTab === 'design' ? <EmailStylePanel theme={theme} onChange={setTheme} activeField={activeField} /> : selectedBlock ? (
               <BlockInspector block={selectedBlock} onChange={handleBlockChange} onBrowseImage={handleBrowseImage} activeField={activeField} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 px-7 text-center">

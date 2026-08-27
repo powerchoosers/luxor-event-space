@@ -153,7 +153,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
         data-field="Hero headline"
-        style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 600, lineHeight: 1.05, color: CREAM, letterSpacing: '0.02em', marginBottom: 12 }}
+        style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 600, lineHeight: 1.05, color: '#ffffff', letterSpacing: '0.02em', marginBottom: 12 }}
       />
       {/* Subheadline */}
       <Editable
@@ -162,7 +162,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         placeholder="Sub-headline"
         data-field="Hero supporting text"
         multiline
-        style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.55, color: MUTED, maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
+        style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.55, color: 'rgba(255,255,255,0.86)', maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
       />
       {/* CTA button */}
       {block.ctaVisible && (

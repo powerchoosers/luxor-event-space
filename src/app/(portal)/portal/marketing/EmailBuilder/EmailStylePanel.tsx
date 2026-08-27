@@ -34,9 +34,16 @@ function ThemeIcon({ mode }: { mode: LuxorEmailThemeMode }) {
   return <Palette size={14} />
 }
 
-export function EmailStylePanel({ theme, onChange }: { theme: LuxorEmailTheme; onChange: (theme: LuxorEmailTheme) => void }) {
+export function EmailStylePanel({ theme, onChange, activeField }: { theme: LuxorEmailTheme; onChange: (theme: LuxorEmailTheme) => void; activeField?: string | null }) {
   const [openSection, setOpenSection] = useState('Email')
   const update = (patch: Partial<LuxorEmailTheme>) => onChange({ ...theme, ...patch })
+  const highlightedKey = activeField?.toLowerCase().includes('supporting') || activeField?.toLowerCase().includes('body') || activeField?.toLowerCase().includes('details')
+    ? 'muted'
+    : activeField?.toLowerCase().includes('headline') || activeField?.toLowerCase().includes('heading') || activeField?.toLowerCase().includes('label')
+      ? 'text'
+      : activeField?.toLowerCase().includes('cta') || activeField?.toLowerCase().includes('button')
+        ? 'accent'
+        : null
 
   return (
     <div className="portal-scrollbar h-full overflow-y-auto">
@@ -76,7 +83,7 @@ export function EmailStylePanel({ theme, onChange }: { theme: LuxorEmailTheme; o
             {open && section === 'Email' ? (
               <div className="space-y-3 px-4 pb-4">
                 {COLOR_FIELDS.map((field) => (
-                  <label key={field.key} className="flex items-center justify-between gap-3">
+                  <label key={field.key} className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition ${highlightedKey === field.key ? 'bg-[#caa24c]/10 ring-1 ring-[#caa24c]/60' : ''}`}>
                     <span className="text-[9px] font-semibold text-[color:var(--portal-muted)]">{field.label}</span>
                     <span className="flex items-center gap-2">
                       <input

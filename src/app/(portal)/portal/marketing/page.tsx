@@ -207,17 +207,14 @@ function MarketingPageContent() {
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
   const [builderSession, setBuilderSession] = useState(0)
   const [builderCanvasOpen, setBuilderCanvasOpen] = useState(false)
-  const [campaignModalOpen, setCampaignModalOpen] = useState(false)
+  const [campaignModalOpen, setCampaignModalOpen] = useState(activeTab === 'builder-automation')
+  const [campaignModalView, setCampaignModalView] = useState<'start' | 'templates'>('start')
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
 
   // Watchers & References
   const latestActivityAtRef = useRef<string | null>(null)
   const seenActivityIdsRef = useRef<Set<string>>(new Set())
   const selectedCampaignIdRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (activeTab === 'builder-automation' && !builderCanvasOpen) setCampaignModalOpen(true)
-  }, [activeTab, builderCanvasOpen])
 
   // 1. Fetch campaigns from DB
   const loadCampaigns = useCallback(async (options: { silent?: boolean } = {}) => {
@@ -648,7 +645,7 @@ function MarketingPageContent() {
 
   let headerActions: React.ReactNode
   const createCampaignButton = (
-    <PortalButton variant="primary" onClick={() => setCampaignModalOpen(true)}>
+    <PortalButton variant="primary" onClick={() => { setCampaignModalView('start'); setCampaignModalOpen(true) }}>
       <Plus size={13} /> Create campaign
     </PortalButton>
   )
@@ -683,18 +680,18 @@ function MarketingPageContent() {
 
   return (
     <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
-      <PortalModal isOpen={campaignModalOpen && !builderCanvasOpen} onClose={() => setCampaignModalOpen(false)} maxWidth="max-w-2xl" ariaLabel="Create a campaign">
+      <PortalModal isOpen={campaignModalOpen && !builderCanvasOpen} onClose={() => setCampaignModalOpen(false)} maxWidth="max-w-3xl" ariaLabel="Create a campaign">
         <div className="border-b border-[color:var(--portal-border)] px-6 py-5 sm:px-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Create a campaign</p>
-              <h2 className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Choose how you want to start.</h2>
-              <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.</p>
+              <h2 className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">{campaignModalView === 'templates' ? 'Choose a Luxor template.' : 'Choose how you want to start.'}</h2>
+              <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">{campaignModalView === 'templates' ? 'Preview the available starting points, then open one in the editor.' : 'Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.'}</p>
             </div>
             <PortalCloseButton onClick={() => setCampaignModalOpen(false)} aria-label="Close campaign start dialog" />
           </div>
         </div>
-        <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">
+        {campaignModalView === 'start' ? <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">
           <button type="button" onClick={() => openTemplateInBuilder(EMAIL_TEMPLATES[0])} className="group rounded-xl border border-[#caa24c]/45 bg-[#caa24c]/10 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#caa24c]/15">
             <LayoutTemplate size={20} className="text-[#a8792f]" />
             <span className="mt-5 block text-sm font-bold text-[color:var(--portal-text)]">Use a Luxor template</span>
@@ -713,10 +710,24 @@ function MarketingPageContent() {
             <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Describe the audience and purpose.</span>
             <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Generate a draft →</span>
           </button>
-        </div>
+        </div> : <div className="grid max-h-[min(32rem,60vh)] gap-3 overflow-y-auto p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-3">
+          {EMAIL_TEMPLATES.map((template) => (
+            <button key={template.id} type="button" onClick={() => openTemplateInBuilder(template)} className="group overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-left transition hover:-translate-y-0.5 hover:border-[#caa24c]/50">
+              <div className="h-1.5" style={{ backgroundColor: template.previewColor || '#caa24c' }} />
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-sm font-bold text-[color:var(--portal-text)] group-hover:text-[#a8792f]">{decodeHtmlEntities(template.name)}</span>
+                  <span className="text-[8px] font-black uppercase tracking-wider text-[#a8792f]">{template.category}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{template.description}</p>
+                <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Use template →</span>
+              </div>
+            </button>
+          ))}
+        </div>}
         <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] px-6 py-4 sm:px-8">
           <span className="text-[10px] text-[color:var(--portal-muted)]">Need a different starting point?</span>
-          <button type="button" onClick={() => { setCampaignModalOpen(false); router.push('/portal/marketing?tab=builder-automation') }} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] hover:underline">Browse all templates</button>
+          {campaignModalView === 'templates' ? <button type="button" onClick={() => setCampaignModalView('start')} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] hover:underline">Back to start options</button> : <button type="button" onClick={() => setCampaignModalView('templates')} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] hover:underline">Browse all templates</button>}
         </div>
       </PortalModal>
       {!builderCanvasOpen ? (
