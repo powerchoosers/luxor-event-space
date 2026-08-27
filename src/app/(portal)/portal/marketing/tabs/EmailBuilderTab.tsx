@@ -277,8 +277,11 @@ export function EmailBuilderTab({
                   <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Builder</h4>
                   
                   {/* Visual template flyer preview */}
-                  <div className="relative group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 h-52 flex flex-col justify-between p-4 text-center shadow-inner">
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10 z-10" />
+                  <div
+                    className="relative group h-52 overflow-hidden rounded-xl border border-[#caa24c]/35 bg-zinc-950 bg-cover bg-center p-4 text-center shadow-inner"
+                    style={{ backgroundImage: "url('/images/dining-hall/main-hall-wedding-wide.png')" }}
+                  >
+                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/90 via-black/60 to-black/35" />
                     
                     <span className="relative z-20 text-[7px] tracking-widest uppercase font-black text-[#caa24c]">Luxor Las Palmas</span>
                     <div className="relative z-20 space-y-1 my-auto">
