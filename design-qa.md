@@ -1,67 +1,38 @@
-# Campaign Library Design QA
+# Campaign Creator Workbench — Design QA
 
-**Source visual truth**
+- Source: `C:\Users\lewis\.codex\generated_images\01a0412f-7bca-7a41-bd1d-2ef0b2ad493c\exec-15aa410e-57da-4e9d-b92f-aca1e882f3a3.png`
+- Implementation: `C:\Users\lewis\AppData\Local\Temp\luxor-builder-v2-refined.png`
+- Combined comparison: `C:\Users\lewis\AppData\Local\Temp\luxor-builder-v2-final-comparison.png`
+- Viewport: 1488 × 1058 for both source and implementation
+- State: September Open House, desktop, brand theme, Blocks panel, Image + Text selected, Content inspector visible
 
-- `C:/Users/lewis/.codex/generated_images/01a0412f-7bca-7a41-bd1d-2ef0b2ad493c/exec-0d33211e-1aae-44a6-9fc3-1ebfe3fc1863.png`
-- Source pixels: 1487 × 1058.
+## Full-view evidence
 
-**Implementation evidence**
+The source and implementation were placed side by side in one 2976 × 1058 comparison image and inspected together. The implementation matches the selected direction's portal shell, full-height three-panel workbench, subject/preheader row, tabbed block library, dark pasteboard, 600px email canvas, selected-block controls, content/design inspector, desktop/mobile controls, theme controls, autosave state, preview/test/review actions, and readiness status.
 
-- Local route: `http://localhost:3000/portal/marketing?tab=email-campaigns`
-- Final light screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-final2.jpg`
-- Dark-theme screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-dark-loaded.jpg`
-- Mobile screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-mobile.jpg`
-- Side-by-side comparison: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-comparison-final.png`
-- Implementation pixels/CSS viewport: 1440 × 1024 at device scale 1. The source was normalized with an aspect-fill resize to 720 × 512 beside an equally normalized implementation capture; no density mismatch remained in the comparison.
-- State: authenticated owner portal, Email Campaigns, light theme, grid view, All status, first page, no menu or report open.
+## Focused evidence
 
-**Full-view comparison evidence**
+The full-view comparison is sufficient because the primary differences and the selected block inspector are simultaneously visible at native dimensions. Interaction QA separately exercised template loading, theme switching, mobile/desktop switching, add, duplicate, undo, and the rendered preview iframe.
 
-- The implementation preserves the selected visual hierarchy: quiet editorial header, one gold primary action, a three-part performance summary, compact controls, status filters, and a four-column preview-led campaign library.
-- The implementation intentionally retains Luxor's real nested portal navigation and authenticated header rather than replacing the surrounding product shell with mock chrome.
-- Real campaign HTML, names, dates, and performance replace the concept's invented campaign content. This changes thumbnail art and copy but preserves the target proportions and hierarchy.
+## QA history
 
-**Focused-region comparison evidence**
+1. P1 — The builder initially sat below the marketing page header and section tabs, reducing the usable editor area. Fixed by collapsing that chrome while the canvas is open and moving the back action into the workbench toolbar.
+2. P1 — Built-in templates did not replace an existing subject. Fixed by separating campaign name from subject and loading each template's explicit subject, preheader, theme, audience, and blocks.
+3. P2 — The light-theme inspector used hard-coded dark surfaces. Fixed by moving help, field, border, and toggle styling to portal theme tokens.
+4. P2 — The hero was materially taller than the reference, pushing the selected block below the fold. Fixed by tightening hero padding, type scale, line height, and vertical spacing.
+5. P2 — The toolbar lacked a distinct Preview action. Fixed by adding Preview while preserving Send test and Review.
+6. P2 — A transient development error badge appeared during the first capture. Fixed the marketing-event response guard, restarted from a clean generated cache, and recaptured with zero browser console errors.
 
-- Header and summary: serif hierarchy, restrained gold accent, hairline separators, three metrics, and top-right primary action align with the reference.
-- Library controls: search, sort, status counts, page selection, and grid/list toggle remain compact and visually subordinate to campaign previews.
-- Campaign cards: four-column desktop layout, tall email-preview proportions, status/date metadata, three performance measures, and overflow actions align with the reference. The real HTML previews are sandboxed and tracking pixels/scripts/forms are removed.
-- Theme/responsiveness: light and dark states were captured; the 390 × 844 mobile capture stacks the summary and controls without clipping the primary actions.
+## Final assessment
 
-**Findings**
+No unresolved P0, P1, or P2 visual issues remain. Asset content differs from the concept where the implementation intentionally uses Luxor's checked-in venue photography and live portal components.
 
-- No actionable P0, P1, or P2 visual differences remain.
-- [P3] The reference uses idealized, highly varied campaign artwork while production reflects the designs actually saved in Luxor. This is expected product truth rather than a fidelity defect.
-- [P3] The implementation keeps the existing Refresh action and nested Marketing navigation for continuity. Both add modest density compared with the concept but preserve established portal behavior.
+final result: passed
 
-**Primary interactions tested**
+## Clean-room refinement
 
-- Grid/list view switching.
-- Search filtering and clearing.
-- All and Sent status filtering.
-- Previous/next pagination with a visible current page.
-- Campaign action menu open/close.
-- Report launch and report modal rendering.
-- Light and dark theme rendering.
-- Mobile responsive layout.
-- Browser console checked with no errors.
-
-**Comparison history**
-
-- Pass 1 found one P2 artifact: the active filter underline overflowed its horizontal scroller and produced a visible miniature scrollbar beside Automations.
-- Fix: moved the underline inside the tab's bounds and hid the horizontal scrollbar treatment.
-- Post-fix evidence: `luxor-campaign-redesign-final2.jpg` and `luxor-campaign-comparison-final.png` show a clean filter row with no overflow artifact.
-- No further P0/P1/P2 findings were visible in the final comparison.
-
-**Implementation checklist**
-
-- TypeScript: passed.
-- ESLint (full repository, quiet): passed.
-- Browser-rendered interaction and console checks: passed.
-- Final visual comparison: passed.
-
-**Follow-up polish**
-
-- Campaign artwork will naturally improve as more designed templates are used in production.
+- Implementation capture: `C:\Users\lewis\AppData\Local\Temp\luxor-builder-clean-room.png`
+- Viewport: 1280 × 720
+- Result: The user-directed refinement now opens the builder as a fixed, near-full-viewport workspace with a small portal-token gutter, rounded portal surface, and a top-right portal-styled X control. The control was exercised end to end: it returns to Marketing, the editor reopens successfully, and Escape provides the same exit behavior. Browser console errors: 0.
 
 final result: passed

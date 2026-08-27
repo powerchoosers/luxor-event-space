@@ -9,7 +9,7 @@ import { BlockCanvas } from './BlockCanvas'
 import { BlockInspector } from './BlockInspector'
 import { EmailStylePanel } from './EmailStylePanel'
 import { EmailPreview } from './EmailPreview'
-import { ArrowLeft, BadgeCheck, CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2 } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2, X } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -566,11 +566,6 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
-        {onClose ? (
-          <button type="button" onClick={onClose} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[9px] font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
-            <ArrowLeft size={13} /> Back to campaigns
-          </button>
-        ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <div
@@ -596,6 +591,11 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Eye size={13} /> Preview</button>
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review</button>
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label="Close builder" title="Close builder" className="grid size-9 place-items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:border-[#b88732]/50 hover:bg-[#b88732]/10 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b88732]/40">
+            <X size={16} />
+          </button>
+        ) : null}
       </div>
 
       <div className="grid shrink-0 gap-px border-b border-[color:var(--portal-border)] bg-[color:var(--portal-border)] md:grid-cols-2">

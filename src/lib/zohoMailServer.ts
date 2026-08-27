@@ -482,28 +482,66 @@ export async function createLuxorZohoCalendarEvent(input: {
     transparency: 0,
   }
 
-  const eventPath = input.existingEventUid
-    ? `/calendars/${encodeURIComponent(resolvedCalendarUid)}/events/${encodeURIComponent(input.existingEventUid)}`
-    : `/calendars/${encodeURIComponent(resolvedCalendarUid)}/events`
-  const response = await fetch(
-    `${calendarBaseUrl}${eventPath}?eventdata=${encodeURIComponent(JSON.stringify(eventData))}`,
-    {
-      method: input.existingEventUid ? 'PATCH' : 'POST',
+  const calendarPath = `/calendars/${encodeURIComponent(resolvedCalendarUid)}`
+  const collectionPath = `${calendarPath}/events`
+  let response: Response
+
+  if (input.existingEventUid) {
+    const eventPath = `${collectionPath}/${encodeURIComponent(input.existingEventUid)}`
+    const detailsResponse = await fetch(`${calendarBaseUrl}${eventPath}`, {
       headers: {
         Authorization: `Zoho-oauthtoken ${accessToken}`,
         Accept: 'application/json',
       },
       cache: 'no-store',
-    },
-  )
-  const resultText = await response.text()
+    })
+    const detailsText = await detailsResponse.text()
 
-  if (!response.ok) {
-    if (response.status === 401) cachedAccessToken = null
-    throw new Error(`Zoho calendar invite failed with ${response.status}: ${resultText}`)
+    if (detailsResponse.status === 404) {
+      console.warn('[zoho-calendar] saved event was not found; creating a replacement')
+      response = await createZohoCalendarEvent(calendarBaseUrl, collectionPath, accessToken, eventData)
+    } else {
+      if (!detailsResponse.ok) {
+        throwZohoCalendarRequestError('look up the saved event', detailsResponse, detailsText)
+      }
+
+      const details = parseZohoCalendarResponse<ZohoCalendarEventDetailsResponse>(detailsText)
+      const existingEvent = details.events?.[0]
+      if (!existingEvent?.etag) {
+        throw new Error('Zoho Calendar did not return the version required to update this event. Please try again.')
+      }
+
+      const updateData = {
+        ...eventData,
+        uid: existingEvent.uid || input.existingEventUid,
+        etag: String(existingEvent.etag),
+      }
+      response = await fetch(
+        `${calendarBaseUrl}${eventPath}?eventdata=${encodeURIComponent(JSON.stringify(updateData))}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: 'application/json',
+            etag: String(existingEvent.etag),
+          },
+          cache: 'no-store',
+        },
+      )
+
+      if (response.status === 404) {
+        console.warn('[zoho-calendar] saved event disappeared during update; creating a replacement')
+        response = await createZohoCalendarEvent(calendarBaseUrl, collectionPath, accessToken, eventData)
+      }
+    }
+  } else {
+    response = await createZohoCalendarEvent(calendarBaseUrl, collectionPath, accessToken, eventData)
   }
 
-  const result = resultText ? JSON.parse(resultText) as ZohoCalendarEventResponse : {}
+  const resultText = await response.text()
+  if (!response.ok) throwZohoCalendarRequestError('schedule the tour', response, resultText)
+
+  const result = parseZohoCalendarResponse<ZohoCalendarEventResponse>(resultText)
   const event = result.events?.[0]
   if (!event?.uid && !event?.id) throw new Error('Zoho Calendar did not return an event ID.')
 
@@ -512,6 +550,70 @@ export async function createLuxorZohoCalendarEvent(input: {
     eventUid: event.uid || null,
     viewEventUrl: event.viewEventURL || null,
   }
+}
+
+async function createZohoCalendarEvent(
+  calendarBaseUrl: string,
+  collectionPath: string,
+  accessToken: string,
+  eventData: Record<string, unknown>,
+) {
+  return fetch(
+    `${calendarBaseUrl}${collectionPath}?eventdata=${encodeURIComponent(JSON.stringify(eventData))}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    },
+  )
+}
+
+function parseZohoCalendarResponse<T>(resultText: string): T {
+  if (!resultText) return {} as T
+  try {
+    return JSON.parse(resultText) as T
+  } catch {
+    console.error('[zoho-calendar] provider returned a non-JSON success response')
+    throw new Error('Zoho Calendar returned an unreadable response. Please try again.')
+  }
+}
+
+function throwZohoCalendarRequestError(operation: string, response: Response, resultText: string): never {
+  if (response.status === 401) cachedAccessToken = null
+
+  let providerCode: string | undefined
+  if (response.headers.get('content-type')?.includes('application/json')) {
+    try {
+      const payload = JSON.parse(resultText) as { code?: unknown; error?: unknown }
+      const candidate = payload.code || payload.error
+      if (typeof candidate === 'string') providerCode = candidate.slice(0, 80)
+    } catch {
+      // The user-facing error below intentionally excludes malformed provider content.
+    }
+  }
+  console.error('[zoho-calendar] request failed', {
+    operation,
+    status: response.status,
+    providerCode,
+    responseType: response.headers.get('content-type') || 'unknown',
+  })
+
+  if (response.status === 401) {
+    throw new Error('Zoho Calendar authorization expired. Reconnect Zoho in Settings → Integrations and try again.')
+  }
+  if (response.status === 403) {
+    throw new Error('Zoho Calendar denied access to this calendar. Reconnect Zoho in Settings → Integrations and try again.')
+  }
+  if (response.status === 429) {
+    throw new Error('Zoho Calendar is temporarily busy. Please wait a moment and try again.')
+  }
+  if (response.status >= 500) {
+    throw new Error('Zoho Calendar is temporarily unavailable. Please try again shortly.')
+  }
+  throw new Error(`Zoho Calendar could not ${operation} (status ${response.status}). Please try again.`)
 }
 
 /**
@@ -542,8 +644,7 @@ export async function cancelLuxorZohoCalendarEvent(eventUid: string) {
 
   if (detailsResponse.status === 404) return { status: 'already_removed' as const }
   if (!detailsResponse.ok) {
-    if (detailsResponse.status === 401) cachedAccessToken = null
-    throw new Error(`Zoho calendar event lookup failed with ${detailsResponse.status}: ${detailsText}`)
+    throwZohoCalendarRequestError('look up the calendar event', detailsResponse, detailsText)
   }
 
   const details = detailsText ? JSON.parse(detailsText) as ZohoCalendarEventDetailsResponse : {}
@@ -570,8 +671,7 @@ export async function cancelLuxorZohoCalendarEvent(eventUid: string) {
 
   if (response.status === 404) return { status: 'already_removed' as const }
   if (!response.ok) {
-    if (response.status === 401) cachedAccessToken = null
-    throw new Error(`Zoho calendar event cancellation failed with ${response.status}: ${resultText}`)
+    throwZohoCalendarRequestError('cancel the calendar event', response, resultText)
   }
 
   return { status: 'cancelled' as const }
@@ -587,11 +687,10 @@ async function getZohoCalendarUid(accessToken: string, calendarBaseUrl: string, 
   })
   const resultText = await response.text()
   if (!response.ok) {
-    if (response.status === 401) cachedAccessToken = null
-    throw new Error(`Zoho calendar lookup failed with ${response.status}: ${resultText}`)
+    throwZohoCalendarRequestError('find the Luxor calendar', response, resultText)
   }
 
-  const result = resultText ? JSON.parse(resultText) as { calendars?: Array<{ uid?: string; isdefault?: boolean }> } : {}
+  const result = parseZohoCalendarResponse<{ calendars?: Array<{ uid?: string; isdefault?: boolean }> }>(resultText)
   const calendar = result.calendars?.find((item) => item.isdefault) || result.calendars?.[0]
   if (!calendar?.uid) throw new Error('Zoho did not return a writable Calendar ID.')
   cachedCalendarUid = calendar.uid

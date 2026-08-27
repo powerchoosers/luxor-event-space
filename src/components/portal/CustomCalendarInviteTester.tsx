@@ -132,7 +132,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
   const resendReady = config?.configured === true
 
   return (
-    <section className="luxor-glass-card min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 xl:col-span-2">
+    <section data-testid="calendar-invite-tester" className="luxor-glass-card min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 xl:col-span-2">
       <div className="flex min-w-0 flex-col gap-3 border-b border-[color:var(--portal-border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">

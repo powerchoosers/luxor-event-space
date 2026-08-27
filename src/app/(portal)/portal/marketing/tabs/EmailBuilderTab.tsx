@@ -54,6 +54,15 @@ export function EmailBuilderTab({
     return () => onCanvasChange(false)
   }, [onCanvasChange, showCanvas])
 
+  useEffect(() => {
+    if (!showCanvas) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowCanvas(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [showCanvas])
+
   // Elena AI Assistant state
   const [elenaPromptText, setElenaPromptText] = useState('')
   const [generatingElena, setGeneratingElena] = useState(false)
@@ -228,9 +237,9 @@ export function EmailBuilderTab({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.99 }}
         transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-        className="flex h-full min-h-[500px] flex-col overflow-hidden bg-[color:var(--portal-card)]"
+        className="fixed inset-0 z-[120] flex min-h-0 flex-col bg-[color:var(--portal-bg)] p-2 sm:p-3"
       >
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[0_24px_80px_rgba(15,12,8,0.16)] sm:rounded-2xl">
           <EmailBuilderShell
             key={`${builderTemplate?.id || 'blank-builder'}-${builderSession}`}
             initialTemplate={builderTemplate}

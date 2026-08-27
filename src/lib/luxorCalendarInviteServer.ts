@@ -149,10 +149,8 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
   const safeDescription = escapeHtml(validated.description).replace(/\r?\n/g, '<br />')
 
   const receipt = await transporter.sendMail({
-    from: `${LUXOR_ORGANIZER_NAME} <${fromAddress}>`,
-    to: validated.attendeeName
-      ? `${validated.attendeeName} <${validated.attendeeEmail}>`
-      : validated.attendeeEmail,
+    from: { name: LUXOR_ORGANIZER_NAME, address: fromAddress },
+    to: { name: validated.attendeeName, address: validated.attendeeEmail },
     replyTo: LUXOR_ORGANIZER_EMAIL,
     subject: validated.title,
     text: [validated.title, dateLabel, validated.location, validated.description, '', `Reply to ${LUXOR_ORGANIZER_EMAIL} with any questions.`].filter(Boolean).join('\n\n'),

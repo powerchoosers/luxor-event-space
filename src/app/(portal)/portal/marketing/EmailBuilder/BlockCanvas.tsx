@@ -141,7 +141,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
   const align = block.textAlign as React.CSSProperties['textAlign']
 
   return (
-    <div style={{ background: bg, padding: '56px 48px 48px', textAlign: align, position: 'relative' }}>
+    <div style={{ background: bg, padding: '38px 44px 32px', textAlign: align, position: 'relative' }}>
       <EditHint show={selected} />
       {/* Label */}
       <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.38em', textTransform: 'uppercase', color: GOLD, marginBottom: 14 }}>
@@ -152,7 +152,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         value={block.headline}
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
-        style={{ fontFamily: SERIF, fontSize: 38, fontWeight: 600, lineHeight: 1.05, color: CREAM, letterSpacing: '0.02em', marginBottom: 14 }}
+        style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 600, lineHeight: 1.05, color: CREAM, letterSpacing: '0.02em', marginBottom: 12 }}
       />
       {/* Subheadline */}
       <Editable
@@ -160,11 +160,11 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         onChange={(v) => u({ subheadline: v })}
         placeholder="Sub-headline"
         multiline
-        style={{ fontFamily: SANS, fontSize: 15, fontWeight: 400, lineHeight: 1.75, color: MUTED, maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
+        style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.55, color: MUTED, maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
       />
       {/* CTA button */}
       {block.ctaVisible && (
-        <div style={{ marginTop: 28, display: 'flex', justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
+        <div style={{ marginTop: 22, display: 'flex', justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
           <Editable
             value={block.ctaLabel}
             onChange={(v) => u({ ctaLabel: v })}
@@ -187,7 +187,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         </div>
       )}
       {/* Gold shimmer rule below */}
-      <div style={{ marginTop: 24, height: 1, background: 'linear-gradient(90deg,transparent,rgba(202,162,76,0.4),transparent)' }} />
+      <div style={{ marginTop: 18, height: 1, background: 'linear-gradient(90deg,transparent,rgba(202,162,76,0.4),transparent)' }} />
     </div>
   )
 }
