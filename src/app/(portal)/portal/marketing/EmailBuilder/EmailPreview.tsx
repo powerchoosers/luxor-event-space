@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check, Link2 } from 'lucide-react'
-import type { EmailBlock } from '../emailTemplates'
-import { renderEmailToHtml } from './emailRenderer'
+import type { EmailBlock, LuxorEmailTheme } from '../emailTemplates'
+import { renderThemedEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
@@ -13,6 +13,8 @@ interface EmailPreviewProps {
   isOpen: boolean
   blocks: EmailBlock[]
   subject: string
+  preheader?: string
+  theme?: LuxorEmailTheme
   initialAudienceLabel?: string
   initialSelectedEmails?: string[]
   onAudienceLabelChange?: (value: string) => void
@@ -33,7 +35,7 @@ type MarketingList = {
   members: { email: string; full_name: string | null }[]
 }
 
-export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onBlocksChange, onClose }: EmailPreviewProps) {
+export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onBlocksChange, onClose }: EmailPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [selectedEmails, setSelectedEmails] = useState<string[]>(initialSelectedEmails)
   const [typedInput, setTypedInput] = useState('')
@@ -53,7 +55,7 @@ export function EmailPreview({ isOpen, blocks, subject, initialAudienceLabel = '
   const [sendMessage, setSendMessage] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const html = stripTrackingPixels(renderEmailToHtml(subject, blocks))
+  const html = stripTrackingPixels(renderThemedEmailToHtml(subject, blocks, theme, preheader))
   const scheduledFor = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : ''
   const isScheduled = Boolean(scheduledFor)
   const editableLinks = blocks.reduce<EditableEmailLink[]>((links, block) => {

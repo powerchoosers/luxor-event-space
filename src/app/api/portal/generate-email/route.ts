@@ -68,10 +68,13 @@ Use this context to draft a tailored marketing/follow-up email. You can weave th
             content: `You are Elena, the marketing coordinator and email copywriter for Luxor Event Space in San Antonio.
 Your task is to write a highly professional, beautifully copy-crafted marketing email draft based on the user's prompt instruction.
 
-You MUST respond ONLY with a valid JSON object containing exactly three keys:
-1. "subject": A catchy, professional email subject line.
-2. "name": A clean name for this generated template.
-3. "blocks": An array of content blocks (max 5 blocks) representing the layout structure of the email.
+You MUST respond ONLY with a valid Luxor Email Document v2 JSON object containing exactly these keys:
+1. "schemaVersion": Always the number 2.
+2. "subject": A catchy, professional email subject line.
+3. "preheader": A concise inbox preview sentence (40-90 characters).
+4. "name": A clean name for this generated template.
+5. "theme": One of "light", "dark", or "brand". Use brand unless the user's request clearly favors light or dark.
+6. "blocks": An array of content blocks (4-8 blocks) representing the layout structure of the email.
 
 Each block in the "blocks" array MUST match one of the following JSON structures:
 
@@ -134,11 +137,16 @@ Guidelines for generating blocks:
 - Use Client Merge Tags: You are encouraged to include merge tags like {{client_name}}, {{event_type}}, {{event_date}}, or {{tour_time}} inside text and hero blocks where appropriate to make the template dynamic.
 - Tone of Voice: You must write the email copywriting using a ${tonePrompt} tone.
 - Keep the design clean, elegant, and focused. A standard layout begins with a 'hero' block, followed by a 'text' block explaining the details, a 'button' CTA block, and perhaps a 'divider' or 'two_column' section. Do not add a 'footer' block as the system appends it automatically.
+- The editor and renderer use this exact versioned structure. Never invent block type names or omit required block fields.
+- Favor one clear CTA, useful details, short paragraphs, and accessible button labels.
 
 JSON output structure:
 {
+  "schemaVersion": 2,
   "subject": "Catchy Subject",
+  "preheader": "A polished preview of what this email contains.",
   "name": "Template Name",
+  "theme": "brand",
   "blocks": [
     { "type": "hero", "headline": "Celebrate at Luxor", "subheadline": "Your milestone event awaits.", "backgroundImage": "", "overlayOpacity": 0.6, "textAlign": "center", "ctaLabel": "Book Tour", "ctaUrl": "https://luxoratlaspalmas.com/tour", "ctaVisible": true },
     { "type": "text", "content": "We would love to host your next celebration.", "fontSize": 15, "textAlign": "left", "color": "rgba(255, 255, 255, 0.85)" }
@@ -172,11 +180,19 @@ ${leadPrompt}`
 
     try {
       const emailContent = JSON.parse(responseText) as {
+        schemaVersion?: number
         subject: string
+        preheader?: string
         name: string
+        theme?: 'light' | 'dark' | 'brand'
         blocks: Record<string, unknown>[]
       }
-      return NextResponse.json(emailContent)
+      return NextResponse.json({
+        ...emailContent,
+        schemaVersion: 2,
+        preheader: emailContent.preheader || '',
+        theme: emailContent.theme === 'light' || emailContent.theme === 'dark' ? emailContent.theme : 'brand',
+      })
     } catch (parseErr) {
       console.error('Failed to parse AI response as JSON:', responseText, parseErr)
       return NextResponse.json({ error: 'AI response was not valid JSON' }, { status: 500 })

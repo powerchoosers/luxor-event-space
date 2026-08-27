@@ -16,7 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
 import type {
   EmailBlock,
   HeroBlock,
@@ -27,18 +27,20 @@ import type {
   DividerBlock,
   SpacerBlock,
   FooterBlock,
+  BlockType,
+  LuxorEmailTheme,
 } from '../emailTemplates'
 
 // ─── Brand constants (match emailRenderer.ts and the website) ─────────────────
-const GOLD       = '#caa24c'
-const GOLD_DIM   = 'rgba(202,162,76,0.6)'
-const CREAM      = '#f7efe3'
-const MUTED      = 'rgba(215,194,154,0.78)'
-const BG_CARD    = '#0a0807'
-const BG_DARK    = '#080605'
-const BORDER     = 'rgba(202,162,76,0.18)'
-const SERIF      = "'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif"
-const SANS       = "'Manrope', 'Helvetica Neue', Arial, Helvetica, sans-serif"
+const GOLD       = 'var(--email-accent)'
+const GOLD_DIM   = 'var(--email-accent-muted)'
+const CREAM      = 'var(--email-text)'
+const MUTED      = 'var(--email-muted)'
+const BG_CARD    = 'var(--email-surface)'
+const BG_DARK    = 'var(--email-surface-alt)'
+const BORDER     = 'var(--email-border)'
+const SERIF      = 'var(--email-heading-font)'
+const SANS       = 'var(--email-body-font)'
 
 // ─── Inline-editable text primitive ──────────────────────────────────────────
 
@@ -576,9 +578,12 @@ interface BlockCanvasProps {
   onDelete: (id: string) => void
   onReorder: (blocks: EmailBlock[]) => void
   onChange: (block: EmailBlock) => void
+  onAddBlock?: (type: BlockType) => void
+  theme: LuxorEmailTheme
+  previewMode?: 'desktop' | 'mobile'
 }
 
-export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder, onChange }: BlockCanvasProps) {
+export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder, onChange, onAddBlock, theme, previewMode = 'desktop' }: BlockCanvasProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
@@ -598,14 +603,34 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
     else if (direction === 'down' && idx < blocks.length - 1) onReorder(arrayMove(blocks, idx, idx + 1))
   }
 
+  const themeVariables = {
+    '--email-accent': theme.accent,
+    '--email-accent-muted': `${theme.accent}99`,
+    '--email-text': theme.text,
+    '--email-muted': theme.muted,
+    '--email-surface': theme.surface,
+    '--email-surface-alt': theme.surfaceAlt,
+    '--email-border': theme.border,
+    '--email-heading-font': theme.fontHeading,
+    '--email-body-font': theme.fontBody,
+  } as React.CSSProperties
+
+  const handlePaletteDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const type = event.dataTransfer.getData('application/x-luxor-email-block') as BlockType
+    if (type && onAddBlock) onAddBlock(type)
+  }
+
   if (blocks.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 py-24 px-8">
+      <div
+        className="flex-1 flex flex-col items-center justify-center gap-4 py-24 px-8"
+        style={themeVariables}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handlePaletteDrop}
+      >
         <div style={{ width: 64, height: 64, borderRadius: 12, border: '2px dashed rgba(202,162,76,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'rgba(202,162,76,0.3)' }}>
-            <rect x="3" y="3" width="18" height="18" rx="3" />
-            <path d="M12 8v8M8 12h8" />
-          </svg>
+          <Plus size={28} style={{ color: theme.accent }} />
         </div>
         <div className="text-center">
           <p style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: 'rgba(215,194,154,0.4)', marginBottom: 4 }}>Canvas is empty</p>
@@ -616,12 +641,18 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
   }
 
   return (
+    <div
+      className="flex min-h-0 flex-1"
+      style={themeVariables}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={handlePaletteDrop}
+    >
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
         {/* Email at 600px, centred, scrollable */}
         <div className="flex-1 overflow-y-auto portal-scrollbar" style={{ padding: '32px 24px' }}>
           {/* Email chrome header */}
-          <div style={{ maxWidth: 600, margin: '0 auto', marginBottom: 4 }}>
+          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', marginBottom: 4, transition: 'max-width .2s ease' }}>
             <div style={{ background: '#0a0807', border: '1px solid rgba(202,162,76,0.22)', borderBottom: 'none', borderRadius: '4px 4px 0 0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(202,162,76,0.25)' }} />
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(202,162,76,0.15)' }} />
@@ -643,7 +674,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
           </div>
 
           {/* Blocks */}
-          <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 2, transition: 'max-width .2s ease' }}>
             {blocks.map((block, idx) => (
               <SortableBlock
                 key={block.id}
@@ -661,7 +692,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
           </div>
 
           {/* Email chrome footer bar */}
-          <div style={{ maxWidth: 600, margin: '0 auto', marginTop: 4 }}>
+          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', marginTop: 4, transition: 'max-width .2s ease' }}>
             <div style={{ height: 3, background: 'linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24)' }} />
             <div style={{ background: '#0a0807', border: '1px solid rgba(202,162,76,0.22)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '8px 16px', textAlign: 'center' }}>
               <span style={{ fontFamily: SANS, fontSize: 8, fontWeight: 600, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(202,162,76,0.25)' }}>End of email</span>
@@ -670,5 +701,6 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
         </div>
       </SortableContext>
     </DndContext>
+    </div>
   )
 }

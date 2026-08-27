@@ -554,11 +554,12 @@ export default function LeadsPage() {
       <PortalPageHeader
         icon={<Users size={18} />}
         title="Leads & Clients"
+        mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
             {activeTab === 'pipeline' && (
               <>
-                <div className="flex border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase">
+                <div className="hidden border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase md:flex">
                   <button
                     type="button"
                     onClick={() => {

@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { LuxorBooking, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, LuxorNote, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
+import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -18,7 +19,16 @@ function money(value: number) {
 }
 
 function brandedEmail(input: { eyebrow: string; title: string; greeting: string; copy: string; buttonLabel?: string; buttonUrl?: string; detail?: string }) {
-  return `<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media(prefers-color-scheme:dark){.bg{background:#050505!important}.card{background:#0a0807!important;color:#f7efe3!important}.muted{color:#d7c29a!important}}</style></head><body class="bg" style="margin:0;background:#050505;padding:28px 12px;font-family:Arial,sans-serif"><table class="card" role="presentation" style="width:100%;max-width:620px;margin:auto;background:#0a0807;color:#f7efe3;border:1px solid rgba(202,162,76,.28)"><tr><td style="height:4px;background:#caa24c"></td></tr><tr><td style="padding:30px 42px;text-align:center;border-bottom:1px solid rgba(202,162,76,.16)"><div style="font-family:Georgia,serif;color:#caa24c;font-size:28px;letter-spacing:.18em">LUXOR</div><div style="font-size:8px;letter-spacing:.35em;color:#8c754f;margin-top:6px">AT LAS PALMAS EVENTS</div></td></tr><tr><td style="padding:42px"><div style="color:#caa24c;font-size:10px;font-weight:700;letter-spacing:.25em;text-transform:uppercase">${escapeHtml(input.eyebrow)}</div><h1 style="font-family:Georgia,serif;font-size:36px;line-height:1.1;margin:14px 0;color:#f7efe3">${escapeHtml(input.title)}</h1><p class="muted" style="font-size:15px;line-height:1.75;color:#d7c29a">${escapeHtml(input.greeting)}</p><p class="muted" style="font-size:15px;line-height:1.75;color:#d7c29a">${escapeHtml(input.copy)}</p>${input.detail ? `<div style="margin:24px 0;padding:16px;border:1px solid rgba(202,162,76,.2);background:#0f0c09;color:#f1d27a;font-size:13px">${escapeHtml(input.detail)}</div>` : ''}${input.buttonLabel && input.buttonUrl ? `<p style="margin:28px 0 10px"><a href="${escapeHtml(input.buttonUrl)}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:15px 24px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">${escapeHtml(input.buttonLabel)}</a></p>` : ''}<p style="margin-top:26px;color:#8d7d64;font-size:12px;line-height:1.7">Questions or changes? Reply to this email and the Luxor team will help.</p></td></tr></table></body></html>`
+  return renderLuxorSystemEmail({
+    eyebrow: escapeHtml(input.eyebrow),
+    title: escapeHtml(input.title),
+    greeting: escapeHtml(input.greeting),
+    bodyHtml: `<p style="margin:0">${escapeHtml(input.copy)}</p>`,
+    details: input.detail ? [{ label: 'Details', value: escapeHtml(input.detail) }] : undefined,
+    actions: input.buttonLabel && input.buttonUrl ? [{ label: escapeHtml(input.buttonLabel), url: input.buttonUrl }] : undefined,
+    note: 'Questions or changes? Reply to this email and the Luxor team will help.',
+    theme: 'brand',
+  })
 }
 
 export function buildProposalReminderEmail(input: { inquiry: LuxorInquiry; invoice: LuxorInvoice; reviewUrl: string; kind: 'view' | 'payment'; paymentAmount: number }) {

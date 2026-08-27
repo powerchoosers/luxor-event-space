@@ -1,118 +1,195 @@
 'use client'
 
-import React from 'react'
-import type { BlockType } from '../emailTemplates'
-import { LayoutTemplate, Type, Image, MousePointerClick, Columns2, Minus, AlignJustify, FootprintsIcon } from 'lucide-react'
+import React, { useState } from 'react'
+import type { BlockType, EmailTemplate } from '../emailTemplates'
+import {
+  CalendarDays,
+  Columns2,
+  Heading1,
+  Image,
+  Images,
+  LayoutTemplate,
+  Link2,
+  Minus,
+  MousePointerClick,
+  PanelBottom,
+  Search,
+  Share2,
+  Space,
+  Type,
+} from 'lucide-react'
 
-interface PaletteBlock {
+type PaletteTab = 'blocks' | 'sections' | 'templates'
+
+type PaletteItem = {
   type: BlockType
   label: string
-  description: string
-  icon: React.ReactNode
-  color: string
+  icon: React.ComponentType<{ size?: number }>
 }
 
-const PALETTE_BLOCKS: PaletteBlock[] = [
+const GROUPS: Array<{ label: string; items: PaletteItem[] }> = [
   {
-    type: 'hero',
-    label: 'Hero',
-    description: 'Full-width banner with headline',
-    icon: <LayoutTemplate size={18} />,
-    color: '#b8924a',
+    label: 'Basic blocks',
+    items: [
+      { type: 'text', label: 'Heading', icon: Heading1 },
+      { type: 'text', label: 'Paragraph', icon: Type },
+      { type: 'image_text', label: 'Image', icon: Image },
+      { type: 'button', label: 'Button', icon: MousePointerClick },
+      { type: 'divider', label: 'Divider', icon: Minus },
+      { type: 'spacer', label: 'Spacer', icon: Space },
+    ],
   },
   {
-    type: 'text',
-    label: 'Text',
-    description: 'Paragraph or heading block',
-    icon: <Type size={18} />,
-    color: '#4a90d9',
+    label: 'Event & CTA',
+    items: [
+      { type: 'two_column', label: 'Event card', icon: CalendarDays },
+      { type: 'button', label: 'Booking CTA', icon: Link2 },
+      { type: 'hero', label: 'Hero', icon: LayoutTemplate },
+      { type: 'two_column', label: 'Columns', icon: Columns2 },
+    ],
   },
   {
-    type: 'image_text',
-    label: 'Image + Text',
-    description: 'Side-by-side image and copy',
-    icon: <Image size={18} />,
-    color: '#6c63ff',
+    label: 'Media & social',
+    items: [
+      { type: 'image_text', label: 'Gallery', icon: Images },
+      { type: 'footer', label: 'Social', icon: Share2 },
+    ],
   },
   {
-    type: 'button',
-    label: 'Button',
-    description: 'CTA button with custom URL',
-    icon: <MousePointerClick size={18} />,
-    color: '#27ae60',
-  },
-  {
-    type: 'two_column',
-    label: 'Two Columns',
-    description: 'Side-by-side content sections',
-    icon: <Columns2 size={18} />,
-    color: '#e67e22',
-  },
-  {
-    type: 'divider',
-    label: 'Divider',
-    description: 'Horizontal rule separator',
-    icon: <Minus size={18} />,
-    color: '#888888',
-  },
-  {
-    type: 'spacer',
-    label: 'Spacer',
-    description: 'Vertical whitespace',
-    icon: <AlignJustify size={18} />,
-    color: '#555555',
-  },
-  {
-    type: 'footer',
-    label: 'Footer',
-    description: 'Branded footer with links',
-    icon: <FootprintsIcon size={18} />,
-    color: '#c0392b',
+    label: 'Footer & legal',
+    items: [
+      { type: 'footer', label: 'Signature', icon: PanelBottom },
+      { type: 'footer', label: 'Footer', icon: PanelBottom },
+    ],
   },
 ]
 
-interface BlockPaletteProps {
-  onAdd: (type: BlockType) => void
-  isDragging?: boolean
-}
+const SECTIONS: Array<{ label: string; description: string; blocks: BlockType[]; icon: React.ComponentType<{ size?: number }> }> = [
+  { label: 'Tour details', description: 'Hero, visit details, and booking action', blocks: ['hero', 'two_column', 'button'], icon: CalendarDays },
+  { label: 'Venue feature', description: 'Image, story, and link', blocks: ['image_text', 'button'], icon: Image },
+  { label: 'Payment reminder', description: 'Clear balance details and payment action', blocks: ['text', 'divider', 'button'], icon: Link2 },
+  { label: 'Event invitation', description: 'Announcement, details, and RSVP', blocks: ['hero', 'text', 'button'], icon: LayoutTemplate },
+]
 
-export function BlockPalette({ onAdd }: BlockPaletteProps) {
+export function BlockPalette({
+  onAdd,
+  onAddSequence,
+  templates = [],
+  onSelectTemplate,
+}: {
+  onAdd: (type: BlockType) => void
+  onAddSequence?: (types: BlockType[]) => void
+  templates?: EmailTemplate[]
+  onSelectTemplate?: (template: EmailTemplate) => void
+}) {
+  const [activeTab, setActiveTab] = useState<PaletteTab>('blocks')
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-3.5">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Blocks</p>
-        <p className="text-[11px] text-[color:var(--portal-muted)] mt-0.5">Click to add to canvas</p>
-      </div>
-      <div className="flex-1 overflow-y-auto portal-scrollbar px-3.5 py-3.5 space-y-2">
-        {PALETTE_BLOCKS.map((block) => (
+    <div className="flex h-full min-h-0 flex-col bg-[color:var(--portal-card)]">
+      <div className="grid grid-cols-3 border-b border-[color:var(--portal-border)] px-2 pt-2">
+        {(['blocks', 'sections', 'templates'] as const).map((tab) => (
           <button
-            key={block.type}
-            onClick={() => onAdd(block.type)}
-            className="w-full flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-3 text-left transition-all hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:scale-[1.015] active:scale-[0.99] group cursor-pointer"
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`border-b-2 px-1 py-3 text-[10px] font-bold capitalize transition-colors ${activeTab === tab ? 'border-[#b88732] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
           >
-            <div
-              className="flex-shrink-0 rounded-lg p-2 transition-transform group-hover:scale-110"
-              style={{ background: `${block.color}20`, color: block.color }}
-            >
-              {block.icon}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{block.label}</p>
-              <p className="text-[10px] text-[color:var(--portal-muted)] leading-tight mt-0.5 truncate">{block.description}</p>
-            </div>
-            <div className="ml-auto text-[color:var(--portal-muted)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a] transition-colors flex-shrink-0">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </div>
+            {tab}
           </button>
         ))}
       </div>
 
-      {/* Drag hint */}
-      <div className="px-4 pb-3.5 pt-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 mt-1">
-        <p className="text-[9px] text-[color:var(--portal-muted)] text-center uppercase tracking-widest">Drag blocks on canvas to reorder</p>
+      <div className="border-b border-[color:var(--portal-border)] p-3">
+        <label className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2">
+          <Search size={13} className="text-[color:var(--portal-muted)]" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${activeTab}`}
+            className="min-w-0 flex-1 bg-transparent text-[11px] text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+          />
+        </label>
       </div>
+
+      <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+        {activeTab === 'blocks' ? (
+          <div className="space-y-5">
+            {GROUPS.map((group) => {
+              const items = group.items.filter((item) => !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery))
+              if (!items.length) return null
+              return (
+                <section key={group.label}>
+                  <p className="mb-2 text-[8px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{group.label}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {items.map((item, index) => {
+                      const Icon = item.icon
+                      return (
+                        <button
+                          key={`${item.label}-${index}`}
+                          type="button"
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'copy'
+                            event.dataTransfer.setData('application/x-luxor-email-block', item.type)
+                          }}
+                          onClick={() => onAdd(item.type)}
+                          className="group flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-3 text-center transition hover:border-[#b88732]/55 hover:bg-[#b88732]/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b88732]/35"
+                        >
+                          <Icon size={17} />
+                          <span className="text-[10px] font-semibold text-[color:var(--portal-text)]">{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        ) : null}
+
+        {activeTab === 'sections' ? (
+          <div className="space-y-2">
+            {SECTIONS.filter((section) => !normalizedQuery || `${section.label} ${section.description}`.toLowerCase().includes(normalizedQuery)).map((section) => {
+              const Icon = section.icon
+              return (
+                <button
+                  key={section.label}
+                  type="button"
+                  onClick={() => onAddSequence?.(section.blocks)}
+                  className="flex w-full items-start gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-left transition hover:border-[#b88732]/55 hover:bg-[#b88732]/8"
+                >
+                  <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[#a8792f]"><Icon size={16} /></span>
+                  <span>
+                    <span className="block text-[11px] font-bold text-[color:var(--portal-text)]">{section.label}</span>
+                    <span className="mt-1 block text-[9px] leading-4 text-[color:var(--portal-muted)]">{section.description}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+
+        {activeTab === 'templates' ? (
+          <div className="space-y-2">
+            {templates.filter((template) => !normalizedQuery || `${template.name} ${template.description}`.toLowerCase().includes(normalizedQuery)).map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => onSelectTemplate?.(template)}
+                className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-left transition hover:border-[#b88732]/55 hover:bg-[#b88732]/8"
+              >
+                <span className="mb-2 block h-1 w-8" style={{ backgroundColor: template.previewColor }} />
+                <span className="block text-[11px] font-bold text-[color:var(--portal-text)]">{template.name}</span>
+                <span className="mt-1 line-clamp-2 block text-[9px] leading-4 text-[color:var(--portal-muted)]">{template.description}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <p className="border-t border-[color:var(--portal-border)] px-3 py-2.5 text-center text-[8px] uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Drag blocks to add · drag canvas blocks to reorder</p>
     </div>
   )
 }

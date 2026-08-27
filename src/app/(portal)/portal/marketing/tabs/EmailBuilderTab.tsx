@@ -18,6 +18,7 @@ import { type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent } from '../page'
 import { PortalSelect } from '@/components/portal/PortalUI'
+import { cloneLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 
 interface EmailBuilderTabProps {
   initialTemplate: EmailTemplate | null
@@ -127,8 +128,11 @@ export function EmailBuilderTab({
       }
 
       const data = await response.json() as {
+        schemaVersion?: number
         subject: string
+        preheader?: string
         name: string
+        theme?: 'light' | 'dark' | 'brand'
         blocks: Record<string, unknown>[]
       }
 
@@ -167,6 +171,9 @@ export function EmailBuilderTab({
         description: `Elena AI Generated Email Draft`,
         category: `seasonal`,
         previewColor: `#a8792f`,
+        schemaVersion: 2,
+        preheader: data.preheader || '',
+        theme: cloneLuxorEmailTheme(data.theme || 'brand'),
         blocks: mappedBlocks
       }
 

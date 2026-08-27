@@ -13,6 +13,8 @@ import type {
   SpacerBlock,
   FooterBlock,
 } from '../emailTemplates'
+import type { LuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
+import { normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 
 const SITE_BASE_URL = 'https://luxor-event-space.vercel.app'
 
@@ -465,6 +467,50 @@ export function renderEmailToHtml(subject: string, blocks: EmailBlock[]): string
   ].join('\n')
 
   return wrapEmail(rows)
+}
+
+function replaceAllLiteral(value: string, search: string, replacement: string) {
+  return value.split(search).join(replacement)
+}
+
+/**
+ * Theme-aware v2 renderer. The block HTML remains deliberately table-based for
+ * Outlook compatibility; this final token pass keeps old saved blocks working
+ * while allowing the document-level palette to control the whole message.
+ */
+export function renderThemedEmailToHtml(
+  subject: string,
+  blocks: EmailBlock[],
+  themeValue?: LuxorEmailTheme,
+  preheader = '',
+): string {
+  const theme = normalizeLuxorEmailTheme(themeValue)
+  let html = renderEmailToHtml(subject, blocks)
+  const tokenPairs: Array<[string, string]> = [
+    ['#050505', theme.canvas],
+    ['#0a0807', theme.surface],
+    ['#080605', theme.surfaceAlt],
+    ['#120d0a', theme.surfaceAlt],
+    ['#0b0a08', theme.surfaceAlt],
+    ['#f7efe3', theme.text],
+    ['#d7c29a', theme.muted],
+    ['rgba(215,194,154,0.82)', theme.muted],
+    ['rgba(215,194,154,0.78)', theme.muted],
+    ['rgba(215,194,154,0.75)', theme.muted],
+    ['rgba(215,194,154,0.70)', theme.muted],
+    ['#caa24c', theme.accent],
+    ['#f1d27a', theme.accent],
+    ['rgba(202,162,76,0.22)', theme.border],
+    ['rgba(202,162,76,0.18)', theme.border],
+    ['rgba(202,162,76,0.14)', theme.border],
+    ['rgba(202,162,76,0.12)', theme.border],
+  ]
+  for (const [from, to] of tokenPairs) html = replaceAllLiteral(html, from, to)
+  html = replaceAllLiteral(html, "'Cormorant Garamond',Georgia,serif", theme.fontHeading)
+  html = replaceAllLiteral(html, "'Manrope','Helvetica Neue',Arial,sans-serif", theme.fontBody)
+  html = replaceAllLiteral(html, '<body ', `<body data-email-theme="${theme.mode}" `)
+  const hiddenPreview = `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${preheader || subject}</div>`
+  return replaceAllLiteral(html, '<!-- Outer wrapper -->', `${hiddenPreview}\n  <!-- Outer wrapper -->`)
 }
 
 // Re-export brand tokens for use in the builder UI (block previews)

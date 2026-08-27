@@ -2,17 +2,19 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { nanoid } from './nanoid'
-import type { EmailBlock, BlockType, EmailTemplate } from '../emailTemplates'
-import { EMAIL_TEMPLATES } from '../emailTemplates'
+import type { EmailBlock, BlockType, EmailTemplate, LuxorEmailTheme, LuxorEmailThemeMode } from '../emailTemplates'
+import { EMAIL_TEMPLATES, LUXOR_EMAIL_DOCUMENT_VERSION } from '../emailTemplates'
 import { BlockPalette } from './BlockPalette'
 import { BlockCanvas } from './BlockCanvas'
 import { BlockInspector } from './BlockInspector'
+import { EmailStylePanel } from './EmailStylePanel'
 import { EmailPreview } from './EmailPreview'
-import { Eye, Sparkles, RotateCcw, ChevronDown, Save, Trash2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2 } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence, motion } from 'framer-motion'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
+import { cloneLuxorEmailTheme, normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 
 // ─── Default block factories ──────────────────────────────────────────────────
 
@@ -20,11 +22,11 @@ function createBlock(type: BlockType): EmailBlock {
   const id = nanoid()
   switch (type) {
     case 'hero':
-      return { id, type, headline: 'Your Headline Here', subheadline: 'A compelling sub-headline that draws your reader in.', backgroundImage: '', overlayOpacity: 0.55, textAlign: 'center', ctaLabel: 'Learn More', ctaUrl: 'https://luxoratlaspalmas.com', ctaVisible: true }
+      return { id, type, headline: 'An Unforgettable Event at Luxor', subheadline: 'Add a short, inviting message that gives readers a reason to keep exploring.', backgroundImage: '/images/dining-hall/main-hall-wedding-wide.png', overlayOpacity: 0.58, textAlign: 'center', ctaLabel: 'Explore Luxor', ctaUrl: 'https://www.luxoratlaspalmas.com/spaces', ctaVisible: true }
     case 'text':
       return { id, type, content: 'Write your message here. You can edit this text directly on the canvas.', fontSize: 15, textAlign: 'left', color: 'rgba(215,194,154,0.78)' }
     case 'image_text':
-      return { id, type, imageUrl: '', imageAlt: 'Luxor Event Space', imagePosition: 'left', headline: 'Your Section Headline', body: 'Supporting copy that describes this section. Keep it concise and compelling.', ctaLabel: 'Find Out More', ctaUrl: 'https://luxoratlaspalmas.com' }
+      return { id, type, imageUrl: '/images/luxor-lounge/luxor-lounge-wedding.png', imageAlt: 'Luxor Event Space', imagePosition: 'left', headline: 'Designed for unforgettable moments', body: 'Supporting copy that describes this section. Keep it concise, useful, and compelling.', ctaLabel: 'Explore Our Spaces', ctaUrl: 'https://www.luxoratlaspalmas.com/spaces' }
     case 'button':
       return { id, type, label: 'Call to Action', url: 'https://luxoratlaspalmas.com', align: 'center', bgColor: '#b8924a', textColor: '#ffffff' }
     case 'two_column':
@@ -205,6 +207,8 @@ function TemplatePicker({
 function SaveTemplateModal({
   isOpen,
   subject,
+  preheader,
+  theme,
   blocks,
   audienceLabel,
   recipientEmails,
@@ -213,6 +217,8 @@ function SaveTemplateModal({
 }: {
   isOpen: boolean
   subject: string
+  preheader: string
+  theme: LuxorEmailTheme
   blocks: EmailBlock[]
   audienceLabel: string
   recipientEmails: string[]
@@ -238,7 +244,13 @@ function SaveTemplateModal({
           category: 'custom',
           blocks,
           previewColor: '#caa24c',
-          metadata: { audienceLabel, recipientEmails },
+          metadata: {
+            audienceLabel,
+            recipientEmails,
+            schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+            preheader,
+            theme,
+          },
         }),
       })
       const payload = await response.json()
@@ -304,12 +316,18 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     return {
       blocks: initialBlocks,
       subject: initialTemplate?.name || '',
+      preheader: initialTemplate?.preheader || '',
+      theme: normalizeLuxorEmailTheme(initialTemplate?.theme),
       history: [initialBlocks],
     }
   })
   const [blocks, setBlocks] = useState<EmailBlock[]>(initialBuilderState.blocks)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [subject, setSubject] = useState(initialBuilderState.subject)
+  const [preheader, setPreheader] = useState(initialBuilderState.preheader)
+  const [theme, setTheme] = useState<LuxorEmailTheme>(initialBuilderState.theme)
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [inspectorTab, setInspectorTab] = useState<'content' | 'design'>('content')
   const [audienceLabel, setAudienceLabel] = useState('Manual list')
   const [recipientEmails, setRecipientEmails] = useState<string[]>([])
   const [showPreview, setShowPreview] = useState(false)
@@ -335,6 +353,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
             const cloned = cloneTemplateBlocks(sourceBlocks)
             setBlocks(cloned)
             setSubject(activeDraft.subject || '')
+            setPreheader(activeDraft.preheader || '')
+            setTheme(normalizeLuxorEmailTheme(activeDraft.theme))
             setAudienceLabel(activeDraft.audienceLabel || 'Manual list')
             setRecipientEmails(Array.isArray(activeDraft.recipientEmails) ? activeDraft.recipientEmails : [])
             setHistory([cloned])
@@ -357,8 +377,16 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
 
   useEffect(() => {
     if (!draftHydrated) return
-    localStorage.setItem('luxor_email_builder_working_draft', JSON.stringify({ subject, blocks, audienceLabel, recipientEmails }))
-  }, [audienceLabel, blocks, draftHydrated, recipientEmails, subject])
+    localStorage.setItem('luxor_email_builder_working_draft', JSON.stringify({
+      schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+      subject,
+      preheader,
+      theme,
+      blocks,
+      audienceLabel,
+      recipientEmails,
+    }))
+  }, [audienceLabel, blocks, draftHydrated, preheader, recipientEmails, subject, theme])
 
   // Brand Asset Picker States & Actions
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -394,6 +422,9 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         subject: tpl.subject,
         blocks: tpl.blocks,
         updatedAt: tpl.updated_at,
+        schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+        preheader: typeof tpl.metadata?.preheader === 'string' ? tpl.metadata.preheader : '',
+        theme: normalizeLuxorEmailTheme(tpl.metadata?.theme),
         audienceLabel: typeof tpl.metadata?.audienceLabel === 'string' ? tpl.metadata.audienceLabel : 'Manual list',
         recipientEmails: Array.isArray(tpl.metadata?.recipientEmails)
           ? tpl.metadata.recipientEmails.filter((email): email is string => typeof email === 'string')
@@ -429,6 +460,15 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     }
   }
 
+  function redo() {
+    if (historyIdx < history.length - 1) {
+      const next = history[historyIdx + 1]
+      setHistoryIdx(historyIdx + 1)
+      setBlocks(next)
+      setSelectedId(null)
+    }
+  }
+
   // ─── Block operations ───────────────────────────────────────────────────────
   const handleAddBlock = useCallback((type: BlockType) => {
     const block = createBlock(type)
@@ -436,6 +476,14 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     setBlocks(newBlocks)
     pushHistory(newBlocks)
     setSelectedId(block.id)
+  }, [blocks, history, historyIdx])
+
+  const handleAddSequence = useCallback((types: BlockType[]) => {
+    const additions = types.map(createBlock)
+    const newBlocks = [...blocks, ...additions]
+    setBlocks(newBlocks)
+    pushHistory(newBlocks)
+    setSelectedId(additions[0]?.id || null)
   }, [blocks, history, historyIdx])
 
   const handleDelete = useCallback((id: string) => {
@@ -462,6 +510,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     pushHistory(withNewIds)
     setSelectedId(null)
     if (!subject) setSubject(tpl.subject || tpl.name)
+    setPreheader(tpl.preheader || '')
+    setTheme(normalizeLuxorEmailTheme(tpl.theme))
     setAudienceLabel(tpl.audienceLabel || 'Manual list')
     setRecipientEmails(tpl.recipientEmails || [])
     if (tpl.savedId) {
@@ -483,129 +533,97 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   const selectedBlock = blocks.find((b) => b.id === selectedId) ?? null
 
   const canUndo = historyIdx > 0
+  const canRedo = historyIdx < history.length - 1
 
   return (
-    <div className="flex flex-col h-full gap-0 p-3">
-      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 mb-3 shadow-xs">
-        {/* Subject line */}
-        <div className="flex-1 relative">
-          <input
-            className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors font-medium"
-            placeholder="Email subject line..."
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <input
+              value={subject || 'Untitled email'}
+              onChange={(event) => setSubject(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent font-serif text-lg font-semibold text-[color:var(--portal-text)] outline-none"
+              aria-label="Email name"
+            />
+            <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Draft</span>
+            <span className="hidden items-center gap-1 text-[9px] text-[color:var(--portal-muted)] sm:flex"><CheckCircle2 size={12} className="text-[#a8792f]" /> Autosaved</span>
+          </div>
         </div>
-
-        {/* Template picker trigger */}
-        <button
-          onClick={() => setShowTemplates(true)}
-          className="flex items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[#caa24c]/10 hover:text-[#a8792f] transition-all flex-shrink-0 cursor-pointer"
-        >
-          <Sparkles size={13} />
-          Templates
-          <ChevronDown size={11} />
-        </button>
-
-        <button
-          onClick={() => setShowSaveTemplate(true)}
-          disabled={blocks.length === 0}
-          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:bg-[#caa24c]/10 hover:text-[#a8792f] disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-        >
-          <Save size={13} />
-          Save Template
-        </button>
-
-        {/* Undo */}
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          title="Undo"
-          className="p-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:border-[#caa24c]/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0 cursor-pointer"
-        >
-          <RotateCcw size={15} />
-        </button>
-
-        {/* Block count */}
-        <div className="text-[10px] text-[color:var(--portal-muted)] font-mono flex-shrink-0 hidden md:block">
-          {blocks.length} block{blocks.length !== 1 ? 's' : ''}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={undo} disabled={!canUndo} title="Undo" className="rounded-md p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-25"><RotateCcw size={15} /></button>
+          <button type="button" onClick={redo} disabled={!canRedo} title="Redo" className="rounded-md p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-25"><Redo2 size={15} /></button>
         </div>
-
-        {/* Preview + Send */}
-        <button
-          onClick={() => setShowPreview(true)}
-          disabled={blocks.length === 0}
-          className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-md shadow-[#caa24c]/20 hover:bg-[#dfbd68] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 flex-shrink-0 cursor-pointer"
-        >
-          <Eye size={14} />
-          Preview & Send
-        </button>
+        <button type="button" onClick={() => setShowTemplates(true)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Templates</button>
+        <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Save size={13} /> Save</button>
+        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
+        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><Eye size={13} /> Review</button>
       </div>
 
-      {/* ── Three-panel workspace ──────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 flex gap-3.5 overflow-hidden">
-        {/* Left: Palette */}
-        <motion.div
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.22, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="w-60 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs"
-        >
-          <BlockPalette onAdd={handleAddBlock} />
-        </motion.div>
+      <div className="grid shrink-0 gap-px border-b border-[color:var(--portal-border)] bg-[color:var(--portal-border)] md:grid-cols-2">
+        <label className="flex items-center gap-2 bg-[color:var(--portal-card)] px-4 py-2.5">
+          <span className="text-[9px] font-bold text-[color:var(--portal-muted)]">Subject</span>
+          <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Write a subject line" className="min-w-0 flex-1 bg-transparent text-[11px] text-[color:var(--portal-text)] outline-none" />
+        </label>
+        <label className="flex items-center gap-2 bg-[color:var(--portal-card)] px-4 py-2.5">
+          <span className="text-[9px] font-bold text-[color:var(--portal-muted)]">Preview text</span>
+          <input value={preheader} onChange={(event) => setPreheader(event.target.value)} placeholder="Add the inbox preview sentence" className="min-w-0 flex-1 bg-transparent text-[11px] text-[color:var(--portal-text)] outline-none" />
+        </label>
+      </div>
 
-        {/* Center: Canvas */}
-        <motion.div
-          initial={{ opacity: 0, y: 8, scale: 0.995 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
-          className="flex-1 min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden flex flex-col shadow-xs"
-        >
-          <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Canvas · 600px email width</p>
-            {blocks.length > 0 && (
-              <button onClick={() => { setBlocks([]); pushHistory([]); setSelectedId(null) }} className="text-[9px] text-[color:var(--portal-muted)] hover:text-rose-500 uppercase tracking-widest font-bold transition-colors cursor-pointer">
-                Clear all
-              </button>
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[238px_minmax(0,1fr)_294px]">
+        <motion.aside initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="hidden min-h-0 border-r border-[color:var(--portal-border)] xl:block">
+          <BlockPalette onAdd={handleAddBlock} onAddSequence={handleAddSequence} templates={EMAIL_TEMPLATES} onSelectTemplate={(template) => handleLoadTemplate({ ...template, source: 'built-in' })} />
+        </motion.aside>
+
+        <motion.main initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#2c2b2a]">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <BlockCanvas
+              blocks={blocks}
+              selectedId={selectedId}
+              onSelect={(id) => { setSelectedId(id); setInspectorTab('content') }}
+              onDelete={handleDelete}
+              onReorder={handleReorder}
+              onChange={handleBlockChange}
+              onAddBlock={handleAddBlock}
+              theme={theme}
+              previewMode={previewMode}
+            />
+          </div>
+          <div className="flex shrink-0 items-center justify-between border-t border-black/15 bg-[color:var(--portal-card)] px-3 py-2">
+            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-0.5">
+              <button type="button" onClick={() => setPreviewMode('desktop')} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[9px] font-bold ${previewMode === 'desktop' ? 'bg-[color:var(--portal-soft)] text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}><Monitor size={13} /> Desktop</button>
+              <button type="button" onClick={() => setPreviewMode('mobile')} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[9px] font-bold ${previewMode === 'mobile' ? 'bg-[color:var(--portal-soft)] text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}><Smartphone size={13} /> Mobile</button>
+            </div>
+            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-0.5">
+              {(['light', 'dark', 'brand'] as LuxorEmailThemeMode[]).map((mode) => (
+                <button key={mode} type="button" onClick={() => setTheme(cloneLuxorEmailTheme(mode))} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[9px] font-bold capitalize ${theme.mode === mode ? 'bg-[color:var(--portal-soft)] text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                  {mode === 'light' ? <Sun size={12} /> : mode === 'dark' ? <Moon size={12} /> : null}{mode}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-700"><CheckCircle2 size={14} /> {blocks.length ? '3 checks passed' : 'Add content to check'}</button>
+          </div>
+        </motion.main>
+
+        <motion.aside initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="hidden min-h-0 overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] xl:flex xl:flex-col">
+          <div className="grid shrink-0 grid-cols-2 border-b border-[color:var(--portal-border)] px-2 pt-2">
+            {(['content', 'design'] as const).map((tab) => (
+              <button key={tab} type="button" onClick={() => setInspectorTab(tab)} className={`border-b-2 px-3 py-3 text-[10px] font-bold capitalize ${inspectorTab === tab ? 'border-[#b88732] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)]'}`}>{tab}</button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {inspectorTab === 'design' ? <EmailStylePanel theme={theme} onChange={setTheme} /> : selectedBlock ? (
+              <BlockInspector block={selectedBlock} onChange={handleBlockChange} onBrowseImage={handleBrowseImage} />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-7 text-center">
+                <Eye size={20} className="text-[color:var(--portal-muted)]" />
+                <p className="text-[11px] font-semibold text-[color:var(--portal-text)]">Select a block to edit</p>
+                <p className="text-[9px] leading-4 text-[color:var(--portal-muted)]">Content controls appear here. Global colors and typography live under Design.</p>
+              </div>
             )}
           </div>
-          <BlockCanvas
-            blocks={blocks}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onDelete={handleDelete}
-            onReorder={handleReorder}
-            onChange={handleBlockChange}
-          />
-        </motion.div>
-
-        {/* Right: Inspector */}
-        <motion.div
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.22, delay: 0.08, ease: [0.23, 1, 0.32, 1] }}
-          className="w-80 flex-shrink-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden shadow-xs"
-        >
-          {selectedBlock ? (
-            <BlockInspector
-              block={selectedBlock}
-              onChange={(updated) => {
-                handleBlockChange(updated)
-              }}
-              onBrowseImage={handleBrowseImage}
-            />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
-              <div className="w-10 h-10 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[color:var(--portal-muted)]">
-                  <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-              </div>
-              <p className="text-xs text-[color:var(--portal-muted)] font-medium">Select a block<br />to edit its content</p>
-            </div>
-          )}
-        </motion.div>
+        </motion.aside>
       </div>
 
       {/* Modals */}
@@ -620,6 +638,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
       <SaveTemplateModal
         isOpen={showSaveTemplate}
         subject={subject || 'Email from Luxor'}
+        preheader={preheader}
+        theme={theme}
         blocks={blocks}
         audienceLabel={audienceLabel}
         recipientEmails={recipientEmails}
@@ -630,6 +650,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         isOpen={showPreview}
         blocks={blocks}
         subject={subject || 'Email from Luxor'}
+        preheader={preheader}
+        theme={theme}
         initialAudienceLabel={audienceLabel}
         initialSelectedEmails={recipientEmails}
         onAudienceLabelChange={setAudienceLabel}

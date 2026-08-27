@@ -104,7 +104,7 @@ const PortalElenaChat = dynamic(
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
-  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Calls & Voicemail' },
+  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone' },
   { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
@@ -914,7 +914,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                   <span>Settings</span>
                 </Link>
                 <button type="button" onClick={() => { setMobileMoreOpen(false); setElenaOpen(true) }} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
-                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#caa24c]/15 text-[10px] font-black text-[#caa24c]">E</span>
+                  <span className="relative inline-flex h-[22px] w-[22px] overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+                    <Image src="/luxor-concierge.png" alt="Elena AI Assistant" fill sizes="22px" className="object-cover" />
+                  </span>
                   <span>Elena</span>
                 </button>
               </div>

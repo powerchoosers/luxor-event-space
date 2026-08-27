@@ -428,6 +428,7 @@ export default function LeadDetailPage({
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showLeadTabOverflow, setShowLeadTabOverflow] = useState(false)
   const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
   const [showEventPicker, setShowEventPicker] = useState(false)
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false)
@@ -3403,6 +3404,8 @@ export default function LeadDetailPage({
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
+  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'activity', 'tasks', 'messages']
+  const isPrimaryLeadTab = (tabId: LeadDetailTab) => primaryLeadTabIds.includes(tabId)
   const linkedVendorRefs = (activeEventMetadata.vendors as Array<{ id: string; notes?: string }> | undefined) || []
   const linkedVendorIds = new Set(linkedVendorRefs.map((vendor) => vendor.id))
   const linkedVendors = linkedVendorRefs.map((vendorRef) => ({
@@ -3806,6 +3809,22 @@ export default function LeadDetailPage({
           </div>
         </div>
 
+        <section aria-label="Lead essentials" className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
+          {[
+            { label: 'Current stage', value: (selectedStageOverride || activeStage).replaceAll('_', ' ') },
+            { label: 'Event', value: displayEventType },
+            { label: 'Event date', value: displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD' },
+            { label: 'Tour', value: lead.preferred_tour_date ? `${formatDisplayDate(lead.preferred_tour_date)}${lead.preferred_tour_time ? ` · ${formatTimeString(lead.preferred_tour_time)}` : ''}` : 'Not scheduled' },
+            { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
+            { label: 'Budget', value: lead.budget || 'Not captured' },
+          ].map((item) => (
+            <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-4 py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{item.label}</p>
+              <p className="mt-1 truncate text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
+            </div>
+          ))}
+        </section>
+
         <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
           <LeadLifecycleRail
             lead={lifecycleLead || lead}
@@ -3840,6 +3859,7 @@ export default function LeadDetailPage({
             />
             {tabItems.map((item) => {
               const isActive = activeLeadTab === item.id
+              const isPrimaryTab = isPrimaryLeadTab(item.id)
               return (
                 <button
                   key={item.id}
@@ -3849,12 +3869,15 @@ export default function LeadDetailPage({
                   type="button"
                   onClick={() => {
                     setActiveLeadTab(item.id)
+                    if (!isPrimaryTab) setShowLeadTabOverflow(true)
                     if (item.id === 'messages') setActiveFeedTab('comms')
                     if (item.id === 'notes') setActiveFeedTab('notes')
                     if (item.id === 'activity') setActiveFeedTab('all')
                     if (item.id === 'tasks') setShowTaskTools(true)
                   }}
-                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+                  className={`relative shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+                    !isPrimaryTab && !showLeadTabOverflow && isPrimaryLeadTab(activeLeadTab) ? 'hidden sm:inline-flex' : 'inline-flex'
+                  } ${
                     isActive
                       ? 'text-[#a8792f]'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
@@ -3869,6 +3892,15 @@ export default function LeadDetailPage({
                 </button>
               )
             })}
+            <button
+              type="button"
+              onClick={() => setShowLeadTabOverflow((current) => !current)}
+              className="inline-flex items-center gap-1 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] sm:hidden"
+              aria-expanded={showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab)}
+            >
+              {showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab) ? 'Less' : 'More'}
+              <ChevronDown size={12} className={showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab) ? 'rotate-180 transition-transform' : 'transition-transform'} />
+            </button>
           </div>
         </div>
       </div>
@@ -4534,6 +4566,7 @@ export default function LeadDetailPage({
                           ) : (
                             emailMessages.map((email) => {
                               const isOutgoing = email.direction === 'outgoing'
+                              const preview = cleanEmailPreview(email.summary)
                               return (
                                 <Link href={emailReaderUrl(email)} key={email.id} className="block space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                                   <div className="flex justify-between items-start gap-2">
@@ -4552,8 +4585,8 @@ export default function LeadDetailPage({
                                   <p className="truncate text-[9px] text-[color:var(--portal-muted)]">
                                     {isOutgoing ? `To: ${lead.full_name}` : `From: ${lead.full_name}`}
                                   </p>
-                                  {email.summary && (
-                                    <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{decodeHtmlEntities(email.summary)}</p>
+                                  {preview && (
+                                    <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{preview}</p>
                                   )}
                                   <span className="inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
                                 </Link>
@@ -9032,6 +9065,19 @@ function compactActivityText(value: string | null | undefined, maxLength = 520) 
   if (trimmed.length <= maxLength) return trimmed
 
   return `${trimmed.slice(0, maxLength).trimEnd()}...`
+}
+
+function cleanEmailPreview(value: string | null | undefined) {
+  if (!value) return ''
+
+  const decoded = decodeHtmlEntities(value)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const stylesheetStart = decoded.search(/(?:^|\s)(:root|@media|body\s*,\s*table|table\s*,\s*td)\b/i)
+  const preview = compactActivityText(stylesheetStart > 0 ? decoded.slice(0, stylesheetStart) : decoded, 180)
+  return /^\d{1,3}$/.test(preview) ? '' : preview
 }
 
 function formatSourceLabel(lead: LuxorInquiry) {

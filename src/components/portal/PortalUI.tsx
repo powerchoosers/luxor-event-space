@@ -26,11 +26,13 @@ export function PortalPageHeader({
   title,
   description,
   actions,
+  mobileActionsInline = false,
 }: {
   icon?: React.ReactNode
   title: string
   description?: string
   actions?: React.ReactNode
+  mobileActionsInline?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -46,8 +48,8 @@ export function PortalPageHeader({
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div className={description ? 'space-y-1.5' : ''}>
+    <div className={`flex shrink-0 gap-3 ${mobileActionsInline ? 'flex-row items-center justify-between' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
+      <div className={`${description ? 'space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0' : ''}`}>
         <div className="flex items-center gap-3">
           {canGoBack ? (
             <button
@@ -61,11 +63,11 @@ export function PortalPageHeader({
             </button>
           ) : null}
           {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
-          <h1 className="font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-3xl">{title}</h1>
+          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${mobileActionsInline ? 'truncate text-xl sm:text-3xl' : 'text-2xl sm:text-3xl'}`}>{title}</h1>
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+      {actions ? <div className={`flex flex-wrap items-center gap-3 ${mobileActionsInline ? 'shrink-0' : ''}`}>{actions}</div> : null}
     </div>
   )
 }

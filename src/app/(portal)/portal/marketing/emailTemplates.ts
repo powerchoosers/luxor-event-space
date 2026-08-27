@@ -1,4 +1,12 @@
 // Email block types and pre-built template definitions for the Luxor email builder.
+// The document envelope is versioned so Elena, saved templates, and automated
+// email renderers can share one stable contract as the editor evolves.
+
+import type { LuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
+import { cloneLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
+export type { LuxorEmailTheme, LuxorEmailThemeMode } from '@/lib/luxorEmailDesignSystem'
+
+export const LUXOR_EMAIL_DOCUMENT_VERSION = 2 as const
 
 export type BlockType =
   | 'hero'
@@ -108,6 +116,17 @@ export interface EmailTemplate {
   category: 'promo' | 'event' | 'nurture' | 'transactional' | 'seasonal' | 'custom'
   previewColor: string
   blocks: EmailBlock[]
+  schemaVersion?: typeof LUXOR_EMAIL_DOCUMENT_VERSION
+  preheader?: string
+  theme?: LuxorEmailTheme
+}
+
+export interface LuxorEmailDocument {
+  schemaVersion: typeof LUXOR_EMAIL_DOCUMENT_VERSION
+  subject: string
+  preheader: string
+  theme: LuxorEmailTheme
+  blocks: EmailBlock[]
 }
 
 // Default footer used across most templates
@@ -126,6 +145,83 @@ const defaultFooter: FooterBlock = {
 }
 
 export const EMAIL_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'open_house_editorial',
+    name: 'September Open House',
+    description: 'Editorial invitation with event details, venue story, and a focused RSVP.',
+    category: 'event',
+    previewColor: '#b88732',
+    schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+    preheader: 'Explore our space, meet the team, and enjoy an evening at Luxor.',
+    theme: cloneLuxorEmailTheme('brand'),
+    blocks: [
+      {
+        id: 'open-house-hero',
+        type: 'hero',
+        headline: 'An Evening at Luxor',
+        subheadline: 'Join us for an exclusive open house to explore our spaces, meet our team, and enjoy light bites and bubbly.',
+        backgroundImage: '/images/dining-hall/main-hall-wedding-wide.png',
+        overlayOpacity: 0.62,
+        textAlign: 'center',
+        ctaLabel: 'RSVP Your Spot',
+        ctaUrl: 'https://www.luxoratlaspalmas.com/tour',
+        ctaVisible: true,
+      },
+      {
+        id: 'open-house-details',
+        type: 'two_column',
+        leftHeadline: 'Saturday · September 20',
+        leftBody: '5:00–8:00 PM at Luxor Event Space, Las Palmas.',
+        rightHeadline: 'What to expect',
+        rightBody: 'Guided venue tours, planning introductions, light bites, and exclusive open-house offers.',
+      },
+      {
+        id: 'open-house-feature',
+        type: 'image_text',
+        imageUrl: '/images/luxor-lounge/luxor-lounge-wedding.png',
+        imageAlt: 'Elegant event setup at Luxor Event Space',
+        imagePosition: 'left',
+        headline: 'Designed for unforgettable moments',
+        body: 'From intimate gatherings to grand celebrations, our versatile spaces are designed to bring your vision to life.',
+        ctaLabel: 'Explore Our Spaces',
+        ctaUrl: 'https://www.luxoratlaspalmas.com/spaces',
+      },
+      { ...defaultFooter, id: 'open-house-footer' },
+    ],
+  },
+  {
+    id: 'tour_follow_up_editorial',
+    name: 'Tour Follow-up',
+    description: 'Warm post-tour recap with next steps and a proposal action.',
+    category: 'nurture',
+    previewColor: '#d8c5a3',
+    schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+    preheader: 'A quick recap and thoughtful next steps for your event.',
+    theme: cloneLuxorEmailTheme('light'),
+    blocks: [
+      {
+        id: 'tour-follow-hero',
+        type: 'hero',
+        headline: 'Thank You for Visiting Luxor',
+        subheadline: 'It was a pleasure learning more about your celebration. We would be honored to help bring it to life.',
+        backgroundImage: '/images/dining-hall/main-hall-table-toast-candid.png',
+        overlayOpacity: 0.58,
+        textAlign: 'center',
+        ctaLabel: 'View Your Proposal',
+        ctaUrl: 'https://www.luxoratlaspalmas.com',
+        ctaVisible: true,
+      },
+      {
+        id: 'tour-follow-next',
+        type: 'two_column',
+        leftHeadline: 'Review your proposal',
+        leftBody: 'We prepared a custom package based on the event details we discussed.',
+        rightHeadline: 'Let’s connect',
+        rightBody: 'Reply with questions or adjustments and our planning team will help.',
+      },
+      { ...defaultFooter, id: 'tour-follow-footer' },
+    ],
+  },
   // ─── WELCOME ────────────────────────────────────────────────────────────────
   {
     id: 'welcome',

@@ -340,7 +340,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Settings Forms */}
-      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
+      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-8">
         <form onSubmit={handleSave} className="w-full space-y-6">
           <PortalTabTransition activeKey={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
@@ -705,10 +705,10 @@ export default function SettingsPage() {
 
           {/* INTEGRATIONS */}
           {activeTab === 'integrations' && (
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-            <div className="luxor-glass-card space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
+            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-2">
+            <div className="luxor-glass-card min-w-0 space-y-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0">
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Real-Time Zoho Email Notifications</h3>
                   <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
                     Zoho sends Luxor one signed event when an email arrives. This replaces continuous Zoho inbox polling and protects the mailbox API allowance.
@@ -755,12 +755,12 @@ export default function SettingsPage() {
                   { name: 'Stripe Payment Processor', status: 'Not connected', desc: 'Online card and ACH collection has not been implemented.' },
                   { name: 'QuickBooks Bookkeeping Link', status: 'Not connected', desc: 'Bookkeeping synchronization has not been implemented.' }
                 ].map((api, idx) => (
-                  <div key={idx} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 last:border-0 last:pb-0">
-                    <div>
+                  <div key={idx} className="flex min-w-0 flex-col items-start gap-3 border-b border-[color:var(--portal-border)] pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
                       <p className="text-xs font-bold text-[color:var(--portal-text)]">{api.name}</p>
                       <p className="mt-1 max-w-sm text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{api.desc}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
                       {'actionHref' in api && api.actionHref ? (
                         <a
                           href={api.actionHref}

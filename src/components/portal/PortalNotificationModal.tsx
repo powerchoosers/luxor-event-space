@@ -186,7 +186,7 @@ export function PortalNotificationModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs sm:hidden"
+            className="portal-modal-layer fixed inset-0 z-40 bg-black/50 backdrop-blur-xs sm:hidden"
             onClick={onClose}
           />
 
@@ -197,7 +197,10 @@ export function PortalNotificationModal({
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 12, scale: 0.96 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed right-4 top-20 z-[90] flex max-h-[85vh] w-[min(28rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Notifications"
+            className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[90] flex max-h-none w-auto flex-col overflow-hidden overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:max-h-[85vh] sm:w-[min(28rem,calc(100vw-2rem))]"
           >
 
             {/* Modal Header */}
@@ -389,7 +392,7 @@ export function PortalNotificationModal({
             </div>
 
             {/* Notifications Body List */}
-            <div className="portal-scrollbar flex-1 overflow-y-auto divide-y divide-[color:var(--portal-border)]/40 p-1.5 space-y-1">
+            <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-[color:var(--portal-border)]/40 p-1.5 space-y-1">
               {filteredItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center">
                   <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 text-[color:var(--portal-muted)]">
