@@ -379,8 +379,9 @@ function MarketingPageContent() {
           ? `/api/marketing/events?since=${encodeURIComponent(since)}&limit=25`
           : '/api/marketing/events?limit=25'
         const response = await fetch(url, { cache: 'no-store' })
-        const payload = await response.json()
-        if (!response.ok) throw new Error(payload.error || 'Unable to load marketing events.')
+        const isJson = response.headers.get('content-type')?.includes('application/json')
+        const payload = isJson ? await response.json() : { events: [] }
+        if (!response.ok) throw new Error(payload.error || `Unable to load marketing events (${response.status}).`)
         if (!active) return
 
         const events = Array.isArray(payload.events) ? payload.events as MarketingActivityEvent[] : []
@@ -430,7 +431,7 @@ function MarketingPageContent() {
           await refreshCampaignReport(selectedCampaignId, { silent: true })
         }
       } catch (activityError) {
-        console.error('Marketing activity watcher failed:', activityError)
+        console.warn('Marketing activity watcher paused:', activityError)
       } finally {
         if (active) {
           timeoutId = setTimeout(() => pollMarketingActivity(false), 3000)

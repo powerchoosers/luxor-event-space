@@ -573,13 +573,16 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <input
-              value={displayCampaignName}
-              onChange={(event) => setCampaignName(event.target.value)}
-              placeholder="Untitled email"
-              className="min-w-0 flex-1 bg-transparent font-serif text-lg font-semibold text-[color:var(--portal-text)] outline-none"
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={(event) => setCampaignName(event.currentTarget.textContent?.trim() || '')}
+              className="min-w-0 flex-1 truncate font-serif text-lg font-semibold text-[color:var(--portal-text)] outline-none"
               aria-label="Email name"
-            />
+              role="textbox"
+            >
+              {displayCampaignName || 'Untitled email'}
+            </div>
             <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Draft</span>
             <span className="hidden items-center gap-1 text-[9px] text-[color:var(--portal-muted)] sm:flex"><CheckCircle2 size={12} className="text-[#a8792f]" /> Autosaved</span>
           </div>
