@@ -456,7 +456,7 @@ export default async function PortalOverview() {
     }));
 
   return (
-    <PortalPageFrame className="min-h-full pb-10 group/portal space-y-6">
+    <PortalPageFrame className="min-h-full pb-10 group/portal space-y-4 sm:space-y-6">
       <PortalPageHeader
         icon={<Activity size={18} />}
         title="Luxor Operations Hub"
@@ -471,16 +471,16 @@ export default async function PortalOverview() {
             <span className="font-mono text-[10px] uppercase tracking-wider">Communications operational</span>
           </div>
           <div className="hidden h-4 w-px bg-[color:var(--portal-border)] sm:block" />
-          <div className="flex items-center gap-1.5 text-[color:var(--portal-muted)]">
+          <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
             <Radio size={13} className="text-[#caa24c]" />
             <span className="font-mono text-[10px]">Twilio SIP online</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[color:var(--portal-muted)]">
+          <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
             <ShieldCheck size={13} className="text-emerald-400" />
             <span className="font-mono text-[10px]">Mailbox connected</span>
           </div>
         </div>
-        <span className="font-mono text-[10px] text-[color:var(--portal-faint)]">LUXOR AT LAS PALMAS • HQ</span>
+        <span className="hidden font-mono text-[10px] text-[color:var(--portal-faint)] sm:block">LUXOR AT LAS PALMAS • HQ</span>
       </div>
 
       {loadError && (
@@ -490,9 +490,9 @@ export default async function PortalOverview() {
       )}
 
       {/* TOP ROW: 4 Metric Cards */}
-      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
         {/* Bookings Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Calendar size={22} strokeWidth={1.5} />
@@ -513,7 +513,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Cash Flow Card */}
-        <PortalStaggerCard className="luxor-glass-card relative flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between overflow-hidden rounded-2xl p-6">
+        <PortalStaggerCard className="luxor-glass-card relative flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between overflow-hidden rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
           <div className="flex justify-between items-start z-10 relative">
             <div>
               <span className="text-[#caa24c] mb-4 block">
@@ -543,7 +543,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Next Event Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
           {nextBooking ? (
             <>
               <div>
@@ -580,7 +580,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Needs Attention Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[180px] min-w-0 w-full flex-col justify-between rounded-2xl p-6">
+        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Bell size={22} strokeWidth={1.5} />
@@ -599,7 +599,7 @@ export default async function PortalOverview() {
       </PortalStaggerGroup>
 
       {/* MIDDLE ROW: 3 Columns (Today's Priorities, This Week, Bills Due) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
         {/* Today's Priorities */}
         <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
           <div>
@@ -648,7 +648,7 @@ export default async function PortalOverview() {
       </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
         {/* Recent Activity */}
         <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
           <div>

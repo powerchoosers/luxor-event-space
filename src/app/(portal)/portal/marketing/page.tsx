@@ -265,9 +265,12 @@ function MarketingPageContent() {
   }, [])
 
   useEffect(() => {
-    loadCampaigns()
-    loadInquiries()
-    loadMarketingLists()
+    const frame = window.requestAnimationFrame(() => {
+      void loadCampaigns()
+      void loadInquiries()
+      void loadMarketingLists()
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [loadCampaigns, loadInquiries, loadMarketingLists])
 
   // Watchers for Elena AI drafts and changes
@@ -553,7 +556,8 @@ function MarketingPageContent() {
       case 'email-campaigns':
         return {
           title: 'Email Campaigns',
-          icon: <Mail size={18} />
+          icon: <Mail size={18} />,
+          description: 'Create, send, and track campaigns for your audience.'
         }
       case 'text-campaigns':
         return {
@@ -628,17 +632,20 @@ function MarketingPageContent() {
       <PortalPageHeader
         icon={header.icon}
         title={header.title}
+        description={'description' in header ? header.description : undefined}
         actions={headerActions}
       />
 
-      <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
-        <PortalAnimatedTabs
-          tabs={MARKETING_TABS}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          ariaLabel="Marketing sections"
-        />
-      </div>
+      {activeTab !== 'email-campaigns' ? (
+        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
+          <PortalAnimatedTabs
+            tabs={MARKETING_TABS}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            ariaLabel="Marketing sections"
+          />
+        </div>
+      ) : null}
 
       <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
         <PortalTabTransition activeKey={activeTab} className="flex h-full min-h-0 flex-col overflow-hidden">

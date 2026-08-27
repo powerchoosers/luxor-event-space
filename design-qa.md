@@ -1,42 +1,67 @@
+# Campaign Library Design QA
+
 **Source visual truth**
 
-- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-e2c9780a-c85b-4e02-9c46-489b09477cb0.png` (1536 × 1024)
-- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-c320af96-76c5-4d10-ba88-5cba70979c2e.png` (1200 × 800)
-- `C:/Users/Lap3p/AppData/Local/Temp/codex-clipboard-a8b98167-e092-4765-b8d2-2bfcc8614adb.png` (1200 × 800)
+- `C:/Users/lewis/.codex/generated_images/01a0412f-7bca-7a41-bd1d-2ef0b2ad493c/exec-0d33211e-1aae-44a6-9fc3-1ebfe3fc1863.png`
+- Source pixels: 1487 × 1058.
 
-**Implementation target**
+**Implementation evidence**
 
-- Lead detail Planning stage → Space & Layout → Open layout builder
-- Intended local URL: `http://127.0.0.1:3000/portal/leads/[lead-id]?stage=planning`
-- Intended desktop viewport: 1536 × 1024 at device scale 1
-- Intended states: light theme focus modal, selected table inspector, template-loaded canvas, dark theme, narrow viewport
+- Local route: `http://localhost:3000/portal/marketing?tab=email-campaigns`
+- Final light screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-final2.jpg`
+- Dark-theme screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-dark-loaded.jpg`
+- Mobile screenshot: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-redesign-mobile.jpg`
+- Side-by-side comparison: `C:/Users/lewis/AppData/Local/Temp/luxor-campaign-comparison-final.png`
+- Implementation pixels/CSS viewport: 1440 × 1024 at device scale 1. The source was normalized with an aspect-fill resize to 720 × 512 beside an equally normalized implementation capture; no density mismatch remained in the comparison.
+- State: authenticated owner portal, Email Campaigns, light theme, grid view, All status, first page, no menu or report open.
 
 **Full-view comparison evidence**
 
-- Blocked. The bundled in-app browser control runtime is not callable in this task session. The repository already has a development server on port 3000, but HTTP availability is not a substitute for a browser-rendered screenshot.
+- The implementation preserves the selected visual hierarchy: quiet editorial header, one gold primary action, a three-part performance summary, compact controls, status filters, and a four-column preview-led campaign library.
+- The implementation intentionally retains Luxor's real nested portal navigation and authenticated header rather than replacing the surrounding product shell with mock chrome.
+- Real campaign HTML, names, dates, and performance replace the concept's invented campaign content. This changes thumbnail art and copy but preserves the target proportions and hierarchy.
 
 **Focused-region comparison evidence**
 
-- Blocked for the same reason. The toolbox, canvas objects, and inspector could not be captured in-browser.
+- Header and summary: serif hierarchy, restrained gold accent, hairline separators, three metrics, and top-right primary action align with the reference.
+- Library controls: search, sort, status counts, page selection, and grid/list toggle remain compact and visually subordinate to campaign previews.
+- Campaign cards: four-column desktop layout, tall email-preview proportions, status/date metadata, three performance measures, and overflow actions align with the reference. The real HTML previews are sandboxed and tracking pixels/scripts/forms are removed.
+- Theme/responsiveness: light and dark states were captured; the 390 × 844 mobile capture stacks the summary and controls without clipping the primary actions.
 
 **Findings**
 
-- [P1] Browser-rendered visual QA is missing.
-  Location: Event Layout Designer focus modal.
-  Evidence: all three source renderings were opened and inspected, but no implementation screenshot could be captured with the required in-app Browser.
-  Impact: typography, responsive behavior, theme contrast, and exact region proportions have not been visually proven.
-  Fix: with Lewis's approval, use standalone Playwright as the documented fallback, capture matching states, inspect the console, and compare the source and implementation images together.
+- No actionable P0, P1, or P2 visual differences remain.
+- [P3] The reference uses idealized, highly varied campaign artwork while production reflects the designs actually saved in Luxor. This is expected product truth rather than a fidelity defect.
+- [P3] The implementation keeps the existing Refresh action and nested Marketing navigation for continuity. Both add modest density compared with the concept but preserve established portal behavior.
 
-**Checks completed**
+**Primary interactions tested**
 
-- `npm run typecheck` passed.
-- Targeted ESLint passed for the new designer and lead detail page.
-- The editable layout is saved through the authenticated lead metadata update path.
+- Grid/list view switching.
+- Search filtering and clearing.
+- All and Sent status filtering.
+- Previous/next pagination with a visible current page.
+- Campaign action menu open/close.
+- Report launch and report modal rendering.
+- Light and dark theme rendering.
+- Mobile responsive layout.
+- Browser console checked with no errors.
 
 **Comparison history**
 
-- Initial pass: blocked before an implementation screenshot could be captured; no visual iteration has been claimed.
+- Pass 1 found one P2 artifact: the active filter underline overflowed its horizontal scroller and produced a visible miniature scrollbar beside Automations.
+- Fix: moved the underline inside the tab's bounds and hid the horizontal scrollbar treatment.
+- Post-fix evidence: `luxor-campaign-redesign-final2.jpg` and `luxor-campaign-comparison-final.png` show a clean filter row with no overflow artifact.
+- No further P0/P1/P2 findings were visible in the final comparison.
 
-**Final result**
+**Implementation checklist**
 
-final result: blocked
+- TypeScript: passed.
+- ESLint (full repository, quiet): passed.
+- Browser-rendered interaction and console checks: passed.
+- Final visual comparison: passed.
+
+**Follow-up polish**
+
+- Campaign artwork will naturally improve as more designed templates are used in production.
+
+final result: passed

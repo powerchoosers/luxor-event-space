@@ -28,7 +28,9 @@ import {
   TrendingUp,
   Workflow,
   Megaphone,
+  MoreHorizontal,
   SlidersHorizontal,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -113,6 +115,13 @@ const navItems = [
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
 ]
 
+const mobilePrimaryNavItems = [
+  { href: '/portal', icon: <LayoutDashboard size={19} />, label: 'Home' },
+  { href: '/portal/leads', icon: <Users size={19} />, label: 'Leads' },
+  { href: '/portal/calendar', icon: <Calendar size={19} />, label: 'Calendar' },
+  { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Messages' },
+]
+
 const operationsSubItems = [
   { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: Gauge },
   { href: '/portal/operations?tab=bills', label: 'Bills & Payments', icon: Receipt },
@@ -177,6 +186,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
   const contentScrollRef = useRef<HTMLDivElement>(null)
@@ -754,14 +764,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
               />
             </div>
 
-            <Link href="/portal/messages?tab=sms" prefetch className="rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer" aria-label="Text messages">
+            <Link href="/portal/messages?tab=sms" prefetch className="hidden rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer sm:inline-flex" aria-label="Text messages">
               <MessageSquare size={20} className="text-zinc-400" />
             </Link>
             
             <button
               type="button"
               onClick={() => setElenaOpen((current) => !current)}
-              className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${
+              className={`relative hidden h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 sm:block ${
                 elenaOpen 
                   ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
                   : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/30'
@@ -780,7 +790,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           </div>
         </header>
 
-        <nav className={`portal-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b px-4 py-3 lg:hidden ${
+        <nav className={`portal-scrollbar hidden shrink-0 gap-2 overflow-x-auto border-b px-4 py-3 md:flex lg:hidden ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-[#caa24c]/10 bg-[#050505]/86'
@@ -804,15 +814,114 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           })}
         </nav>
 
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-0 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-24 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
         }`}>
           <RouteTransition surface="portal" fillAvailableHeight={usesInternalTableScroll}>{children}</RouteTransition>
         </div>
+
+        <nav
+          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] md:hidden ${
+            portalTheme === 'light'
+              ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
+              : 'border-[#caa24c]/15 bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
+          }`}
+          aria-label="Primary portal navigation"
+        >
+          {mobilePrimaryNavItems.map((item) => {
+            const active = isActivePath(pathname, item.href, searchParams)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+                  active ? 'bg-[#caa24c]/10 text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                }`}
+                aria-current={active ? 'page' : undefined}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen(true)}
+            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+              !mobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
+                ? 'bg-[#caa24c]/10 text-[#caa24c]'
+                : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+            }`}
+            aria-label="More portal sections"
+            aria-expanded={mobileMoreOpen}
+          >
+            <MoreHorizontal size={20} />
+            <span>More</span>
+          </button>
+        </nav>
       </main>
       <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />
+      <AnimatePresence>
+        {mobileMoreOpen && (
+          <motion.div
+            className="portal-modal-layer fixed inset-0 z-[70] flex items-end bg-black/35 p-3 md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileMoreOpen(false)}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-label="More portal sections"
+              className="portal-sheet w-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl"
+              initial={reduceMotion ? false : { opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">More at Luxor</p>
+                  <p className="text-xs text-[color:var(--portal-muted)]">Operations, communication, and account tools.</p>
+                </div>
+                <button type="button" onClick={() => setMobileMoreOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close more sections">
+                  <X size={19} />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {navItems.filter((item) => !mobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
+                  const active = isActivePath(pathname, item.href, searchParams)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMoreOpen(false)}
+                      className={`flex min-h-20 flex-col items-start justify-between rounded-xl border p-3 text-xs font-bold transition-colors ${
+                        active ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#caa24c]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                      }`}
+                    >
+                      <span className="text-[#caa24c]">{item.icon}</span>
+                      <span className="leading-tight">{item.label}</span>
+                    </Link>
+                  )
+                })}
+                <Link href="/portal/settings" onClick={() => setMobileMoreOpen(false)} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
+                  <Settings size={18} className="text-[#caa24c]" />
+                  <span>Settings</span>
+                </Link>
+                <button type="button" onClick={() => { setMobileMoreOpen(false); setElenaOpen(true) }} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#caa24c]/15 text-[10px] font-black text-[#caa24c]">E</span>
+                  <span>Elena</span>
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {isComposeOpen && (
           <EmailComposeDrawer
