@@ -376,7 +376,7 @@ export async function sendLuxorZohoEmail(input: {
           headers: {
             Authorization: `Zoho-oauthtoken ${accessToken}`,
             Accept: 'application/json',
-            'Content-Type': attachment.contentType || 'application/octet-stream',
+            'Content-Type': 'application/octet-stream',
           },
           body: Buffer.from(attachment.content),
         },
