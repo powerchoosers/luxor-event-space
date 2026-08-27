@@ -9,7 +9,7 @@ import { BlockCanvas } from './BlockCanvas'
 import { BlockInspector } from './BlockInspector'
 import { EmailStylePanel } from './EmailStylePanel'
 import { EmailPreview } from './EmailPreview'
-import { CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2 } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2 } from 'lucide-react'
 import { PortalModal } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -206,6 +206,7 @@ function TemplatePicker({
 
 function SaveTemplateModal({
   isOpen,
+  campaignName,
   subject,
   preheader,
   theme,
@@ -216,6 +217,7 @@ function SaveTemplateModal({
   onSaved,
 }: {
   isOpen: boolean
+  campaignName: string
   subject: string
   preheader: string
   theme: LuxorEmailTheme
@@ -225,7 +227,7 @@ function SaveTemplateModal({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [name, setName] = useState(subject || '')
+  const [name, setName] = useState(campaignName || subject || '')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -310,12 +312,13 @@ function SaveTemplateModal({
 
 // ─── Main Shell ───────────────────────────────────────────────────────────────
 
-export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?: EmailTemplate | null }) {
+export function EmailBuilderShell({ initialTemplate = null, onClose }: { initialTemplate?: EmailTemplate | null; onClose?: () => void }) {
   const [initialBuilderState] = useState(() => {
     const initialBlocks = initialTemplate ? cloneTemplateBlocks(initialTemplate.blocks) : []
     return {
       blocks: initialBlocks,
-      subject: initialTemplate?.name || '',
+      campaignName: initialTemplate?.name || '',
+      subject: initialTemplate?.subject || initialTemplate?.name || '',
       preheader: initialTemplate?.preheader || '',
       theme: normalizeLuxorEmailTheme(initialTemplate?.theme),
       history: [initialBlocks],
@@ -323,6 +326,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   })
   const [blocks, setBlocks] = useState<EmailBlock[]>(initialBuilderState.blocks)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [campaignName, setCampaignName] = useState(initialBuilderState.campaignName)
   const [subject, setSubject] = useState(initialBuilderState.subject)
   const [preheader, setPreheader] = useState(initialBuilderState.preheader)
   const [theme, setTheme] = useState<LuxorEmailTheme>(initialBuilderState.theme)
@@ -352,6 +356,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
             const sourceBlocks = activeDraftStr ? cleanElenaDraftBlocks(activeDraft.blocks) : activeDraft.blocks
             const cloned = cloneTemplateBlocks(sourceBlocks)
             setBlocks(cloned)
+            setCampaignName(activeDraft.name || activeDraft.campaignName || activeDraft.subject || '')
             setSubject(activeDraft.subject || '')
             setPreheader(activeDraft.preheader || '')
             setTheme(normalizeLuxorEmailTheme(activeDraft.theme))
@@ -379,6 +384,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     if (!draftHydrated) return
     localStorage.setItem('luxor_email_builder_working_draft', JSON.stringify({
       schemaVersion: LUXOR_EMAIL_DOCUMENT_VERSION,
+      campaignName,
       subject,
       preheader,
       theme,
@@ -386,7 +392,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
       audienceLabel,
       recipientEmails,
     }))
-  }, [audienceLabel, blocks, draftHydrated, preheader, recipientEmails, subject, theme])
+  }, [audienceLabel, blocks, campaignName, draftHydrated, preheader, recipientEmails, subject, theme])
 
   // Brand Asset Picker States & Actions
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -522,7 +528,8 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     setBlocks(withNewIds)
     pushHistory(withNewIds)
     setSelectedId(null)
-    if (!subject) setSubject(tpl.subject || tpl.name)
+    setCampaignName(tpl.name)
+    setSubject(tpl.subject || tpl.name)
     setPreheader(tpl.preheader || '')
     setTheme(normalizeLuxorEmailTheme(tpl.theme))
     setAudienceLabel(tpl.audienceLabel || 'Manual list')
@@ -554,15 +561,22 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
 
   const canUndo = historyIdx > 0
   const canRedo = historyIdx < history.length - 1
+  const displayCampaignName = campaignName?.trim() || EMAIL_TEMPLATES.find((template) => template.subject === subject)?.name || subject
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3">
+        {onClose ? (
+          <button type="button" onClick={onClose} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[9px] font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+            <ArrowLeft size={13} /> Back to campaigns
+          </button>
+        ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <input
-              value={subject || 'Untitled email'}
-              onChange={(event) => setSubject(event.target.value)}
+              value={displayCampaignName}
+              onChange={(event) => setCampaignName(event.target.value)}
+              placeholder="Untitled email"
               className="min-w-0 flex-1 bg-transparent font-serif text-lg font-semibold text-[color:var(--portal-text)] outline-none"
               aria-label="Email name"
             />
@@ -576,8 +590,9 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
         </div>
         <button type="button" onClick={() => setShowTemplates(true)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Templates</button>
         <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Save size={13} /> Save</button>
+        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Eye size={13} /> Preview</button>
         <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
-        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><Eye size={13} /> Review</button>
+        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review</button>
       </div>
 
       <div className="grid shrink-0 gap-px border-b border-[color:var(--portal-border)] bg-[color:var(--portal-border)] md:grid-cols-2">
@@ -658,6 +673,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
       />
       <SaveTemplateModal
         isOpen={showSaveTemplate}
+        campaignName={campaignName}
         subject={subject || 'Email from Luxor'}
         preheader={preheader}
         theme={theme}

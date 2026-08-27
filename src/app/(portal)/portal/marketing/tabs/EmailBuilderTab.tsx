@@ -26,6 +26,7 @@ interface EmailBuilderTabProps {
   activityEvents: MarketingActivityEvent[]
   onOpenBlankBuilder: () => void
   onOpenTemplateInBuilder: (template: EmailTemplate) => void
+  onCanvasChange: (open: boolean) => void
 }
 
 type SubTab = 'builder' | 'templates' | 'elena-ai'
@@ -35,7 +36,8 @@ export function EmailBuilderTab({
   campaigns,
   activityEvents,
   onOpenBlankBuilder,
-  onOpenTemplateInBuilder
+  onOpenTemplateInBuilder,
+  onCanvasChange,
 }: EmailBuilderTabProps) {
   const { notify } = useToast()
   const searchParams = useSearchParams()
@@ -46,6 +48,11 @@ export function EmailBuilderTab({
   const [showCanvas, setShowCanvas] = useState(false)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(initialTemplate)
   const [builderSession, setBuilderSession] = useState(0)
+
+  useEffect(() => {
+    onCanvasChange(showCanvas)
+    return () => onCanvasChange(false)
+  }, [onCanvasChange, showCanvas])
 
   // Elena AI Assistant state
   const [elenaPromptText, setElenaPromptText] = useState('')
@@ -221,23 +228,13 @@ export function EmailBuilderTab({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.99 }}
         transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-        className="h-full min-h-[500px] border border-[color:var(--portal-border)] rounded-2xl overflow-hidden bg-[color:var(--portal-card)] flex flex-col shadow-lg"
+        className="flex h-full min-h-[500px] flex-col overflow-hidden bg-[color:var(--portal-card)]"
       >
-        <div className="bg-[color:var(--portal-soft)] px-5 py-3 border-b border-[color:var(--portal-border)] flex justify-between items-center shrink-0">
-          <span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">
-            Email Builder Workspace
-          </span>
-          <button
-            onClick={() => setShowCanvas(false)}
-            className="rounded-lg px-3 py-1.5 text-[9px] font-black uppercase bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] text-[color:var(--portal-text)] hover:bg-[#caa24c]/10 hover:text-[#a8792f] transition-all cursor-pointer"
-          >
-            Close Canvas
-          </button>
-        </div>
         <div className="flex-1 min-h-0 overflow-hidden">
           <EmailBuilderShell
             key={`${builderTemplate?.id || 'blank-builder'}-${builderSession}`}
             initialTemplate={builderTemplate}
+            onClose={() => setShowCanvas(false)}
           />
         </div>
       </motion.div>

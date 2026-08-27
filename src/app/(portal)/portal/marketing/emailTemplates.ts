@@ -112,6 +112,7 @@ export type EmailBlock =
 export interface EmailTemplate {
   id: string
   name: string
+  subject?: string
   description: string
   category: 'promo' | 'event' | 'nurture' | 'transactional' | 'seasonal' | 'custom'
   previewColor: string
@@ -148,6 +149,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
   {
     id: 'open_house_editorial',
     name: 'September Open House',
+    subject: "You're Invited: September Open House at Luxor",
     description: 'Editorial invitation with event details, venue story, and a focused RSVP.',
     category: 'event',
     previewColor: '#b88732',
@@ -192,6 +194,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
   {
     id: 'tour_follow_up_editorial',
     name: 'Tour Follow-up',
+    subject: 'Thank you for touring Luxor',
     description: 'Warm post-tour recap with next steps and a proposal action.',
     category: 'nurture',
     previewColor: '#d8c5a3',

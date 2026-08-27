@@ -206,6 +206,7 @@ function MarketingPageContent() {
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(null)
   const [builderSession, setBuilderSession] = useState(0)
+  const [builderCanvasOpen, setBuilderCanvasOpen] = useState(false)
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
 
   // Watchers & References
@@ -629,14 +630,16 @@ function MarketingPageContent() {
 
   return (
     <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
-      <PortalPageHeader
-        icon={header.icon}
-        title={header.title}
-        description={'description' in header ? header.description : undefined}
-        actions={headerActions}
-      />
+      {!builderCanvasOpen ? (
+        <PortalPageHeader
+          icon={header.icon}
+          title={header.title}
+          description={'description' in header ? header.description : undefined}
+          actions={headerActions}
+        />
+      ) : null}
 
-      {activeTab !== 'email-campaigns' ? (
+      {activeTab !== 'email-campaigns' && !builderCanvasOpen ? (
         <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
           <PortalAnimatedTabs
             tabs={MARKETING_TABS}
@@ -695,6 +698,7 @@ function MarketingPageContent() {
                 activityEvents={marketingActivity}
                 onOpenBlankBuilder={openBlankBuilder}
                 onOpenTemplateInBuilder={openTemplateInBuilder}
+                onCanvasChange={setBuilderCanvasOpen}
               />
             )}
 

@@ -14,6 +14,8 @@ interface InspectorProps {
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] mb-1.5'
 const inputCls = 'w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors'
 const fieldCls = 'space-y-1.5'
+const helpCls = 'flex items-start gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[11px] text-[color:var(--portal-muted)]'
+const browseCls = 'shrink-0 cursor-pointer rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]'
 const textAlignOptions = [
   { value: 'left', label: 'Left' },
   { value: 'center', label: 'Center' },
@@ -47,8 +49,8 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.</span>
       </div>
       <Field label="Background Image URL">
@@ -58,7 +60,7 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
             <button
               type="button"
               onClick={() => onBrowseImage('backgroundImage')}
-              className="shrink-0 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className={browseCls}
             >
               Browse
             </button>
@@ -68,7 +70,7 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
       <RowFields>
         <Field label="Overlay Opacity">
           <input type="range" min={0} max={1} step={0.05} value={block.overlayOpacity} onChange={(e) => u({ overlayOpacity: Number(e.target.value) })} className="w-full accent-[#caa24c]" />
-          <span className="text-[10px] text-zinc-500 font-mono">{Math.round(block.overlayOpacity * 100)}%</span>
+          <span className="font-mono text-[10px] text-[color:var(--portal-muted)]">{Math.round(block.overlayOpacity * 100)}%</span>
         </Field>
         <Field label="Text Align">
           <PortalSelect
@@ -79,12 +81,12 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
           />
         </Field>
       </RowFields>
-      <div className="border-t border-zinc-800/60 pt-4 space-y-3">
+      <div className="space-y-3 border-t border-[color:var(--portal-border)] pt-4">
         <div className="flex items-center justify-between">
           <label className={labelCls + ' mb-0'}>Show CTA Button</label>
           <button
             onClick={() => u({ ctaVisible: !block.ctaVisible })}
-            className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.ctaVisible ? 'bg-[#caa24c]' : 'bg-zinc-700'}`}
+            className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.ctaVisible ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`}
           >
             <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${block.ctaVisible ? 'translate-x-4' : ''}`} />
           </button>
@@ -104,8 +106,8 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
   const u = (patch: Partial<TextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Paragraph text</strong> can be typed directly on the canvas.</span>
       </div>
       <RowFields>
@@ -136,8 +138,8 @@ function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTe
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.</span>
       </div>
       <Field label="Image URL">
@@ -147,7 +149,7 @@ function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTe
             <button
               type="button"
               onClick={() => onBrowseImage('imageUrl')}
-              className="shrink-0 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className={browseCls}
             >
               Browse
             </button>
@@ -179,8 +181,8 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
   const u = (patch: Partial<ButtonBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Button text</strong> can be typed directly on the button on the canvas.</span>
       </div>
       <Field label="URL">
@@ -216,8 +218,8 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
 function TwoColumnInspector() {
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Two Columns</strong> content is edited entirely in-place — click any text area on the canvas and start typing.</span>
       </div>
     </div>
@@ -269,8 +271,8 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
   const u = (patch: Partial<FooterBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900/30 border border-zinc-800/40 rounded-lg p-3">
-        <Info size={13} className="shrink-0 mt-0.5 text-zinc-500" />
+      <div className={helpCls}>
+        <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Address</strong> and <strong>phone/details</strong> can be typed directly on the footer on the canvas.</span>
       </div>
       <Field label="Website">
@@ -279,11 +281,11 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
       <Field label="Unsubscribe URL">
         <input className={inputCls} placeholder="#unsubscribe" value={block.unsubscribeUrl} onChange={(e) => u({ unsubscribeUrl: e.target.value })} />
       </Field>
-      <div className="flex items-center justify-between border-t border-zinc-800/60 pt-4">
+      <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-4">
         <label className={labelCls + ' mb-0'}>Show Social Links</label>
         <button
           onClick={() => u({ showSocial: !block.showSocial })}
-          className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.showSocial ? 'bg-[#caa24c]' : 'bg-zinc-700'}`}
+          className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.showSocial ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`}
         >
           <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${block.showSocial ? 'translate-x-4' : ''}`} />
         </button>

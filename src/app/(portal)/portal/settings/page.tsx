@@ -45,6 +45,7 @@ import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityMan
 import { PromotionManager } from '@/components/portal/PromotionManager'
 import { PortalPushNotifications } from '@/components/portal/PortalPushNotifications'
 import { PortalSettingsSearch } from '@/components/portal/PortalSettingsSearch'
+import { CustomCalendarInviteTester } from '@/components/portal/CustomCalendarInviteTester'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -780,6 +781,7 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+            <CustomCalendarInviteTester defaultRecipientEmail={profileEmail} />
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 xl:col-span-2">
               <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Twilio Phone Numbers</h3><p className="mt-1 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">Search, purchase, configure, and choose the number Luxor uses for browser calls and text messages.</p></div>
               <TwilioNumberManager />
