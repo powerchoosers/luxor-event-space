@@ -90,13 +90,6 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
     }
   }
 
-  // Trigger loading state when switching tabs
-  useEffect(() => {
-    if (activeTab === 'preview') {
-      setIframeLoading(true)
-    }
-  }, [activeTab])
-
   useEffect(() => {
     const timer = setTimeout(updateIframeHeight, 150)
     return () => clearTimeout(timer)
@@ -104,7 +97,8 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
 
   // Load contacts
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+    const timer = window.setTimeout(() => {
       setContactsLoading(true)
       fetch('/api/inquiries')
         .then((res) => res.json())
@@ -118,16 +112,20 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
         .then((res) => res.json())
         .then((data) => setMarketingLists(Array.isArray(data.lists) ? data.lists : []))
         .catch((err) => console.error(err))
-    }
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [isOpen])
 
   useEffect(() => {
     if (!isOpen || !marketingLists.length) return
     const matchingList = marketingLists.find((list) => list.name.toLowerCase() === initialAudienceLabel.toLowerCase())
     if (matchingList) {
-      setAudienceLabel(matchingList.name)
-      setSelectedMarketingListId(matchingList.id)
-      setSelectedEmails(matchingList.members.map((member) => member.email))
+      const timer = window.setTimeout(() => {
+        setAudienceLabel(matchingList.name)
+        setSelectedMarketingListId(matchingList.id)
+        setSelectedEmails(matchingList.members.map((member) => member.email))
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [initialAudienceLabel, isOpen, marketingLists])
 
@@ -389,7 +387,10 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
             <PortalAnimatedTabs
               tabs={tabs}
               activeTab={activeTab}
-              onTabChange={(tab) => setActiveTab(tab)}
+              onTabChange={(tab) => {
+                if (tab === 'preview') setIframeLoading(true)
+                setActiveTab(tab)
+              }}
               buttonClassName="px-3"
             />
           </div>

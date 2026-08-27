@@ -204,10 +204,12 @@ export function EmailBuilderTab({
   useEffect(() => {
     const prompt = searchParams?.get('elenaPrompt')?.trim()
     if (!prompt) return
-
-    setElenaPromptText(prompt)
-    setActiveSubTab('elena-ai')
-    void handleGenerateElenaDraft({ preventDefault() {} } as React.FormEvent, prompt)
+    const timer = window.setTimeout(() => {
+      setElenaPromptText(prompt)
+      setActiveSubTab('elena-ai')
+      void handleGenerateElenaDraft({ preventDefault() {} } as React.FormEvent, prompt)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [searchParams])
 
   // If live email builder canvas is activated

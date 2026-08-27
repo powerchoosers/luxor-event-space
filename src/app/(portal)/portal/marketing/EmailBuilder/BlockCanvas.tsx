@@ -16,7 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
+import { Copy, GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
 import type {
   EmailBlock,
   HeroBlock,
@@ -463,6 +463,7 @@ interface SortableBlockProps {
   isSelected: boolean
   onSelect: () => void
   onDelete: () => void
+  onDuplicate: () => void
   onMoveUp: () => void
   onMoveDown: () => void
   canMoveUp: boolean
@@ -471,7 +472,7 @@ interface SortableBlockProps {
 }
 
 function SortableBlock({
-  block, isSelected, onSelect, onDelete, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange,
+  block, isSelected, onSelect, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange,
 }: SortableBlockProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
 
@@ -531,6 +532,13 @@ function SortableBlock({
           </div>
           <div style={{ width: 1, height: 14, background: 'rgba(202,162,76,0.15)', margin: '0 2px' }} />
           <button
+            onClick={onDuplicate}
+            title="Duplicate block"
+            style={{ color: 'rgba(215,194,154,0.55)', padding: '0 3px', cursor: 'pointer', background: 'none', border: 'none', display: 'flex' }}
+          >
+            <Copy size={13} />
+          </button>
+          <button
             onClick={onMoveUp}
             disabled={!canMoveUp}
             title="Move up"
@@ -576,6 +584,7 @@ interface BlockCanvasProps {
   selectedId: string | null
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  onDuplicate?: (id: string) => void
   onReorder: (blocks: EmailBlock[]) => void
   onChange: (block: EmailBlock) => void
   onAddBlock?: (type: BlockType) => void
@@ -583,7 +592,7 @@ interface BlockCanvasProps {
   previewMode?: 'desktop' | 'mobile'
 }
 
-export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder, onChange, onAddBlock, theme, previewMode = 'desktop' }: BlockCanvasProps) {
+export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicate, onReorder, onChange, onAddBlock, theme, previewMode = 'desktop' }: BlockCanvasProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
@@ -682,6 +691,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onReorder,
                 isSelected={block.id === selectedId}
                 onSelect={() => onSelect(block.id)}
                 onDelete={() => onDelete(block.id)}
+                onDuplicate={() => onDuplicate?.(block.id)}
                 onMoveUp={() => moveBlock(block.id, 'up')}
                 onMoveDown={() => moveBlock(block.id, 'down')}
                 canMoveUp={idx > 0}

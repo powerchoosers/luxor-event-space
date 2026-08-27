@@ -439,7 +439,10 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   }
 
   useEffect(() => {
-    loadSavedTemplates()
+    const timer = window.setTimeout(() => {
+      void loadSavedTemplates()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
 
@@ -492,6 +495,16 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
     pushHistory(newBlocks)
     if (selectedId === id) setSelectedId(null)
   }, [blocks, selectedId, history, historyIdx])
+
+  const handleDuplicate = useCallback((id: string) => {
+    const index = blocks.findIndex((block) => block.id === id)
+    if (index < 0) return
+    const duplicate = { ...blocks[index], id: nanoid() } as EmailBlock
+    const newBlocks = [...blocks.slice(0, index + 1), duplicate, ...blocks.slice(index + 1)]
+    setBlocks(newBlocks)
+    pushHistory(newBlocks)
+    setSelectedId(duplicate.id)
+  }, [blocks, history, historyIdx])
 
   const handleReorder = useCallback((newBlocks: EmailBlock[]) => {
     setBlocks(newBlocks)
@@ -583,6 +596,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
               selectedId={selectedId}
               onSelect={(id) => { setSelectedId(id); setInspectorTab('content') }}
               onDelete={handleDelete}
+              onDuplicate={handleDuplicate}
               onReorder={handleReorder}
               onChange={handleBlockChange}
               onAddBlock={handleAddBlock}
