@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { LuxorInquiry } from './luxorInquiryTypes'
+import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 
 type TourCopy = {
   subject: string
@@ -131,6 +132,28 @@ function fallbackCopy(context: TourEmailContext): TourCopy {
 }
 
 function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
+  const baseUrl = publicBaseUrl()
+  return renderLuxorSystemEmail({
+    previewText: copy.introduction,
+    eyebrow: 'Tour confirmed',
+    title: 'You are confirmed for your tour',
+    heroImage: `${baseUrl}${eventImagePath(context.inquiry.event_type)}`,
+    heroAlt: `${context.inquiry.event_type || 'Celebration'} inspiration at Luxor at Las Palmas Events`,
+    greeting: escapeHtml(copy.greeting),
+    bodyHtml: `<p style="margin:0 0 14px">${escapeHtml(copy.introduction)}</p><p style="margin:0 0 14px">${escapeHtml(copy.preparation)}</p><p style="margin:0">${escapeHtml(copy.closing)}</p>`,
+    details: [
+      { label: 'Date', value: escapeHtml(context.tourDateLabel) },
+      { label: 'Time', value: escapeHtml(`${context.tourTimeLabel} · ${context.durationMinutes} minutes`) },
+      { label: 'Meeting', value: escapeHtml(context.meetingType) },
+      { label: 'Location', value: escapeHtml(FALLBACK_LOCATION) },
+    ],
+    actions: context.responseUrl ? [{ label: 'Reschedule tour', url: context.responseUrl }] : undefined,
+    note: 'Reply to this email if your timing changes and the Luxor team will help.',
+    theme: 'brand',
+  })
+}
+
+export function renderTourEmailHtmlLegacy(context: TourEmailContext, copy: TourCopy) {
   const baseUrl = publicBaseUrl()
   const heroUrl = `${baseUrl}${eventImagePath(context.inquiry.event_type)}`
   const heroAlt = `${context.inquiry.event_type || 'Celebration'} inspiration at Luxor at Las Palmas Events`

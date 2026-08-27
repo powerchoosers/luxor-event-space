@@ -96,6 +96,8 @@ export interface LuxorSystemEmailInput {
   previewText?: string
   eyebrow: string
   title: string
+  heroImage?: string
+  heroAlt?: string
   greeting?: string
   bodyHtml: string
   details?: LuxorSystemEmailDetail[]
@@ -152,6 +154,7 @@ export function renderLuxorSystemEmail(input: LuxorSystemEmailInput) {
         <p style="margin:0;color:${t.accent};font-family:${t.fontHeading};font-size:30px;font-weight:600;letter-spacing:.19em;text-transform:uppercase">Luxor</p>
         <p style="margin:5px 0 0;color:${t.muted};font-family:${t.fontBody};font-size:8px;font-weight:700;letter-spacing:.37em;text-transform:uppercase">At Las Palmas Events</p>
       </td></tr>
+      ${input.heroImage ? `<tr><td><img src="${escapeAttribute(input.heroImage)}" alt="${escapeAttribute(input.heroAlt || '')}" width="${t.contentWidth}" style="display:block;width:100%;max-width:${t.contentWidth}px;height:auto" /></td></tr>` : ''}
       <tr><td class="luxor-pad" style="padding:48px 42px 22px">
         <p style="margin:0 0 13px;color:${t.accent};font-family:${t.fontBody};font-size:9px;font-weight:800;letter-spacing:.25em;text-transform:uppercase">${input.eyebrow}</p>
         <h1 class="luxor-title" style="margin:0;color:${t.text};font-family:${t.fontHeading};font-size:41px;font-weight:600;line-height:1.05;letter-spacing:-.01em">${input.title}</h1>

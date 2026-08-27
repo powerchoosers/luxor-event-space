@@ -12,6 +12,7 @@ import { isLuxorOfferExpired } from './luxorOffer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
+import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -113,6 +114,29 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
 }
 
 export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: string) {
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  return renderLuxorSystemEmail({
+    previewText: 'We received your private tour request and are reviewing the details.',
+    eyebrow: 'Tour request received',
+    title: 'Thanks for your request',
+    greeting: `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: '<p style="margin:0">Thank you for requesting a private tour of Luxor Event Space. Our team is reviewing your preferred date and time and will send an official confirmation with calendar details once it is accepted.</p>',
+    details: [
+      { label: 'Requested date', value: escapeHtml(inquiry.preferred_tour_date || 'Pending') },
+      { label: 'Requested time', value: escapeHtml(inquiry.preferred_tour_time || 'Pending') },
+      { label: 'Event', value: escapeHtml(inquiry.event_type || 'Private event') },
+      { label: 'Guests', value: escapeHtml(inquiry.guest_count ? String(inquiry.guest_count) : 'Open') },
+    ],
+    actions: [
+      { label: 'Explore our spaces', url: absoluteUrl('/spaces') },
+      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+    ],
+    note: `Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}. Reply to this email if you need to adjust your request.`,
+    theme: 'brand',
+  })
+}
+
+export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, token: string) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
   const pricingUrl = absoluteUrl('/pricing')
@@ -257,6 +281,33 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
   const attendeeCount = inquiry.attendee_count || inquiry.guest_count || 1
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const interestLine = inquiry.package_interest || inquiry.event_type || 'Future event planning'
+  return renderLuxorSystemEmail({
+    previewText: `Your spot is saved for ${LUXOR_GRAND_OPENING.dateLabel}.`,
+    eyebrow: 'Grand opening showcase',
+    title: 'Your RSVP is confirmed',
+    heroImage: absoluteUrl('/images/dining-hall/main-hall-corporate-cocktail.png'),
+    heroAlt: 'An evening celebration at Luxor Event Space',
+    greeting: `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: '<p style="margin:0">We saved your spot for an evening of venue tours, vendor connections, tastings, giveaways, and a closer look at planning celebrations at Luxor.</p>',
+    details: [
+      { label: 'Date', value: escapeHtml(LUXOR_GRAND_OPENING.dateLabel) },
+      { label: 'Time', value: escapeHtml(LUXOR_GRAND_OPENING.timeLabel) },
+      { label: 'Attending', value: `${attendeeCount} guest${attendeeCount === 1 ? '' : 's'}` },
+      { label: 'Interest', value: escapeHtml(interestLine) },
+    ],
+    actions: [
+      { label: 'Schedule a tour', url: absoluteUrl('/tour') },
+      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+    ],
+    note: 'This confirmation was sent because you reserved a spot for the Luxor Grand Opening Showcase.',
+    theme: 'brand',
+  })
+}
+
+export function buildGrandOpeningRsvpEmailHtmlLegacy(inquiry: LuxorInquiry) {
+  const attendeeCount = inquiry.attendee_count || inquiry.guest_count || 1
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const interestLine = inquiry.package_interest || inquiry.event_type || 'Future event planning'
   const websiteUrl = absoluteUrl('/')
   const tourUrl = absoluteUrl('/tour')
   const pricingUrl = absoluteUrl('/pricing')
@@ -370,6 +421,27 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
 }
 
 export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  return renderLuxorSystemEmail({
+    previewText: 'We received your Luxor inquiry and will connect with you shortly.',
+    eyebrow: 'Inquiry received',
+    title: 'Your celebration starts here',
+    greeting: `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: '<p style="margin:0">Thank you for reaching out to Luxor Event Space. Our team is reviewing your event details so we can prepare useful package options and thoughtful next steps.</p>',
+    details: [
+      { label: 'Event type', value: escapeHtml(inquiry.event_type || 'Private event') },
+      { label: 'Guest count', value: escapeHtml(inquiry.guest_count ? String(inquiry.guest_count) : 'Open') },
+    ],
+    actions: [
+      { label: 'Schedule a private tour', url: absoluteUrl('/tour') },
+      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+    ],
+    note: 'A coordinator will connect with you shortly. Reply to this email at any time if there is another detail we should know.',
+    theme: 'light',
+  })
+}
+
+export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
   const tourUrl = absoluteUrl('/tour')
@@ -495,7 +567,16 @@ export function buildSignatureEmail(signature: LuxorSignatureRequest) {
 export function buildSignatureEmailHtml(signature: LuxorSignatureRequest) {
   const firstName = signature.client_first_name || signature.client_name.split(' ')[0] || signature.client_name
   const signingUrl = absoluteUrl(`/secure-portal/sign/${signature.token}`)
-  return `<!doctype html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media(prefers-color-scheme:dark){.bg{background:#050505!important}.card{background:#0a0807!important;color:#f7efe3!important}.muted{color:#d7c29a!important}}</style></head><body class="bg" style="margin:0;background:#eee7dc;padding:28px 12px;font-family:Arial,sans-serif"><table class="card" role="presentation" style="width:100%;max-width:620px;margin:auto;background:#fffaf2;color:#221d18;border:1px solid #d9bd84"><tr><td style="height:4px;background:#caa24c"></td></tr><tr><td style="padding:32px 42px;text-align:center;border-bottom:1px solid #d9bd84"><div style="font-family:Georgia,serif;color:#b48635;font-size:28px;letter-spacing:.18em">LUXOR</div><div style="font-size:8px;letter-spacing:.35em;color:#8c754f;margin-top:6px">AT LAS PALMAS EVENTS</div></td></tr><tr><td style="padding:46px 42px"><div style="color:#b48635;font-size:10px;font-weight:700;letter-spacing:.25em;text-transform:uppercase">Your event agreement</div><h1 style="font-family:Georgia,serif;font-size:38px;line-height:1.1;margin:14px 0">Ready for your signature</h1><p class="muted" style="font-size:15px;line-height:1.75;color:#675d50">Hi ${escapeHtml(firstName)}, your Luxor Event Space agreement is ready to read, download, and sign. Your Guest Guide is attached to this email so you can begin planning right away.</p><p style="margin:30px 0"><a href="${signingUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:15px 26px;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Review &amp; sign agreement</a></p><p class="muted" style="font-size:12px;line-height:1.7;color:#756755">After you sign, Arianna will be countersigned automatically and both you and Luxor will receive completed copies. This secure link expires in 30 days.</p></td></tr></table></body></html>`
+  return renderLuxorSystemEmail({
+    previewText: 'Your Luxor Event Agreement is ready to review and sign.',
+    eyebrow: 'Your event agreement',
+    title: 'Ready for your signature',
+    greeting: `Hi ${escapeHtml(firstName)},`,
+    bodyHtml: '<p style="margin:0">Your Luxor Event Space agreement is ready to read, download, and sign. Your Guest Guide is attached so you can begin planning right away.</p>',
+    actions: [{ label: 'Review & sign agreement', url: signingUrl }],
+    note: 'After you sign, Arianna will be countersigned automatically and both you and Luxor will receive completed copies. This secure link expires in 30 days.',
+    theme: 'light',
+  })
 }
 
 export async function createLuxorEmailJob(data: {
