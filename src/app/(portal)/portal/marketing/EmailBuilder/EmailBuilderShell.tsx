@@ -326,6 +326,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
   })
   const [blocks, setBlocks] = useState<EmailBlock[]>(initialBuilderState.blocks)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [activeField, setActiveField] = useState<string | null>(null)
   const [campaignName, setCampaignName] = useState(initialBuilderState.campaignName)
   const [subject, setSubject] = useState(initialBuilderState.subject)
   const [preheader, setPreheader] = useState(initialBuilderState.preheader)
@@ -466,6 +467,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
       setHistoryIdx(historyIdx - 1)
       setBlocks(prev)
       setSelectedId(null)
+      setActiveField(null)
     }
   }
 
@@ -475,6 +477,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
       setHistoryIdx(historyIdx + 1)
       setBlocks(next)
       setSelectedId(null)
+      setActiveField(null)
     }
   }
 
@@ -485,6 +488,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
     setBlocks(newBlocks)
     pushHistory(newBlocks)
     setSelectedId(block.id)
+    setActiveField(null)
   }, [blocks, history, historyIdx])
 
   const handleAddSequence = useCallback((types: BlockType[]) => {
@@ -493,13 +497,17 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
     setBlocks(newBlocks)
     pushHistory(newBlocks)
     setSelectedId(additions[0]?.id || null)
+    setActiveField(null)
   }, [blocks, history, historyIdx])
 
   const handleDelete = useCallback((id: string) => {
     const newBlocks = blocks.filter((b) => b.id !== id)
     setBlocks(newBlocks)
     pushHistory(newBlocks)
-    if (selectedId === id) setSelectedId(null)
+    if (selectedId === id) {
+      setSelectedId(null)
+      setActiveField(null)
+    }
   }, [blocks, selectedId, history, historyIdx])
 
   const handleDuplicate = useCallback((id: string) => {
@@ -510,6 +518,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
     setBlocks(newBlocks)
     pushHistory(newBlocks)
     setSelectedId(duplicate.id)
+    setActiveField(null)
   }, [blocks, history, historyIdx])
 
   const handleReorder = useCallback((newBlocks: EmailBlock[]) => {
@@ -528,6 +537,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
     setBlocks(withNewIds)
     pushHistory(withNewIds)
     setSelectedId(null)
+    setActiveField(null)
     setCampaignName(tpl.name)
     setSubject(tpl.subject || tpl.name)
     setPreheader(tpl.preheader || '')
@@ -619,7 +629,8 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
             <BlockCanvas
               blocks={blocks}
               selectedId={selectedId}
-              onSelect={(id) => { setSelectedId(id); setInspectorTab('content') }}
+              onSelect={(id) => { setSelectedId(id); setActiveField(null); setInspectorTab('content') }}
+              onActivateField={(id, field) => { setSelectedId(id); setActiveField(field); setInspectorTab('content') }}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onReorder={handleReorder}
@@ -653,7 +664,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
             {inspectorTab === 'design' ? <EmailStylePanel theme={theme} onChange={setTheme} /> : selectedBlock ? (
-              <BlockInspector block={selectedBlock} onChange={handleBlockChange} onBrowseImage={handleBrowseImage} />
+              <BlockInspector block={selectedBlock} onChange={handleBlockChange} onBrowseImage={handleBrowseImage} activeField={activeField} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 px-7 text-center">
                 <Eye size={20} className="text-[color:var(--portal-muted)]" />

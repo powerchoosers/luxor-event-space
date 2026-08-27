@@ -46,6 +46,7 @@ export function EmailBuilderTab({
   // Track active subtab (Builder is selected in Rendering 4)
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('builder')
   const [showCanvas, setShowCanvas] = useState(false)
+  const [showStartModal, setShowStartModal] = useState(true)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(initialTemplate)
   const [builderSession, setBuilderSession] = useState(0)
 
@@ -113,6 +114,7 @@ export function EmailBuilderTab({
   function handleStartCanvas(tpl: EmailTemplate | null) {
     setBuilderTemplate(tpl)
     setBuilderSession(curr => curr + 1)
+    setShowStartModal(false)
     setShowCanvas(true)
   }
 
@@ -195,6 +197,7 @@ export function EmailBuilderTab({
 
       setBuilderTemplate(elenaCustomTemplate)
       setBuilderSession(curr => curr + 1)
+      setShowStartModal(false)
       setShowCanvas(true)
 
       notify({
@@ -251,7 +254,47 @@ export function EmailBuilderTab({
   }
 
   return (
-    <div className="space-y-4 flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="relative space-y-4 flex flex-col h-full min-h-0 overflow-hidden">
+      {showStartModal && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color:var(--portal-bg)]/80 p-4 backdrop-blur-[2px] sm:p-8">
+          <div role="dialog" aria-modal="true" aria-labelledby="email-start-title" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[0_24px_80px_rgba(15,12,8,0.2)]">
+            <div className="border-b border-[color:var(--portal-border)] px-6 py-5 sm:px-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Create a campaign</p>
+                  <h2 id="email-start-title" className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Choose how you want to start.</h2>
+                  <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.</p>
+                </div>
+                <button type="button" aria-label="Close start dialog" onClick={() => setShowStartModal(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">×</button>
+              </div>
+            </div>
+            <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">
+              <button type="button" onClick={() => handleStartCanvas(EMAIL_TEMPLATES[0])} className="group rounded-xl border border-[#caa24c]/45 bg-[#caa24c]/10 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#caa24c]/15">
+                <LayoutTemplate size={20} className="text-[#a8792f]" />
+                <span className="mt-5 block text-sm font-bold text-[color:var(--portal-text)]">Use a Luxor template</span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Start with a polished event layout.</span>
+                <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Start template →</span>
+              </button>
+              <button type="button" onClick={() => handleStartCanvas(null)} className="group rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#caa24c]/45">
+                <FilePenLine size={20} className="text-[#a8792f]" />
+                <span className="mt-5 block text-sm font-bold text-[color:var(--portal-text)]">Start blank</span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Build the message block by block.</span>
+                <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Open blank canvas →</span>
+              </button>
+              <button type="button" onClick={() => { setShowStartModal(false); setActiveSubTab('elena-ai') }} className="group rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#caa24c]/45">
+                <PenSquare size={20} className="text-[#a8792f]" />
+                <span className="mt-5 block text-sm font-bold text-[color:var(--portal-text)]">Draft with Elena</span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Describe the audience and purpose.</span>
+                <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Generate a draft →</span>
+              </button>
+            </div>
+            <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] px-6 py-4 sm:px-8">
+              <span className="text-[10px] text-[color:var(--portal-muted)]">Need a different starting point?</span>
+              <button type="button" onClick={() => { setShowStartModal(false); setActiveSubTab('templates') }} className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] hover:underline">Browse all templates</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top subtabs navigation */}
       <div className="flex items-center gap-2 border-b border-[color:var(--portal-border)] pb-3 overflow-x-auto portal-scrollbar w-full shrink-0">
         <TabBtn active={activeSubTab === 'builder'} onClick={() => setActiveSubTab('builder')} label="Builder" />

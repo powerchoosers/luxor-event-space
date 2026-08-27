@@ -152,6 +152,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         value={block.headline}
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
+        data-field="Hero headline"
         style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 600, lineHeight: 1.05, color: CREAM, letterSpacing: '0.02em', marginBottom: 12 }}
       />
       {/* Subheadline */}
@@ -159,6 +160,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         value={block.subheadline}
         onChange={(v) => u({ subheadline: v })}
         placeholder="Sub-headline"
+        data-field="Hero supporting text"
         multiline
         style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.55, color: MUTED, maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
       />
@@ -168,6 +170,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
           <Editable
             value={block.ctaLabel}
             onChange={(v) => u({ ctaLabel: v })}
+            data-field="Hero CTA label"
             style={{
               display: 'inline-block',
               background: GOLD,
@@ -204,6 +207,7 @@ function TextBlockView({ block, onChange, selected }: { block: TextBlock; onChan
         onChange={(v) => u({ content: v })}
         multiline
         placeholder="Type your text here..."
+        data-field="Paragraph text"
         style={{
           fontFamily: SANS,
           fontSize: block.fontSize,
@@ -243,6 +247,7 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
         value={block.headline}
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
+        data-field="Image-text headline"
         style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, lineHeight: 1.1, color: CREAM, marginBottom: 12 }}
       />
       <Editable
@@ -250,11 +255,13 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
         onChange={(v) => u({ body: v })}
         multiline
         placeholder="Body text..."
+        data-field="Image-text body"
         style={{ fontFamily: SANS, fontSize: 13, fontWeight: 400, lineHeight: 1.8, color: MUTED, marginBottom: 20 }}
       />
       <Editable
         value={block.ctaLabel}
         onChange={(v) => u({ ctaLabel: v })}
+        data-field="Image-text CTA label"
         style={{
           display: 'inline-block',
           background: GOLD,
@@ -294,6 +301,7 @@ function ButtonBlockView({ block, onChange, selected }: { block: ButtonBlock; on
       <Editable
         value={block.label}
         onChange={(v) => u({ label: v })}
+        data-field="Button label"
         style={{
           display: 'inline-block',
           background: block.bgColor,
@@ -324,16 +332,16 @@ function TwoColumnBlockView({ block, onChange, selected }: { block: TwoColumnBlo
       {/* Left */}
       <div>
         <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.34em', textTransform: 'uppercase', color: GOLD, marginBottom: 10 }}>01</div>
-        <Editable value={block.leftHeadline} onChange={(v) => u({ leftHeadline: v })} style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, lineHeight: 1.15, color: CREAM, marginBottom: 10 }} />
-        <Editable value={block.leftBody} onChange={(v) => u({ leftBody: v })} multiline style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.8, color: MUTED }} />
+        <Editable value={block.leftHeadline} onChange={(v) => u({ leftHeadline: v })} data-field="Left column heading" style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, lineHeight: 1.15, color: CREAM, marginBottom: 10 }} />
+        <Editable value={block.leftBody} onChange={(v) => u({ leftBody: v })} data-field="Left column body" multiline style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.8, color: MUTED }} />
       </div>
       {/* Divider */}
       <div style={{ background: BORDER }} />
       {/* Right */}
       <div>
         <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.34em', textTransform: 'uppercase', color: GOLD, marginBottom: 10 }}>02</div>
-        <Editable value={block.rightHeadline} onChange={(v) => u({ rightHeadline: v })} style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, lineHeight: 1.15, color: CREAM, marginBottom: 10 }} />
-        <Editable value={block.rightBody} onChange={(v) => u({ rightBody: v })} multiline style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.8, color: MUTED }} />
+        <Editable value={block.rightHeadline} onChange={(v) => u({ rightHeadline: v })} data-field="Right column heading" style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, lineHeight: 1.15, color: CREAM, marginBottom: 10 }} />
+        <Editable value={block.rightBody} onChange={(v) => u({ rightBody: v })} data-field="Right column body" multiline style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.8, color: MUTED }} />
       </div>
     </div>
   )
@@ -403,11 +411,13 @@ function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; on
       <Editable
         value={block.address}
         onChange={(v) => u({ address: v })}
+        data-field="Footer address"
         style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: 'rgba(215,194,154,0.52)', lineHeight: 1.9, display: 'block', textAlign: 'center' }}
       />
       <Editable
         value={block.phone}
         onChange={(v) => u({ phone: v })}
+        data-field="Footer details"
         style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: 'rgba(215,194,154,0.40)', lineHeight: 1.9, display: 'block', textAlign: 'center' }}
       />
       <div style={{ fontFamily: SANS, fontSize: 11, color: 'rgba(202,162,76,0.55)', marginTop: 2 }}>
@@ -469,10 +479,11 @@ interface SortableBlockProps {
   canMoveUp: boolean
   canMoveDown: boolean
   onChange: (b: EmailBlock) => void
+  onActivateField: (field: string) => void
 }
 
 function SortableBlock({
-  block, isSelected, onSelect, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange,
+  block, isSelected, onSelect, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange, onActivateField,
 }: SortableBlockProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
 
@@ -500,7 +511,11 @@ function SortableBlock({
         onMouseLeave={(e) => {
           if (!isSelected) (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent'
         }}
-        onClick={onSelect}
+        onClick={(event) => {
+          const field = (event.target as HTMLElement).closest<HTMLElement>('[contenteditable]')?.dataset.field
+          onSelect()
+          if (field) onActivateField(field)
+        }}
       >
         {/* Controls toolbar */}
         <div
@@ -586,12 +601,13 @@ interface BlockCanvasProps {
   onDuplicate?: (id: string) => void
   onReorder: (blocks: EmailBlock[]) => void
   onChange: (block: EmailBlock) => void
+  onActivateField?: (blockId: string, field: string) => void
   onAddBlock?: (type: BlockType) => void
   theme: LuxorEmailTheme
   previewMode?: 'desktop' | 'mobile'
 }
 
-export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicate, onReorder, onChange, onAddBlock, theme, previewMode = 'desktop' }: BlockCanvasProps) {
+export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicate, onReorder, onChange, onAddBlock, onActivateField, theme, previewMode = 'desktop' }: BlockCanvasProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
@@ -696,6 +712,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicat
                 canMoveUp={idx > 0}
                 canMoveDown={idx < blocks.length - 1}
                 onChange={onChange}
+                onActivateField={(field) => onActivateField?.(block.id, field)}
               />
             ))}
           </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Info } from 'lucide-react'
+import { Check, Info } from 'lucide-react'
 import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
@@ -9,6 +9,7 @@ interface InspectorProps {
   block: EmailBlock
   onChange: (updated: EmailBlock) => void
   onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void
+  activeField?: string | null
 }
 
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] mb-1.5'
@@ -31,6 +32,15 @@ const dividerStyleOptions = [
   { value: 'dotted', label: 'Dotted' },
 ]
 
+const COLOR_SWATCHES = [
+  { value: '#ffffff', label: 'White' },
+  { value: '#f4ead4', label: 'Warm ivory' },
+  { value: '#caa24c', label: 'Luxor gold' },
+  { value: '#b8924a', label: 'Antique gold' },
+  { value: '#18130d', label: 'Ink' },
+  { value: '#6e6254', label: 'Muted taupe' },
+]
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className={fieldCls}>
@@ -42,6 +52,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function RowFields({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const selected = COLOR_SWATCHES.find((swatch) => swatch.value.toLowerCase() === value.toLowerCase())
+  return (
+    <Field label={label}>
+      <div className="space-y-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2.5">
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={`${label} presets`}>
+          {COLOR_SWATCHES.map((swatch) => {
+            const isActive = swatch.value.toLowerCase() === value.toLowerCase()
+            return <button key={swatch.value} type="button" role="radio" aria-checked={isActive} aria-label={`${swatch.label} (${swatch.value})`} title={`${swatch.label} · ${swatch.value}`} onClick={() => onChange(swatch.value)} className={`relative grid size-7 place-items-center rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 ${isActive ? 'border-[#caa24c] ring-2 ring-[#caa24c]/25' : 'border-[color:var(--portal-card)] hover:scale-105'}`} style={{ backgroundColor: swatch.value }}>
+              {isActive ? <Check size={13} className={swatch.value === '#ffffff' || swatch.value === '#f4ead4' ? 'text-[#18130d]' : 'text-white'} /> : null}
+            </button>
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="size-6 shrink-0 rounded-md border border-[color:var(--portal-border)]" style={{ backgroundColor: value }} aria-hidden="true" />
+          <input aria-label={`${label} hex value`} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} />
+          <input aria-label={`Custom ${label}`} type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={(e) => onChange(e.target.value)} className="size-7 cursor-pointer rounded border-0 bg-transparent p-0" />
+        </div>
+        <p className="text-[10px] text-[color:var(--portal-muted)]">Current: <span className="font-semibold text-[color:var(--portal-text)]">{selected?.label ?? 'Custom color'}</span></p>
+      </div>
+    </Field>
+  )
 }
 
 // ─── Hero Inspector ──────────────────────────────────────────────────────────
@@ -123,12 +157,7 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
           />
         </Field>
       </RowFields>
-      <Field label="Color">
-        <div className="flex items-center gap-2">
-          <input type="color" value={block.color} onChange={(e) => u({ color: e.target.value })} className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0" />
-          <input className={inputCls} value={block.color} onChange={(e) => u({ color: e.target.value })} />
-        </div>
-      </Field>
+      <ColorField label="Paragraph color" value={block.color} onChange={(color) => u({ color })} />
     </div>
   )
 }
@@ -197,18 +226,8 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
         />
       </Field>
       <RowFields>
-        <Field label="Background Color">
-          <div className="flex items-center gap-2">
-            <input type="color" value={block.bgColor} onChange={(e) => u({ bgColor: e.target.value })} className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0" />
-            <input className={inputCls} value={block.bgColor} onChange={(e) => u({ bgColor: e.target.value })} />
-          </div>
-        </Field>
-        <Field label="Text Color">
-          <div className="flex items-center gap-2">
-            <input type="color" value={block.textColor} onChange={(e) => u({ textColor: e.target.value })} className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0" />
-            <input className={inputCls} value={block.textColor} onChange={(e) => u({ textColor: e.target.value })} />
-          </div>
-        </Field>
+        <ColorField label="Button background" value={block.bgColor} onChange={(bgColor) => u({ bgColor })} />
+        <ColorField label="Button text" value={block.textColor} onChange={(textColor) => u({ textColor })} />
       </RowFields>
     </div>
   )
@@ -232,12 +251,7 @@ function DividerInspector({ block, onChange }: { block: DividerBlock; onChange: 
   return (
     <div className="space-y-4">
       <RowFields>
-        <Field label="Color">
-          <div className="flex items-center gap-2">
-            <input type="color" value={block.color} onChange={(e) => u({ color: e.target.value })} className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0" />
-            <input className={inputCls} value={block.color} onChange={(e) => u({ color: e.target.value })} />
-          </div>
-        </Field>
+        <ColorField label="Divider color" value={block.color} onChange={(color) => u({ color })} />
         <Field label="Thickness (px)">
           <input type="number" className={inputCls} min={1} max={8} value={block.thickness} onChange={(e) => u({ thickness: Number(e.target.value) })} />
         </Field>
@@ -308,7 +322,7 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
 }
 
 // ─── Main Inspector ───────────────────────────────────────────────────────────
-export function BlockInspector({ block, onChange, onBrowseImage }: InspectorProps) {
+export function BlockInspector({ block, onChange, onBrowseImage, activeField }: InspectorProps) {
   const titles: Record<string, string> = {
     hero: 'Hero Block',
     text: 'Text Block',
@@ -323,8 +337,9 @@ export function BlockInspector({ block, onChange, onBrowseImage }: InspectorProp
   return (
     <div className="h-full flex flex-col">
       <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-3.5">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Inspector</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Editing</p>
         <h3 className="text-sm font-bold text-[color:var(--portal-text)] mt-0.5">{titles[block.type] ?? 'Block'}</h3>
+        <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{activeField ? `Selected on canvas: ${activeField}` : 'Select a text area or element on the canvas to edit it.'}</p>
       </div>
       <div className="flex-1 overflow-y-auto portal-scrollbar px-5 py-5 space-y-4">
         {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} onBrowseImage={onBrowseImage} />}
