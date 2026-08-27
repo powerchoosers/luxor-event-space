@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Mail,
-  RefreshCw,
   Plus,
   BarChart3,
   TrendingUp,
@@ -22,7 +21,6 @@ import {
   PortalStatusBadge,
   PortalButton,
   PortalCloseButton,
-  PortalAnimatedTabs,
   PortalTabTransition
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -231,8 +229,8 @@ function MarketingPageContent() {
   }, [])
 
   // 2. Fetch inquiries from DB
-  const loadInquiries = useCallback(async () => {
-    setLoadingInquiries(true)
+  const loadInquiries = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) setLoadingInquiries(true)
     try {
       const response = await fetch('/api/inquiries', { cache: 'no-store' })
       if (response.ok) {
@@ -242,7 +240,7 @@ function MarketingPageContent() {
     } catch (err) {
       console.error('Failed to load inquiries:', err)
     } finally {
-      setLoadingInquiries(false)
+      if (!options.silent) setLoadingInquiries(false)
     }
   }, [])
 
@@ -250,8 +248,8 @@ function MarketingPageContent() {
   const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
   const [loadingLists, setLoadingLists] = useState(true)
 
-  const loadMarketingLists = useCallback(async () => {
-    setLoadingLists(true)
+  const loadMarketingLists = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) setLoadingLists(true)
     try {
       const res = await fetch('/api/marketing/lists', { cache: 'no-store' })
       if (res.ok) {
@@ -261,7 +259,7 @@ function MarketingPageContent() {
     } catch (err) {
       console.error('Failed loading marketing lists:', err)
     } finally {
-      setLoadingLists(false)
+      if (!options.silent) setLoadingLists(false)
     }
   }, [])
 
@@ -424,8 +422,6 @@ function MarketingPageContent() {
           })
         })
 
-        await loadCampaigns({ silent: true })
-
         const selectedCampaignId = selectedCampaignIdRef.current
         if (selectedCampaignId && newEvents.some((event) => event.campaign_id === selectedCampaignId)) {
           await refreshCampaignReport(selectedCampaignId, { silent: true })
@@ -434,7 +430,7 @@ function MarketingPageContent() {
         console.warn('Marketing activity watcher paused:', activityError)
       } finally {
         if (active) {
-          timeoutId = setTimeout(() => pollMarketingActivity(false), 3000)
+          timeoutId = setTimeout(() => pollMarketingActivity(false), 15_000)
         }
       }
     }
@@ -445,7 +441,43 @@ function MarketingPageContent() {
       active = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [loadCampaigns, notify, refreshCampaignReport])
+  }, [notify, refreshCampaignReport])
+
+  // Keep this workspace current without repeatedly touching Zoho. These API reads are
+  // backed by Luxor's application data; we only revalidate while the page is visible,
+  // and skip a refresh if one is already in flight.
+  const refreshAllData = useCallback(async () => {
+    if (document.visibilityState !== 'visible') return
+    await Promise.all([
+      loadCampaigns({ silent: true }),
+      loadInquiries({ silent: true }),
+      loadMarketingLists({ silent: true }),
+    ])
+  }, [loadCampaigns, loadInquiries, loadMarketingLists])
+
+  useEffect(() => {
+    let refreshing = false
+    const refreshIfVisible = async () => {
+      if (refreshing || document.visibilityState !== 'visible') return
+      refreshing = true
+      try {
+        await refreshAllData()
+      } finally {
+        refreshing = false
+      }
+    }
+    const intervalId = window.setInterval(() => void refreshIfVisible(), 45_000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshIfVisible()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
+    }
+  }, [refreshAllData])
 
   // Email Builder specific triggers
   function openTemplateInBuilder(template: EmailTemplate) {
@@ -553,7 +585,8 @@ function MarketingPageContent() {
       case 'sources':
         return {
           title: 'Lead Sources',
-          icon: <TrendingUp size={18} />
+          icon: <TrendingUp size={18} />,
+          description: 'See which channels bring people into the Luxor booking journey.'
         }
       case 'email-campaigns':
         return {
@@ -564,27 +597,32 @@ function MarketingPageContent() {
       case 'text-campaigns':
         return {
           title: 'Text Campaigns',
-          icon: <MessageSquare size={18} />
+          icon: <MessageSquare size={18} />,
+          description: 'Send thoughtful, consent-based updates to your audience.'
         }
       case 'builder-automation':
         return {
           title: 'Email Builder',
-          icon: <LayoutTemplate size={18} />
+          icon: <LayoutTemplate size={18} />,
+          description: 'Create a campaign, shape the message, and prepare it for delivery.'
         }
       case 'contact-lists':
         return {
           title: 'Contact Lists',
-          icon: <Users size={18} />
+          icon: <Users size={18} />,
+          description: 'Keep the right people organized for the next conversation.'
         }
       case 'call-center':
         return {
           title: 'Call Center',
-          icon: <Phone size={18} />
+          icon: <Phone size={18} />,
+          description: 'Work the follow-up queue and turn inquiries into tours.'
         }
       case 'calendar':
         return {
           title: 'Marketing Calendar',
-          icon: <Calendar size={18} />
+          icon: <Calendar size={18} />,
+          description: 'See what is scheduled, what has shipped, and what needs a date.'
         }
       case 'overview':
       default:
@@ -598,22 +636,23 @@ function MarketingPageContent() {
   const header = getHeaderInfo()
 
   let headerActions: React.ReactNode
-  if (activeTab === 'email-campaigns') {
+  const createCampaignButton = (
+    <PortalButton variant="primary" onClick={openBlankBuilder}>
+      <Plus size={13} /> Create campaign
+    </PortalButton>
+  )
+
+  if (activeTab === 'overview' || activeTab === 'sources' || activeTab === 'text-campaigns' || activeTab === 'call-center') {
     headerActions = (
-      <>
-        <PortalButton onClick={() => loadCampaigns()} disabled={loadingCampaigns}>
-          <RefreshCw size={13} className={loadingCampaigns ? 'animate-spin' : ''} /> Refresh
-        </PortalButton>
-        <PortalButton variant="primary" onClick={openBlankBuilder}>
-          <Plus size={13} /> Create Campaign
-        </PortalButton>
-      </>
+      createCampaignButton
+    )
+  } else if (activeTab === 'email-campaigns') {
+    headerActions = (
+      createCampaignButton
     )
   } else if (activeTab === 'builder-automation') {
     headerActions = (
-      <PortalButton variant="primary" onClick={openBlankBuilder}>
-        <Plus size={13} /> New Email
-      </PortalButton>
+      createCampaignButton
     )
   } else if (activeTab === 'contact-lists') {
     headerActions = (
@@ -623,33 +662,37 @@ function MarketingPageContent() {
     )
   } else if (activeTab === 'calendar') {
     headerActions = (
-      <PortalButton variant="primary" onClick={openBlankBuilder}>
-        <Plus size={13} /> Create Campaign
-      </PortalButton>
+      createCampaignButton
     )
+  }
+
+  if (activeTab === 'contact-lists') {
+    headerActions = <>{createCampaignButton}{headerActions}</>
   }
 
   return (
     <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
       {!builderCanvasOpen ? (
-        <PortalPageHeader
-          icon={header.icon}
-          title={header.title}
-          description={'description' in header ? header.description : undefined}
-          actions={headerActions}
-        />
-      ) : null}
-
-      {activeTab !== 'email-campaigns' && !builderCanvasOpen ? (
-        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
-          <PortalAnimatedTabs
-            tabs={MARKETING_TABS}
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            ariaLabel="Marketing sections"
+        <div className="shrink-0 space-y-5 border-b border-[color:var(--portal-border)] pb-5">
+          <PortalPageHeader
+            icon={activeTab === 'overview' ? undefined : header.icon}
+            title={activeTab === 'overview' ? 'Marketing' : header.title}
+            description={activeTab === 'overview' ? 'Grow your audience, engage your contacts, and fill your event calendar.' : ('description' in header ? header.description : undefined)}
+            actions={headerActions}
           />
+          {activeTab === 'overview' ? (
+            <p className="max-w-2xl text-xs font-medium leading-5 text-[color:var(--portal-muted)] md:hidden">Use the sections below to plan campaigns, understand your audience, and follow up with the right people.</p>
+          ) : null}
         </div>
       ) : null}
+
+      {!builderCanvasOpen ? (
+        <div className="shrink-0 overflow-x-auto portal-scrollbar">
+          <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
+        </div>
+      ) : null}
+
+      {!builderCanvasOpen ? <MarketingTabGuide activeTab={activeTab} /> : null}
 
       <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
         <PortalTabTransition activeKey={activeTab} className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -738,6 +781,55 @@ function MarketingPageContent() {
       <CampaignReportModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </PortalPageFrame>
   )
+}
+
+function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: MarketingTab; onTabChange: (tab: MarketingTab) => void }) {
+  const groups: Array<{ label: string; tabs: ReadonlyArray<typeof MARKETING_TABS[number]> }> = [
+    { label: 'Plan', tabs: MARKETING_TABS.filter((tab) => tab.id === 'overview' || tab.id === 'sources') },
+    { label: 'Reach', tabs: MARKETING_TABS.filter((tab) => ['email-campaigns', 'text-campaigns', 'contact-lists', 'call-center'].includes(tab.id)) },
+    { label: 'Measure', tabs: MARKETING_TABS.filter((tab) => tab.id === 'calendar') },
+  ]
+
+  return (
+    <nav aria-label="Marketing sections" className="flex min-w-max items-end gap-6 py-1">
+      {groups.map((group) => (
+        <div key={group.label} className="flex items-end gap-4 border-r border-[color:var(--portal-border)] pr-6 last:border-r-0 last:pr-0">
+          <span className="pb-2 text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f]">{group.label}</span>
+          <div className="flex items-end gap-5">
+            {group.tabs.map((tab) => {
+              const isActive = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onTabChange(tab.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative inline-flex items-center gap-2 border-b-2 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${isActive ? 'border-[#caa24c] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                >
+                  {tab.icon}
+                  <span>{tab.label.replace('Marketing ', '')}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  )
+}
+
+function MarketingTabGuide({ activeTab }: { activeTab: MarketingTab }) {
+  const guide = {
+    overview: ['Start here', 'See reach, attention, and audience movement in one place.'],
+    sources: ['Understand demand', 'Compare where inquiries come from and which sources become tours.'],
+    'email-campaigns': ['Manage campaigns', 'Review drafts, scheduled sends, and performance without leaving this workspace.'],
+    'text-campaigns': ['Reach people directly', 'Use SMS for timely updates while keeping consent and opt-outs visible.'],
+    'builder-automation': ['Create the message', 'Choose a starting point, build the email, then send it to a campaign.'],
+    'contact-lists': ['Organize the audience', 'Keep lists and contacts ready for the next campaign or follow-up.'],
+    'call-center': ['Work the queue', 'Prioritize new inquiries, log outcomes, and move good conversations forward.'],
+    calendar: ['Plan the rhythm', 'Use the calendar to see upcoming sends and keep the marketing plan intentional.'],
+  }[activeTab]
+  return <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--portal-border)] py-3 text-xs"><span className="font-black uppercase tracking-[0.18em] text-[#a8792f]">{guide[0]}</span><span className="text-[color:var(--portal-muted)]">{guide[1]}</span></div>
 }
 
 function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | null; onClose: () => void }) {

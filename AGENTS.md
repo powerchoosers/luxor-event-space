@@ -25,6 +25,8 @@ These instructions apply to this entire repository.
 
 ## Development
 
+- This repository uses npm and `package-lock.json` as its dependency source of truth. Do not run pnpm for normal development or validation. If `pnpm-lock.yaml` or `pnpm-workspace.yaml` appears as an untracked file, delete those generated files before committing; do not add them to `.gitignore` or commit them.
+
 ```bash
 npm run dev
 npm run typecheck

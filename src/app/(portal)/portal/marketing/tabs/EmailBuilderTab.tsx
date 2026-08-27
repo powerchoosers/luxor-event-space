@@ -318,8 +318,8 @@ export function EmailBuilderTab({
                 </div>
               </div>
 
-              {/* Column 2: Supabase-backed automated campaigns */}
-              <div className="lg:col-span-2 space-y-4 overflow-y-auto portal-scrollbar px-1">
+              {/* Campaign history belongs in Overview; keep the creation workspace focused. */}
+              <div className="hidden lg:col-span-2 space-y-4 overflow-y-auto portal-scrollbar px-1">
                 <div className="rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b border-[color:var(--portal-border)] pb-3">
                     <div>
@@ -353,8 +353,7 @@ export function EmailBuilderTab({
                 </div>
               </div>
 
-              {/* Column 3: Real campaign performance and activity */}
-              <div className="space-y-5 overflow-y-auto portal-scrollbar pl-1">
+              <div className="hidden space-y-5 overflow-y-auto portal-scrollbar pl-1">
                 <div className="rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm space-y-4">
                   <h4 className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">Tracked Campaign Performance</h4>
                   <div className="grid grid-cols-2 gap-3 text-left">
@@ -394,6 +393,22 @@ export function EmailBuilderTab({
                     <TrackingMetric label="Sent" value={campaignTotals.sent} />
                     <TrackingMetric label="Events" value={activityEvents.length} />
                   </div>
+                </div>
+              </div>
+
+              <div className="min-w-0 overflow-y-auto portal-scrollbar rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-3">
+                <div className="max-w-3xl">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Campaign workspace</p>
+                  <h3 className="mt-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Build one clear message.</h3>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--portal-muted)]">Start from a Luxor template or a blank canvas, shape the content, then choose the audience and send date inside the editor.</p>
+                  <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                    {[
+                      ['01', 'Choose a starting point', 'Use a proven template or begin with a blank email.'],
+                      ['02', 'Shape the message', 'Write the subject, content, and action your audience needs.'],
+                      ['03', 'Prepare the send', 'Select the audience, schedule the campaign, and review before delivery.'],
+                    ].map(([number, title, detail]) => <div key={number} className="border-t border-[color:var(--portal-border)] pt-3"><span className="font-mono text-[10px] text-[#a8792f]">{number}</span><h4 className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">{title}</h4><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{detail}</p></div>)}
+                  </div>
+                  <button type="button" onClick={() => handleStartCanvas(null)} className="mt-8 inline-flex items-center gap-2 rounded-lg bg-[#caa24c] px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-[#caa24c]/15 transition hover:bg-[#dfbd68]">Open blank canvas <ChevronRight size={14} /></button>
                 </div>
               </div>
             </motion.div>

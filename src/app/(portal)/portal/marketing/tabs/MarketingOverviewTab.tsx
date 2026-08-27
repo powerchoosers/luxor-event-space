@@ -4,7 +4,6 @@ import React from 'react'
 import {
   ArrowUpRight,
   CalendarClock,
-  CheckCircle2,
   Mail,
   MailOpen,
   MousePointerClick,
@@ -100,25 +99,65 @@ export function MarketingOverviewTab({
     [marketingLists],
   )
 
+  const sentTrend = React.useMemo(() => {
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(nowTime - (6 - index) * 24 * 60 * 60 * 1000)
+      date.setHours(0, 0, 0, 0)
+      return { date, value: 0 }
+    })
+    campaigns.forEach((campaign) => {
+      if (!campaign.sent_at) return
+      const campaignDate = new Date(campaign.sent_at)
+      campaignDate.setHours(0, 0, 0, 0)
+      const day = days.find((item) => item.date.getTime() === campaignDate.getTime())
+      if (day) day.value += Number(campaign.sent_count || 0)
+    })
+    return days
+  }, [campaigns, nowTime])
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-6">
-        <StatsCard label="Subscribers" value={loading ? '…' : totalSubscribers.toLocaleString()} icon={<Users size={15} />} detail="Saved marketing-list emails" />
-        <StatsCard label="New This Week" value={loading ? '…' : newSubscribersThisWeek.toLocaleString()} icon={<UserPlus size={15} />} detail="Added in the last 7 days" />
-        <StatsCard label="Emails Sent" value={loading ? '…' : totalSent.toLocaleString()} icon={<Mail size={15} />} detail="Tracked campaign recipients" />
-        <StatsCard label="Open Rate" value={loading ? '…' : `${overallOpenRate}%`} icon={<MailOpen size={15} />} detail={`${totalUniqueOpens.toLocaleString()} unique opens`} />
-        <StatsCard label="Needs Follow-up" value={loading ? '…' : followUpQueue.toLocaleString()} icon={<ArrowUpRight size={15} />} detail="New, contacted, or tour requested" />
-        <StatsCard label="New Inquiries" value={loading ? '…' : newInquiriesThisWeek.toLocaleString()} icon={<CheckCircle2 size={15} />} detail="Submitted in the last 7 days" />
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(19rem,0.85fr)]">
+        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Performance overview</h3>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">A quick read on reach and engagement across your marketing activity.</p>
+            </div>
+            <span className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-bold text-[color:var(--portal-muted)]">Last 7 days</span>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">
+            <MetricBlock label="Subscribers" value={loading ? '…' : totalSubscribers.toLocaleString()} />
+            <MetricBlock label="New this week" value={loading ? '…' : newSubscribersThisWeek.toLocaleString()} />
+            <MetricBlock label="Emails sent" value={loading ? '…' : totalSent.toLocaleString()} />
+            <MetricBlock label="Open rate" value={loading ? '…' : `${overallOpenRate}%`} />
+            <MetricBlock label="New inquiries" value={loading ? '…' : newInquiriesThisWeek.toLocaleString()} />
+          </div>
+          <TrendChart points={sentTrend} loading={loading} />
+        </section>
+
+        <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
+            <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Needs attention</h3>
+            <ArrowUpRight size={16} className="text-[#caa24c]" />
+          </div>
+          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour requested" onClick={() => onTabChange('call-center')} />
+          <AttentionRow value={newInquiriesThisWeek} label="New inquiries" detail="Submitted in the last 7 days" onClick={() => onTabChange('contact-lists')} />
+          <div className="mt-auto border-t border-[color:var(--portal-border)] pt-4">
+            <button type="button" onClick={() => onTabChange('call-center')} className="text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Open follow-up queue →</button>
+          </div>
+        </section>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2">
           <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Audience by List</h3>
-              <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Current marketing-list membership, grouped by saved source.</p>
+              <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Audience</h3>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Current marketing-list membership, grouped by saved source.</p>
             </div>
-            <span className="font-mono text-xs font-bold text-[#caa24c]">{loading ? '…' : totalSubscribers.toLocaleString()} total</span>
+            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f] hover:text-[#caa24c]">Manage audience</button>
           </div>
 
           {audienceRows.length ? (
@@ -127,42 +166,18 @@ export function MarketingOverviewTab({
                 const share = totalSubscribers ? Math.min(100, (list.memberCount / totalSubscribers) * 100) : 0
                 return (
                   <div key={list.name} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{list.name}</p>
-                      <span className="font-mono text-xs font-black text-[#caa24c]">{list.memberCount.toLocaleString()}</span>
-                    </div>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
-                      <div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${share}%` }} />
-                    </div>
+                    <div className="flex items-center justify-between gap-3"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{list.name}</p><span className="font-mono text-xs font-black text-[#caa24c]">{list.memberCount.toLocaleString()}</span></div>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]"><div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${share}%` }} /></div>
                   </div>
                 )
               })}
             </div>
-          ) : (
-            <DataEmptyState loading={loading} message="No subscribers are saved yet." />
-          )}
+          ) : <DataEmptyState loading={loading} message="No subscribers are saved yet." />}
         </section>
 
         <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Recent Subscribers</h3>
-            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#dfbd68]">View all</button>
-          </div>
-          {recentSubscribers.length ? (
-            <div className="mt-3 divide-y divide-[color:var(--portal-border)]">
-              {recentSubscribers.map((subscriber) => (
-                <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p>
-                    <p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p>
-                  </div>
-                  <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <DataEmptyState loading={loading} message="No subscriber records are available." />
-          )}
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4"><h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Recent subscribers</h3><button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f]">View all</button></div>
+          {recentSubscribers.length ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recentSubscribers.map((subscriber) => <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p><p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p></div><span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span></div>)}</div> : <DataEmptyState loading={loading} message="No subscriber records are available." />}
         </section>
       </div>
 
@@ -287,9 +302,8 @@ export function MarketingOverviewTab({
 
       <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
         <h4 className="mb-3.5 px-1 text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Quick Actions</h4>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <ActionButton onClick={onAddContactClick} icon={<Plus size={14} className="text-[#caa24c]" />} label="Add Contact" />
-          <ActionButton onClick={() => onTabChange('builder-automation')} icon={<Mail size={14} className="text-[#caa24c]" />} label="Build Email" />
           <ActionButton onClick={() => onTabChange('email-campaigns')} icon={<MailOpen size={14} className="text-[#caa24c]" />} label="View Campaigns" />
           <ActionButton onClick={() => onTabChange('calendar')} icon={<CalendarClock size={14} className="text-[#caa24c]" />} label="View Schedule" />
         </div>
@@ -300,21 +314,23 @@ export function MarketingOverviewTab({
   )
 }
 
-function StatsCard({ label, value, icon, detail }: { label: string; value: string; icon: React.ReactNode; detail: string }) {
+function TrendChart({ points, loading }: { points: Array<{ date: Date; value: number }>; loading: boolean }) {
+  const max = Math.max(...points.map((point) => point.value), 1)
+  const chartPoints = points.map((point, index) => `${(index / Math.max(points.length - 1, 1)) * 100},${92 - (point.value / max) * 68}`).join(' ')
   return (
-    <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 transition-all hover:border-[#caa24c]/20">
-      <div className="flex items-center justify-between text-[color:var(--portal-muted)]">
-        <span className="text-[8.5px] font-black uppercase tracking-wider leading-none">{label}</span>
-        <span className="text-[#caa24c]">{icon}</span>
+    <div className="mt-5">
+      <div className="relative h-36 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3">
+        <div className="pointer-events-none absolute inset-x-3 top-7 border-t border-dashed border-[color:var(--portal-border)]" />
+        <div className="pointer-events-none absolute inset-x-3 top-1/2 border-t border-dashed border-[color:var(--portal-border)]" />
+        {loading ? <div className="h-full w-full rounded-lg luxor-skeleton" /> : <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full"><polyline points={chartPoints} fill="none" stroke="#caa24c" strokeWidth="1.6" vectorEffect="non-scaling-stroke" /></svg>}
       </div>
-      {value === '…' ? (
-        <div className="mt-3.5 h-6 w-16 rounded luxor-skeleton" />
-      ) : (
-        <h3 className="mt-3.5 font-mono text-xl font-bold leading-none text-[color:var(--portal-text)]">{value}</h3>
-      )}
-      <p className="mt-2.5 text-[8px] font-bold leading-4 text-[color:var(--portal-muted)]">{detail}</p>
+      <div className="mt-2 flex items-center justify-between text-[9px] font-mono text-[color:var(--portal-faint)]"><span>{points[0] ? formatDate(points[0].date.toISOString()) : '—'}</span><span>Email sends</span><span>{points[points.length - 1] ? formatDate(points[points.length - 1].date.toISOString()) : '—'}</span></div>
     </div>
   )
+}
+
+function AttentionRow({ value, label, detail, onClick }: { value: number; label: string; detail: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 border-b border-[color:var(--portal-border)] py-5 text-left"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#a8792f]"><Users size={16} /></span><span className="min-w-0 flex-1"><strong className="block font-mono text-2xl leading-none text-[color:var(--portal-text)]">{value.toLocaleString()}</strong><span className="mt-1 block text-xs font-bold text-[color:var(--portal-text)]">{label}</span><span className="mt-0.5 block text-[10px] text-[color:var(--portal-muted)]">{detail}</span></span><ArrowUpRight size={16} className="text-[color:var(--portal-faint)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#caa24c]" /></button>
 }
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
