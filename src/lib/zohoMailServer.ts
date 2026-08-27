@@ -2,6 +2,7 @@ import 'server-only'
 
 import { decodeHtmlEntities } from './luxorTextUtils'
 import { supabaseRest } from './supabaseRestServer'
+import { parseZohoJson } from './zohoJson'
 
 type ZohoTokenResponse = {
   access_token?: string
@@ -732,7 +733,7 @@ export async function listLuxorZohoInbox(limit = 1000) {
             if (response.status === 401) cachedAccessToken = null
             throw new Error(`Zoho inbox fetch failed with ${response.status}: ${resultText}`)
           }
-          const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+          const result = resultText ? (parseZohoJson(resultText) as { data?: ZohoMessageSummary[] }) : {}
           return (result.data || []).map((message): LuxorZohoMessage => ({
             id: message.messageId || message.message_id || '',
             threadId: message.threadId || message.messageId || message.message_id || '',
@@ -811,7 +812,7 @@ export async function listLuxorZohoSentMessages(limit = 1000) {
             if (response.status === 401) cachedAccessToken = null
             throw new Error(`Zoho sent messages fetch failed with ${response.status}: ${resultText}`)
           }
-          const result = resultText ? (JSON.parse(resultText) as { data?: ZohoMessageSummary[] }) : {}
+          const result = resultText ? (parseZohoJson(resultText) as { data?: ZohoMessageSummary[] }) : {}
           return (result.data || []).map((message): LuxorZohoMessage => ({
             id: message.messageId || message.message_id || '',
             threadId: message.threadId || message.messageId || message.message_id || '',
@@ -987,139 +988,121 @@ export async function downloadLuxorZohoAttachment(input: {
   throw new Error(`Zoho attachment fetch failed with ${lastStatus}.`)
 }
 
+// A shared, bounded mailbox index resolves folder IDs omitted by limited-data webhooks.
+let messageFolderIndex: { folders: Map<string, string>; expiresAt: number } | null = null
+let messageFolderIndexRequest: Promise<Map<string, string>> | null = null
+
+async function resolveZohoMessageFolder(messageId: string, force = false) {
+  if (!force && messageFolderIndex && messageFolderIndex.expiresAt > Date.now()) {
+    return messageFolderIndex.folders.get(messageId)
+  }
+  if (!messageFolderIndexRequest) {
+    messageFolderIndexRequest = (async () => {
+      const { accountId, baseUrl } = getZohoConfig()
+      const accessToken = await getZohoAccessToken()
+      const folders = new Map<string, string>()
+      for (let start = 1; start <= 4000; start += 200) {
+        const params = new URLSearchParams({
+          start: String(start), limit: '200', includesent: 'true',
+          includearchive: 'true', includeto: 'true', threadedMails: 'false',
+        })
+        const data = await readZohoMessageJson<ZohoMessageSummary[]>(
+          `${baseUrl}/accounts/${accountId}/messages/view?${params}`, accessToken,
+        )
+        if (!Array.isArray(data)) throw new Error('Zoho returned an unreadable mailbox index.')
+        for (const message of data) {
+          const id = String(message.messageId || message.message_id || '')
+          if (id && message.folderId) folders.set(id, String(message.folderId))
+        }
+        if (data.length < 200) break
+      }
+      messageFolderIndex = { folders, expiresAt: Date.now() + 60_000 }
+      return folders
+    })()
+  }
+  try {
+    return (await messageFolderIndexRequest).get(messageId)
+  } finally {
+    messageFolderIndexRequest = null
+  }
+}
+
+export class ZohoMessageReadError extends Error {
+  constructor(public status: number) {
+    super(status === 401 || status === 403
+      ? 'Zoho denied access to this email. Check the mailbox connection in Settings.'
+      : status === 429
+        ? 'Zoho is pacing email requests. The saved mailbox is still available; please try again shortly.'
+        : status === 404
+          ? 'This email could not be found in Zoho. It may have been moved or deleted before a copy was saved.'
+          : 'Zoho could not retrieve this email body. Please try again shortly.')
+    this.name = 'ZohoMessageReadError'
+  }
+}
+
+async function readZohoMessageJson<T>(url: string, accessToken: string): Promise<T> {
+  const response = await fetchZohoMailRead(url, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    console.warn('[zoho-mail] message read failed', { status: response.status })
+    throw new ZohoMessageReadError(response.status)
+  }
+  const result = parseZohoJson(await response.text()) as { data?: T } | null
+  if (!result || result.data === undefined) throw new Error('Zoho returned an unreadable email response.')
+  return result.data
+}
+
 async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string): Promise<LuxorZohoMessage | null> {
   const { accountId, baseUrl, allowedSenders } = getZohoConfig()
   const accessToken = await getZohoAccessToken()
+  let resolvedFolderId = folderId || await resolveZohoMessageFolder(messageId)
+  if (!resolvedFolderId) throw new ZohoMessageReadError(404)
 
-  // Helper to parse a Zoho message data payload into our detail shape
-  function parseMessageData(data: Record<string, unknown>, content: string, attachments: LuxorZohoAttachment[] = [], engagement?: { openCount: number; clickCount: number }) {
-    const direction = allowedSenders.includes(normalizeEmailAddress(data.fromAddress as string || data.sender as string || ''))
-      ? 'outgoing' as const
-      : 'incoming' as const
-    return {
-      id: messageId,
-      threadId: String(data.threadId || messageId),
-      folderId: String(data.folderId || folderId || ''),
-      subject: decodeHtmlEntities(String(data.subject || '')) || '(No subject)',
-      from: String(data.fromAddress || data.sender || ''),
-      to: String(data.toAddress || ''),
-      cc: String(data.ccAddress || ''),
-      receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
-      summary: decodeHtmlEntities(String(data.summary || '')),
-      content,
-      htmlContent: content,
-      hasAttachment: zohoBoolean(data.hasAttachment),
-      attachments,
-      engagement,
-      direction,
+  // Never call /messages/view/{id}: it is not a Zoho message-detail endpoint.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const messagePath = `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}`
+      const [data, body] = await Promise.all([
+        readZohoMessageJson<Record<string, unknown>>(`${messagePath}/details`, accessToken),
+        readZohoMessageJson<{ content?: string }>(`${messagePath}/content?includeBlockContent=true`, accessToken),
+      ])
+      // A preview is not a body. Do not cache a failed/partial read as a complete email.
+      if (typeof body.content !== 'string') throw new Error('Zoho did not return the email body. Please try again.')
+      const content = body.content
+      const hasAttachment = zohoBoolean(data.hasAttachment)
+      const attachments = hasAttachment ? await getLuxorZohoMessageAttachments(messageId, resolvedFolderId) : []
+      return {
+        id: messageId,
+        threadId: String(data.threadId || messageId),
+        folderId: resolvedFolderId,
+        subject: decodeHtmlEntities(String(data.subject || '')) || '(No subject)',
+        from: String(data.fromAddress || data.sender || ''),
+        to: String(data.toAddress || ''),
+        cc: String(data.ccAddress || ''),
+        receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
+        summary: decodeHtmlEntities(content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280),
+        content,
+        htmlContent: content,
+        hasAttachment,
+        attachments,
+        direction: allowedSenders.includes(normalizeEmailAddress(String(data.fromAddress || data.sender || ''))) ? 'outgoing' : 'incoming',
+      }
+    } catch (error) {
+      if (attempt === 0 && error instanceof ZohoMessageReadError && error.status === 404) {
+        const currentFolder = await resolveZohoMessageFolder(messageId, true)
+        if (currentFolder && currentFolder !== resolvedFolderId) {
+          resolvedFolderId = currentFolder
+          continue
+        }
+      }
+      throw error
     }
   }
-
-  try {
-    // Strategy 1: If folderId is known, use the folder-specific endpoint which reliably returns content
-    if (folderId) {
-      try {
-        const folderDetailRes = await fetchZohoMailRead(
-          `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/details`,
-          { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-        )
-        if (folderDetailRes.ok) {
-          const folderResult = await folderDetailRes.json().catch(() => ({})) as { data?: Record<string, unknown> }
-          const data = folderResult.data || {}
-
-          // Also fetch full HTML content from the content sub-endpoint
-          let content = String(data.content || '')
-          if (!content.trim()) {
-            const contentRes = await fetchZohoMailRead(
-              `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
-              { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-            )
-            if (contentRes.ok) {
-              const contentData = await contentRes.json().catch(() => ({})) as { data?: { content?: string } }
-              content = String(contentData.data?.content || '')
-            }
-          }
-          content ||= String(data.summary || '')
-
-          if (Object.keys(data).length > 0) {
-            const attachments = zohoBoolean(data.hasAttachment)
-              ? await getLuxorZohoMessageAttachments(messageId, String(data.folderId || folderId || ''))
-              : []
-            const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
-            return parseMessageData(data, content, attachments, engagement)
-          }
-        }
-      } catch (err) {
-        console.warn('Folder-specific Zoho message fetch failed, falling back to generic view:', err)
-      }
-    }
-
-    // Strategy 2: Generic /messages/view/{id} — always attempt as fallback
-    const response = await fetchZohoMailRead(`${baseUrl}/accounts/${accountId}/messages/view/${encodeURIComponent(messageId)}`, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      if (response.status === 401) cachedAccessToken = null
-      const errText = await response.text().catch(() => '')
-      console.error(`[Zoho] getLuxorZohoMessageDetail strategy-2 failed — status ${response.status}:`, errText.slice(0, 400))
-      return null
-    }
-
-    const resultText = await response.text()
-    const result = resultText ? (JSON.parse(resultText) as { data?: Record<string, unknown> }) : {}
-    const data = result.data || {}
-
-    let fullContent = String(data.content || '')
-
-    // If we have a folderId hint from the data, try the content endpoint
-    const resolvedFolderId = String(data.folderId || folderId || '')
-    if (resolvedFolderId && !fullContent.trim()) {
-      const contentResponse = await fetchZohoMailRead(
-        `${baseUrl}/accounts/${accountId}/folders/${encodeURIComponent(resolvedFolderId)}/messages/${encodeURIComponent(messageId)}/content?includeBlockContent=true`,
-        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-      )
-      if (contentResponse.ok) {
-        const contentResult = await contentResponse.json().catch(() => ({})) as { data?: { content?: string } }
-        fullContent = String(contentResult.data?.content || fullContent)
-      } else {
-        console.warn(`[Zoho] content endpoint returned ${contentResponse.status} for ${messageId}`)
-      }
-    }
-
-    // Strategy 3: originalmessage endpoint — works without folderId, returns MIME source
-    if (!fullContent.trim()) {
-      try {
-        const mimeRes = await fetchZohoMailRead(
-          `${baseUrl}/accounts/${accountId}/messages/${encodeURIComponent(messageId)}/originalmessage`,
-          { headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' }, cache: 'no-store' },
-        )
-        if (mimeRes.ok) {
-          const mimeData = await mimeRes.json().catch(() => ({})) as { data?: { content?: string; htmlContent?: string } }
-          fullContent = String(mimeData.data?.htmlContent || mimeData.data?.content || fullContent)
-        } else {
-          console.warn(`[Zoho] originalmessage returned ${mimeRes.status} for ${messageId}`)
-        }
-      } catch (mimeErr) {
-        console.warn('[Zoho] originalmessage fallback failed:', mimeErr)
-      }
-    }
-
-    fullContent ||= String(data.summary || '')
-
-    const attachments = zohoBoolean(data.hasAttachment)
-      ? await getLuxorZohoMessageAttachments(messageId, resolvedFolderId)
-      : []
-    const engagement = await getLuxorEmailEngagement(String(data.toAddress || ''), String(data.subject || ''))
-    return parseMessageData(data, fullContent, attachments, engagement)
-  } catch (err) {
-    console.error('Failed fetching Zoho message detail:', err)
-    return null
-  }
+  return null
 }
 
 export async function listLuxorZohoMessagesForAddress(email: string, limit = 1000) {

@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
+import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
 import { processDueLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
 import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const EMAIL_TIME_ZONE = 'America/Chicago'
 const SEND_WINDOW_START_HOUR = 8
@@ -39,6 +41,13 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ success: true, authenticated: true, processed: 0 })
   }
+
+  // Independent read-only Zoho sync; health=1 above still performs no queue processing.
+  // Durable event metadata tracks retries and leases if this invocation is interrupted.
+  after(async () => {
+    try { await syncPendingLuxorEmailBodies(3) }
+    catch { console.warn('[email-archive] background sync could not run; pending records retained') }
+  })
 
   const now = new Date()
   const centralHour = Number(

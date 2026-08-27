@@ -2,6 +2,7 @@ import 'server-only'
 
 import crypto from 'crypto'
 import { supabaseRest } from './supabaseRestServer'
+import { parseZohoJson } from './zohoJson'
 
 type WebhookConfigRow = {
   provider: string
@@ -145,7 +146,7 @@ function webhookDate(value: unknown) {
 export function parseZohoEmailWebhook(rawBody: string): LuxorEmailWebhookEvent {
   let payload: unknown
   try {
-    payload = JSON.parse(rawBody)
+    payload = parseZohoJson(rawBody)
   } catch {
     payload = Object.fromEntries(new URLSearchParams(rawBody))
   }
@@ -165,7 +166,8 @@ export function parseZohoEmailWebhook(rawBody: string): LuxorEmailWebhookEvent {
     recipient_email: emailFrom(recipientValue),
     subject: subject || '(No subject)',
     received_at: webhookDate(receivedValue),
-    metadata: { source: 'zoho-mail-webhook', limitedData: true },
+    metadata: { source: 'zoho-mail-webhook', limitedData: true,
+      folderId: String(findPayloadValue(payload, ['folderId', 'folder_id']) || '') || undefined },
   }
 }
 

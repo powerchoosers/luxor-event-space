@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorZohoMessageDetail } from '@/lib/zohoMailServer'
+import { ZohoMessageReadError } from '@/lib/zohoMailServer'
+import { getArchivedLuxorEmail } from '@/lib/luxorEmailArchiveServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
@@ -11,11 +12,6 @@ type StoredEmailJob = {
   body: string
   sent_at: string | null
   scheduled_for: string
-}
-
-type StoredEmailEvent = {
-  id: string
-  metadata: Record<string, unknown> | null
 }
 
 export async function GET(
@@ -117,46 +113,11 @@ export async function GET(
       )
     }
 
-    const storedEvents = await supabaseRest<StoredEmailEvent[]>(
-      `luxor_email_events?select=id,metadata&message_id=eq.${encodeURIComponent(id)}&limit=1`,
-    )
-    const storedEvent = storedEvents[0]
-    const cachedMessage = storedEvent?.metadata?.cachedMessage
-    if (cachedMessage && typeof cachedMessage === 'object') {
-      return NextResponse.json(cachedMessage)
-    }
-
-    // Incoming message bodies are requested from Zoho only once, then retained
-    // in the protected Supabase event record for subsequent views.
     const folderId = new URL(request.url).searchParams.get('folderId') || undefined
-    const detail = await getLuxorZohoMessageDetail(id, folderId)
-    if (!detail) {
-      return NextResponse.json(
-        { error: 'Zoho could not retrieve this email body. Refresh the mailbox and try again.' },
-        { status: 502 },
-      )
-    }
-
-    if (storedEvent) {
-      await supabaseRest(`luxor_email_events?id=eq.${encodeURIComponent(storedEvent.id)}`, {
-        method: 'PATCH',
-        headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          metadata: {
-            ...(storedEvent.metadata || {}),
-            limitedData: false,
-            cachedAt: new Date().toISOString(),
-            cachedMessage: detail,
-          },
-        }),
-      }).catch((cacheError) => {
-        console.warn('Incoming email body could not be cached in Supabase:', cacheError instanceof Error ? cacheError.message : cacheError)
-      })
-    }
-
+    const detail = await getArchivedLuxorEmail(id, folderId)
     return NextResponse.json(detail)
   } catch (error) {
-    console.error('Error fetching email message detail:', error)
-    return NextResponse.json({ error: 'Failed to fetch email message detail.' }, { status: 500 })
+    console.warn('[email-reader] body unavailable', { status: error instanceof ZohoMessageReadError ? error.status : 'sync_pending' })
+    return NextResponse.json({ error: error instanceof ZohoMessageReadError ? error.message : 'This email body has not finished syncing. Please retry shortly; saved emails remain available.' }, { status: 502 })
   }
 }

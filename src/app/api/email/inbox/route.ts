@@ -13,6 +13,10 @@ type StoredEmailEvent = {
   recipient_email: string | null
   subject: string
   received_at: string
+  folder_id: string | null
+  body_summary: string | null
+  body_cached_at: string | null
+  thread_id: string | null
 }
 
 type StoredEmailJob = {
@@ -59,7 +63,7 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
 
   const [events, jobs] = await Promise.all([
     supabaseRest<StoredEmailEvent[]>(
-      `luxor_email_events?select=id,message_id,sender_email,sender_name,recipient_email,subject,received_at${eventFilter}&order=received_at.desc&limit=${limit}`,
+      `luxor_email_events?select=id,message_id,sender_email,sender_name,recipient_email,subject,received_at,folder_id:metadata->>folderId,body_summary:metadata->cachedMessage->>summary,body_cached_at:metadata->>cachedAt,thread_id:metadata->cachedMessage->>threadId${eventFilter}&order=received_at.desc&limit=${limit}`,
     ),
     supabaseRest<StoredEmailJob[]>(
       `luxor_email_jobs?select=id,recipient_email,subject,body,status,sent_at,scheduled_for${jobFilter}&status=in.(sent,sending)&order=sent_at.desc.nullslast&limit=${limit}`,
@@ -69,14 +73,15 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
   return [
     ...events.map((event) => ({
       id: event.message_id || `event-${event.id}`,
-      threadId: undefined,
+      threadId: event.thread_id || undefined,
+      folderId: event.folder_id || undefined,
       subject: decodeHtmlEntities(event.subject) || '(No subject)',
       from: event.sender_name
         ? `${event.sender_name}${event.sender_email ? ` <${event.sender_email}>` : ''}`
         : event.sender_email || 'Unknown sender',
       to: event.recipient_email || '',
       receivedAt: event.received_at,
-      summary: 'Open this message to retrieve its body from Zoho.',
+      summary: event.body_summary || (event.body_cached_at ? 'No text preview.' : 'Email body awaiting sync.'),
       hasAttachment: false,
       direction: 'incoming' as const,
       folder: 'inbox' as const,

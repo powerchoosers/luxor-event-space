@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Inbox,
+  ArrowLeft,
   Send,
   Megaphone,
   Star,
@@ -32,13 +33,13 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Document, Page, pdfjs } from 'react-pdf'
-import { PortalCloseButton, PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
+import dynamic from 'next/dynamic'
+import { PortalCloseButton, PortalContactAvatar, PortalPagination, PortalSelect } from '@/components/portal/PortalUI'
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+const EmailPdfPreview = dynamic(() => import('@/components/portal/EmailPdfPreview'), { ssr: false })
 
 export interface EmailMessageItem {
   id: string
@@ -169,7 +170,10 @@ async function requestMessageDetail(messageId: string, folderId?: string) {
   const folderQuery = folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''
   const request = fetch(`/api/email/messages/${encodeURIComponent(messageId)}${folderQuery}`, { cache: 'no-store' })
     .then(async (response) => {
-      if (!response.ok) throw new Error('Unable to load this email.')
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({}))
+        throw new Error(failure.error || 'Unable to load this email. Please try again.')
+      }
       const detail = (await response.json()) as EmailMessageItem
       messageDetailCache.set(cacheKey, detail)
       return detail
@@ -246,6 +250,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [selectedMessageKey, setSelectedMessageKey] = useState<string | null>(null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [detailRetry, setDetailRetry] = useState(0)
+  const [compactReaderOpen, setCompactReaderOpen] = useState(Boolean(initialMessageId))
   const [thread, setThread] = useState<EmailThreadData | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
   const [threadError, setThreadError] = useState<string | null>(null)
@@ -266,7 +273,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<(EmailAttachment & { url: string; mimeType: string }) | null>(null)
-  const [previewPdfPages, setPreviewPdfPages] = useState(0)
 
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
@@ -348,6 +354,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       const cacheKey = detailCacheKey(selectedId, selectedFolderId)
       const cached = messageDetailCache.get(cacheKey)
       setMessageDetail(cached || null)
+      setDetailError(null)
       setLoadingDetail(!cached)
       try {
         const detail = await requestMessageDetail(selectedId, selectedFolderId)
@@ -358,11 +365,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       } catch (err) {
         const fallback = messageDetailCache.get(cacheKey) || selectedSummary || null
         if (fallback) {
-          console.warn('Full email body is temporarily unavailable; showing the synced message summary instead.', err)
+          console.warn('Full email body is unavailable; showing a retryable error.', err)
         } else {
           console.error('Error loading email message detail:', err)
         }
-        if (isCurrent) setMessageDetail(fallback)
+        if (isCurrent) {
+          setMessageDetail(null)
+          setDetailError(err instanceof Error ? err.message : 'Unable to load this email.')
+        }
       } finally {
         if (isCurrent) setLoadingDetail(false)
       }
@@ -372,7 +382,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     return () => {
       isCurrent = false
     }
-  }, [selectedId, selectedFolderId, selectedMessageKey, selectedSummary])
+  }, [selectedId, selectedFolderId, selectedMessageKey, selectedSummary, detailRetry])
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
@@ -601,7 +611,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       const contentType = response.headers.get('content-type') || attachment.mimeType || 'application/octet-stream'
       const bytes = await response.arrayBuffer()
       const url = URL.createObjectURL(new Blob([bytes], { type: contentType }))
-      setPreviewPdfPages(0)
       setPreviewAttachment({ ...attachment, mimeType: contentType, url })
     } catch (error) {
       console.error('Error opening email attachment:', error)
@@ -611,7 +620,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   }
 
   const closeAttachmentPreview = () => {
-    setPreviewPdfPages(0)
     setPreviewAttachment((current) => {
       if (current?.url) URL.revokeObjectURL(current.url)
       return null
@@ -644,6 +652,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     setSelectedMessageKey(messageKey(message))
     setMessageDetail(cached || null)
     setLoadingDetail(!cached)
+    setDetailError(null)
+    setCompactReaderOpen(true)
     setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
     setThreadError(null)
     setReplyOpen(false)
@@ -667,7 +677,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         animate={{ width: 'var(--folder-pane-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
         transition={PANEL_TRANSITION}
-        className="w-64 [--folder-pane-width:16rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden md:flex rounded-l-2xl"
+        className="w-52 [--folder-pane-width:13rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden xl:flex rounded-l-2xl"
       >
         {/* Scrollable folder list area */}
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4">
@@ -740,8 +750,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           </div>
           <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 p-2.5 text-[10px]">
             <p className="font-bold text-[color:var(--portal-text)] truncate">booking@luxoratlaspalmas.com</p>
-            <p className="text-emerald-500 font-mono text-[9px] mt-0.5 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active Connection
+            <p className="text-[color:var(--portal-muted)] font-mono text-[9px] mt-0.5">
+              {loading ? 'Loading mailbox…' : error ? 'Mailbox refresh needs attention' : 'Saved mailbox · Supabase'}
             </p>
           </div>
         </div>
@@ -756,11 +766,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
         transition={PANEL_TRANSITION}
-        className={`w-full [--message-list-width:100%] lg:w-96 lg:[--message-list-width:24rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex flex-col overflow-hidden rounded-l-2xl md:rounded-l-none ${
-          folderPaneOpen
-            ? 'md:w-[calc(100%-16rem)] md:[--message-list-width:calc(100%-16rem)]'
-            : 'md:w-full md:[--message-list-width:100%]'
-        }`}
+        className={`min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden ${compactReaderOpen ? 'hidden lg:flex' : 'flex'}`}
       >
         {/* Search & Header */}
         <div className="p-4 border-b border-[color:var(--portal-border)] space-y-3 shrink-0">
@@ -770,7 +776,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 <button
                   type="button"
                   onClick={() => setFolderPaneOpen(true)}
-                  className="shrink-0 rounded-lg bg-transparent p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
+                  className="hidden xl:inline-flex shrink-0 rounded-lg bg-transparent p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
                   title="Show mailbox folders"
                   aria-label="Show mailbox folders"
                 >
@@ -785,6 +791,21 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               {activeFolder === 'starred' && 'Starred Messages'}
             </h3>
             <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">{filteredMessages.length} items</span>
+          </div>
+
+          <div className="xl:hidden">
+            <PortalSelect
+              value={activeFolder}
+              onChange={(value) => { setActiveFolder(value as ActiveFolder); setCurrentPage(1) }}
+              options={[
+                { value: 'inbox', label: 'Inbox' },
+                { value: 'sent', label: 'Sent Items' },
+                { value: 'all', label: 'All Mail' },
+                { value: 'campaigns', label: 'Campaign Blasts' },
+                { value: 'starred', label: 'Starred' },
+              ]}
+              buttonClassName="min-h-10 text-xs"
+            />
           </div>
 
           {/* Search Input */}
@@ -929,9 +950,21 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className="flex-1 overflow-hidden bg-[color:var(--portal-card)] flex flex-col hidden lg:flex rounded-r-2xl">
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
+        <div className="shrink-0 border-b border-[color:var(--portal-border)] px-3 py-2 lg:hidden">
+          <button type="button" onClick={() => { setCompactReaderOpen(false); setReaderExpanded(false); setReaderMenuOpen(false) }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+            <ArrowLeft size={18} /> Back to inbox
+          </button>
+        </div>
         <AnimatePresence mode="wait" initial={false}>
-        {loadingDetail ? (
+        {detailError ? (
+          <motion.div key={`error:${selectedId}`} role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+            <Mail size={28} className="text-[color:var(--portal-muted)]" />
+            <h2 className="font-semibold text-[color:var(--portal-text)]">Email body unavailable</h2>
+            <p className="max-w-md text-sm text-[color:var(--portal-muted)]">{detailError}</p>
+            <button type="button" onClick={() => setDetailRetry((value) => value + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-sm hover:bg-[color:var(--portal-soft)]"><RefreshCw size={15} /> Retry loading email</button>
+          </motion.div>
+        ) : loadingDetail ? (
           <motion.div
             key={`loading:${selectedMessageKey || selectedId || 'email'}`}
             initial={{ opacity: 0 }}
@@ -968,8 +1001,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
-            <div className="p-6 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 space-y-4">
-              <div className="flex items-start justify-between gap-4">
+            <div className="shrink-0 p-4 sm:p-6 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <DirectionBadge direction={messageDetail.direction} />
@@ -997,7 +1030,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                       setReaderMenuOpen(false)
                       setReaderExpanded((expanded) => !expanded)
                     }}
-                    className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                    className="hidden lg:inline-flex rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
                     title={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                     aria-label={readerExpanded ? 'Restore message list' : 'Expand email reader'}
                   >
@@ -1308,19 +1341,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
                 <div className="min-h-0 flex-1 bg-white">
                   {previewAttachment.mimeType.startsWith('application/pdf') || /\.pdf$/i.test(previewAttachment.filename) ? (
-                    <div className="h-full overflow-y-auto bg-zinc-100 p-5">
-                      <Document
-                        file={previewAttachment.url}
-                        onLoadSuccess={({ numPages }) => setPreviewPdfPages(numPages)}
-                        loading={<div className="flex min-h-48 items-center justify-center text-xs text-zinc-500">Loading PDF…</div>}
-                        error={<div className="flex min-h-48 items-center justify-center text-xs text-rose-600">This PDF could not be rendered.</div>}
-                        className="flex flex-col items-center gap-3"
-                      >
-                        {previewPdfPages > 0 && Array.from({ length: previewPdfPages }, (_, index) => (
-                          <Page key={index + 1} pageNumber={index + 1} width={Math.min(typeof window !== 'undefined' ? window.innerWidth * 0.7 : 900, 900)} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-lg" />
-                        ))}
-                      </Document>
-                    </div>
+                    <EmailPdfPreview key={previewAttachment.url} url={previewAttachment.url} />
                   ) : previewAttachment.mimeType.startsWith('image/') ? (
                     <div className="flex h-full items-center justify-center bg-zinc-950 p-5">
                       <img src={previewAttachment.url} alt={previewAttachment.filename} className="max-h-full max-w-full object-contain" />

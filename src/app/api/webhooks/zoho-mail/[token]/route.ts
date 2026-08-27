@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
+import { getArchivedLuxorEmail } from '@/lib/luxorEmailArchiveServer'
 import {
   broadcastLuxorEmailArrival,
   getZohoWebhookSecret,
@@ -52,6 +53,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
     const event = parseZohoEmailWebhook(rawBody)
     const stored = await storeZohoEmailEvent(event)
+    if (stored && event.message_id) {
+      const messageId = event.message_id
+      after(async () => {
+        try { await getArchivedLuxorEmail(messageId) }
+        catch { console.warn('[email-archive] new message deferred to background retry') }
+      })
+    }
     if (stored) {
       await broadcastLuxorEmailArrival(stored.event_key)
       await sendLuxorWebPush('email', {
