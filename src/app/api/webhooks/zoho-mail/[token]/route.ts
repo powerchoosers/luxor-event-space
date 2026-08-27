@@ -11,6 +11,8 @@ import {
 } from '@/lib/luxorZohoWebhookServer'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 
+export const maxDuration = 60
+
 export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
   const startedAt = Date.now()
   const requestId = request.headers.get('x-vercel-id')

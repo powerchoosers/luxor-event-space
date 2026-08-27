@@ -187,11 +187,11 @@ async function requestMessageDetail(messageId: string, folderId?: string) {
 }
 
 async function requestMailbox(force = false) {
-  if (mailboxCache && !force) return mailboxCache
+  // Show the session cache immediately, but revalidate Supabase on each visit so
+  // newly archived bodies and previews do not remain hidden behind stale headers.
   if (mailboxRequest && !force) return mailboxRequest
 
-  const liveQuery = force ? '&live=1' : ''
-  const request = fetch(`/api/email/inbox?limit=250&folder=all${liveQuery}`, { cache: 'no-store' })
+  const request = fetch('/api/email/inbox?limit=1000&folder=all', { cache: 'no-store' })
     .then(async (response) => {
       const data = (await response.json().catch(() => ({}))) as {
         messages?: EmailMessageItem[]
@@ -1179,7 +1179,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </div>
 
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
+            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto [overflow-anchor:none] p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">

@@ -182,7 +182,7 @@ function getZohoConfig() {
   const refreshToken = process.env.ZOHO_REFRESH_TOKEN
   const accountId = process.env.ZOHO_ACCOUNT_ID
   const accountsServer = (process.env.ZOHO_ACCOUNTS_SERVER || 'https://accounts.zoho.com').replace(/\/$/, '')
-  const baseUrl = (process.env.ZOHO_BASE_URL || 'https://mail.zoho.com/api/v1').replace(/\/$/, '')
+  const baseUrl = (process.env.ZOHO_BASE_URL || 'https://mail.zoho.com/api').replace(/\/$/, '')
   const calendarBaseUrl = (process.env.ZOHO_CALENDAR_BASE_URL || 'https://calendar.zoho.com/api/v1').replace(/\/$/, '')
   const calendarUid = (process.env.LUXOR_ZOHO_CALENDAR_UID || '').trim()
   const loginEmail = (process.env.LUXOR_ZOHO_LOGIN_EMAIL || DEFAULT_LOGIN_EMAIL).toLowerCase()
@@ -1107,7 +1107,7 @@ async function fetchLuxorZohoMessageDetail(messageId: string, folderId?: string)
         to: String(data.toAddress || ''),
         cc: String(data.ccAddress || ''),
         receivedAt: normalizeZohoDate(data.receivedTime || data.receivedtime || data.sentDateInGMT),
-        summary: decodeHtmlEntities(content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280),
+        summary: decodeHtmlEntities(content.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280),
         content,
         htmlContent: content,
         hasAttachment,

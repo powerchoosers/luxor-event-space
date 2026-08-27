@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { ZohoMessageReadError } from '@/lib/zohoMailServer'
+import { isLuxorZohoAuthorizationError, ZohoMessageReadError } from '@/lib/zohoMailServer'
 import { getArchivedLuxorEmail } from '@/lib/luxorEmailArchiveServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
@@ -118,6 +118,9 @@ export async function GET(
     return NextResponse.json(detail)
   } catch (error) {
     console.warn('[email-reader] body unavailable', { status: error instanceof ZohoMessageReadError ? error.status : 'sync_pending' })
-    return NextResponse.json({ error: error instanceof ZohoMessageReadError ? error.message : 'This email body has not finished syncing. Please retry shortly; saved emails remain available.' }, { status: 502 })
+    const authorizationRejected = isLuxorZohoAuthorizationError(error)
+    return NextResponse.json({ error: authorizationRejected
+      ? 'Zoho rejected the saved mailbox authorization. Reconnect in Settings to sync missing bodies; saved emails remain available.'
+      : error instanceof ZohoMessageReadError ? error.message : 'This email body has not finished syncing. Please retry shortly; saved emails remain available.' }, { status: 502 })
   }
 }

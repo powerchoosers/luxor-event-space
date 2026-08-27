@@ -30,7 +30,7 @@ type StoredEmailJob = {
 }
 
 function plainTextSummary(value: string) {
-  return decodeHtmlEntities(value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280)
+  return decodeHtmlEntities(value.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 280)
 }
 
 type MailboxMessageItem = {
@@ -96,8 +96,6 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
       to: job.recipient_email,
       receivedAt: job.sent_at || job.scheduled_for,
       summary: plainTextSummary(job.body),
-      content: job.body,
-      htmlContent: /<\/?[a-z][\s\S]*>/i.test(job.body) ? job.body : undefined,
       hasAttachment: false,
       direction: 'outgoing' as const,
       folder: 'sent' as const,
