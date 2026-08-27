@@ -73,6 +73,7 @@ export function cloneLuxorEmailTheme(mode: LuxorEmailThemeMode = 'brand'): Luxor
 }
 
 export function normalizeLuxorEmailTheme(value: unknown): LuxorEmailTheme {
+  if (value === 'light' || value === 'dark' || value === 'brand') return cloneLuxorEmailTheme(value)
   if (!value || typeof value !== 'object') return cloneLuxorEmailTheme('brand')
   const candidate = value as Partial<LuxorEmailTheme>
   const mode: LuxorEmailThemeMode = candidate.mode === 'light' || candidate.mode === 'dark' || candidate.mode === 'brand'

@@ -544,6 +544,13 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
   }
 
   const selectedBlock = blocks.find((b) => b.id === selectedId) ?? null
+  const readinessIssues = [
+    !subject.trim() ? 'Add a subject line' : null,
+    !preheader.trim() ? 'Add preview text' : null,
+    !blocks.length ? 'Add at least one content block' : null,
+    blocks.some((block) => block.type === 'image_text' && !block.imageAlt.trim()) ? 'Add alt text to every image' : null,
+    blocks.some((block) => block.type === 'button' && !/^https?:\/\//i.test(block.url)) ? 'Check button links' : null,
+  ].filter((issue): issue is string => Boolean(issue))
 
   const canUndo = historyIdx > 0
   const canRedo = historyIdx < history.length - 1
@@ -616,7 +623,7 @@ export function EmailBuilderShell({ initialTemplate = null }: { initialTemplate?
                 </button>
               ))}
             </div>
-            <button type="button" onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-700"><CheckCircle2 size={14} /> {blocks.length ? '3 checks passed' : 'Add content to check'}</button>
+            <button type="button" onClick={() => setShowPreview(true)} title={readinessIssues.join(' · ')} className={`flex items-center gap-1.5 text-[9px] font-bold ${readinessIssues.length ? 'text-amber-700' : 'text-emerald-700'}`}><CheckCircle2 size={14} /> {readinessIssues.length ? `${readinessIssues.length} issue${readinessIssues.length === 1 ? '' : 's'}` : 'Ready · 5 checks passed'}</button>
           </div>
         </motion.main>
 

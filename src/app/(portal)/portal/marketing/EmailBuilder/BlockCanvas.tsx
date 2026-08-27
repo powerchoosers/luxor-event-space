@@ -568,7 +568,6 @@ function SortableBlock({
         {/* Actual email block preview */}
         <div
           style={{ background: BG_CARD, overflow: 'hidden', borderRadius: 2 }}
-          onClick={(e) => e.stopPropagation()} // let clicks on editables through without triggering block select
         >
           <BlockView block={block} onChange={onChange} selected={isSelected} />
         </div>
