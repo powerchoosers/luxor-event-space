@@ -10,7 +10,7 @@ import ical, {
   ICalEventStatus,
   ICalEventTransparency,
 } from 'ical-generator'
-import nodemailer from 'nodemailer'
+import { sendLuxorZohoEmail } from './zohoMailServer'
 
 const LUXOR_CALENDAR_DOMAIN = 'luxoratlaspalmas.com'
 const LUXOR_ORGANIZER_EMAIL = 'booking@luxoratlaspalmas.com'
@@ -128,33 +128,20 @@ function invitationDateLabel(start: Date, end: Date) {
 }
 
 export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
-  const apiKey = process.env.RESEND_API_KEY?.trim()
-  if (!apiKey) throw new Error('Resend is not configured. Add RESEND_API_KEY before sending a test invitation.')
-
   const validated = validateInvite(input)
   const calendarContent = buildLuxorCalendarInvite(input)
-  const fromAddress = normalizedEmail(process.env.LUXOR_RESEND_FROM_EMAIL || LUXOR_ORGANIZER_EMAIL)
-  if (!fromAddress) throw new Error('LUXOR_RESEND_FROM_EMAIL is not a valid email address.')
-
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 465,
-    secure: true,
-    auth: { user: 'resend', pass: apiKey },
-  })
   const dateLabel = invitationDateLabel(input.start, input.end)
   const safeTitle = escapeHtml(validated.title)
   const safeDate = escapeHtml(dateLabel)
   const safeLocation = escapeHtml(validated.location)
   const safeDescription = escapeHtml(validated.description).replace(/\r?\n/g, '<br />')
 
-  const receipt = await transporter.sendMail({
-    from: { name: LUXOR_ORGANIZER_NAME, address: fromAddress },
-    to: { name: validated.attendeeName, address: validated.attendeeEmail },
-    replyTo: LUXOR_ORGANIZER_EMAIL,
+  const receipt = await sendLuxorZohoEmail({
+    from: LUXOR_ORGANIZER_EMAIL,
+    fromName: LUXOR_ORGANIZER_NAME,
+    to: validated.attendeeEmail,
     subject: validated.title,
-    text: [validated.title, dateLabel, validated.location, validated.description, '', `Reply to ${LUXOR_ORGANIZER_EMAIL} with any questions.`].filter(Boolean).join('\n\n'),
-    html: `
+    content: `
       <div style="margin:0;background:#f6f2eb;padding:28px 14px;font-family:Arial,Helvetica,sans-serif;color:#2f271f;">
         <div style="margin:0 auto;max-width:600px;border:1px solid #e0d3bd;background:#fff;padding:30px;">
           <div style="font-family:Georgia,'Times New Roman',serif;font-size:25px;letter-spacing:.12em;color:#9a712e;text-transform:uppercase;">Luxor</div>
@@ -165,25 +152,32 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
           <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">Use the calendar controls in this message to accept, decline, or add the appointment. Questions? Reply to booking@luxoratlaspalmas.com.</p>
         </div>
       </div>`,
-    icalEvent: {
+    attachments: [{
       filename: 'luxor-event-space-invitation.ics',
-      method: 'REQUEST',
-      content: calendarContent,
-    },
+      content: Buffer.from(calendarContent, 'utf8'),
+      contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+    }],
   })
 
   return {
     messageId: receipt.messageId,
-    accepted: receipt.accepted.map(String),
-    rejected: receipt.rejected.map(String),
+    accepted: [receipt.to],
+    rejected: [],
     calendarContent,
   }
 }
 
 export function luxorCalendarInviteConfig() {
+  const configured = Boolean(
+    process.env.ZOHO_CLIENT_ID?.trim()
+    && process.env.ZOHO_CLIENT_SECRET?.trim()
+    && process.env.ZOHO_REFRESH_TOKEN?.trim()
+    && process.env.ZOHO_ACCOUNT_ID?.trim(),
+  )
   return {
-    configured: Boolean(process.env.RESEND_API_KEY?.trim()),
-    fromAddress: normalizedEmail(process.env.LUXOR_RESEND_FROM_EMAIL || LUXOR_ORGANIZER_EMAIL) || LUXOR_ORGANIZER_EMAIL,
+    configured,
+    provider: 'zoho',
+    fromAddress: normalizedEmail(process.env.LUXOR_ZOHO_LOGIN_EMAIL || LUXOR_ORGANIZER_EMAIL) || LUXOR_ORGANIZER_EMAIL,
     organizerEmail: LUXOR_ORGANIZER_EMAIL,
     timezone: LUXOR_TIMEZONE,
   }

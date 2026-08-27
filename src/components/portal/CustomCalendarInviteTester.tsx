@@ -24,6 +24,7 @@ const DURATION_OPTIONS = [
 
 type ConfigResponse = {
   configured?: boolean
+  provider?: 'zoho'
   fromAddress?: string
   organizerEmail?: string
   timezone?: string
@@ -67,10 +68,10 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
     fetch('/api/portal/calendar-invite-test', { cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as ConfigResponse
-        if (!response.ok) throw new Error(payload.error || 'Could not check Resend configuration.')
+        if (!response.ok) throw new Error(payload.error || 'Could not check Zoho Mail configuration.')
         setConfig(payload)
       })
-      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check Resend configuration.' }))
+      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check Zoho Mail configuration.' }))
   }, [])
 
   const requestInvite = async (mode: 'send' | 'download') => {
@@ -129,7 +130,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
     }
   }
 
-  const resendReady = config?.configured === true
+  const zohoReady = config?.configured === true
 
   return (
     <section data-testid="calendar-invite-tester" className="luxor-glass-card min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 xl:col-span-2">
@@ -140,18 +141,18 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Custom Calendar Invite Test</h3>
           </div>
           <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
-            Creates Luxor&apos;s own RFC 5545 meeting request and sends it through Resend SMTP. This test does not create, update, or remove a Zoho Calendar event.
+            Creates Luxor&apos;s own RFC 5545 meeting request and sends the .ics file through Zoho Mail. This test does not create, update, or remove a Zoho Calendar event.
           </p>
         </div>
         <div className={`inline-flex min-h-8 shrink-0 items-center gap-2 self-start rounded-lg border px-3 text-[9px] font-black uppercase tracking-wider ${
           config === null
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-            : resendReady
+            : zohoReady
               ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
               : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
         }`}>
-          {config === null ? <Loader2 size={12} className="animate-spin" /> : resendReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
-          {config === null ? 'Checking Resend' : resendReady ? 'Resend ready' : 'Resend key needed'}
+          {config === null ? <Loader2 size={12} className="animate-spin" /> : zohoReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
+          {config === null ? 'Checking Zoho Mail' : zohoReady ? 'Zoho Mail ready' : 'Zoho Mail unavailable'}
         </div>
       </div>
 
@@ -199,7 +200,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           </label>
 
           <div className="flex flex-col gap-2.5 sm:flex-row">
-            <PortalButton type="button" variant="primary" disabled={!resendReady || busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('send')} className="w-full sm:w-auto">
+            <PortalButton type="button" variant="primary" disabled={!zohoReady || busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('send')} className="w-full sm:w-auto">
               {busyAction === 'send' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               {busyAction === 'send' ? 'Sending test' : 'Send test invite'}
             </PortalButton>
@@ -208,8 +209,8 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
               {busyAction === 'download' ? 'Building file' : 'Download .ics'}
             </PortalButton>
           </div>
-          {!resendReady && config !== null ? (
-            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading works now. Sending becomes available after RESEND_API_KEY is configured for the Luxor deployment.</p>
+          {!zohoReady && config !== null ? (
+            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading still works. Sending requires the existing Luxor Zoho Mail connection.</p>
           ) : null}
         </div>
 
@@ -229,7 +230,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Delivery</dt>
-              <dd className="text-right font-semibold text-[color:var(--portal-text)]">Resend SMTP · calendar request</dd>
+              <dd className="text-right font-semibold text-[color:var(--portal-text)]">Zoho Mail · .ics request</dd>
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Response</dt>
@@ -238,7 +239,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           </dl>
           {lastMessageId ? (
             <div className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-3 text-[10px] leading-5 text-emerald-700 dark:text-emerald-300">
-              Resend accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
+              Zoho Mail accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
             </div>
           ) : null}
         </aside>
