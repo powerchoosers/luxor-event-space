@@ -246,7 +246,7 @@ export function EmailBuilderTab({
           <EmailBuilderShell
             key={`${builderTemplate?.id || 'blank-builder'}-${builderSession}`}
             initialTemplate={builderTemplate}
-            onClose={() => setShowCanvas(false)}
+            onClose={() => { setShowCanvas(false); setShowStartModal(true) }}
           />
         </div>
       </motion.div>
