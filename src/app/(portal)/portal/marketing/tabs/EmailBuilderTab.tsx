@@ -17,7 +17,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent } from '../page'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalSelect } from '@/components/portal/PortalUI'
 import { cloneLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 
 interface EmailBuilderTabProps {
@@ -27,6 +27,7 @@ interface EmailBuilderTabProps {
   onOpenBlankBuilder: () => void
   onOpenTemplateInBuilder: (template: EmailTemplate) => void
   onCanvasChange: (open: boolean) => void
+  openCanvas?: boolean
 }
 
 type SubTab = 'builder' | 'templates' | 'elena-ai'
@@ -38,6 +39,7 @@ export function EmailBuilderTab({
   onOpenBlankBuilder,
   onOpenTemplateInBuilder,
   onCanvasChange,
+  openCanvas = false,
 }: EmailBuilderTabProps) {
   const { notify } = useToast()
   const searchParams = useSearchParams()
@@ -45,7 +47,7 @@ export function EmailBuilderTab({
   
   // Track active subtab (Builder is selected in Rendering 4)
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('builder')
-  const [showCanvas, setShowCanvas] = useState(false)
+  const [showCanvas, setShowCanvas] = useState(openCanvas)
   const [showStartModal, setShowStartModal] = useState(true)
   const [builderTemplate, setBuilderTemplate] = useState<EmailTemplate | null>(initialTemplate)
   const [builderSession, setBuilderSession] = useState(0)
@@ -253,6 +255,9 @@ export function EmailBuilderTab({
     )
   }
 
+  // Campaign creation starts in the marketing-shell modal; this tab only renders the actual canvas.
+  if (!showCanvas) return null
+
   return (
     <div className="relative space-y-4 flex flex-col h-full min-h-0 overflow-hidden">
       {showStartModal && (
@@ -265,7 +270,7 @@ export function EmailBuilderTab({
                   <h2 id="email-start-title" className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Choose how you want to start.</h2>
                   <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.</p>
                 </div>
-                <button type="button" aria-label="Close start dialog" onClick={() => setShowStartModal(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">×</button>
+                <PortalCloseButton type="button" aria-label="Close start dialog" onClick={() => setShowStartModal(false)} />
               </div>
             </div>
             <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">

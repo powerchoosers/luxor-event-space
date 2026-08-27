@@ -618,7 +618,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
         </div>
       </aside>
 
-      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden rounded-tl-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left,border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <header className={`z-50 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -812,7 +812,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           })}
         </nav>
 
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-24 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-24 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
