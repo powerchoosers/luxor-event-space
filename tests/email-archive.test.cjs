@@ -10,7 +10,7 @@ const ts = require('typescript')
 function loadTs(relative, mocks = {}) {
   const filename = path.resolve(__dirname, '..', relative)
   const localRequire = createRequire(filename)
-  const module = { exports: {} }
+  const loadedModule = { exports: {} }
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText
@@ -20,8 +20,8 @@ function loadTs(relative, mocks = {}) {
     if (id.startsWith('.')) return loadTs(path.relative(path.resolve(__dirname, '..'), path.resolve(path.dirname(filename), id + '.ts')), mocks)
     return localRequire(id)
   }
-  new Function('require', 'module', 'exports', code)(requireMock, module, module.exports)
-  return module.exports
+  new Function('require', 'module', 'exports', code)(requireMock, loadedModule, loadedModule.exports)
+  return loadedModule.exports
 }
 
 const { parseZohoJson } = loadTs('src/lib/zohoJson.ts')
@@ -56,7 +56,10 @@ function provider(t, messages = []) {
   global.fetch = async (url) => {
     calls.push(String(url))
     if (String(url).includes('/oauth/v2/token')) return Response.json({ access_token: 'fake', expires_in: 3600 })
-    if (String(url).includes('/messages/view?')) return Response.json({ data: messages })
+    if (String(url).includes('/messages/view?') || String(url).includes('/messages/search?')) {
+      const start = Number(new URL(url).searchParams.get('start'))
+      return Response.json({ data: start === 1 ? messages : [] })
+    }
     if (String(url).endsWith('/details')) return Response.json({ data: { subject: 'Hello', fromAddress: 'client@example.com', receivedTime: '1787850392225', hasAttachment: false } })
     if (String(url).includes('/content?')) return Response.json({ data: body }, { status: contentStatus })
     throw new Error('Unexpected provider call: ' + url)

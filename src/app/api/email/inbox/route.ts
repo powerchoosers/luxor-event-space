@@ -17,6 +17,7 @@ type StoredEmailEvent = {
   body_summary: string | null
   body_cached_at: string | null
   thread_id: string | null
+  resolved_id: string | null
 }
 
 type StoredEmailJob = {
@@ -63,16 +64,16 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
 
   const [events, jobs] = await Promise.all([
     supabaseRest<StoredEmailEvent[]>(
-      `luxor_email_events?select=id,message_id,sender_email,sender_name,recipient_email,subject,received_at,folder_id:metadata->>folderId,body_summary:metadata->cachedMessage->>summary,body_cached_at:metadata->>cachedAt,thread_id:metadata->cachedMessage->>threadId${eventFilter}&order=received_at.desc&limit=${limit}`,
+      `luxor_email_events?select=id,message_id,sender_email,sender_name,recipient_email,subject,received_at,folder_id:metadata->>folderId,body_summary:metadata->cachedMessage->>summary,body_cached_at:metadata->>cachedAt,thread_id:metadata->cachedMessage->>threadId,resolved_id:metadata->cachedMessage->>id${eventFilter}&order=received_at.desc&limit=${limit}`,
     ),
     supabaseRest<StoredEmailJob[]>(
       `luxor_email_jobs?select=id,recipient_email,subject,body,status,sent_at,scheduled_for${jobFilter}&status=in.(sent,sending)&order=sent_at.desc.nullslast&limit=${limit}`,
     ),
   ])
 
-  return [
+  const messages = [
     ...events.map((event) => ({
-      id: event.message_id || `event-${event.id}`,
+      id: event.resolved_id || event.message_id || `event-${event.id}`,
       threadId: event.thread_id || undefined,
       folderId: event.folder_id || undefined,
       subject: decodeHtmlEntities(event.subject) || '(No subject)',
@@ -102,7 +103,10 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
       isRead: true,
       storedLocally: true,
     })),
-  ].sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()).slice(0, limit)
+  ].sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
+  // A repaired legacy webhook and a direct reader fetch may reference the same
+  // provider email. Keep both database records, but show only one mailbox item.
+  return Array.from(new Map(messages.map((message) => [message.id, message])).values()).slice(0, limit)
 }
 
 export async function GET(request: NextRequest) {

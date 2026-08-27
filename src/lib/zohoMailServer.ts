@@ -993,28 +993,24 @@ let messageFolderIndex: { messages: Map<string, ZohoMessageSummary>; expiresAt: 
 let messageFolderIndexRequest: Promise<Map<string, ZohoMessageSummary>> | null = null
 
 async function getZohoMessageIndex(force = false) {
+  if (force) {
+    cachedInboxListing = null
+    cachedSentListing = null
+  }
   if (!force && messageFolderIndex && messageFolderIndex.expiresAt > Date.now()) {
     return messageFolderIndex.messages
   }
   if (!messageFolderIndexRequest) {
     messageFolderIndexRequest = (async () => {
-      const { accountId, baseUrl } = getZohoConfig()
-      const accessToken = await getZohoAccessToken()
       const messages = new Map<string, ZohoMessageSummary>()
-      for (let start = 1; start <= 4000; start += 200) {
-        const params = new URLSearchParams({
-          start: String(start), limit: '200', includesent: 'true',
-          includearchive: 'true', includeto: 'true', threadedMails: 'false',
+      // Use the same inbox and sent listings as the working live mailbox. A single
+      // combined view is not reliable for locating messages across both folders.
+      const listings = await Promise.all([listLuxorZohoInbox(1000), listLuxorZohoSentMessages(1000)])
+      for (const message of listings.flat()) {
+        if (message.id && message.folderId) messages.set(message.id, {
+          messageId: message.id, folderId: message.folderId, subject: message.subject,
+          fromAddress: message.from, receivedTime: message.receivedAt || undefined,
         })
-        const data = await readZohoMessageJson<ZohoMessageSummary[]>(
-          `${baseUrl}/accounts/${accountId}/messages/view?${params}`, accessToken,
-        )
-        if (!Array.isArray(data)) throw new Error('Zoho returned an unreadable mailbox index.')
-        for (const message of data) {
-          const id = String(message.messageId || message.message_id || '')
-          if (id && message.folderId) messages.set(id, message)
-        }
-        if (data.length < 200) break
       }
       messageFolderIndex = { messages, expiresAt: Date.now() + 60_000 }
       return messages
@@ -1047,7 +1043,11 @@ export async function resolveArchivedZohoMessage(messageId: string, identity: Ar
     && Math.abs(new Date(normalizeZohoDate(item.receivedTime || item.receivedtime || item.sentDateInGMT) || '').getTime()
       - new Date(identity.received_at).getTime()) <= 60_000
   ))
-  return candidates.length === 1 ? { id: candidates[0][0], folderId: candidates[0][1].folderId } : null
+  if (candidates.length !== 1) {
+    console.warn('[email-archive] message identity could not be resolved', { indexedMessages: index.size, matches: candidates.length })
+    return null
+  }
+  return { id: candidates[0][0], folderId: candidates[0][1].folderId }
 }
 
 export class ZohoMessageReadError extends Error {
