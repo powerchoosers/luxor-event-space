@@ -10,7 +10,7 @@ import ical, {
   ICalEventStatus,
   ICalEventTransparency,
 } from 'ical-generator'
-import { sendLuxorZohoEmail } from './zohoMailServer'
+import nodemailer from 'nodemailer'
 
 const LUXOR_CALENDAR_DOMAIN = 'luxoratlaspalmas.com'
 const LUXOR_ORGANIZER_EMAIL = 'booking@luxoratlaspalmas.com'
@@ -127,8 +127,25 @@ function invitationDateLabel(start: Date, end: Date) {
   return `${date}, ${time.format(start)}–${time.format(end)}`
 }
 
+function zohoSmtpConfig() {
+  const host = String(process.env.LUXOR_ZOHO_SMTP_HOST || '').trim()
+  const port = Number(process.env.LUXOR_ZOHO_SMTP_PORT || 465)
+  const user = normalizedEmail(process.env.LUXOR_ZOHO_SMTP_USER || '')
+  const password = String(process.env.LUXOR_ZOHO_SMTP_PASSWORD || '').trim()
+
+  if (!host || !user || !password || ![465, 587].includes(port)) {
+    throw new Error('Zoho SMTP is not configured. Check the Luxor SMTP host, port, user, and app password.')
+  }
+  if (user !== LUXOR_ORGANIZER_EMAIL) {
+    throw new Error(`Zoho SMTP must authenticate as ${LUXOR_ORGANIZER_EMAIL}.`)
+  }
+
+  return { host, port, user, password }
+}
+
 export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
   const validated = validateInvite(input)
+  const smtp = zohoSmtpConfig()
   const calendarContent = buildLuxorCalendarInvite(input)
   const dateLabel = invitationDateLabel(input.start, input.end)
   const safeTitle = escapeHtml(validated.title)
@@ -136,12 +153,29 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
   const safeLocation = escapeHtml(validated.location)
   const safeDescription = escapeHtml(validated.description).replace(/\r?\n/g, '<br />')
 
-  const receipt = await sendLuxorZohoEmail({
-    from: LUXOR_ORGANIZER_EMAIL,
-    fromName: LUXOR_ORGANIZER_NAME,
-    to: validated.attendeeEmail,
+  const transporter = nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.port === 465,
+    requireTLS: smtp.port === 587,
+    auth: { user: smtp.user, pass: smtp.password },
+    tls: { minVersion: 'TLSv1.2' },
+  })
+
+  const receipt = await transporter.sendMail({
+    from: { name: LUXOR_ORGANIZER_NAME, address: LUXOR_ORGANIZER_EMAIL },
+    to: { name: validated.attendeeName, address: validated.attendeeEmail },
+    replyTo: LUXOR_ORGANIZER_EMAIL,
     subject: validated.title,
-    content: `
+    text: [
+      validated.title,
+      dateLabel,
+      validated.location,
+      validated.description,
+      '',
+      `Reply to ${LUXOR_ORGANIZER_EMAIL} with any questions.`,
+    ].filter(Boolean).join('\n\n'),
+    html: `
       <div style="margin:0;background:#f6f2eb;padding:28px 14px;font-family:Arial,Helvetica,sans-serif;color:#2f271f;">
         <div style="margin:0 auto;max-width:600px;border:1px solid #e0d3bd;background:#fff;padding:30px;">
           <div style="font-family:Georgia,'Times New Roman',serif;font-size:25px;letter-spacing:.12em;color:#9a712e;text-transform:uppercase;">Luxor</div>
@@ -152,32 +186,36 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
           <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">Use the calendar controls in this message to accept, decline, or add the appointment. Questions? Reply to booking@luxoratlaspalmas.com.</p>
         </div>
       </div>`,
-    attachments: [{
+    headers: {
+      'Content-Class': 'urn:content-classes:calendarmessage',
+    },
+    icalEvent: {
       filename: 'luxor-event-space-invitation.ics',
-      content: Buffer.from(calendarContent, 'utf8'),
-      contentType: 'text/calendar; charset=utf-8; method=REQUEST',
-    }],
+      method: 'REQUEST',
+      content: calendarContent,
+    },
   })
 
   return {
     messageId: receipt.messageId,
-    accepted: [receipt.to],
-    rejected: [],
+    accepted: receipt.accepted.map(String),
+    rejected: receipt.rejected.map(String),
     calendarContent,
   }
 }
 
 export function luxorCalendarInviteConfig() {
+  const smtpUser = normalizedEmail(process.env.LUXOR_ZOHO_SMTP_USER || '')
   const configured = Boolean(
-    process.env.ZOHO_CLIENT_ID?.trim()
-    && process.env.ZOHO_CLIENT_SECRET?.trim()
-    && process.env.ZOHO_REFRESH_TOKEN?.trim()
-    && process.env.ZOHO_ACCOUNT_ID?.trim(),
+    process.env.LUXOR_ZOHO_SMTP_HOST?.trim()
+    && smtpUser === LUXOR_ORGANIZER_EMAIL
+    && process.env.LUXOR_ZOHO_SMTP_PASSWORD?.trim()
+    && [465, 587].includes(Number(process.env.LUXOR_ZOHO_SMTP_PORT || 465)),
   )
   return {
     configured,
-    provider: 'zoho',
-    fromAddress: normalizedEmail(process.env.LUXOR_ZOHO_LOGIN_EMAIL || LUXOR_ORGANIZER_EMAIL) || LUXOR_ORGANIZER_EMAIL,
+    provider: 'zoho-smtp',
+    fromAddress: smtpUser || LUXOR_ORGANIZER_EMAIL,
     organizerEmail: LUXOR_ORGANIZER_EMAIL,
     timezone: LUXOR_TIMEZONE,
   }

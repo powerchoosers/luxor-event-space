@@ -24,7 +24,7 @@ const DURATION_OPTIONS = [
 
 type ConfigResponse = {
   configured?: boolean
-  provider?: 'zoho'
+  provider?: 'zoho-smtp'
   fromAddress?: string
   organizerEmail?: string
   timezone?: string
@@ -68,10 +68,10 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
     fetch('/api/portal/calendar-invite-test', { cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as ConfigResponse
-        if (!response.ok) throw new Error(payload.error || 'Could not check Zoho Mail configuration.')
+        if (!response.ok) throw new Error(payload.error || 'Could not check Zoho SMTP configuration.')
         setConfig(payload)
       })
-      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check Zoho Mail configuration.' }))
+      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check Zoho SMTP configuration.' }))
   }, [])
 
   const requestInvite = async (mode: 'send' | 'download') => {
@@ -141,7 +141,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Custom Calendar Invite Test</h3>
           </div>
           <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
-            Creates Luxor&apos;s own RFC 5545 meeting request and sends the .ics file through Zoho Mail. This test does not create, update, or remove a Zoho Calendar event.
+            Sends Luxor&apos;s RFC 5545 meeting request as a true calendar MIME message through Zoho SMTP. This test does not create, update, or remove a Zoho Calendar event.
           </p>
         </div>
         <div className={`inline-flex min-h-8 shrink-0 items-center gap-2 self-start rounded-lg border px-3 text-[9px] font-black uppercase tracking-wider ${
@@ -152,7 +152,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
               : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
         }`}>
           {config === null ? <Loader2 size={12} className="animate-spin" /> : zohoReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
-          {config === null ? 'Checking Zoho Mail' : zohoReady ? 'Zoho Mail ready' : 'Zoho Mail unavailable'}
+          {config === null ? 'Checking Zoho SMTP' : zohoReady ? 'Zoho SMTP ready' : 'Zoho SMTP unavailable'}
         </div>
       </div>
 
@@ -210,7 +210,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             </PortalButton>
           </div>
           {!zohoReady && config !== null ? (
-            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading still works. Sending requires the existing Luxor Zoho Mail connection.</p>
+            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading still works. Sending requires the Luxor Zoho SMTP environment variables.</p>
           ) : null}
         </div>
 
@@ -230,7 +230,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Delivery</dt>
-              <dd className="text-right font-semibold text-[color:var(--portal-text)]">Zoho Mail · .ics request</dd>
+              <dd className="text-right font-semibold text-[color:var(--portal-text)]">Zoho SMTP · calendar MIME</dd>
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Response</dt>
@@ -239,7 +239,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           </dl>
           {lastMessageId ? (
             <div className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-3 text-[10px] leading-5 text-emerald-700 dark:text-emerald-300">
-              Zoho Mail accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
+              Zoho SMTP accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
             </div>
           ) : null}
         </aside>
