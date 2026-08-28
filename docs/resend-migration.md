@@ -5,7 +5,7 @@ The migration is **not ready for production cutover**. Keep `LUXOR_MAIL_PROVIDER
 ## Implemented foundation
 
 - Provider selection for ordinary mail and queued email/agreement delivery, preserving the approved sender allowlist.
-- Resend SMTP calendar test using Nodemailer's `icalEvent`, not only a generic file attachment. The test retains the event UID and revision timestamp for retries.
+- Resend SMTP calendar delivery keeps the invitation as a single `text/calendar; method=REQUEST` alternative, rather than Nodemailer's `icalEvent` convenience option that also creates a second downloadable attachment. The delivery retains the event UID and revision timestamp for retries.
 - Durable outgoing records before sending, provider idempotency keys, attachment archiving, ambiguous-delivery state, and protection against late send responses overwriting webhook delivery status.
 - Signature-verified webhook ingestion into a durable retry queue; incoming bodies and attachments are fetched through the authenticated Resend API and saved privately.
 - New mailbox message reading, attachment downloads, reply threading, legacy stored-history display, and incoming notification integration.
@@ -53,6 +53,14 @@ The latest August 28 project environment metadata check confirms `RESEND_API_KEY
 9. Obtain explicit commit/push authorization. Deploy, verify no-send cron health endpoints and fresh worker heartbeats, then approve receiving MX cutover separately. MX priorities do not mirror incoming mail to both providers. Preserve Zoho/history during DNS propagation and monitor both paths.
 
 ## Regression checks
+
+### Live Outlook failure and Arianna address — August 28
+
+Lewis approved `lpatterson@ucepartners.com` for the first real calendar test and requested `a.patterson@luxoratlaspalmas.com` for Arianna. Two distinct test submissions were recorded: Lewis reported sending from Settings, and Codex submitted the existing local calendar-test endpoint. Resend reports both delivered (`d32f6886-59d1-42a5-9d62-c143fcc65740` and `fc4ad423-b5a0-430c-88ef-93bccdef03b1`). Lewis reports **no Outlook Accept/Decline controls and two visible attachments**. Native Outlook compatibility has therefore failed this live test; delivery and earlier offline MIME checks do not establish readiness.
+
+The received Outlook `.eml` confirmed the failure: Resend delivered both identical calendar copies as `Content-Disposition: attachment`; the `text/calendar` part lacked the required `method=REQUEST` parameter, so Outlook did not recognize an actionable meeting request. Resend calendar delivery now uses one inline `text/calendar; method=REQUEST` alternative and no second `.ics` attachment. References: [Nodemailer calendar structure](https://nodemailer.com/message/calendar-events), [iMIP Content-Type requirements](https://www.rfc-editor.org/rfc/rfc6047#section-2.4).
+
+Added Arianna's address to `LUXOR_MAIL_ALLOWED_SENDERS` in ignored local configuration and the Vercel production environment, preserving `booking@luxoratlaspalmas.com` and `hello@luxoratlaspalmas.com`. Read-back verified the values and unchanged default Zoho provider. This is staged sender configuration, not a live receiving mailbox or deployed portal login. Zoho identity variables and root MX were not changed. Resend does not require separate per-address provisioning on a verified domain; receiving and an independent portal recovery mechanism are still prerequisites before giving Arianna a usable replacement inbox.
 
 ### Production compilation — August 28
 

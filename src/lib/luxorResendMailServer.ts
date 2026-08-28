@@ -72,7 +72,14 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
         const receipt = await transporter.sendMail({ from: { name: fromName, address: from }, to, replyTo: from,
           subject, text, html: html || undefined, messageId: row.internet_message_id || undefined, date: new Date(row.created_at),
           headers: { ...headers, 'Content-Class': 'urn:content-classes:calendarmessage', 'Resend-Idempotency-Key': idempotencyKey },
-          icalEvent: input.calendar,
+          // Keep the invitation as the calendar alternative of the message.
+          // Nodemailer's `icalEvent` convenience option also adds a downloadable
+          // `application/ics` attachment; Resend/Outlook then treat both parts as
+          // ordinary attachments instead of recognizing the meeting request.
+          alternatives: [{
+            content: input.calendar.content,
+            contentType: `text/calendar; method=${input.calendar.method}; charset=UTF-8`,
+          }],
         })
         if (!receipt.accepted?.length || receipt.rejected?.length) throw new Error('Resend did not accept the calendar invitation recipient.')
         internetMessageId = receipt.messageId

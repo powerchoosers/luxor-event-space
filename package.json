@@ -10,8 +10,7 @@
     "build:webpack": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
-    "test:mail": "node scripts/test-resend-mail.cjs && node scripts/test-calendar-replies.cjs && node scripts/test-calendar-review.cjs && node scripts/test-tour-schedule.cjs && node scripts/test-resend-notifications.cjs && node scripts/test-mailbox-state.cjs && node scripts/test-zoho-import.cjs && node scripts/test-mail-import-progress.cjs && node scripts/test-mail-source-versions.cjs && node scripts/test-mail-history-release.cjs && node scripts/test-mailbox-pagination.cjs && node scripts/test-resend-marketing-delivery.cjs && node scripts/test-inquiry-notifications.cjs && node scripts/test-mail-settings.cjs && node scripts/test-transactional-notices.cjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

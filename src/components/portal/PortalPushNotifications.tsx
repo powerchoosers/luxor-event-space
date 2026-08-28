@@ -1,6 +1,6 @@
 'use client'
 
-import { BellOff, BellRing, Check, Loader2, Send, Smartphone } from 'lucide-react'
+import { BellOff, BellRing, Check, Loader2, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -151,21 +151,6 @@ export function PortalPushNotifications() {
     }
   }
 
-  const sendTest = async () => {
-    setBusy(true)
-    try {
-      const response = await fetch('/api/portal/push-subscriptions/test', { method: 'POST' })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'Could not send a test notification.')
-      if (!payload.sent) throw new Error('No active device subscription was found.')
-      notify({ title: 'Test notification sent', variant: 'success' })
-    } catch (error) {
-      notify({ title: error instanceof Error ? error.message : 'Could not send a test notification.', variant: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const statusCopy: Record<PushState, string> = {
     loading: 'Checking this device…',
     unsupported: 'This browser does not support Web Push notifications.',
@@ -212,9 +197,6 @@ export function PortalPushNotifications() {
       <div className="flex flex-wrap items-center gap-2 border-t border-[color:var(--portal-border)] pt-4">
         {state === 'enabled' ? (
           <>
-            <button type="button" onClick={() => void sendTest()} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#b58e39] disabled:opacity-50">
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send test
-            </button>
             <button type="button" onClick={() => void disableNotifications()} disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-bold text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] disabled:opacity-50">
               <BellOff size={14} /> Disable on this device
             </button>
