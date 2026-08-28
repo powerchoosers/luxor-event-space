@@ -82,7 +82,7 @@ export const Header = () => {
             <Link
               key={item.label}
               href={item.href}
-              className="site-header-link group relative font-serif text-[13px] font-medium uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
+              className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
               {item.label}
               <motion.span 

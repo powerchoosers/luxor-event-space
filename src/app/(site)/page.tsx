@@ -305,7 +305,7 @@ export default function Home() {
                   <figure className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
                     <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
                     <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.82))]" />
-                    <figcaption className="absolute bottom-4 left-1/2 w-52 -translate-x-1/2 rounded-md border border-[#caa24c]/28 bg-black/68 px-3 py-2.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#fff2bf] shadow-[0_16px_44px_-22px_rgba(0,0,0,1)] backdrop-blur-md sm:w-56">
+                    <figcaption className="absolute bottom-4 left-1/2 w-52 -translate-x-1/2 rounded-md border border-[#9b6f24]/35 bg-[#fffdf9]/95 px-3 py-2.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#241d17] shadow-[0_16px_44px_-22px_rgba(61,43,23,0.38)] sm:w-56">
                       {alt}
                     </figcaption>
                   </figure>
