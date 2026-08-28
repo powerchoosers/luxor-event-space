@@ -2,12 +2,12 @@ import 'server-only'
 
 import { LuxorBooking, LuxorInvoice, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
-import { cancelQueuedLuxorEmailJobs, createPublicToken, createUniqueLuxorEmailJob, updateLuxorEmailJob } from './luxorEmailJobsServer'
+import { cancelQueuedLuxorEmailJobs, createPublicToken } from './luxorEmailJobsServer'
 import { getLuxorBooking, updateLuxorBooking } from './luxorBookingsServer'
 import { buildExecutedLuxorContract, buildLuxorContractPdf, buildLuxorGuestGuidePdf, parseClientName } from './luxorContractPdfServer'
 import { getLuxorContractSignaturePlacement, LUXOR_CONTRACT_SIGNATURE_PLACEMENT } from './luxorSignaturePlacement'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
-import { sendLuxorZohoEmail } from './zohoMailServer'
+import { queueLuxorTransactionalNotice } from './luxorTransactionalNoticeServer'
 import crypto from 'crypto'
 import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, ensureLuxorSecurityDepositInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
@@ -16,6 +16,10 @@ import { createNote, listNotesByInquiry } from './luxorNotesServer'
 import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 
 const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
+
+function escapeNoticeHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
 
 function resolveOwnerSignerName(value?: string | null) {
   const configuredName = value?.trim()
@@ -922,6 +926,7 @@ export async function signLuxorSignatureRequest(input: {
         owner_email: ownerEmail,
         owner_signed_at: ownerSignedAt,
         document_hash: rebuilt.customer.hash,
+        metadata: { ...(executionSignature.metadata || {}), transactionalNoticesVersion: 1 },
       }) || completed
       executionCreatedThisAttempt = true
     }
@@ -955,6 +960,7 @@ export async function signLuxorSignatureRequest(input: {
       executed_document_path: executedPath,
       audit_document_path: auditPath,
       document_hash: executed.customer.hash,
+      metadata: { ...(executionSignature.metadata || {}), transactionalNoticesVersion: 1 },
     })
     if (!completed) throw new Error('The executed agreement could not be recorded. Please retry the signing step.')
     executionCreatedThisAttempt = true
@@ -1014,74 +1020,30 @@ export async function signLuxorSignatureRequest(input: {
 
   const paymentBreakdown = paymentInvoice ? getInitialPaymentBreakdown(paymentInvoice) : null
   const paymentSection = checkoutUrl && paymentBreakdown ? `<div style="margin:28px 0;padding:22px;border:1px solid #d9bd84;background:#fffaf2"><p style="margin:0 0 8px;color:#9b6d24;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Next step: complete your booking payment</p><p style="margin:0 0 12px">Your secure initial booking payment due now is <strong>${formatMoney(paymentBreakdown.initialBookingPayment)}</strong>. The refundable security deposit is separate and is not included in this payment.</p><p style="margin:0 0 18px">The separate refundable security deposit is held throughout the event period and returned following the post-event inspection, subject to the Event Agreement.</p><a href="${checkoutUrl}" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:14px 22px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Complete secure payment</a></div>` : '<p style="color:#756755">Luxor will follow up separately with secure payment instructions.</p>'
-  const completionHtml = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${input.signedName.split(' ')[0] || input.signedName},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${ownerName}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
-  const paymentEmailSummary = checkoutUrl && paymentBreakdown
-    ? `Your agreement is complete. Complete your secure initial booking payment of ${formatMoney(paymentBreakdown.initialBookingPayment)}. The refundable security deposit is separate and is not included in this payment. ${checkoutUrl}`
-    : 'Your agreement is complete. Your fully executed copy is attached. Luxor will follow up with secure payment instructions.'
+  const completionHtml = `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.28em;text-transform:uppercase;color:#9b6d24;font-size:12px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:34px">Your agreement is complete</h1><p>Hi ${escapeNoticeHtml(input.signedName.split(' ')[0] || input.signedName)},</p><p>Your Event Space Agreement has been signed by you and countersigned by ${escapeNoticeHtml(ownerName)}. Your fully executed copy is attached for your records.</p>${paymentSection}<p style="color:#756755;font-size:13px">Document ID: ${signature.id}<br/>Completed: ${new Date(ownerSignedAt).toLocaleString('en-US')}</p></div>`
   const latestInquiry = signature.inquiry_id ? await getLuxorInquiry(signature.inquiry_id) : null
   if (latestInquiry?.status !== 'closed_lost') {
-    const clientJob = await createUniqueLuxorEmailJob({
-      inquiryId: signature.inquiry_id,
-      bookingId: signature.booking_id,
-      signatureRequestId: signature.id,
-      jobType: 'contract_signature',
-      recipientEmail: signature.client_email,
+    await queueLuxorTransactionalNotice({
+      kind: 'agreement_client', sourceId: signature.id,
+      inquiryId: signature.inquiry_id, bookingId: signature.booking_id, signatureRequestId: signature.id,
+      recipient: signature.client_email,
       subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
-      body: paymentEmailSummary,
-      scheduledFor: ownerSignedAt,
-      automationKey: `contract_completed_payment:${signature.id}:${paymentInvoice?.id || 'unavailable'}`,
-      metadata: {
-        automated: true,
-        flow_stage: 'contract_completed',
-        includes_executed_contract: true,
-        includes_payment_link: Boolean(checkoutUrl),
-        payment_invoice_id: paymentInvoice?.id || null,
-        payment_amount: paymentBreakdown?.total || null,
-      },
+      html: completionHtml, scheduledFor: ownerSignedAt,
+      pdf: executedCustomerPdf, filename: 'Luxor-Event-Agreement-Executed.pdf',
     })
-    if (clientJob.status !== 'sent') {
-      try {
-        await sendLuxorZohoEmail({
-          to: signature.client_email,
-          subject: checkoutUrl ? 'Agreement complete — complete your secure booking payment' : 'Your Luxor Event Space agreement is complete',
-          content: completionHtml,
-          from: 'booking@luxoratlaspalmas.com',
-          fromName: 'Luxor Event Space',
-          attachments: [{ filename: 'Luxor-Event-Agreement-Executed.pdf', content: executedCustomerPdf, contentType: 'application/pdf' }],
-        })
-        await updateLuxorEmailJob(clientJob.id, { status: 'sent', sent_at: new Date().toISOString() })
-      } catch (sendError) {
-        const message = sendError instanceof Error ? sendError.message : 'Email send failed.'
-        await updateLuxorEmailJob(clientJob.id, { status: 'failed', last_error: message })
-        if (signature.inquiry_id) {
-          await createNote(signature.inquiry_id, `Agreement completed, but the client email failed: ${message}`, 'note', 'Signature Automation').catch(() => null)
-        }
-        console.error('Agreement completed, but the client completion and payment email failed:', message)
-      }
-    }
   }
   const ownerNoticeAlreadySent = Boolean(signature.metadata?.ownerExecutionNoticeSentAt)
-  if (executionCreatedThisAttempt && !ownerNoticeAlreadySent) {
-    try {
-      await sendLuxorZohoEmail({
-        to: ownerEmail,
-        subject: `Executed Luxor agreement - ${executionSignature.signed_name || input.signedName}`,
-        content: `<div style="font-family:Arial,sans-serif"><h2>Executed agreement archived</h2><p>${executionSignature.signed_name || input.signedName} completed the agreement. The internal copy with the full audit timeline is attached.</p></div>`,
-        from: 'booking@luxoratlaspalmas.com',
-        fromName: 'Luxor Event Space',
-        attachments: [{ filename: 'Luxor-Event-Agreement-Audit.pdf', content: executedAuditPdf, contentType: 'application/pdf' }],
-      })
-      await updateLuxorSignatureRequest(signature.id, {
-        metadata: {
-          ...(completed?.metadata || executionSignature.metadata || signature.metadata || {}),
-          ownerExecutionNoticeSentAt: new Date().toISOString(),
-        },
-      })
-    } catch (ownerNoticeError) {
-      // The executed agreement is already durable. Keep recovery safe and
-      // allow a later retry to make this one owner-only notification.
-      console.error('Executed agreement was archived, but the owner archive email failed:', ownerNoticeError)
-    }
+  if (!ownerNoticeAlreadySent && (executionCreatedThisAttempt || signature.metadata?.transactionalNoticesVersion === 1)) {
+    // The queue row is the delivery receipt. Do not mark this notice sent at enqueue.
+    // Owner copies are not customer follow-ups and remain independent of lead closure.
+    await queueLuxorTransactionalNotice({
+      kind: 'agreement_owner', sourceId: signature.id,
+      bookingId: signature.booking_id, signatureRequestId: signature.id,
+      recipient: ownerEmail,
+      subject: `Executed Luxor agreement - ${executionSignature.signed_name || input.signedName}`.replace(/[\r\n]+/g, ' '),
+      html: `<div style="font-family:Arial,sans-serif;overflow-wrap:anywhere"><h2>Executed agreement archived</h2><p>${escapeNoticeHtml(executionSignature.signed_name || input.signedName)} completed the agreement. The internal copy with the full audit timeline is attached.</p></div>`,
+      scheduledFor: ownerSignedAt, pdf: executedAuditPdf, filename: 'Luxor-Event-Agreement-Audit.pdf',
+    })
   }
 
   return completed || updated || signature

@@ -140,6 +140,7 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
   const pipelineStage: LuxorPipelineStage = status === 'tour_requested' ? 'tour' : 'inquiry'
   const insertPayload = {
     ...row,
+    internal_notification_requested: true,
     status,
     pipeline_stage: pipelineStage,
     tour_attendance_status: status === 'tour_requested' ? 'pending' : null,
@@ -212,6 +213,10 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
         recipientEmail: created.email,
         subject: 'We have received your Luxor inquiry',
         body: emailHtml,
+        // This is a receipt for a newly submitted inquiry, not a promotional
+        // campaign. A marketing opt-out must not hide that requested receipt;
+        // hard-bounce/complaint blocks still remain enforced by the worker.
+        metadata: { ignore_suppressions: true, source: 'inquiry_acknowledgment' },
       })
 
       // Send standard confirmation immediately

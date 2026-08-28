@@ -2,6 +2,7 @@ import 'server-only'
 
 import { supabaseRest } from './supabaseRestServer'
 import { getLuxorZohoMessageDetail, normalizeEmailAddress, resolveArchivedZohoMessage, ZohoMessageReadError, type ArchivedZohoIdentity, type LuxorZohoMessage } from './zohoMailServer'
+import { getLuxorMailboxMessage, resolveLuxorMailboxRow } from './luxorMailboxServer'
 
 type BodySync = { attempts?: number; leaseUntil?: string | null; nextAttemptAt?: string | null; error?: string | null }
 type EmailRecord = ArchivedZohoIdentity & {
@@ -74,6 +75,9 @@ async function syncRecord(row: EmailRecord, folderId?: string): Promise<LuxorZoh
 }
 
 export async function getArchivedLuxorEmail(messageId: string, folderId?: string) {
+  const imported = await resolveLuxorMailboxRow(messageId)
+  if (imported) return getLuxorMailboxMessage(`mail-${imported.id}`)
+  if (messageId.startsWith('mail-')) throw new Error('Mailbox message not found.')
   let row = await findRecord(messageId)
   if (!row) {
     const detail = await getLuxorZohoMessageDetail(messageId, folderId)

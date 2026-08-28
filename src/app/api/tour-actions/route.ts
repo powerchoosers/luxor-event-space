@@ -6,6 +6,7 @@ import {
   createPublicToken,
   getTourResponseLinks,
   listLuxorEmailJobsForInquiry,
+  assertEmailHasNoUnresolvedPlaceholders,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
@@ -17,6 +18,9 @@ import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext 
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
+import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -35,7 +39,8 @@ export async function GET(request: NextRequest) {
     const inquiryId = request.nextUrl.searchParams.get('inquiryId') || ''
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
 
-    return NextResponse.json({ jobs: await listLuxorEmailJobsForInquiry(inquiryId) })
+    const [jobs, calendar] = await Promise.all([listLuxorEmailJobsForInquiry(inquiryId), getLuxorCalendarStatus(inquiryId)])
+    return NextResponse.json({ jobs, calendar })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load tour emails.' }, { status: 500 })
   }
@@ -73,7 +78,7 @@ export async function POST(request: NextRequest) {
       if (['attended', 'no_show', 'cancelled'].includes(inquiry.tour_attendance_status || '')) {
         return NextResponse.json({ error: 'Only a pending or upcoming tour can be cancelled.' }, { status: 409 })
       }
-      if (!inquiry.preferred_tour_date && typeof inquiry.metadata?.zohoCalendarEventUid !== 'string') {
+      if (!inquiry.preferred_tour_date && typeof inquiry.metadata?.zohoCalendarEventUid !== 'string' && typeof inquiry.metadata?.calendarEventUid !== 'string') {
         return NextResponse.json({ error: 'There is no scheduled tour to cancel.' }, { status: 409 })
       }
       const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
@@ -187,7 +192,7 @@ export async function POST(request: NextRequest) {
         `luxor_event_contacts?select=email&inquiry_id=eq.${encodeURIComponent(inquiryId)}`
       )
       const recipientEmails = Array.from(new Set([inquiry.email, ...eventContacts.map((contact) => contact.email)].filter((email): email is string => Boolean(email && email.trim()))))
-      const calendar = await createLuxorZohoCalendarEvent({
+      const eventInput = {
         attendeeEmails: recipientEmails,
         title: `${meetingType} · ${inquiry.full_name}`,
         description: [
@@ -204,7 +209,37 @@ export async function POST(request: NextRequest) {
         existingEventUid: typeof inquiry.metadata?.zohoCalendarEventUid === 'string'
           ? inquiry.metadata.zohoCalendarEventUid
           : null,
-      })
+      }
+      // A global provider rollback must not create a second meeting in Zoho
+      // for an appointment that already has a Resend-owned UID.
+      const existingCalendar = await getLuxorCalendarEvent(inquiryId)
+      if (existingCalendar || luxorMailProvider() === 'resend') {
+        const templates = { confirmation, reminder_24: buildTourReminderEmail(emailContext, 'tomorrow'),
+          reminder_2: buildTourReminderEmail(emailContext, 'soon') }
+        for (const template of Object.values(templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
+        const saved = await saveLuxorTourSchedule({ inquiry, expectedSequence: existingCalendar?.sequence ?? -1,
+          state: { title: eventInput.title, description: eventInput.description, location: eventInput.location,
+            startUtc: eventInput.startUtc, endUtc: eventInput.endUtc, attendeeEmails: recipientEmails },
+          tour: { meetingType, clientFacingNotes, responseToken: token, assignees: tourAssignees },
+          templates, requestedBy: session.email })
+        // Email/event state is already committed. A best-effort secondary task
+        // must not turn a successful schedule into a retry of all its emails.
+        if (!saved.replayed) {
+          try { await queueInquiryTextJobs(saved.inquiry) }
+          catch (error) { console.error('Tour saved; text confirmations could not be queued:', error) }
+          try {
+            await createNote(inquiryId,
+              `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. Calendar invitation, branded confirmation and ${saved.reminderJobs.length} reminders queued through Resend.`,
+              'email_log', session.email)
+          } catch (error) { console.error('Tour saved; activity note could not be recorded:', error) }
+        }
+        return NextResponse.json({ inquiry: saved.inquiry,
+          calendar: { eventId: saved.event.id, eventUid: saved.event.uid, viewEventUrl: '/portal/calendar' },
+          confirmationJob: saved.confirmationJobs.find(job => job.recipient_email === inquiry.email?.toLowerCase().trim()) || saved.confirmationJobs[0],
+          reminderJobs: saved.reminderJobs, replayed: saved.replayed }, { status: saved.replayed ? 200 : 201 })
+      }
+      const calendar = await createLuxorZohoCalendarEvent(eventInput)
+      const calendarMetadata = { zohoCalendarEventId: calendar.eventId, zohoCalendarEventUid: calendar.eventUid, zohoCalendarUrl: calendar.viewEventUrl }
 
       await cancelQueuedTourEmailJobs(inquiryId)
       const sharedMetadata = {
@@ -213,9 +248,10 @@ export async function POST(request: NextRequest) {
         tour_start_at: startUtc.toISOString(),
         tour_end_at: endUtc.toISOString(),
         timezone: TOUR_TIMEZONE,
-        zoho_calendar_event_id: calendar.eventId,
-        zoho_calendar_event_uid: calendar.eventUid,
-        zoho_calendar_url: calendar.viewEventUrl,
+        calendar_provider: 'zoho',
+        calendar_event_id: calendar.eventId,
+        calendar_event_uid: calendar.eventUid,
+        calendar_url: calendar.viewEventUrl,
         hero_image: confirmation.heroImage,
         requested_by: session.email,
       }
@@ -258,9 +294,7 @@ export async function POST(request: NextRequest) {
           tourDurationMinutes: durationMinutes,
           ...(tourAssignees.length ? { tour_assignees: tourAssignees } : {}),
           tourStartAt: startUtc.toISOString(),
-          zohoCalendarEventId: calendar.eventId,
-          zohoCalendarEventUid: calendar.eventUid,
-          zohoCalendarUrl: calendar.viewEventUrl,
+          ...calendarMetadata,
         },
       })
 

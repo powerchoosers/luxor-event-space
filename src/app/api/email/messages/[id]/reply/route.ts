@@ -2,15 +2,23 @@ import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorZohoMessageDetail, normalizeEmailAddress, replyLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { getLuxorMailboxMessage, resolveLuxorMailboxRow } from '@/lib/luxorMailboxServer'
+import { sendLuxorResendEmail } from '@/lib/luxorResendMailServer'
+import { luxorResendApi } from '@/lib/luxorResendApiServer'
+import { luxorMailProvider } from '@/lib/luxorMailConfig'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const { id } = await params
-    const body = await request.json() as { content?: string; folderId?: string | null; inquiryId?: string | null }
+    const body = await request.json() as { content?: string; folderId?: string | null; inquiryId?: string | null; deliveryKey?: string }
     const content = String(body.content || '').trim()
-    const original = await getLuxorZohoMessageDetail(id, String(body.folderId || '') || undefined)
+    const mailRow = await resolveLuxorMailboxRow(id)
+    if (id.startsWith('mail-') && !mailRow) return NextResponse.json({ error: 'Mailbox message not found.' }, { status: 404 })
+    const useResend = mailRow?.provider === 'resend' || luxorMailProvider() === 'resend'
+    if (useResend && !mailRow) throw new Error('Import the complete original Zoho message before replying through Resend.')
+    const original = mailRow ? await getLuxorMailboxMessage(`mail-${mailRow.id}`) : await getLuxorZohoMessageDetail(id, String(body.folderId || '') || undefined)
     if (!original) throw new Error('The original email could not be loaded for this reply.')
 
     const recipient = original.direction === 'incoming'
@@ -18,8 +26,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : normalizeEmailAddress(original.to)
     const baseSubject = original.subject.replace(/^(\s*re\s*:\s*)+/i, '').trim() || '(No subject)'
     const subject = `Re: ${baseSubject}`
-    const result = await replyLuxorZohoEmail({
-      messageId: id,
+    let internetMessageId = mailRow?.internet_message_id
+    if (useResend && mailRow?.provider === 'resend' && !internetMessageId && mailRow.provider_id) {
+      const sent = await luxorResendApi<{ message_id: string }>(`/emails/${encodeURIComponent(mailRow.provider_id)}`)
+      internetMessageId = sent.message_id
+    }
+    if (useResend && !internetMessageId) throw new Error('The original email identifier is missing or still syncing. Review the original before replying.')
+    const result = useResend && mailRow ? await sendLuxorResendEmail({
+      content, to: mailRow.direction === 'incoming' ? mailRow.reply_to_addresses[0] || recipient : recipient,
+      subject, from: session.mailboxAddress || session.email, inReplyTo: internetMessageId!,
+      references: [...mailRow.reference_ids, internetMessageId!], threadId: mailRow.thread_key,
+      idempotencyKey: body.deliveryKey ? `reply/${body.deliveryKey}` : undefined,
+    }) : await replyLuxorZohoEmail({
+      messageId: mailRow ? String(mailRow.metadata.zohoMessageId || '') : id,
       content,
       to: recipient,
       subject,

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Inbox,
+  Folder,
   ArrowLeft,
   Send,
   Megaphone,
@@ -38,6 +39,9 @@ import { PortalCloseButton, PortalContactAvatar, PortalPagination, PortalSelect 
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
+import { luxorMailDeliveryLabel } from '@/lib/luxorMailDelivery'
+import { luxorMailAdditionalFolders, type LuxorMailFolder } from '@/lib/luxorMailFolders'
+import type { LuxorMailboxPageRequest, LuxorMailboxPageResult } from '@/lib/luxorMailboxPage'
 
 const EmailPdfPreview = dynamic(() => import('@/components/portal/EmailPdfPreview'), { ssr: false })
 
@@ -58,10 +62,15 @@ export interface EmailMessageItem {
     clickCount: number
   }
   direction?: 'incoming' | 'outgoing' | 'campaign'
-  folder?: 'inbox' | 'sent' | 'campaigns'
+  folder?: string
+  folderName?: string
+  folderPath?: string
   category?: string
   isStarred?: boolean
   isRead?: boolean
+  deliveryStatus?: string
+  legacyMessageId?: string
+  deliveryError?: string | null
   threadId?: string
   folderId?: string
 }
@@ -84,34 +93,6 @@ interface EmailThreadData {
   bookings: Array<{ id: string; status: string; event_date: string | null; package_name: string | null }>
 }
 
-const MAILBOX_SESSION_KEY = 'luxor_email_mailbox_v1'
-
-function readSessionMailbox() {
-  if (typeof window === 'undefined') return null
-  try {
-    const stored = JSON.parse(window.sessionStorage.getItem(MAILBOX_SESSION_KEY) || 'null') as {
-      cachedAt?: number
-      messages?: EmailMessageItem[]
-    } | null
-    if (!stored?.cachedAt || !Array.isArray(stored.messages)) return null
-    return Date.now() - stored.cachedAt < 5 * 60_000 ? stored.messages : null
-  } catch {
-    return null
-  }
-}
-
-function saveMailbox(messages: EmailMessageItem[]) {
-  mailboxCache = messages
-  if (typeof window === 'undefined') return
-  try {
-    window.sessionStorage.setItem(MAILBOX_SESSION_KEY, JSON.stringify({ cachedAt: Date.now(), messages }))
-  } catch {
-    // The in-memory cache still protects the current page if storage is unavailable.
-  }
-}
-
-let mailboxCache: EmailMessageItem[] | null = null
-let mailboxRequest: Promise<EmailMessageItem[]> | null = null
 const messageDetailCache = new Map<string, EmailMessageItem>()
 const messageDetailRequests = new Map<string, Promise<EmailMessageItem>>()
 const threadCache = new Map<string, EmailThreadData>()
@@ -186,37 +167,15 @@ async function requestMessageDetail(messageId: string, folderId?: string) {
   return request
 }
 
-async function requestMailbox(force = false) {
-  // Show the session cache immediately, but revalidate Supabase on each visit so
-  // newly archived bodies and previews do not remain hidden behind stale headers.
-  if (mailboxRequest && !force) return mailboxRequest
-
-  const request = fetch('/api/email/inbox?limit=1000&folder=all', { cache: 'no-store' })
-    .then(async (response) => {
-      const data = (await response.json().catch(() => ({}))) as {
-        messages?: EmailMessageItem[]
-        error?: string
-        reconnectRequired?: boolean
-      }
-      if (!response.ok) {
-        const error = new Error(data.error || 'Failed to load email inbox.') as Error & { reconnectRequired?: boolean }
-        error.reconnectRequired = Boolean(data.reconnectRequired)
-        throw error
-      }
-      const messages = data.messages || []
-      saveMailbox(messages)
-      return messages
-    })
-
-  mailboxRequest = request
-  try {
-    return await request
-  } finally {
-    if (mailboxRequest === request) mailboxRequest = null
-  }
+async function requestMailbox(input: LuxorMailboxPageRequest, signal: AbortSignal) {
+  const response = await fetch('/api/email/mailbox', { method: 'POST', cache: 'no-store', signal,
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || 'Failed to load mailbox page.')
+  return data as LuxorMailboxPageResult<EmailMessageItem>
 }
 
-type ActiveFolder = 'all' | 'inbox' | 'sent' | 'campaigns' | 'starred'
+type ActiveFolder = string
 
 const PANEL_TRANSITION = { duration: 0.32, ease: [0.23, 1, 0.32, 1] as const }
 
@@ -231,19 +190,20 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const readerMenuRef = useRef<HTMLDivElement | null>(null)
-  const [messages, setMessages] = useState<EmailMessageItem[]>(() => mailboxCache || [])
-  const [loading, setLoading] = useState(() => !mailboxCache)
+  const [messages, setMessages] = useState<EmailMessageItem[]>([])
+  const [folderCatalog, setFolderCatalog] = useState<LuxorMailFolder[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [reconnectRequired, setReconnectRequired] = useState(false)
 
   // Active navigation & filters
-  const [activeFolder, setActiveFolder] = useState<ActiveFolder>('inbox')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [sortBy] = useState<'newest' | 'oldest'>('newest')
+  const [activeFolder, changeActiveFolder] = useState<ActiveFolder>('inbox')
+  const [searchQuery, changeSearchQuery] = useState('')
 
   // Pagination
   const PAGE_SIZE = 25
   const [currentPage, setCurrentPage] = useState(1)
+  const setActiveFolder = (folder: string) => { changeActiveFolder(folder); setCurrentPage(1) }
+  const setSearchQuery = (query: string) => { changeSearchQuery(query); setCurrentPage(1) }
 
   // Selected email detail state
   const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
@@ -252,6 +212,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [detailRetry, setDetailRetry] = useState(0)
+  const [readRequestedId, setReadRequestedId] = useState<string | null>(initialMessageId || null)
+  const [savingReadId, setSavingReadId] = useState<string | null>(null)
+  const [readStateError, setReadStateError] = useState<{ id: string; message: string } | null>(null)
   const [compactReaderOpen, setCompactReaderOpen] = useState(Boolean(initialMessageId))
   const [thread, setThread] = useState<EmailThreadData | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
@@ -261,6 +224,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [replyInstruction, setReplyInstruction] = useState('')
   const [draftingReply, setDraftingReply] = useState(false)
   const [sendingReply, setSendingReply] = useState(false)
+  const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
 
@@ -278,59 +242,66 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
 
-  // Load emails list from API
+  const pageSnapshot = useRef<{ key: string; value: string | null }>({ key: '', value: null })
+  const pageRequest = useRef<AbortController | null>(null)
+  const [pageResult, setPageResult] = useState<LuxorMailboxPageResult<EmailMessageItem> | null>(null)
   const loadEmails = useCallback(async (force = false) => {
+    pageRequest.current?.abort()
+    const controller = new AbortController()
+    pageRequest.current = controller
+    const key = JSON.stringify([activeFolder, searchQuery.trim()])
+    if (force || pageSnapshot.current.key !== key) pageSnapshot.current = { key, value: null }
     setLoading(true)
     setError(null)
-    setReconnectRequired(false)
     try {
-      const list = await requestMailbox(force)
-      setMessages(list)
-    } catch (err) {
-      console.error(err)
-      const needsReconnect = Boolean((err as Error & { reconnectRequired?: boolean }).reconnectRequired)
-      setReconnectRequired(needsReconnect)
-      setError(needsReconnect ? 'The mailbox needs to be reconnected in Settings.' : 'The mailbox could not refresh. Please try again.')
+      const result = await requestMailbox({ folder: activeFolder, query: searchQuery, page: currentPage,
+        pageSize: PAGE_SIZE, snapshot: pageSnapshot.current.value, starred: [...starredIds] }, controller.signal)
+      if (controller.signal.aborted) return
+      pageSnapshot.current = { key, value: result.snapshot }
+      setPageResult(result)
+      setMessages(result.messages)
+      setFolderCatalog(result.folders)
+      if (result.page !== currentPage) setCurrentPage(result.page)
+      const latest = new Map(result.messages.map(message => [message.id, message]))
+      const updateState = (detail: EmailMessageItem) => {
+        const summary = latest.get(detail.id)
+        return summary && detail.id.startsWith('mail-')
+          ? { ...detail, isRead: summary.isRead, deliveryStatus: summary.deliveryStatus, deliveryError: summary.deliveryError }
+          : detail
+      }
+      for (const [cacheKey, detail] of messageDetailCache) messageDetailCache.set(cacheKey, updateState(detail))
+      setMessageDetail(current => current ? updateState(current) : current)
+    } catch {
+      if (!controller.signal.aborted) setError('The mailbox could not load this page. Please retry.')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }, [initialMessageId])
+  }, [activeFolder, searchQuery, currentPage, starredIds])
 
   useEffect(() => {
-    const savedMailbox = mailboxCache || readSessionMailbox()
-    if (savedMailbox) {
-      mailboxCache = savedMailbox
-      setMessages(savedMailbox)
-      setLoading(false)
-    }
-    void loadEmails(false)
+    // Search is server-side across all saved mail; debounce typing and abort
+    // obsolete page requests so a slow response cannot replace newer results.
+    const timer = window.setTimeout(() => { void loadEmails() }, 200)
+    return () => { window.clearTimeout(timer); pageRequest.current?.abort() }
   }, [loadEmails])
 
   useEffect(() => {
-    const shouldApplyLinkedMessage = initialMessageId && appliedInitialMessageId.current !== initialMessageId
-    const linkedTarget = shouldApplyLinkedMessage ? messages.find((message) => message.id === initialMessageId) : null
-    if (linkedTarget && initialMessageId) {
+    if (initialMessageId && appliedInitialMessageId.current !== initialMessageId) {
       appliedInitialMessageId.current = initialMessageId
-      const linkedKey = messageKey(linkedTarget)
-      if (selectedId !== linkedTarget.id || selectedMessageKey !== linkedKey) {
-        setSelectedId(linkedTarget.id)
-        setSelectedMessageKey(linkedKey)
-        setReplyOpen(false)
-        setThreadError(null)
-      }
+      setSelectedId(initialMessageId)
+      setReadRequestedId(initialMessageId)
       return
     }
-    if (shouldApplyLinkedMessage && loading) return
-    if (shouldApplyLinkedMessage && initialMessageId) appliedInitialMessageId.current = initialMessageId
-    if (selectedMessageKey && messages.some((message) => messageKey(message) === selectedMessageKey)) return
+    // Preserve an open reader when paging. Deep links can load directly even
+    // when the requested message is far outside the first page.
+    if (selectedId || loading) return
     const target = messages[0]
-    if (!target) return
-    setSelectedId(target.id)
-    setSelectedMessageKey(messageKey(target))
-  }, [initialMessageId, loading, messages, selectedId, selectedMessageKey])
+    if (target) { setSelectedId(target.id); setSelectedMessageKey(messageKey(target)) }
+  }, [initialMessageId, loading, messages, selectedId])
 
   const selectedSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)
+    || (messageDetail?.id === selectedId ? messageDetail : undefined)
   const selectedFolderId = selectedSummary?.folderId
 
   const inquiryByEmail = useMemo(() => {
@@ -341,6 +312,26 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     })
     return entries
   }, [inquiries])
+
+  const persistReadState = useCallback(async (id: string, isRead: boolean) => {
+    setSavingReadId(id)
+    setReadStateError(null)
+    try {
+      const response = await fetch(`/api/email/messages/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isRead }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Read state could not be saved.')
+      const apply = (message: EmailMessageItem) => message.id === id ? { ...message, isRead: result.isRead } : message
+      setMessages((current) => current.map(apply))
+      setMessageDetail((current) => current ? apply(current) : current)
+      for (const [key, detail] of messageDetailCache) if (detail.id === id) messageDetailCache.set(key, apply(detail))
+    } catch (error) {
+      setReadStateError({ id, message: error instanceof Error ? error.message : 'Read state could not be saved.' })
+    } finally {
+      setSavingReadId((current) => current === id ? null : current)
+    }
+  }, [])
 
   // Fetch full message detail when selection changes
   useEffect(() => {
@@ -360,10 +351,20 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         const detail = await requestMessageDetail(selectedId, selectedFolderId)
         if (isCurrent) {
           setMessageDetail(detail)
-          setReadIds((prev) => new Set(prev).add(selectedId))
+          if (detail.id !== selectedId && readRequestedId === selectedId) {
+            setSelectedId(detail.id)
+            setReadRequestedId(detail.id)
+            setSelectedMessageKey(messageKey(detail))
+          }
+          if (!selectedId.startsWith('mail-')) setReadIds((prev) => new Set(prev).add(selectedId))
+          // Only an explicit open/deep link marks archived mail read. Selecting
+          // the first list item while the mobile reader is hidden must not.
+          if (readRequestedId === selectedId && selectedId.startsWith('mail-') && detail.direction === 'incoming') {
+            void persistReadState(selectedId, true)
+          }
         }
       } catch (err) {
-        const fallback = messageDetailCache.get(cacheKey) || selectedSummary || null
+        const fallback = messageDetailCache.get(cacheKey) || null
         if (fallback) {
           console.warn('Full email body is unavailable; showing a retryable error.', err)
         } else {
@@ -382,7 +383,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     return () => {
       isCurrent = false
     }
-  }, [selectedId, selectedFolderId, selectedMessageKey, selectedSummary, detailRetry])
+  }, [selectedId, selectedFolderId, selectedMessageKey, readRequestedId, detailRetry, persistReadState])
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
@@ -468,7 +469,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   const sendInlineReply = async () => {
     const replyTo = [...(thread?.messages || [])].reverse().find((message) => message.direction === 'incoming') || messageDetail
-    if (!replyTo?.id || !replyText.trim()) return
+    if (!replyTo?.id || !replyText.trim() || sendingReply) return
+    const fingerprint = JSON.stringify({ messageId: replyTo.id, content: replyText })
+    if (replyDelivery.current?.fingerprint !== fingerprint) replyDelivery.current = { fingerprint, key: crypto.randomUUID() }
     setSendingReply(true)
     setReplyStatus(null)
     try {
@@ -477,6 +480,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: replyText,
+          deliveryKey: replyDelivery.current.key,
           folderId: replyTo.folderId || null,
           inquiryId: thread?.inquiry?.id || currentInquiry?.id || null,
         }),
@@ -494,14 +498,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
           threadCache.set(current.threadId, next)
           return next
         })
-        setMessages((current) => {
-          const next = [sentMessage, ...current.filter((message) => message.id !== sentMessage.id)]
-          saveMailbox(next)
-          return next
-        })
+        void loadEmails(true)
         messageDetailCache.set(detailCacheKey(sentMessage.id, sentMessage.folderId), sentMessage)
       }
       setReplyText('')
+      replyDelivery.current = null
       setReplyInstruction('')
       setReplyStatus(null)
       setReplyOpen(false)
@@ -535,42 +536,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     })
   }
 
-  // Derive filtered message list
-  const filteredMessages = useMemo(() => {
-    return messages
-      .filter((msg) => {
-        // Folder filter
-        if (activeFolder === 'inbox' && msg.direction === 'outgoing') return false
-        if (activeFolder === 'sent' && msg.direction === 'incoming') return false
-        if (activeFolder === 'campaigns' && msg.direction !== 'campaign') return false
-        if (activeFolder === 'starred' && !starredIds.has(msg.id)) return false
-
-        // Search query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim()
-          const matchSubject = msg.subject.toLowerCase().includes(q)
-          const matchFrom = `${msg.from} ${mailboxLabel(msg.from, inquiryByEmail)}`.toLowerCase().includes(q)
-          const matchTo = `${msg.to} ${mailboxLabel(msg.to, inquiryByEmail)}`.toLowerCase().includes(q)
-          const matchSummary = msg.summary.toLowerCase().includes(q)
-          return matchSubject || matchFrom || matchTo || matchSummary
-        }
-
-        return true
-      })
-      .sort((a, b) => {
-        const timeA = a.receivedAt ? new Date(a.receivedAt).getTime() : 0
-        const timeB = b.receivedAt ? new Date(b.receivedAt).getTime() : 0
-        return sortBy === 'newest' ? timeB - timeA : timeA - timeB
-      })
-  }, [messages, activeFolder, searchQuery, sortBy, starredIds, inquiryByEmail])
-
-  // Reset to page 1 whenever filters/search changes
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [activeFolder, searchQuery])
-
-  const totalPages = Math.max(1, Math.ceil(filteredMessages.length / PAGE_SIZE))
-  const pagedMessages = filteredMessages.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const totalItems = pageResult?.total || 0
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+  const pagedMessages = messages
 
   // Matched inquiry for currently selected email
   const currentInquiry = useMemo(() => {
@@ -580,15 +548,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
     return inquiryByEmail.get(targetEmail) || null
   }, [messageDetail, inquiryByEmail, thread?.inquiry])
 
-  // Count stats
-  const stats = useMemo(() => {
-    const total = messages.length
-    const inboxCount = messages.filter((m) => m.direction === 'incoming').length
-    const sentCount = messages.filter((m) => m.direction === 'outgoing').length
-    const campaignCount = messages.filter((m) => m.direction === 'campaign').length
-    const starredCount = messages.filter((m) => starredIds.has(m.id)).length
-    return { total, inboxCount, sentCount, campaignCount, starredCount }
-  }, [messages, starredIds])
+  const stats = pageResult?.stats || { total: 0, inboxCount: 0, sentCount: 0, campaignCount: 0, starredCount: 0 }
+  const additionalFolders = useMemo(() => luxorMailAdditionalFolders(folderCatalog, []).map(folder => ({
+    ...folder, count: pageResult?.folderCounts[folder.value] || 0,
+  })), [folderCatalog, pageResult])
+  const folderOptions = [
+    { value: 'inbox', label: 'Inbox' }, { value: 'sent', label: 'Sent & outbox' },
+    { value: 'all', label: 'All Mail' }, { value: 'campaigns', label: 'Campaign Blasts' },
+    { value: 'starred', label: 'Starred' }, ...additionalFolders,
+  ]
+  const activeFolderLabel = folderOptions.find((folder) => folder.value === activeFolder)?.label || 'Imported folder'
 
   // Print selected email
   const handlePrint = () => {
@@ -649,6 +618,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   const selectMessage = (message: EmailMessageItem) => {
     const cached = messageDetailCache.get(detailCacheKey(message.id, message.folderId))
     setSelectedId(message.id)
+    setReadRequestedId(message.id)
+    setReadStateError(null)
     setSelectedMessageKey(messageKey(message))
     setMessageDetail(cached || null)
     setLoadingDetail(!cached)
@@ -705,7 +676,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             />
             <FolderNavItem
               icon={<Send size={15} />}
-              label="Sent Items"
+              label="Sent & outbox"
               count={stats.sentCount}
               active={activeFolder === 'sent'}
               onClick={() => setActiveFolder('sent')}
@@ -731,6 +702,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               active={activeFolder === 'starred'}
               onClick={() => setActiveFolder('starred')}
             />
+            {additionalFolders.map((folder) => (
+              <FolderNavItem key={folder.value} icon={<Folder size={15} />} label={folder.label}
+                count={folder.count} active={activeFolder === folder.value}
+                onClick={() => setActiveFolder(folder.value)} />
+            ))}
           </div>
         </div>
 
@@ -784,26 +760,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </button>
               )}
               <Inbox size={15} className="text-[#caa24c]" />
-              {activeFolder === 'all' && 'All Messages'}
-              {activeFolder === 'inbox' && 'Inbox Messages'}
-              {activeFolder === 'sent' && 'Sent Correspondence'}
-              {activeFolder === 'campaigns' && 'Campaign Blasts'}
-              {activeFolder === 'starred' && 'Starred Messages'}
+              <span className="truncate" title={activeFolderLabel}>{activeFolderLabel}</span>
             </h3>
-            <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">{filteredMessages.length} items</span>
+            <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">{totalItems.toLocaleString()} items</span>
           </div>
 
           <div className="xl:hidden">
             <PortalSelect
               value={activeFolder}
               onChange={(value) => { setActiveFolder(value as ActiveFolder); setCurrentPage(1) }}
-              options={[
-                { value: 'inbox', label: 'Inbox' },
-                { value: 'sent', label: 'Sent Items' },
-                { value: 'all', label: 'All Mail' },
-                { value: 'campaigns', label: 'Campaign Blasts' },
-                { value: 'starred', label: 'Starred' },
-              ]}
+              options={folderOptions}
               buttonClassName="min-h-10 text-xs"
             />
           </div>
@@ -814,26 +780,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             <input
               type="text"
               value={searchQuery}
+              maxLength={200}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search subject, sender, text..."
               className="w-full bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-xl pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
 
-          {error && messages.length > 0 && (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[9px] text-amber-600 dark:text-amber-300">
-              <span className="truncate">Showing saved messages. Mailbox refresh needs another try.</span>
-              {reconnectRequired ? (
-                <a href="/api/auth/zoho/login?setup=1" className="shrink-0 font-bold uppercase tracking-wider hover:underline">Reconnect</a>
-              ) : (
-                <button type="button" onClick={() => void loadEmails(true)} className="shrink-0 font-bold uppercase tracking-wider hover:underline">Retry</button>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]">
-          {loading && messages.length === 0 ? (
+          {loading ? (
             <div className="p-4 space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="p-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 space-y-2.5">
@@ -846,19 +803,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 </div>
               ))}
             </div>
-          ) : error && messages.length === 0 ? (
+          ) : error ? (
             <div className="p-6 text-center">
               <p className="text-xs text-rose-400 leading-relaxed">{error}</p>
-              {reconnectRequired && (
-                <a
-                  href="/api/auth/zoho/login?setup=1"
-                  className="mt-3 inline-flex rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-400 hover:bg-rose-500/20"
-                >
-                  Reconnect mailbox
-                </a>
-              )}
+              <button type="button" onClick={() => void loadEmails()} className="mt-3 min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs text-[color:var(--portal-text)]">Retry page</button>
             </div>
-          ) : filteredMessages.length === 0 ? (
+          ) : messages.length === 0 ? (
             <div className="py-12 px-6 text-center text-xs text-[color:var(--portal-muted)]">
               No emails match the selected filters or search terms.
             </div>
@@ -866,7 +816,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             pagedMessages.map((msg) => {
               const isSelected = messageKey(msg) === selectedMessageKey
               const isStarred = starredIds.has(msg.id)
-              const isRead = readIds.has(msg.id)
+              const isRead = Boolean(msg.isRead) || readIds.has(msg.id) || msg.direction !== 'incoming'
 
               return (
                 <div
@@ -883,6 +833,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                   tabIndex={0}
                   aria-label={`Open ${decodeHtmlEntities(msg.subject) || 'email'}`}
                   aria-current={isSelected ? 'true' : undefined}
+                  data-read={isRead ? 'true' : 'false'}
                   className={`p-4 flex flex-col gap-2 transition-all cursor-pointer relative group ${
                     isSelected
                       ? 'bg-[#caa24c]/10 border-l-2 border-[#caa24c]'
@@ -892,6 +843,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <DirectionBadge direction={msg.direction} />
+                      {!isRead && <span className="sr-only">Unread</span>}
                       <p className={`truncate text-xs font-bold ${isSelected ? 'text-[#a8792f] dark:text-[#f1d27a]' : isRead ? 'text-[color:var(--portal-muted)]' : 'text-[color:var(--portal-text)]'}`}>
                         {msg.direction === 'outgoing' ? `To: ${mailboxLabel(msg.to, inquiryByEmail)}` : mailboxLabel(msg.from, inquiryByEmail)}
                       </p>
@@ -922,6 +874,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                   </p>
 
                   {/* Indicators */}
+                  {msg.direction === 'outgoing' && msg.deliveryStatus && (
+                    <p className="text-[10px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(msg.deliveryStatus)}</p>
+                  )}
                   {msg.hasAttachment && (
                     <div className="flex items-center gap-1 text-[9px] font-mono text-[color:var(--portal-muted)] mt-1">
                       <Paperclip size={11} /> Has attachments
@@ -935,9 +890,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
         {/* Pinned Pagination Bar */}
         {totalPages > 1 && (
-          <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
             <span className="shrink-0 whitespace-nowrap text-[10px] font-mono text-[color:var(--portal-muted)]">
-              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredMessages.length)} of {filteredMessages.length}
+              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalItems)} of {totalItems.toLocaleString()}
             </span>
             <PortalPagination
               currentPage={currentPage}
@@ -1006,6 +961,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <DirectionBadge direction={messageDetail.direction} />
+                    {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus && (
+                      <span className="text-[10px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</span>
+                    )}
                     {messageDetail.category && (
                       <span className="text-[9px] font-mono uppercase bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] px-2 py-0.5 rounded border border-[color:var(--portal-border)]">
                         {messageDetail.category}
@@ -1013,6 +971,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     )}
                   </div>
                   <h2 className="text-lg font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(messageDetail.subject)}</h2>
+                  {messageDetail.folderPath && (
+                    <p className="mt-1 break-words text-xs text-[color:var(--portal-muted)]">Folder: {messageDetail.folderPath}</p>
+                  )}
                 </div>
 
                 {/* Main Action Buttons */}
@@ -1062,6 +1023,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                           <div className="border-b border-[color:var(--portal-border)] px-2.5 pb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">
                             Message actions
                           </div>
+                          {messageDetail.id.startsWith('mail-') && messageDetail.direction === 'incoming' && (
+                            <button type="button" role="menuitem" disabled={savingReadId === messageDetail.id}
+                              onClick={() => {
+                                setReadRequestedId(null)
+                                setReaderMenuOpen(false)
+                                void persistReadState(messageDetail.id, !messageDetail.isRead)
+                              }}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50">
+                              <Mail size={13} /> {messageDetail.isRead ? 'Mark as unread' : 'Mark as read'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             role="menuitem"
@@ -1150,6 +1122,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               </div>
 
               {/* Sender / Recipient & Matched Lead Row */}
+              {readStateError?.id === messageDetail.id && (
+                <p role="alert" className="text-xs text-[color:var(--portal-text)]">{readStateError.message} Use “More email actions” to retry.</p>
+              )}
+              {messageDetail.deliveryError && (
+                <p role="status" className="text-xs text-[color:var(--portal-text)]">{messageDetail.deliveryError}</p>
+              )}
               <div className="flex items-center justify-between gap-4 pt-2 border-t border-[color:var(--portal-border)]">
                 <div className="flex items-center gap-3">
                   <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="md" />
@@ -1514,15 +1492,17 @@ function FolderNavItem({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
+      title={label}
       className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all cursor-pointer ${
         active
           ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30'
           : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
       }`}
     >
-      <div className="flex items-center gap-2.5">
-        <span className={active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}>{icon}</span>
-        <span>{label}</span>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`shrink-0 ${active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}`}>{icon}</span>
+        <span className="truncate">{label}</span>
       </div>
       <span className={`text-[10px] font-mono rounded-full px-2 py-0.5 ${active ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'}`}>
         {count}
@@ -1532,23 +1512,9 @@ function FolderNavItem({
 }
 
 function DirectionBadge({ direction }: { direction?: 'incoming' | 'outgoing' | 'campaign' }) {
-  if (direction === 'incoming') {
-    return (
-      <span className="shrink-0 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-300">
-        Received
-      </span>
-    )
-  }
-  if (direction === 'campaign') {
-    return (
-      <span className="shrink-0 rounded border border-purple-500/20 bg-purple-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-purple-300">
-        Blast
-      </span>
-    )
-  }
   return (
-    <span className="shrink-0 rounded border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-blue-300">
-      Sent
+    <span className="shrink-0 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
+      {direction === 'incoming' ? 'Received' : direction === 'campaign' ? 'Blast' : 'Outgoing'}
     </span>
   )
 }

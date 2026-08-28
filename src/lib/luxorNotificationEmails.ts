@@ -1,8 +1,13 @@
 import 'server-only'
 
-import { LuxorInquiry } from './luxorInquiryTypes'
+import { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 import { sendLuxorZohoEmail } from './zohoMailServer'
+import { sendLuxorResendEmail } from './luxorResendMailServer'
+import { luxorMailProvider } from './luxorMailConfig'
 import { supabaseRest } from './supabaseRestServer'
+
+type InquirySnapshot = Pick<LuxorInquiry, 'id' | 'full_name' | 'email' | 'phone' | 'event_type' | 'guest_count' | 'budget'
+  | 'target_date' | 'message' | 'source' | 'flow' | 'preferred_tour_date' | 'preferred_tour_time' | 'metadata'>
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -26,7 +31,7 @@ function escapeHtml(value: string) {
  * Uses the Elena chat model (openai/gpt-4.1-mini via OpenRouter) to summarize
  * inquiry details, notes, and chat conversations.
  */
-async function generateAiSummary(inquiry: LuxorInquiry): Promise<string> {
+async function generateAiSummary(inquiry: InquirySnapshot): Promise<string> {
   const apiKey = process.env.OPEN_ROUTER_API_KEY
   if (!apiKey) {
     return 'No AI summary generated (OpenRouter API key missing).'
@@ -42,9 +47,10 @@ async function generateAiSummary(inquiry: LuxorInquiry): Promise<string> {
   const targetDate = inquiry.target_date || 'N/A'
   const notes = inquiry.message || ''
   
-  const chatMessages = (inquiry.metadata?.chatMessages as Array<{ role: string; content: string }>) || []
+  const chatMessages = Array.isArray(inquiry.metadata?.chatMessages) ? inquiry.metadata.chatMessages : []
   const formattedChat = chatMessages
-    .map(m => `${m.role === 'user' ? 'Visitor' : 'Elena AI'}: ${m.content}`)
+    .filter((m): m is { role: string; content: string } => Boolean(m) && typeof m === 'object' && typeof m.content === 'string')
+    .slice(-40).map(m => `${m.role === 'user' ? 'Visitor' : 'Elena AI'}: ${m.content.slice(0, 2000)}`)
     .join('\n')
 
   const prompt = `You are Elena, the internal AI concierge for Luxor Event Space. Summarize this lead inquiry details for the internal booking team. Highlight what they are planning and synthesize the context from their notes and chat history with you. Keep the summary professional, actionable, and under 150 words.
@@ -66,6 +72,7 @@ ${formattedChat || 'No chat history.'}
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(8_000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -90,14 +97,15 @@ ${formattedChat || 'No chat history.'}
     })
 
     if (!response.ok) {
-      console.error(`OpenRouter error: ${response.status} ${await response.text()}`)
+      console.warn(`Inquiry summary unavailable (HTTP ${response.status}).`)
       return 'AI Summary failed to generate.'
     }
 
     const data = await response.json()
-    return data.choices?.[0]?.message?.content?.trim() || 'No AI summary generated.'
-  } catch (error) {
-    console.error('Error generating AI summary:', error)
+    const summary = data.choices?.[0]?.message?.content
+    return typeof summary === 'string' ? summary.trim().slice(0, 3000) || 'No AI summary generated.' : 'No AI summary generated.'
+  } catch {
+    console.warn('Inquiry summary unavailable; sending the saved inquiry details.')
     return 'Error generating AI summary.'
   }
 }
@@ -105,7 +113,7 @@ ${formattedChat || 'No chat history.'}
 /**
  * Builds the branded HTML email content.
  */
-function buildBrandedNotificationHtml(inquiry: LuxorInquiry, aiSummary: string): string {
+function buildBrandedNotificationHtml(inquiry: InquirySnapshot, aiSummary: string): string {
   const leadUrl = absoluteUrl(`/portal/leads/${inquiry.id}`)
   
   return `<!DOCTYPE html>
@@ -139,7 +147,7 @@ function buildBrandedNotificationHtml(inquiry: LuxorInquiry, aiSummary: string):
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
     <tr>
       <td align="center" style="padding:28px 16px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:100%;max-width:600px;table-layout:fixed;overflow-wrap:anywhere;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
           <tr>
             <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
           </tr>
@@ -232,64 +240,37 @@ function buildBrandedNotificationHtml(inquiry: LuxorInquiry, aiSummary: string):
 </html>`
 }
 
-/**
- * Core notification trigger function.
- */
-export async function sendInquiryNotificationEmail(inquiry: LuxorInquiry): Promise<void> {
-  try {
-    // 1. Fetch unique configured notification emails from preferences
-    const preferences = await supabaseRest<Array<{ notification_emails?: string }>>(
-      'luxor_user_preferences?select=notification_emails'
-    )
-    
-    const uniqueEmails = new Set<string>()
-    if (Array.isArray(preferences)) {
-      for (const pref of preferences) {
-        if (pref.notification_emails) {
-          const emails = pref.notification_emails
-            .split(',')
-            .map(e => e.trim().toLowerCase())
-            .filter(Boolean)
-          for (const email of emails) {
-            uniqueEmails.add(email)
-          }
-        }
-      }
+/** Build once before delivery so a retry uses the exact same provider payload. */
+export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promise<{ status: 'sent' }> {
+  if (job.job_type !== 'inquiry_notification' || job.status !== 'sending') throw new Error('Internal alert must be claimed before delivery.')
+  let frozen = job
+  if (job.metadata.notificationRendered !== true) {
+    const snapshot = job.metadata.inquirySnapshot as InquirySnapshot | undefined
+    if (!snapshot || snapshot.id !== job.inquiry_id || typeof snapshot.full_name !== 'string') {
+      throw new Error('Internal alert is missing its saved inquiry snapshot.')
     }
-
-    // Default fallback
-    if (uniqueEmails.size === 0) {
-      uniqueEmails.add('booking@luxoratlaspalmas.com')
-    }
-
-    // 2. Generate the AI Summary
-    const aiSummary = await generateAiSummary(inquiry)
-
-    // 3. Build HTML Template
-    const htmlContent = buildBrandedNotificationHtml(inquiry, aiSummary)
-
-    // 4. Send email to each recipient
-    const recipientList = Array.from(uniqueEmails)
-    const subject = `[New Lead] ${inquiry.full_name} - ${inquiry.event_type || 'Event Inquiry'}`
-
-    console.log(`Sending internal inquiry notification email to: ${recipientList.join(', ')}`)
-
-    await Promise.all(
-      recipientList.map(async (recipient) => {
-        try {
-          await sendLuxorZohoEmail({
-            to: recipient,
-            subject,
-            content: htmlContent,
-            from: 'booking@luxoratlaspalmas.com',
-            fromName: 'Luxor Lead Alerts',
-          })
-        } catch (sendError) {
-          console.error(`Failed to send lead alert to ${recipient}:`, sendError)
-        }
-      })
+    const summary = await generateAiSummary(snapshot)
+    const html = buildBrandedNotificationHtml(snapshot, summary)
+    const rows = await supabaseRest<LuxorEmailJob[]>(
+      `luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.sending&attempts=eq.${job.attempts}`,
+      { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
+        body: html, updated_at: new Date().toISOString(),
+        metadata: { ...job.metadata, notificationRendered: true, notificationProvider: luxorMailProvider() },
+      }) },
     )
-  } catch (error) {
-    console.error('Failed to process lead notification email:', error)
+    if (!rows[0]) throw new Error('Internal alert claim changed before content was saved.')
+    frozen = rows[0]
   }
+  const provider = frozen.metadata.notificationProvider
+  if (provider !== 'resend' && provider !== 'zoho') throw new Error('Internal alert is missing its saved delivery provider.')
+  if (provider === 'zoho' && luxorMailProvider() !== 'zoho') {
+    throw new Error('Review the unfinished Zoho alert before switching its delivery provider.')
+  }
+  const send = provider === 'resend' ? sendLuxorResendEmail : sendLuxorZohoEmail
+  await send({
+    to: frozen.recipient_email, subject: frozen.subject, content: frozen.body,
+    from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Lead Alerts',
+    idempotencyKey: `email-job/${frozen.id}`,
+  })
+  return { status: 'sent' }
 }

@@ -144,6 +144,7 @@ export async function deliverLuxorAgreementEmailJob(job: LuxorEmailJob): Promise
   const signingUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')}/secure-portal/sign/${claimedSignature.token}`
   const email = await buildLuxorProposalContractEmail({ invoice, inquiry, booking, signingUrl })
   const receipt = await sendLuxorZohoEmail({
+    idempotencyKey: `agreement-job/${job.id}`,
     to: inquiry.email,
     subject: email.subject,
     content: email.html,

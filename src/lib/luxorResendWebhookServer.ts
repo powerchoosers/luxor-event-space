@@ -1,0 +1,196 @@
+import 'server-only'
+
+import { randomUUID } from 'node:crypto'
+import { supabaseRest } from './supabaseRestServer'
+import { luxorResendApi } from './luxorResendApiServer'
+import { luxorMailAddress, luxorMailSenders } from './luxorMailConfig'
+import { downloadLuxorMailAttachment, listLuxorMailAttachments, luxorMailMessage, saveLuxorMailAttachment, updateLuxorMailRow, type LuxorMailRow } from './luxorMailboxServer'
+import { recordLuxorCalendarReplies } from './luxorCalendarReplyServer'
+import { broadcastLuxorEmailArrival } from './luxorZohoWebhookServer'
+import { sendLuxorWebPush } from './luxorWebPushServer'
+
+export type ResendEvent = {
+  type: string; created_at: string
+  data: { email_id?: string; from?: string; to?: string[]; subject?: string; tags?: Record<string, string> }
+}
+type EventRow = {
+  event_id: string; payload: ResendEvent; processed_at: string | null; attempts: number; lease_until: string | null
+}
+type ReceivedEmail = {
+  id: string; from: string; to: string[]; cc: string[]; reply_to: string[]; subject: string
+  text: string | null; html: string | null; message_id: string; created_at: string; headers: Record<string, string>
+  attachments: Array<{ id: string; filename: string; content_type: string; content_id: string | null; size: number }>
+  raw?: { download_url: string; expires_at: string } | null
+}
+type ResendAttachment = { id: string; filename: string; content_type: string; content_id: string | null; size: number; download_url: string }
+
+function address(value: string) {
+  return luxorMailAddress(value.match(/<([^<>]+)>/)?.[1] || value)
+}
+
+function isLuxorEvent(event: ResendEvent) {
+  const senders = luxorMailSenders()
+  return event.type === 'email.received'
+    ? (event.data.to || []).some((value) => senders.includes(address(value)))
+    : senders.includes(address(event.data.from || ''))
+}
+
+export async function storeLuxorResendEvent(id: string, event: ResendEvent) {
+  if (!isLuxorEvent(event)) return false // Other domains can share this Resend account.
+  await supabaseRest('luxor_resend_events?on_conflict=event_id', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' },
+    body: JSON.stringify({ event_id: id, event_type: event.type, provider_email_id: event.data.email_id, payload: event }),
+  })
+  return true
+}
+
+async function downloadProviderAttachment(urlValue: string, raw = false) {
+  const url = new URL(urlValue)
+  // Only fetch signed URLs returned by the authenticated Resend API, never webhook/user URLs.
+  const allowedHost = raw ? url.hostname.endsWith('.resend.com') || url.hostname.endsWith('.cloudfront.net')
+    : ['inbound-cdn.resend.com', 'cdn.resend.com'].includes(url.hostname)
+  if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || !allowedHost) {
+    throw new Error('Resend returned an unsupported attachment download host.')
+  }
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(25_000) })
+  if (!response.ok || !response.body) throw new Error('Incoming attachment download failed.')
+  const reader = response.body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const part = await reader.read()
+      if (part.done) break
+      size += part.value.byteLength
+      if (size > 40 * 1024 * 1024) throw new Error('Incoming attachment exceeds the archive limit.')
+      parts.push(part.value)
+    }
+  } finally { await reader.cancel().catch(() => undefined) }
+  return Buffer.concat(parts)
+}
+
+async function receiveEmail(providerId: string) {
+  const email = await luxorResendApi<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(providerId)}?html_format=cid`)
+  if (!email.to.some((value) => luxorMailSenders().includes(address(value)))) return
+  const headers = Object.fromEntries(Object.entries(email.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
+  const references = `${headers.references || ''} ${headers['in-reply-to'] || ''}`.match(/<[^<>\s]+>/g) || []
+  let threadKey = ''
+  for (const reference of references.slice().reverse()) {
+    const parents = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&internet_message_id=eq.${encodeURIComponent(reference)}&limit=1`)
+    if (parents[0]) { threadKey = parents[0].thread_key; break }
+  }
+  const id = randomUUID()
+  await supabaseRest('luxor_mail_messages?on_conflict=provider,provider_id', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' },
+    body: JSON.stringify({ id, provider: 'resend', provider_id: email.id, direction: 'incoming',
+      internet_message_id: email.message_id, thread_key: threadKey || `mail-${id}`,
+      from_address: address(email.from) || email.from, to_addresses: email.to.map(address).filter(Boolean),
+      cc_addresses: (email.cc || []).map(address).filter(Boolean), reply_to_addresses: (email.reply_to || []).map(address).filter(Boolean),
+      reference_ids: references, subject: email.subject || '(No subject)', text_body: email.text || '', html_body: email.html,
+      status: 'received', occurred_at: email.created_at, metadata: { hasAttachments: email.attachments.length > 0, headers } }),
+  })
+  const rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&provider_id=eq.${encodeURIComponent(email.id)}&limit=1`)
+  const row = rows[0]
+  if (!row) throw new Error('Incoming email was not saved.')
+  const archived = await listLuxorMailAttachments(row.id)
+  for (const attachment of email.attachments) {
+    if (archived.some((item) => item.source_key === attachment.id)) continue
+    const detail = await luxorResendApi<ResendAttachment>(`/emails/receiving/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(attachment.id)}`)
+    const bytes = await downloadProviderAttachment(detail.download_url)
+    archived.push(await saveLuxorMailAttachment({ messageId: row.id, sourceKey: attachment.id,
+      filename: attachment.filename || 'attachment', contentType: attachment.content_type || 'application/octet-stream',
+      contentId: attachment.content_id, bytes }))
+  }
+  // Keep the original MIME for calendar parts that clients place inline, and
+  // verify DKIM ourselves instead of trusting caller-supplied auth headers.
+  if (email.raw?.download_url) {
+    const savedRaw = archived.find((item) => item.source_key === 'raw-message')
+    const raw = savedRaw ? (await downloadLuxorMailAttachment(row.id, savedRaw.id)).bytes
+      : await downloadProviderAttachment(email.raw.download_url, true)
+    if (!savedRaw) await saveLuxorMailAttachment({ messageId: row.id, sourceKey: 'raw-message', filename: 'original-message.eml', contentType: 'message/rfc822', bytes: raw })
+    await recordLuxorCalendarReplies(row.id, raw, row.from_address)
+  }
+  const cachedMessage = luxorMailMessage(row, archived)
+  const eventKey = `resend:${email.id}`
+  await supabaseRest<Array<{ id: string }>>('luxor_email_events?on_conflict=event_key&select=id', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ event_key: eventKey, message_id: cachedMessage.id, sender_email: row.from_address,
+      recipient_email: row.to_addresses[0], subject: row.subject, received_at: row.occurred_at,
+      metadata: { source: 'resend', limitedData: false, cachedAt: new Date().toISOString(), cachedMessage } }),
+  })
+  // Persist each notification stage so a transient failure is retried even
+  // after the inbox event was already inserted. Browser tags collapse repeats
+  // if the process dies after push acceptance but before the checkpoint.
+  const metadata = { ...row.metadata }
+  if (!metadata.arrivalBroadcastAt) {
+    await broadcastLuxorEmailArrival(eventKey)
+    metadata.arrivalBroadcastAt = new Date().toISOString()
+    await updateLuxorMailRow(row.id, { metadata })
+  }
+  if (!metadata.arrivalPushAt) {
+    const push = await sendLuxorWebPush('email', { title: 'New Luxor email', body: 'A new message arrived in the owner inbox.',
+      url: `/portal/emails?messageId=${cachedMessage.id}`, tag: `luxor-email-${eventKey}` })
+    if (push.failed) throw new Error('Email notification delivery needs a retry.')
+    metadata.arrivalPushAt = new Date().toISOString()
+    await updateLuxorMailRow(row.id, { metadata })
+  }
+}
+
+async function processDelivery(event: ResendEvent, eventId: string) {
+  const providerId = event.data.email_id
+  if (!providerId) return
+  const email = await luxorResendApi<{ id: string; message_id: string; tags?: Array<{ name: string; value: string }> }>(`/emails/${encodeURIComponent(providerId)}`)
+  const localId = event.data.tags?.luxor_message_id || email.tags?.find((tag) => tag.name === 'luxor_message_id')?.value
+  let rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&provider_id=eq.${encodeURIComponent(providerId)}&limit=1`)
+  if (!rows[0] && localId && /^[0-9a-f-]{36}$/i.test(localId)) {
+    rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&id=eq.${localId}&limit=1`)
+  }
+  if (!rows[0] && email.message_id) rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&internet_message_id=eq.${encodeURIComponent(email.message_id)}&limit=1`)
+  const row = rows[0]
+  if (!row) throw new Error('Sent email has not been linked to the local outbox yet.')
+  // Events may arrive out of order. Retain the event log, but never regress status.
+  const rank: Record<string, number> = { prepared: 0, sending: 1, sent: 2, delivery_delayed: 3, delivered: 4, opened: 5, clicked: 6, failed: 7, bounced: 8, suppressed: 9, complained: 10 }
+  const next = event.type.replace(/^email\./, '')
+  const updated = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?id=eq.${row.id}&status=eq.${encodeURIComponent(row.status)}&select=id`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
+      provider_id: providerId, internet_message_id: email.message_id || row.internet_message_id,
+      accepted_at: row.accepted_at || event.created_at,
+      status: (rank[next] || 0) >= (rank[row.status] || 0) ? next : row.status,
+    }),
+  })
+  if (!updated?.length) throw new Error('Delivery state changed concurrently; retry this event.')
+  // Keep this inside the durable event retry boundary. A transient campaign
+  // write failure must not leave the event marked processed.
+  await supabaseRest('rpc/luxor_resend_marketing_delivery', { method: 'POST',
+    body: JSON.stringify({ p_message_id: row.id, p_event_id: eventId }) })
+}
+
+export async function processLuxorResendEvent(eventId: string) {
+  const filter = `event_id=eq.${encodeURIComponent(eventId)}`
+  const rows = await supabaseRest<EventRow[]>(`luxor_resend_events?select=*&${filter}&limit=1`)
+  const row = rows[0]
+  if (!row || row.processed_at) return
+  const now = new Date().toISOString()
+  const claimed = await supabaseRest<EventRow[]>(`luxor_resend_events?${filter}&processed_at=is.null&or=(lease_until.is.null,lease_until.lt.${encodeURIComponent(now)})&select=*`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ lease_until: new Date(Date.now() + 120_000).toISOString(), attempts: row.attempts + 1 }),
+  })
+  if (!claimed?.length) return
+  try {
+    if (row.payload.type === 'email.received' && row.payload.data.email_id) await receiveEmail(row.payload.data.email_id)
+    else if (row.payload.type.startsWith('email.')) await processDelivery(row.payload, eventId)
+    await supabaseRest(`luxor_resend_events?${filter}`, { method: 'PATCH',
+      body: JSON.stringify({ processed_at: new Date().toISOString(), lease_until: null, last_error: null }) })
+  } catch (error) {
+    await supabaseRest(`luxor_resend_events?${filter}`, { method: 'PATCH', body: JSON.stringify({
+      lease_until: null, next_attempt_at: new Date(Date.now() + Math.min(3600_000, 30_000 * 2 ** Math.min(row.attempts, 7))).toISOString(),
+      last_error: 'Email processing failed. A retry is scheduled.',
+    }) })
+    throw error
+  }
+}
+
+export async function processPendingLuxorResendEvents(limit = 3) {
+  const rows = await supabaseRest<EventRow[]>(`luxor_resend_events?select=event_id&processed_at=is.null&next_attempt_at=lte.${encodeURIComponent(new Date().toISOString())}&order=received_at.asc&limit=${limit}`)
+  for (const row of rows) await processLuxorResendEvent(row.event_id).catch(() => undefined)
+}

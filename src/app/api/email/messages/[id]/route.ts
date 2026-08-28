@@ -4,6 +4,29 @@ import { isLuxorZohoAuthorizationError, ZohoMessageReadError } from '@/lib/zohoM
 import { getArchivedLuxorEmail } from '@/lib/luxorEmailArchiveServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { setLuxorMailboxRead } from '@/lib/luxorMailboxServer'
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getLuxorPortalSession()
+  if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
+  const origin = request.headers.get('origin')
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
+    return NextResponse.json({ error: 'Cross-site mailbox changes are not allowed.' }, { status: 403 })
+  }
+  const { id } = await params
+  if (!/^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return NextResponse.json({ error: 'This message must be migrated before its read state can be saved.' }, { status: 400 })
+  }
+  const body = await request.json().catch(() => null)
+  if (typeof body?.isRead !== 'boolean') return NextResponse.json({ error: 'isRead must be true or false.' }, { status: 400 })
+  try {
+    const result = await setLuxorMailboxRead(id, body.isRead)
+    if (!result) return NextResponse.json({ error: 'Incoming mailbox message not found.' }, { status: 404 })
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } })
+  } catch {
+    return NextResponse.json({ error: 'Read state could not be saved. Please retry.' }, { status: 503 })
+  }
+}
 
 type StoredEmailJob = {
   id: string

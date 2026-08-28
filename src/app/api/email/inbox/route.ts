@@ -4,6 +4,9 @@ import { listLuxorZohoInbox, listLuxorZohoMessagesForAddress, listLuxorZohoSentM
 import { listMarketingCampaigns, type MarketingCampaignSummary } from '@/lib/luxorMarketingServer'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { findLuxorImportedLegacyIds, listLuxorMailboxMessages, listLuxorReleasedMailFolders } from '@/lib/luxorMailboxServer'
+import { isLuxorMailFolderFilter, luxorMailMatchesFolder } from '@/lib/luxorMailFolders'
 
 type StoredEmailEvent = {
   id: string
@@ -44,7 +47,7 @@ type MailboxMessageItem = {
   summary: string
   hasAttachment: boolean
   direction: 'incoming' | 'outgoing' | 'campaign'
-  folder: 'inbox' | 'sent' | 'campaigns'
+  folder: string
   isRead?: boolean
   storedLocally?: boolean
   content?: string
@@ -125,28 +128,47 @@ export async function GET(request: NextRequest) {
     const live = searchParams.get('live') === '1'
     const source = searchParams.get('source') || 'email-client'
     const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 1000, 1), 1000)
+    if (!isLuxorMailFolderFilter(folder)) {
+      return NextResponse.json({ error: 'Invalid mailbox folder.' }, { status: 400 })
+    }
+
+    // Locally archived mail remains visible during staged testing or rollback,
+    // regardless of which provider currently sends ordinary messages.
+    if (luxorMailProvider() === 'resend' || !live || !['all', 'inbox', 'sent', 'campaigns'].includes(folder)) {
+      const [mail, legacy, campaigns, folders] = await Promise.all([
+        listLuxorMailboxMessages({ limit: safeLimit, email, folder }),
+        listStoredMailboxMessages(safeLimit, email),
+        !email && ['all', 'sent', 'campaigns'].includes(folder) ? listMarketingCampaigns(25).catch(() => []) : Promise.resolve([]),
+        listLuxorReleasedMailFolders(),
+      ])
+      const ids = new Set(mail.map((item) => item.id))
+      const legacyIds = await findLuxorImportedLegacyIds(legacy.map((item) => item.id))
+      const jobIds = new Set(mail.map((item) => `job-${item.emailJobId}`))
+      const campaignMessages: MailboxMessageItem[] = campaigns.map((camp) => ({
+        id: `campaign-${camp.id}`, subject: decodeHtmlEntities(camp.subject || camp.name),
+        from: 'booking@luxoratlaspalmas.com', to: camp.audience_label || `${camp.recipient_count} Recipients`,
+        receivedAt: camp.sent_at || camp.created_at,
+        summary: `Marketing Campaign Blast: ${camp.name}. ${camp.sent_count} sent, ${camp.open_count} opens, ${camp.click_count} clicks.`,
+        hasAttachment: false, direction: 'campaign', folder: 'campaigns', isRead: true, storedLocally: true,
+        engagement: { openCount: Number(camp.open_count || 0), clickCount: Number(camp.click_count || 0) },
+      }))
+      const messages = [...mail, ...legacy.filter((item) => !ids.has(item.id) && !legacyIds.has(item.id) && !jobIds.has(item.id) && !item.id.startsWith('mail-')), ...campaignMessages]
+        .filter((item) => luxorMailMatchesFolder(item, folder))
+        .sort((a, b) => Date.parse(b.receivedAt || '') - Date.parse(a.receivedAt || ''))
+      return NextResponse.json({ mailbox: session.mailboxAddress || session.email, folder, folders,
+        source: luxorMailProvider() === 'resend' ? 'resend' : 'supabase', messages: messages.slice(0, safeLimit) }, { headers: { 'Cache-Control': 'private, no-store' } })
+    }
 
     console.log(JSON.stringify({
       level: 'info',
-      message: live ? 'Zoho mailbox request started' : 'Stored mailbox request started',
+      message: 'Zoho mailbox request started',
       route: '/api/email/inbox',
       requestId,
       source,
-      provider: live ? 'zoho' : 'supabase',
+      provider: 'zoho',
       folder,
       addressLookup: Boolean(email),
     }))
-
-    if (email && !live) {
-      const messages = await listStoredMailboxMessages(safeLimit, email)
-      return NextResponse.json({
-        mailbox: session.mailboxAddress || session.email,
-        email,
-        folder,
-        source: 'supabase',
-        messages,
-      })
-    }
 
     if (email) {
       const messages = await listLuxorZohoMessagesForAddress(email, safeLimit)
@@ -155,33 +177,6 @@ export async function GET(request: NextRequest) {
         email,
         folder,
         messages,
-      })
-    }
-
-    if (!live) {
-      const messages = await listStoredMailboxMessages(safeLimit)
-      const campaigns = await listMarketingCampaigns(25).catch(() => [])
-      campaigns.forEach((camp) => {
-        messages.push({
-          id: `campaign-${camp.id}`,
-          subject: decodeHtmlEntities(camp.subject || camp.name),
-          from: 'booking@luxoratlaspalmas.com',
-          to: camp.audience_label || `${camp.recipient_count} Recipients`,
-          receivedAt: camp.sent_at || camp.created_at,
-          summary: `Marketing Campaign Blast: ${camp.name}. ${camp.sent_count} sent, ${camp.open_count} opens, ${camp.click_count} clicks.`,
-          hasAttachment: false,
-          direction: 'campaign',
-          folder: 'campaigns',
-          isRead: true,
-          storedLocally: true,
-        })
-      })
-      messages.sort((a, b) => new Date(b.receivedAt || 0).getTime() - new Date(a.receivedAt || 0).getTime())
-      return NextResponse.json({
-        mailbox: session.mailboxAddress || session.email,
-        folder,
-        source: 'supabase',
-        messages: messages.slice(0, safeLimit),
       })
     }
 

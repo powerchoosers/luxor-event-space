@@ -24,7 +24,9 @@ const DURATION_OPTIONS = [
 
 type ConfigResponse = {
   configured?: boolean
-  provider?: 'zoho-smtp'
+  provider?: 'zoho-smtp' | 'resend-smtp'
+  activeProvider?: 'zoho' | 'resend'
+  providers?: Partial<Record<'zoho' | 'resend', { configured: boolean }>>
   fromAddress?: string
   organizerEmail?: string
   timezone?: string
@@ -51,6 +53,7 @@ function displayDate(dateValue: string, timeValue: string) {
 export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { defaultRecipientEmail?: string }) {
   const { notify } = useToast()
   const [config, setConfig] = React.useState<ConfigResponse | null>(null)
+  const [provider, setProvider] = React.useState<'zoho' | 'resend'>('zoho')
   const [attendeeEmail, setAttendeeEmail] = React.useState(defaultRecipientEmail)
   const [attendeeName, setAttendeeName] = React.useState('Calendar Test Guest')
   const [title, setTitle] = React.useState('Private Venue Tour — Luxor Event Space')
@@ -59,7 +62,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
   const [durationMinutes, setDurationMinutes] = React.useState('30')
   const [location, setLocation] = React.useState(LOCATION)
   const [description, setDescription] = React.useState('A private appointment to tour Luxor Event Space and discuss your upcoming celebration.')
-  const [eventUid, setEventUid] = React.useState('')
+  const inviteRevision = React.useRef<{ fingerprint: string; uid: string; stamp: string } | null>(null)
   const [busyAction, setBusyAction] = React.useState<'send' | 'download' | null>(null)
   const [lastMessageId, setLastMessageId] = React.useState('')
   const effectiveAttendeeEmail = attendeeEmail || defaultRecipientEmail
@@ -68,20 +71,26 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
     fetch('/api/portal/calendar-invite-test', { cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as ConfigResponse
-        if (!response.ok) throw new Error(payload.error || 'Could not check Zoho SMTP configuration.')
+        if (!response.ok) throw new Error(payload.error || 'Could not check email configuration.')
         setConfig(payload)
+        setProvider(payload.activeProvider || 'zoho')
       })
-      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check Zoho SMTP configuration.' }))
+      .catch((error) => setConfig({ configured: false, error: error instanceof Error ? error.message : 'Could not check email configuration.' }))
   }, [])
 
   const requestInvite = async (mode: 'send' | 'download') => {
     setBusyAction(mode)
     try {
+      const fingerprint = JSON.stringify({ provider, attendeeEmail: effectiveAttendeeEmail, attendeeName, title, date, startTime, durationMinutes, location, description })
+      if (inviteRevision.current?.fingerprint !== fingerprint) {
+        inviteRevision.current = { fingerprint, uid: `settings-test-${crypto.randomUUID()}@luxoratlaspalmas.com`, stamp: new Date().toISOString() }
+      }
       const response = await fetch('/api/portal/calendar-invite-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           mode,
+          provider,
           attendeeEmail: effectiveAttendeeEmail,
           attendeeName,
           title,
@@ -90,7 +99,8 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           durationMinutes: Number(durationMinutes),
           location,
           description,
-          uid: eventUid,
+          uid: inviteRevision.current.uid,
+          stamp: inviteRevision.current.stamp,
         }),
       })
       const payload = await response.json().catch(() => ({})) as {
@@ -101,7 +111,6 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
         messageId?: string
       }
       if (!response.ok) throw new Error(payload.error || 'Could not create the calendar invitation.')
-      if (payload.uid) setEventUid(payload.uid)
 
       if (mode === 'download') {
         const blob = new Blob([payload.calendarContent || ''], { type: 'text/calendar;charset=utf-8' })
@@ -118,6 +127,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
       }
 
       setLastMessageId(payload.messageId || 'sent')
+      inviteRevision.current = null
       notify({ title: 'Test invitation sent.', description: `Check ${effectiveAttendeeEmail} in Gmail, Outlook, or Apple Mail.`, variant: 'success' })
     } catch (error) {
       notify({
@@ -130,7 +140,8 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
     }
   }
 
-  const zohoReady = config?.configured === true
+  const providerReady = config?.providers?.[provider]?.configured ?? config?.configured === true
+  const providerLabel = provider === 'resend' ? 'Resend SMTP' : 'Zoho SMTP'
 
   return (
     <section data-testid="calendar-invite-tester" className="luxor-glass-card min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 xl:col-span-2">
@@ -141,23 +152,29 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Custom Calendar Invite Test</h3>
           </div>
           <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
-            Sends Luxor&apos;s RFC 5545 meeting request as a true calendar MIME message through Zoho SMTP. This test does not create, update, or remove a Zoho Calendar event.
+            Sends Luxor&apos;s meeting request as a calendar MIME message through the selected provider. This test does not change your normal mail provider or create a Zoho Calendar event.
           </p>
         </div>
         <div className={`inline-flex min-h-8 shrink-0 items-center gap-2 self-start rounded-lg border px-3 text-[9px] font-black uppercase tracking-wider ${
           config === null
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
-            : zohoReady
+            : providerReady
               ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
               : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
         }`}>
-          {config === null ? <Loader2 size={12} className="animate-spin" /> : zohoReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
-          {config === null ? 'Checking Zoho SMTP' : zohoReady ? 'Zoho SMTP ready' : 'Zoho SMTP unavailable'}
+          {config === null ? <Loader2 size={12} className="animate-spin" /> : providerReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
+          {config === null ? 'Checking configuration' : providerReady ? `${providerLabel} configured` : `${providerLabel} unavailable`}
         </div>
       </div>
 
       <div className="grid min-w-0 gap-6 pt-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:gap-8">
         <div className="min-w-0 space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Test delivery provider</p>
+            <PortalSelect value={provider} disabled={config === null || busyAction !== null} onChange={(value) => { setProvider(value === 'resend' ? 'resend' : 'zoho'); setLastMessageId('') }}
+              options={[{ value: 'zoho', label: 'Zoho SMTP' }, { value: 'resend', label: 'Resend SMTP' }]} />
+            <p className="text-[10px] leading-5 text-[color:var(--portal-muted)]">Normal mail still uses {config?.activeProvider === 'resend' ? 'Resend' : 'Zoho'}. A configured credential does not confirm domain verification or client compatibility.</p>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="min-w-0 space-y-1.5">
               <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Recipient email</span>
@@ -200,7 +217,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           </label>
 
           <div className="flex flex-col gap-2.5 sm:flex-row">
-            <PortalButton type="button" variant="primary" disabled={!zohoReady || busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('send')} className="w-full sm:w-auto">
+            <PortalButton type="button" variant="primary" disabled={!providerReady || busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('send')} className="w-full sm:w-auto">
               {busyAction === 'send' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               {busyAction === 'send' ? 'Sending test' : 'Send test invite'}
             </PortalButton>
@@ -209,8 +226,8 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
               {busyAction === 'download' ? 'Building file' : 'Download .ics'}
             </PortalButton>
           </div>
-          {!zohoReady && config !== null ? (
-            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading still works. Sending requires the Luxor Zoho SMTP environment variables.</p>
+          {!providerReady && config !== null ? (
+            <p className="text-[10px] leading-5 text-amber-700 dark:text-amber-300">Downloading still works. Sending requires {provider === 'resend' ? 'RESEND_API_KEY and a verified Luxor domain' : 'the Luxor Zoho SMTP environment variables'}.</p>
           ) : null}
         </div>
 
@@ -230,7 +247,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Delivery</dt>
-              <dd className="text-right font-semibold text-[color:var(--portal-text)]">Zoho SMTP · calendar MIME</dd>
+              <dd className="text-right font-semibold text-[color:var(--portal-text)]">{providerLabel} · calendar MIME</dd>
             </div>
             <div className="flex min-w-0 items-start justify-between gap-4">
               <dt className="shrink-0 uppercase tracking-wider text-[color:var(--portal-faint)]">Response</dt>
@@ -239,7 +256,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           </dl>
           {lastMessageId ? (
             <div className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-3 text-[10px] leading-5 text-emerald-700 dark:text-emerald-300">
-              Zoho SMTP accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
+              {providerLabel} accepted the test message. Delivery ID: <span className="break-all font-mono">{lastMessageId}</span>
             </div>
           ) : null}
         </aside>

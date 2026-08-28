@@ -3,6 +3,7 @@ import 'server-only'
 import { decodeHtmlEntities } from './luxorTextUtils'
 import { supabaseRest } from './supabaseRestServer'
 import { parseZohoJson } from './zohoJson'
+import { luxorMailProvider } from './luxorMailConfig'
 
 type ZohoTokenResponse = {
   access_token?: string
@@ -55,6 +56,9 @@ export type LuxorZohoMessage = {
   id: string
   threadId: string
   folderId: string
+  folder?: string
+  folderName?: string
+  folderPath?: string
   subject: string
   from: string
   to: string
@@ -70,6 +74,8 @@ export type LuxorZohoMessage = {
     clickCount: number
   }
   isRead?: boolean
+  deliveryStatus?: string
+  deliveryError?: string | null
   direction?: 'incoming' | 'outgoing'
 }
 
@@ -242,7 +248,7 @@ export function normalizeEmailAddress(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
 }
 
-async function getZohoAccessToken() {
+async function getZohoAccessToken(signal?: AbortSignal) {
   if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 60_000) {
     return cachedAccessToken.token
   }
@@ -259,6 +265,7 @@ async function getZohoAccessToken() {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
+    signal,
   })
 
   const tokenData = (await response.json().catch(() => ({}))) as ZohoTokenResponse
@@ -284,6 +291,14 @@ async function getZohoAccessToken() {
  * requests an access token; it never sends, reads, or changes an email.
  */
 export async function verifyLuxorZohoMailConnection() {
+  if (luxorMailProvider() === 'resend') {
+    const { luxorResendApi } = await import('./luxorResendApiServer')
+    const result = await luxorResendApi<{ data: Array<{ name: string; status: string }> }>('/domains?limit=100')
+    if (!result.data.some((domain) => domain.name === 'luxoratlaspalmas.com' && domain.status === 'verified')) {
+      throw new Error('The Luxor sending domain is not verified in Resend.')
+    }
+    return
+  }
   await getZohoAccessToken()
 }
 
@@ -350,7 +365,12 @@ export async function sendLuxorZohoEmail(input: {
   from?: string
   fromName?: string
   attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
+  idempotencyKey?: string
 }) {
+  if (luxorMailProvider() === 'resend') {
+    const { sendLuxorResendEmail } = await import('./luxorResendMailServer')
+    return sendLuxorResendEmail(input)
+  }
   const { accountId, baseUrl, allowedSenders, loginEmail } = getZohoConfig()
   const to = normalizeEmailAddress(input.to)
   const from = normalizeEmailAddress(input.from) || loginEmail
@@ -553,6 +573,131 @@ export async function createLuxorZohoCalendarEvent(input: {
   }
 }
 
+export type LuxorZohoImportFolder = { id: string; name: string; path: string; type: string }
+export type LuxorZohoImportMessage = {
+  id: string; folderId: string; threadId: string; isRead: boolean
+  occurredAt: string | null; source: Record<string, unknown>
+}
+
+/** Pin an import to server configuration, never to a client-supplied account. */
+export function getLuxorZohoImportAccount() {
+  const { accountId, loginEmail, allowedSenders } = getZohoConfig()
+  if (!/^\d+$/.test(accountId) || !allowedSenders.includes(loginEmail)) throw new Error('The Zoho import mailbox is not approved.')
+  return { accountId, mailbox: loginEmail, senders: allowedSenders }
+}
+
+/** Read the exact saved appointment for migration checks, without updating it
+ * or notifying attendees. An etag is an API concurrency token, not ICS SEQUENCE. */
+export async function readLuxorZohoCalendarEvent(eventUid: string) {
+  if (!/^[A-Za-z0-9._@-]{8,255}$/.test(eventUid)) throw new Error('Invalid saved Zoho event identifier.')
+  const account = getLuxorZohoImportAccount()
+  const { calendarBaseUrl, calendarUid } = getZohoConfig()
+  const token = await getZohoAccessToken(AbortSignal.timeout(20_000))
+  const resolvedUid = await getZohoCalendarUid(token, calendarBaseUrl, calendarUid)
+  const response = await fetch(`${calendarBaseUrl}/calendars/${encodeURIComponent(resolvedUid)}/events/${encodeURIComponent(eventUid)}`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, Accept: 'application/json' },
+    cache: 'no-store', signal: AbortSignal.timeout(30_000),
+  })
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    throw new Error(`Zoho calendar read failed (${response.status}); the appointment was not changed.`)
+  }
+  const text = await response.text()
+  if (Buffer.byteLength(text) > 2_000_000) throw new Error('Zoho calendar response exceeds the migration review limit.')
+  const result = parseZohoJson(text) as { events?: Array<Record<string, unknown>> }
+  const event = result.events?.[0]
+  if (result.events?.length !== 1 || !event || event.uid !== eventUid
+    || normalizeEmailAddress(String(event.organizer || '')) !== account.mailbox
+    || event.role !== 'organizer' || (event.caluid && event.caluid !== resolvedUid)) {
+    throw new Error('Zoho did not confirm the saved appointment and its approved organizer.')
+  }
+  return { calendarUid: resolvedUid, mailbox: account.mailbox, observedAt: new Date().toISOString(), event }
+}
+
+/** Migration reads never use the UI's capped/stale mailbox cache. */
+async function readZohoImportResource(path: string, expectedAccountId: string) {
+  const { accountId, baseUrl, loginEmail, allowedSenders } = getZohoConfig()
+  if (!/^\d+$/.test(accountId) || accountId !== expectedAccountId || !allowedSenders.includes(loginEmail)) {
+    throw new Error('The Zoho migration account no longer matches the approved mailbox configuration.')
+  }
+  if (zohoReadCooldownUntil > Date.now()) throw new Error('Zoho is rate limited; resume the import later.')
+  const token = await getZohoAccessToken(AbortSignal.timeout(20_000))
+  // The durable worker owns retries. Do not wait behind UI cooldowns or repeat
+  // requests inside one invocation, which could outlive its processing lease.
+  const response = await fetch(`${baseUrl}/accounts/${accountId}${path ? `/${path}` : ''}`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, Accept: 'application/json' },
+    cache: 'no-store', signal: AbortSignal.timeout(30_000),
+  })
+  if (!response.ok) {
+    if (response.status === 401) cachedAccessToken = null
+    if (response.status === 429) zohoReadCooldownUntil = Date.now() + 60_000
+    // Never include provider response bodies, mailbox content, or credentials in logs.
+    throw new Error(`Zoho history read failed (${response.status}); no import progress was committed.`)
+  }
+  const payload = parseZohoJson(await response.text()) as { status?: { code?: number }; data?: unknown }
+  if (payload.status?.code !== undefined && Number(payload.status.code) !== 200) {
+    throw new Error('Zoho rejected the history read; check mailbox authorization and read scopes.')
+  }
+  if (payload.data === undefined) throw new Error('Zoho returned an incomplete history response.')
+  return payload.data
+}
+
+export async function verifyLuxorZohoImportAccount() {
+  const account = getLuxorZohoImportAccount()
+  const data = await readZohoImportResource('', account.accountId) as {
+    accountId?: string; mailboxAddress?: string; primaryEmailAddress?: string
+  } | null
+  if (!data || String(data.accountId) !== account.accountId
+    || normalizeEmailAddress(String(data.mailboxAddress || data.primaryEmailAddress || '')) !== account.mailbox) {
+    throw new Error('Zoho did not confirm the configured source mailbox. Do not start the history import.')
+  }
+  return account
+}
+
+export async function listLuxorZohoImportFolders(expectedAccountId: string): Promise<LuxorZohoImportFolder[]> {
+  const data = await readZohoImportResource('folders', expectedAccountId)
+  if (!Array.isArray(data)) throw new Error('Zoho did not return a folder inventory.')
+  return data.map((folder) => {
+    if (!folder || typeof folder !== 'object' || !/^\d+$/.test(String(folder.folderId || ''))) {
+      throw new Error('Zoho returned an invalid folder identifier; inventory is incomplete.')
+    }
+    return { id: String(folder.folderId), name: String(folder.folderName || ''), path: String(folder.path || ''), type: String(folder.folderType || '') }
+  })
+}
+
+export async function listLuxorZohoImportPage(input: { accountId: string; folderId: string; start: number; status: 'read' | 'unread'; limit?: number }) {
+  if (!/^\d+$/.test(input.folderId) || !Number.isSafeInteger(input.start) || input.start < 1
+    || !['read', 'unread'].includes(input.status)) throw new Error('Invalid Zoho history cursor.')
+  const limit = input.limit ?? 100
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('Zoho history pages must contain 1–200 messages.')
+  const params = new URLSearchParams({ folderId: input.folderId, start: String(input.start), limit: String(limit),
+    status: input.status, sortBy: 'date', sortorder: 'true', includeto: 'true', includesent: 'true', includearchive: 'true', threadedMails: 'false' })
+  const data = await readZohoImportResource(`messages/view?${params}`, input.accountId)
+  if (!Array.isArray(data) || data.length > limit) throw new Error('Zoho returned an invalid history page.')
+  const messages: LuxorZohoImportMessage[] = data.map((item) => {
+    const id = String(item?.messageId || item?.message_id || '')
+    if (!/^\d+$/.test(id) || (item.folderId && String(item.folderId) !== input.folderId)) {
+      throw new Error('Zoho returned a message outside the requested folder or without an exact identifier.')
+    }
+    return { id, folderId: input.folderId, threadId: String(item.threadId || id),
+      // Use the documented read/unread filter, not undocumented numeric status codes.
+      isRead: input.status === 'read', occurredAt: normalizeZohoDate(item.receivedTime || item.receivedtime || item.sentDateInGMT), source: item }
+  })
+  if (new Set(messages.map((item) => item.id)).size !== messages.length) throw new Error('Zoho returned duplicate message IDs in a history page.')
+  return { messages, nextStart: messages.length === limit ? input.start + messages.length : null }
+}
+
+export async function getLuxorZohoOriginalMessage(accountId: string, messageId: string) {
+  if (!/^\d+$/.test(messageId)) throw new Error('Invalid original Zoho message identifier.')
+  const data = await readZohoImportResource(`messages/${messageId}/originalmessage`, accountId) as { messageId?: string; content?: unknown }
+  if ((data.messageId !== undefined && String(data.messageId) !== messageId) || typeof data.content !== 'string' || !data.content.trim()) {
+    throw new Error('Zoho did not return the requested complete original message.')
+  }
+  const bytes = Buffer.from(data.content, 'utf8')
+  if (bytes.byteLength > 40 * 1024 * 1024) throw new Error('This original message exceeds the private archive limit and needs a separate export.')
+  return bytes
+}
+
 async function createZohoCalendarEvent(
   calendarBaseUrl: string,
   collectionPath: string,
@@ -684,7 +829,7 @@ async function getZohoCalendarUid(accessToken: string, calendarBaseUrl: string, 
 
   const response = await fetch(`${calendarBaseUrl}/calendars?category=own`, {
     headers: { Authorization: `Zoho-oauthtoken ${accessToken}`, Accept: 'application/json' },
-    cache: 'no-store',
+    cache: 'no-store', signal: AbortSignal.timeout(30_000),
   })
   const resultText = await response.text()
   if (!response.ok) {

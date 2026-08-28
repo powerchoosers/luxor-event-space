@@ -5,14 +5,18 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
-import { cancelQueuedLuxorEmailJobs, createUniqueLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorBooking, LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { saveLuxorInvoicePdf } from '@/lib/luxorDocumentsServer'
-import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+import { queueLuxorTransactionalNotice } from '@/lib/luxorTransactionalNoticeServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
+
+function escapeNoticeHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
 
 function paymentKind(label: string | undefined, invoiceKind?: string) {
   if (invoiceKind === 'security_deposit') return 'security_deposit'
@@ -276,48 +280,22 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             const paymentExplanation = paymentBreakdown.securityDeposit > 0
               ? `We received your initial booking payment of <strong>${formatMoney(paymentBreakdown.initialBookingPayment)}</strong> and your separate refundable security deposit of <strong>${formatMoney(paymentBreakdown.securityDeposit)}</strong> (total received: ${formatMoney(paymentBreakdown.total)}). The refundable security deposit is held through the event period and returned following the post-event inspection, subject to the Event Agreement.`
               : `We received your initial booking payment of <strong>${formatMoney(paymentBreakdown.total)}</strong>.`
-            const paymentSummary = paymentBreakdown.securityDeposit > 0
-              ? `We received your initial booking payment of ${formatMoney(paymentBreakdown.initialBookingPayment)} and your separate refundable security deposit of ${formatMoney(paymentBreakdown.securityDeposit)} (total received: ${formatMoney(paymentBreakdown.total)}). The refundable security deposit is now held through the post-event inspection, subject to the Event Agreement.`
-              : `We received your initial booking payment of ${formatMoney(paymentBreakdown.total)}.`
             const pdf = await buildLuxorInvoicePdf(paidInvoice, inquiry)
             await saveLuxorInvoicePdf({ invoice: paidInvoice, inquiryId: inquiry.id, pdf, createdBy: 'Stripe Automation' })
-            const job = await createUniqueLuxorEmailJob({
-              inquiryId: inquiry.id,
-              bookingId: booking.id,
-              jobType: 'deposit_payment_confirmation',
-              recipientEmail: inquiry.email,
+            await queueLuxorTransactionalNotice({
+              kind: 'paid_invoice', sourceId: session.id,
+              inquiryId: inquiry.id, bookingId: booking.id, recipient: inquiry.email,
               subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor booking payment is confirmed',
-              body: reservationConfirmed
-                ? `${paymentSummary} Your signed agreement and payment are complete, so your event date is officially reserved.`
-                : `${paymentSummary} Your date remains pending until the agreement is signed.`,
-              scheduledFor: paidAt,
-              automationKey: `deposit_payment_confirmation:${session.id}`,
-              metadata: {
-                automated: true,
-                invoice_id: invoice.id,
-                stripe_checkout_session_id: session.id,
-                includes_paid_invoice: true,
-                initial_booking_payment: paymentBreakdown.initialBookingPayment,
-                refundable_security_deposit: paymentBreakdown.securityDeposit,
-              },
+              html: `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>Hi ${escapeNoticeHtml(inquiry.full_name.split(/\s+/)[0] || inquiry.full_name)},</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}<p>Your paid booking-payment invoice is attached for your records.</p></div>`,
+              scheduledFor: paidAt, pdf,
+              filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`,
+              legacyAutomationKey: `deposit_payment_confirmation:${session.id}`,
             })
-            if (job.status !== 'sent') try {
-              await sendLuxorZohoEmail({
-                to: inquiry.email,
-                subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor booking payment is confirmed',
-                content: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>Hi ${inquiry.full_name.split(/\s+/)[0] || inquiry.full_name},</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}<p>Your paid booking-payment invoice is attached for your records.</p></div>`,
-                from: 'booking@luxoratlaspalmas.com',
-                fromName: 'Luxor Event Space',
-                attachments: [{ filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }],
-              })
-              await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString() })
-            } catch (emailError) {
-              await updateLuxorEmailJob(job.id, { status: 'failed', last_error: emailError instanceof Error ? emailError.message : 'Email send failed.' })
-              console.error('Booking payment recorded, but its paid-invoice email failed:', emailError)
-            }
           }
         } catch (confirmationError) {
           console.error('Deposit recorded, but its paid-invoice confirmation workflow failed:', confirmationError)
+          // Do not acknowledge an event whose receipt has not reached the durable queue.
+          throw confirmationError
         }
       }
     }
@@ -335,17 +313,22 @@ export async function POST(request: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secretKey || !webhookSecret) return NextResponse.json({ error: 'Stripe webhook is not configured.' }, { status: 503 })
 
+  let event: Stripe.Event
   try {
     const stripe = new Stripe(secretKey)
     const signature = request.headers.get('stripe-signature')
     if (!signature) return NextResponse.json({ error: 'Missing Stripe signature.' }, { status: 400 })
-    const event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret)
-
+    event = stripe.webhooks.constructEvent(await request.text(), signature, webhookSecret)
+  } catch {
+    return NextResponse.json({ error: 'Invalid Stripe webhook signature.' }, { status: 400 })
+  }
+  try {
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       await recordPaidCheckoutSession(event.data.object)
     }
     return NextResponse.json({ received: true })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid Stripe webhook.' }, { status: 400 })
+    console.error('Verified Stripe webhook processing failed:', error)
+    return NextResponse.json({ error: 'Payment processing is incomplete. Retry this event.' }, { status: 500 })
   }
 }

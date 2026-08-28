@@ -7,10 +7,10 @@ import {
   LuxorMarketingCampaign,
   LuxorMarketingEvent,
   LuxorMarketingRecipient,
-  LuxorMarketingSuppression,
   LuxorMarketingTemplate,
 } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
+import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
 import {
   createLuxorEmailJob,
   listQueuedLuxorEmailJobsByIds,
@@ -572,7 +572,7 @@ export async function createMarketingCampaign(data: {
   const enrichedRecipients = await enrichMarketingRecipients(data.recipients)
   const sendableRecipients: MarketingRecipientInput[] = []
   for (const recipient of enrichedRecipients) {
-    if (data.ignoreSuppressions || !await isMarketingSuppressed(recipient.email)) {
+    if (!await isLuxorMarketingDeliveryBlocked(recipient.email, Boolean(data.ignoreSuppressions))) {
       sendableRecipients.push(recipient)
     }
   }
@@ -801,7 +801,7 @@ export async function recordMarketingUnsubscribe(trackingToken: string, request:
 
   await supabaseRest('luxor_marketing_suppressions?on_conflict=email', {
     method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates' },
+    headers: { Prefer: 'resolution=ignore-duplicates' },
     body: JSON.stringify({
       email: recipient.email.toLowerCase(),
       reason: 'unsubscribe',
@@ -821,47 +821,28 @@ export async function recordMarketingUnsubscribe(trackingToken: string, request:
 }
 
 export async function markMarketingJobResult(jobId: string, status: 'sent' | 'failed', error?: string) {
-  const [recipient] = await supabaseRest<LuxorMarketingRecipient[]>(
-    `luxor_marketing_recipients?select=*&email_job_id=eq.${encodeURIComponent(jobId)}&limit=1`,
-  )
-
-  if (!recipient) return
-
-  const now = new Date().toISOString()
-  await supabaseRest<LuxorMarketingRecipient[]>(
-    `luxor_marketing_recipients?select=*&id=eq.${encodeURIComponent(recipient.id)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status,
-        sent_at: status === 'sent' ? now : recipient.sent_at,
-        last_error: error || null,
-      }),
-    },
-  )
-
-  await refreshMarketingCampaignStatus(recipient.campaign_id)
+  await recordLuxorMarketingJobResult(jobId, status, error)
 }
 
+// Used when "send now" has no job to reconcile. Normal worker and webhook
+// results use the transactional RPC; this read must also avoid the REST cap.
 async function refreshMarketingCampaignStatus(campaignId: string) {
-  const recipients = await supabaseRest<LuxorMarketingRecipient[]>(
-    `luxor_marketing_recipients?select=*&campaign_id=eq.${encodeURIComponent(campaignId)}`,
-  )
-  const sent = recipients.filter((recipient) => recipient.status === 'sent').length
-  const failed = recipients.filter((recipient) => recipient.status === 'failed').length
-  const queued = recipients.filter((recipient) => recipient.status === 'queued').length
-  const status = queued > 0 ? 'sending' : failed > 0 && sent === 0 ? 'failed' : 'sent'
-
-  await supabaseRest<LuxorMarketingCampaign[]>(
-    `luxor_marketing_campaigns?select=*&id=eq.${encodeURIComponent(campaignId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status,
-        sent_at: queued === 0 ? new Date().toISOString() : null,
-      }),
-    },
-  )
+  let sent = 0; let failed = 0; let queued = 0
+  for (let offset = 0; ; offset += 1000) {
+    const recipients = await supabaseRest<Array<{ status: string }>>(
+      `luxor_marketing_recipients?select=status&campaign_id=eq.${encodeURIComponent(campaignId)}&order=id.asc&limit=1000&offset=${offset}`,
+    )
+    sent += recipients.filter((recipient) => recipient.status === 'sent').length
+    failed += recipients.filter((recipient) => recipient.status === 'failed').length
+    queued += recipients.filter((recipient) => recipient.status === 'queued').length
+    if (recipients.length < 1000) break
+  }
+  await supabaseRest(`luxor_marketing_campaigns?id=eq.${encodeURIComponent(campaignId)}&status=neq.cancelled`, {
+    method: 'PATCH', body: JSON.stringify({
+      status: queued > 0 ? 'sending' : failed > 0 && sent === 0 ? 'failed' : sent === 0 ? 'cancelled' : 'sent',
+      sent_at: queued === 0 && sent > 0 ? new Date().toISOString() : null,
+    }),
+  })
 }
 
 async function getRecipientByTrackingToken(trackingToken: string) {
@@ -872,14 +853,6 @@ async function getRecipientByTrackingToken(trackingToken: string) {
   )
 
   return recipient ?? null
-}
-
-async function isMarketingSuppressed(email: string) {
-  const [suppression] = await supabaseRest<LuxorMarketingSuppression[]>(
-    `luxor_marketing_suppressions?select=id&email=eq.${encodeURIComponent(email.toLowerCase())}&limit=1`,
-  )
-
-  return Boolean(suppression)
 }
 
 function detectDeviceType(userAgent: string) {

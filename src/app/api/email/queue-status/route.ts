@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
+import { luxorMailProvider } from '@/lib/luxorMailConfig'
 
 type EmailJobSummaryRow = {
   status: string
@@ -74,7 +75,9 @@ export async function GET() {
     const workerHeartbeatAgeMs = worker?.last_authorized_at
       ? now - new Date(worker.last_authorized_at).getTime()
       : null
-    const workerStalled = isWithinEmailSendWindow(new Date())
+    const dueInternal = list.some((job) => (job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice') && job.status === 'queued'
+      && new Date(job.scheduled_for).getTime() <= now)
+    const workerStalled = (isWithinEmailSendWindow(new Date()) || dueInternal)
       && dueQueued > 0
       && (workerHeartbeatAgeMs === null || workerHeartbeatAgeMs > WORKER_HEARTBEAT_GRACE_MS)
     const workerError = worker?.last_status === 'error'
@@ -101,7 +104,7 @@ export async function GET() {
         stalled: workerStalled,
         error: worker?.last_error || null,
       },
-      provider: 'Zoho Mail (booking@luxoratlaspalmas.com)',
+      provider: `${luxorMailProvider() === 'resend' ? 'Resend' : 'Zoho Mail'} (booking@luxoratlaspalmas.com)`,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to query email queue status.'

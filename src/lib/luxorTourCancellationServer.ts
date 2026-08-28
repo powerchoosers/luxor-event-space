@@ -5,10 +5,11 @@ import { cancelQueuedTourEmailJobs } from './luxorEmailJobsServer'
 import { cancelQueuedTourTextJobs } from './luxorTextCampaignsServer'
 import { getLuxorTourSlot, releaseLuxorTourSlot } from './luxorTourSlotsServer'
 import { cancelLuxorZohoCalendarEvent } from './zohoMailServer'
+import { cancelLuxorCalendarEvent, getLuxorCalendarEvent } from './luxorCalendarServer'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-type CalendarCancellationStatus = 'not_linked' | 'cancelled' | 'already_removed' | 'needs_reconnect' | 'failed'
+type CalendarCancellationStatus = 'not_linked' | 'cancelled' | 'cancellation_queued' | 'already_removed' | 'needs_reconnect' | 'failed'
 
 export type LuxorTourCancellation = {
   ok: boolean
@@ -114,7 +115,20 @@ export async function cancelLuxorTourForInquiry({ inquiry, reason, requestedBy }
   const slotReleased = slotResult.status === 'fulfilled' && Boolean(slotResult.value)
 
   let calendar: LuxorTourCancellation['calendar'] = { status: 'not_linked' }
-  if (calendarEventUid) {
+  const localCalendar = await getLuxorCalendarEvent(inquiry.id)
+  let calendarMetadata: Record<string, unknown> = {}
+  if (localCalendar) {
+    try {
+      const cancelled = await cancelLuxorCalendarEvent(inquiry.id, requestedBy)
+      if (!cancelled) throw new Error('Saved calendar event not found.')
+      calendar = { status: 'cancellation_queued' }
+      calendarMetadata = { calendarProvider: 'resend', calendarEventId: cancelled.id, calendarEventUid: cancelled.uid, calendarSequence: cancelled.sequence }
+    } catch (error) {
+      const warning = errorMessage(error)
+      errors.push(warning)
+      calendar = { status: 'failed', warning }
+    }
+  } else if (calendarEventUid) {
     try {
       const result = await cancelLuxorZohoCalendarEvent(calendarEventUid)
       calendar = { status: result.status }
@@ -128,6 +142,7 @@ export async function cancelLuxorTourForInquiry({ inquiry, reason, requestedBy }
 
   const priorCancellation = inquiry.metadata?.tourCancellation
   const metadataPatch = {
+    ...calendarMetadata,
     tourCancellation: {
       ...(priorCancellation && typeof priorCancellation === 'object' && !Array.isArray(priorCancellation)
         ? priorCancellation

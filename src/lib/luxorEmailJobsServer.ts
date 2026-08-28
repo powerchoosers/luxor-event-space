@@ -13,6 +13,8 @@ import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
+import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
+import { luxorMailProvider } from './luxorMailConfig'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -640,7 +642,7 @@ export async function cancelQueuedLuxorEmailJobs(inquiryId: string, jobTypes: Lu
 export async function cancelAllQueuedLuxorEmailJobs(inquiryId: string, reason = 'Lead was marked deal lost.') {
   if (!inquiryId) return 0
   const cancelled = await supabaseRest<LuxorEmailJob[]>(
-    `luxor_email_jobs?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued`,
+    `luxor_email_jobs?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.queued&or=(calendar_method.is.null,calendar_method.neq.CANCEL)`,
     {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
@@ -656,7 +658,7 @@ export async function cancelAllQueuedLuxorEmailJobs(inquiryId: string, reason = 
 
 export async function listDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>(
-    `luxor_email_jobs?select=*&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
+    `luxor_email_jobs?select=*&job_type=not.in.(inquiry_notification,transactional_notice)&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
 
@@ -808,7 +810,7 @@ export async function processLuxorEmailJobs(
       // is never touched by this guard.
       if (job.inquiry_id) {
         const inquiry = await getLuxorInquiry(job.inquiry_id)
-        if (!inquiry || inquiry.status === 'closed_lost') {
+        if (!inquiry || (inquiry.status === 'closed_lost' && job.calendar_method !== 'CANCEL' && job.job_type !== 'inquiry_notification')) {
           await updateLuxorEmailJob(job.id, {
             status: 'cancelled',
             last_error: 'The lead was closed lost before this email could be delivered.',
@@ -818,6 +820,40 @@ export async function processLuxorEmailJobs(
         }
       }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+      if ((job.job_type === 'contract_signature' && metadata.flow_stage === 'contract_completed')
+        || (job.job_type === 'deposit_payment_confirmation' && metadata.includes_paid_invoice === true)) {
+        throw new Error('Legacy direct-send receipt needs delivery review; its original PDF cannot be reconstructed by the generic email worker.')
+      }
+      if (job.job_type === 'calendar_invitation' || job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice' || job.tour_revision_id) {
+        if (markSending) {
+          const [claimed] = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.queued`, {
+            method: 'PATCH', headers: { Prefer: 'return=representation' },
+            body: JSON.stringify({ status: 'sending', attempts: Number(job.attempts || 0) + 1, updated_at: new Date().toISOString() }),
+          })
+          if (!claimed) { results.push({ id: job.id, status: 'skipped' }); continue }
+          job = claimed
+        }
+        let delivery: { status: 'sent' | 'skipped' }
+        if (job.job_type === 'transactional_notice') {
+          const { deliverLuxorTransactionalNotice } = await import('./luxorTransactionalNoticeServer')
+          delivery = await deliverLuxorTransactionalNotice(job)
+        } else if (job.job_type === 'inquiry_notification') {
+          const { deliverLuxorInquiryNotification } = await import('./luxorNotificationEmails')
+          delivery = await deliverLuxorInquiryNotification(job)
+        } else if (job.job_type === 'calendar_invitation') {
+          const { deliverLuxorCalendarJob } = await import('./luxorCalendarServer')
+          delivery = await deliverLuxorCalendarJob(job)
+        } else {
+          assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
+          const { deliverLuxorTourNotice } = await import('./luxorTourScheduleServer')
+          delivery = await deliverLuxorTourNotice(job)
+        }
+        await updateLuxorEmailJob(job.id, delivery.status === 'sent'
+          ? { status: 'sent', sent_at: new Date().toISOString(), last_error: null }
+          : { status: 'cancelled', last_error: 'Tour or attendee is no longer eligible for this calendar revision.' })
+        results.push({ id: job.id, status: delivery.status })
+        continue
+      }
       const senderFrom = typeof metadata.sender_from === 'string' ? metadata.sender_from : 'booking@luxoratlaspalmas.com'
       const senderName = typeof metadata.sender_name === 'string' ? metadata.sender_name : 'Luxor Event Space'
       const offerInvoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
@@ -881,6 +917,14 @@ export async function processLuxorEmailJobs(
       if (markSending) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
+      if (job.job_type === 'marketing_campaign' && await isLuxorMarketingDeliveryBlocked(job.recipient_email,
+        metadata.ignore_suppressions === true, typeof metadata.campaign_id === 'string' ? metadata.campaign_id : undefined)) {
+        const reason = 'Marketing email cancelled because this recipient is unsubscribed or suppressed.'
+        await recordLuxorMarketingJobResult(job.id, 'cancelled', reason)
+        await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
       await sendLuxorZohoEmail({
         to: job.recipient_email,
@@ -888,6 +932,7 @@ export async function processLuxorEmailJobs(
         content: job.body,
         from: senderFrom,
         fromName: senderName,
+        idempotencyKey: `email-job/${job.id}`,
       })
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       if (job.job_type === 'marketing_campaign') {
@@ -896,7 +941,14 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
-      await updateLuxorEmailJob(job.id, { status: 'failed', last_error: message })
+      const retryCalendar = (job.job_type === 'calendar_invitation' || Boolean(job.tour_revision_id)) && Number(job.attempts || 0) < 3
+      const retryAlert = job.job_type === 'inquiry_notification' && Number(job.attempts || 0) < 3
+        && (job.metadata.notificationProvider || luxorMailProvider()) === 'resend'
+      const notice = job.metadata?.transactionalNotice as { provider?: string } | undefined
+      const retryNotice = job.job_type === 'transactional_notice' && Number(job.attempts || 0) < 3 && notice?.provider === 'resend'
+      const retry = retryCalendar || retryAlert || retryNotice
+      await updateLuxorEmailJob(job.id, { status: retry ? 'queued' : 'failed', last_error: message,
+        ...(retry ? { scheduled_for: new Date(Date.now() + 60_000 * 2 ** Number(job.attempts || 0)).toISOString() } : {}) })
       if (job.job_type === 'contract_signature' && job.metadata?.agreement_delivery === true) {
         const { markLuxorAgreementEmailJobFailed } = await import('./luxorAgreementDeliveryServer')
         await markLuxorAgreementEmailJobFailed(job, message)
@@ -1028,42 +1080,15 @@ export async function processDueLuxorEmailJobs(limit = 1) {
 }
 
 async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {
-  const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
-  const recipientId = typeof metadata.marketing_recipient_id === 'string' ? metadata.marketing_recipient_id : null
-  const campaignId = typeof metadata.campaign_id === 'string' ? metadata.campaign_id : null
+  await recordLuxorMarketingJobResult(job.id, status, error)
+}
 
-  if (!recipientId || !campaignId) return
-
-  const now = new Date().toISOString()
-  await supabaseRest(
-    `luxor_marketing_recipients?id=eq.${encodeURIComponent(recipientId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status,
-        sent_at: status === 'sent' ? now : null,
-        last_error: error || null,
-      }),
-    },
-  )
-
-  const recipients = await supabaseRest<{ status: string }[]>(
-    `luxor_marketing_recipients?select=status&campaign_id=eq.${encodeURIComponent(campaignId)}`,
-  )
-  const queued = recipients.filter((recipient) => recipient.status === 'queued').length
-  const sent = recipients.filter((recipient) => recipient.status === 'sent').length
-  const failed = recipients.filter((recipient) => recipient.status === 'failed').length
-
-  await supabaseRest(
-    `luxor_marketing_campaigns?id=eq.${encodeURIComponent(campaignId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: queued > 0 ? 'sending' : failed > 0 && sent === 0 ? 'failed' : 'sent',
-        sent_at: queued === 0 ? now : null,
-      }),
-    },
-  )
+/** Internal owner alerts are allowed outside the customer email send window. */
+export async function processDueLuxorInquiryNotifications(limit = 1) {
+  const jobs = await supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_inquiry_notification_jobs', {
+    method: 'POST', body: JSON.stringify({ job_limit: Math.min(Math.max(limit, 1), 3) }),
+  })
+  return processLuxorEmailJobs(jobs, { markSending: false })
 }
 
 export type LuxorEmailCampaign = {
@@ -1109,7 +1134,7 @@ export async function getLuxorEmailCampaignReport(campaignId: string) {
 }
 const UNRESOLVED_EMAIL_PLACEHOLDER_RE = /\{\{\s*[a-z][a-z0-9_.-]*\s*\}\}|\[\[\s*[a-z][a-z0-9_.-]*\s*\]\]|%%\s*[a-z][a-z0-9_.-]*\s*%%|\b(?:client_name|event_type|first_name|recipient_name)\b/i
 
-function assertEmailHasNoUnresolvedPlaceholders(subject: string, body: string) {
+export function assertEmailHasNoUnresolvedPlaceholders(subject: string, body: string) {
   if (!UNRESOLVED_EMAIL_PLACEHOLDER_RE.test(`${subject}\n${body}`)) return
   throw new Error('Email blocked before delivery because unresolved personalization fields remain.')
 }

@@ -4,7 +4,6 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
-import { sendInquiryNotificationEmail } from '@/lib/luxorNotificationEmails'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { countRecentInquiryAttempts, getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
@@ -103,10 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (inquiry) {
-      sendInquiryNotificationEmail(inquiry).catch((emailErr) => {
-        console.error('Inquiry created but failed to send internal notification email:', emailErr)
-      })
-
+      // Internal email alerts were atomically queued by the inquiry insert.
       recordLuxorPublicEvent({
         eventName: 'inquiry_submitted',
         sessionId: payload.sessionId,

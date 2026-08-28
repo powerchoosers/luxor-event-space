@@ -489,6 +489,9 @@ export type LuxorDepositType = 'solidify_date' | 'non_refundable_booking'
 
 export type LuxorEmailJobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
 export type LuxorEmailJobKind =
+  | 'inquiry_notification'
+  | 'transactional_notice'
+  | 'calendar_invitation'
   | 'tour_confirmation'
   | 'tour_reminder'
   | 'tour_no_show_reschedule'
@@ -528,6 +531,10 @@ export type LuxorEmailJob = {
   last_error: string | null
   attempts: number
   metadata: Record<string, unknown>
+  calendar_revision_id?: string | null
+  calendar_method?: 'REQUEST' | 'CANCEL' | null
+  tour_revision_id?: string | null
+  tour_notice?: 'confirmation' | 'reminder_24' | 'reminder_2' | null
 }
 
 export type LuxorSignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'void'

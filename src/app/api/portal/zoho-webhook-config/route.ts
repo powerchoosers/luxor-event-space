@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     webhookUrl,
     realtimeChannel: getLuxorNotificationChannelName(),
     initialized: Boolean(await getZohoWebhookSecret()),
-  })
+  }, { headers: { 'Cache-Control': 'private, no-store' } })
 }
 
 export async function DELETE() {

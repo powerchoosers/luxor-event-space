@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { downloadLuxorZohoAttachment } from '@/lib/zohoMailServer'
+import { downloadLuxorMailAttachment } from '@/lib/luxorMailboxServer'
 
 function inferContentType(filename: string, contentType: string) {
   if (contentType && contentType !== 'application/octet-stream') return contentType
@@ -36,11 +37,18 @@ export async function GET(
       return NextResponse.json({ error: 'Attachment reference is incomplete.' }, { status: 400 })
     }
 
-    const result = await downloadLuxorZohoAttachment({ messageId, attachmentId, attachmentPath, folderId })
+    const result = messageId.startsWith('mail-')
+      ? await downloadLuxorMailAttachment(messageId, attachmentId || '')
+      : await downloadLuxorZohoAttachment({ messageId, attachmentId, attachmentPath, folderId })
+    const servedFilename = ('filename' in result && typeof result.filename === 'string' ? result.filename : filename).replace(/["\r\n]/g, '')
+    const contentType = inferContentType(servedFilename, result.contentType)
+    const safeInline = /^(application\/pdf|image\/(png|jpeg|gif|webp))$/i.test(contentType)
     return new NextResponse(result.bytes as BodyInit, {
       headers: {
-        'Content-Type': inferContentType(filename, result.contentType),
-        'Content-Disposition': `inline; filename="${filename}"`,
+        'Content-Type': contentType,
+        'Content-Disposition': `${safeInline ? 'inline' : 'attachment'}; filename="${servedFilename.replace(/[^\x20-\x7e]/g, '_')}"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "sandbox; default-src 'none'",
         'Cache-Control': 'private, no-store',
       },
     })

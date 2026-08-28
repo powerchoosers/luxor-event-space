@@ -11,8 +11,9 @@ import ical, {
   ICalEventTransparency,
 } from 'ical-generator'
 import nodemailer from 'nodemailer'
+import { luxorMailProvider, luxorResendConfigured, type LuxorMailProvider } from './luxorMailConfig'
+import { sendLuxorResendEmail } from './luxorResendMailServer'
 
-const LUXOR_CALENDAR_DOMAIN = 'luxoratlaspalmas.com'
 const LUXOR_ORGANIZER_EMAIL = 'booking@luxoratlaspalmas.com'
 const LUXOR_ORGANIZER_NAME = 'Luxor Event Space'
 const LUXOR_TIMEZONE = 'America/Chicago'
@@ -27,6 +28,10 @@ export type LuxorCalendarInviteInput = {
   end: Date
   uid: string
   sequence?: number
+  /** Persist this timestamp with the event revision so retries produce identical ICS. */
+  stamp?: Date
+  created?: Date
+  method?: 'REQUEST' | 'CANCEL'
 }
 
 function normalizedEmail(value: string) {
@@ -51,7 +56,7 @@ function validateInvite(input: LuxorCalendarInviteInput) {
 
   if (!title) throw new Error('Enter an invitation title.')
   if (!location) throw new Error('Enter an event location.')
-  if (!/^[A-Za-z0-9._@-]{8,255}$/.test(uid) || !uid.endsWith(`@${LUXOR_CALENDAR_DOMAIN}`)) {
+  if (!/^[A-Za-z0-9._@-]{8,255}$/.test(uid)) {
     throw new Error('The calendar event ID is invalid.')
   }
   if (Number.isNaN(input.start.getTime()) || Number.isNaN(input.end.getTime()) || input.end <= input.start) {
@@ -63,8 +68,13 @@ function validateInvite(input: LuxorCalendarInviteInput) {
 
 export function buildLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
   const validated = validateInvite(input)
+  const stamp = input.stamp || new Date()
+  if (Number.isNaN(stamp.getTime())) throw new Error('Invalid invitation timestamp.')
+  const created = input.created || stamp
+  if (Number.isNaN(created.getTime())) throw new Error('Invalid event creation timestamp.')
+  const cancelled = input.method === 'CANCEL'
   const calendar = ical({
-    method: ICalCalendarMethod.REQUEST,
+    method: cancelled ? ICalCalendarMethod.CANCEL : ICalCalendarMethod.REQUEST,
     prodId: { company: LUXOR_ORGANIZER_NAME, product: 'Luxor Portal Calendar', language: 'EN' },
     scale: 'GREGORIAN',
   })
@@ -73,9 +83,9 @@ export function buildLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
     id: validated.uid,
     start: input.start,
     end: input.end,
-    stamp: new Date(),
-    created: new Date(),
-    lastModified: new Date(),
+    stamp,
+    created,
+    lastModified: stamp,
     summary: validated.title,
     description: validated.description,
     location: validated.location,
@@ -86,10 +96,10 @@ export function buildLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
       role: ICalAttendeeRole.REQ,
       status: ICalAttendeeStatus.NEEDSACTION,
       type: ICalAttendeeType.INDIVIDUAL,
-      rsvp: true,
+      rsvp: !cancelled,
     }],
     sequence: validated.sequence,
-    status: ICalEventStatus.CONFIRMED,
+    status: cancelled ? ICalEventStatus.CANCELLED : ICalEventStatus.CONFIRMED,
     class: ICalEventClass.PRIVATE,
     transparency: ICalEventTransparency.OPAQUE,
     busystatus: ICalEventBusyStatus.BUSY,
@@ -143,32 +153,23 @@ function zohoSmtpConfig() {
   return { host, port, user, password }
 }
 
-export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
+export function buildLuxorCalendarMessage(input: LuxorCalendarInviteInput) {
   const validated = validateInvite(input)
-  const smtp = zohoSmtpConfig()
   const calendarContent = buildLuxorCalendarInvite(input)
   const dateLabel = invitationDateLabel(input.start, input.end)
-  const safeTitle = escapeHtml(validated.title)
+  const subject = input.method === 'CANCEL' ? `Cancelled: ${validated.title}` : validated.title
+  const safeTitle = escapeHtml(subject)
   const safeDate = escapeHtml(dateLabel)
   const safeLocation = escapeHtml(validated.location)
   const safeDescription = escapeHtml(validated.description).replace(/\r?\n/g, '<br />')
 
-  const transporter = nodemailer.createTransport({
-    host: smtp.host,
-    port: smtp.port,
-    secure: smtp.port === 465,
-    requireTLS: smtp.port === 587,
-    auth: { user: smtp.user, pass: smtp.password },
-    tls: { minVersion: 'TLSv1.2' },
-  })
-
-  const receipt = await transporter.sendMail({
+  const message = {
     from: { name: LUXOR_ORGANIZER_NAME, address: LUXOR_ORGANIZER_EMAIL },
     to: { name: validated.attendeeName, address: validated.attendeeEmail },
     replyTo: LUXOR_ORGANIZER_EMAIL,
-    subject: validated.title,
+    subject,
     text: [
-      validated.title,
+      subject,
       dateLabel,
       validated.location,
       validated.description,
@@ -183,7 +184,7 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
           <p style="margin:0 0 6px;font-size:15px;line-height:1.6;"><strong>${safeDate}</strong></p>
           <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#6f624f;">${safeLocation}</p>
           ${safeDescription ? `<p style="margin:0;border-top:1px solid #eadfce;padding-top:20px;font-size:14px;line-height:1.7;color:#51463a;">${safeDescription}</p>` : ''}
-          <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">Use the calendar controls in this message to accept, decline, or add the appointment. Questions? Reply to booking@luxoratlaspalmas.com.</p>
+          <p style="margin:24px 0 0;font-size:12px;line-height:1.7;color:#7d7164;">${input.method === 'CANCEL' ? 'This appointment has been cancelled. Your calendar may update automatically or ask you to remove it.' : 'Use the calendar controls in this message to accept, decline, or add the appointment.'} Questions? Reply to booking@luxoratlaspalmas.com.</p>
         </div>
       </div>`,
     headers: {
@@ -191,10 +192,31 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
     },
     icalEvent: {
       filename: 'luxor-event-space-invitation.ics',
-      method: 'REQUEST',
+      method: input.method || 'REQUEST',
       content: calendarContent,
     },
+  }
+  return message
+}
+
+export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput, provider: LuxorMailProvider = luxorMailProvider()) {
+  const validated = validateInvite(input)
+  const message = buildLuxorCalendarMessage(input)
+  const calendarContent = message.icalEvent.content
+  if (provider === 'resend') {
+    const receipt = await sendLuxorResendEmail({
+      from: LUXOR_ORGANIZER_EMAIL, fromName: LUXOR_ORGANIZER_NAME,
+      to: validated.attendeeEmail, subject: message.subject, content: message.html, text: message.text,
+      calendar: message.icalEvent, idempotencyKey: `calendar/${validated.uid}/${validated.sequence}/${validated.attendeeEmail}/${message.icalEvent.method}`,
+    })
+    return { messageId: receipt.messageId, accepted: [validated.attendeeEmail], rejected: [], calendarContent }
+  }
+  const smtp = zohoSmtpConfig()
+  const transporter = nodemailer.createTransport({
+    host: smtp.host, port: smtp.port, secure: smtp.port === 465, requireTLS: smtp.port === 587,
+    auth: { user: smtp.user, pass: smtp.password }, tls: { minVersion: 'TLSv1.2' },
   })
+  const receipt = await transporter.sendMail(message).finally(() => transporter.close())
 
   return {
     messageId: receipt.messageId,
@@ -204,7 +226,11 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput) {
   }
 }
 
-export function luxorCalendarInviteConfig() {
+export function luxorCalendarInviteConfig(provider: LuxorMailProvider = luxorMailProvider()) {
+  if (provider === 'resend') return {
+    configured: luxorResendConfigured(), provider: 'resend-smtp', fromAddress: LUXOR_ORGANIZER_EMAIL,
+    organizerEmail: LUXOR_ORGANIZER_EMAIL, timezone: LUXOR_TIMEZONE,
+  }
   const smtpUser = normalizedEmail(process.env.LUXOR_ZOHO_SMTP_USER || '')
   const configured = Boolean(
     process.env.LUXOR_ZOHO_SMTP_HOST?.trim()

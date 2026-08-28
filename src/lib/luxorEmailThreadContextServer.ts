@@ -11,7 +11,9 @@ function addresses(value: string) {
 }
 
 export async function getLuxorEmailThreadContext(threadId: string) {
-  const messages = await listLuxorZohoThread(threadId, 50)
+  const messages = threadId.startsWith('mail-')
+    ? await (await import('./luxorMailboxServer')).listLuxorMailboxMessages({ threadId, limit: 100, withAttachments: true }).then((items) => items.reverse())
+    : await listLuxorZohoThread(threadId, 50)
   const participants = Array.from(new Set(messages.flatMap((message) => [
     ...addresses(message.from), ...addresses(message.to), ...addresses(message.cc),
   ])))
