@@ -154,45 +154,48 @@ export default function Home() {
   return (
     <main id="top" className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
       <section id="hero" className="relative isolate min-h-[92svh] overflow-hidden pt-28 sm:min-h-screen">
-        <Image
-          src="/images/dining-hall/main-hall-wedding-wide.png"
-          alt="Luxor main hall prepared for a wedding reception"
-          fill
-          priority
-          sizes="100vw"
-          className="scale-[1.04] object-cover object-[49%_center] sm:-translate-x-[1.8%]"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94),rgba(5,5,5,0.66)_48%,rgba(5,5,5,0.28)),linear-gradient(180deg,rgba(5,5,5,0.5),rgba(5,5,5,0.9)_88%)]" />
-        <div className="absolute inset-0 luxor-noise opacity-[0.18]" />
-
-        <div className="relative z-10 mx-auto flex min-h-[calc(92svh-7rem)] max-w-7xl items-center justify-center px-5 pb-14 pt-8 text-center sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:px-8">
-          <div className="w-full min-w-0 max-w-5xl">
-            <CenteredLuxorLockup />
-            <h1 className="mx-auto mt-5 max-w-[22rem] text-wrap font-serif text-4xl leading-[0.92] text-[#f7efe3] sm:max-w-4xl sm:text-5xl lg:text-6xl">
+        <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8 lg:pt-14">
+          <div className="min-w-0 text-center lg:text-left">
+            <div className="mx-auto max-w-[290px] lg:mx-0 lg:max-w-[330px]">
+              <CenteredLuxorLockup />
+            </div>
+            <h1 className="mx-auto mt-7 max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
               San Antonio celebrations with a room that already feels special.
             </h1>
-            <p className="mx-auto mt-4 max-w-[22rem] text-base leading-7 text-[#d7c29a]/82 sm:max-w-2xl sm:text-lg">
+            <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
               Weddings, quinceañeras, showers, and private events in an elegant gold-accented venue made for photos, dinner, and dancing.
             </p>
-            <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
               <PrimaryButton href="/tour#tour-availability">Check tour times</PrimaryButton>
               <a
                 href="#events"
-                className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/35 bg-black/35 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f7efe3] backdrop-blur-sm transition hover:border-[#f1d27a]/60 sm:text-sm"
+                className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#9b6f24]/35 bg-white/70 px-5 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#241d17] transition hover:border-[#9b6f24]/60 hover:bg-white sm:text-sm"
               >
                 See event types
               </a>
             </div>
-            <div className="mx-auto mt-5 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#d7c29a]/72">
-              <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#caa24c]" />
+            <div className="mx-auto mt-6 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#665a4e] lg:mx-0 lg:justify-start">
+              <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#9b6f24]" />
               <span>Private venue tours at 803 Castroville Rd #402, San Antonio, TX 78237.</span>
             </div>
             <a
               href="#events"
-              className="mx-auto mt-5 hidden items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#d7c29a]/68 transition-colors hover:text-[#f1d27a] xl:inline-flex"
+              className="mx-auto mt-6 hidden items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#827567] transition-colors hover:text-[#805b1f] xl:inline-flex lg:mx-0"
             >
-              Scroll to explore <ArrowDown className="h-3.5 w-3.5 animate-bounce text-[#caa24c]" />
+              Scroll to explore <ArrowDown className="h-3.5 w-3.5 animate-bounce text-[#9b6f24]" />
             </a>
+          </div>
+
+          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:min-h-[calc(100vh-11rem)]">
+            <Image
+              src="/images/dining-hall/main-hall-wedding-wide.png"
+              alt="Luxor main hall prepared for a wedding reception"
+              fill
+              priority
+              sizes="(min-width: 1024px) 58vw, 100vw"
+              className="object-cover object-center"
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/25 to-transparent" />
           </div>
         </div>
       </section>
