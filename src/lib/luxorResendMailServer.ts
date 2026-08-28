@@ -79,6 +79,8 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
           alternatives: [{
             content: input.calendar.content,
             contentType: `text/calendar; method=${input.calendar.method}; charset=UTF-8`,
+            contentDisposition: 'inline',
+            headers: { 'Content-Class': 'urn:content-classes:calendarmessage' },
           }],
         })
         if (!receipt.accepted?.length || receipt.rejected?.length) throw new Error('Resend did not accept the calendar invitation recipient.')
