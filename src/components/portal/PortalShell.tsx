@@ -788,31 +788,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           </div>
         </header>
 
-        <nav className={`portal-scrollbar hidden shrink-0 gap-2 overflow-x-auto border-b px-4 py-3 md:flex lg:hidden ${
-          portalTheme === 'light'
-            ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
-            : 'border-[#caa24c]/10 bg-[#050505]/86'
-        }`} aria-label="Portal sections">
-          {navItems.map((item) => {
-            const active = isActivePath(pathname, item.href, searchParams)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-                  active
-                    ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-white'
-                    : 'border-zinc-900 bg-zinc-950 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
-                }`}
-              >
-                <span className={active ? 'text-[#caa24c]' : 'text-zinc-650'}>{item.icon}</span>
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:px-6 sm:pt-6 sm:pb-0 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-24 sm:p-6 lg:p-8'} ${
+        {/* Phone and portrait-tablet content reserve space for the shared bottom bar. */}
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
@@ -821,7 +798,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
         </div>
 
         <nav
-          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] md:hidden ${
+          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] lg:hidden ${
             portalTheme === 'light'
               ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
               : 'border-[#caa24c]/15 bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
@@ -864,7 +841,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
-            className="portal-modal-layer fixed inset-0 z-[70] flex items-end bg-black/35 p-3 md:hidden"
+            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -874,7 +851,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
               role="dialog"
               aria-modal="true"
               aria-label="More portal sections"
-              className="portal-sheet w-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl"
+              className="portal-sheet max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:max-w-xl"
               initial={reduceMotion ? false : { opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}

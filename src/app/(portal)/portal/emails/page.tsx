@@ -38,12 +38,16 @@ function EmailsPageContent() {
       <PortalPageHeader
         icon={<Mail size={18} />}
         title="Emails"
+        mobileActionsInline
         actions={
           <PortalButton
             variant="primary"
+            className="min-h-11 whitespace-nowrap"
+            aria-label="Compose email"
             onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
           >
-            <Plus size={13} /> Compose Email
+            <Plus size={13} aria-hidden="true" />
+            <span>Compose<span className="hidden sm:inline"> Email</span></span>
           </PortalButton>
         }
       />
