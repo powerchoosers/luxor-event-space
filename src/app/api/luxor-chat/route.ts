@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer'
+import { listAvailableLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -53,7 +54,7 @@ Your goal is to help a visitor confidently take the next step without overwhelmi
 - Be helpful and sales-forward without pressure: lead with what Luxor can do, frame pricing as a path to a tailored proposal, and invite a tour or planning conversation. Do not volunteer internal cost math, discounts, margins, security-deposit rules, private availability notes, or operational limitations that are not needed to answer the visitor.
 - If asked for a package or price, explain the best-fit inclusions or approved rental starting point, then recommend a private tour or proposal so the visitor can see the exact fit. Never say or imply that Luxor is too expensive, unavailable, or a poor fit based only on a budget range.
 - For a tour, tell them to use the live booking card to choose a time and add their name and phone; do not make them type all booking details into chat.
-- Tours are 30 minutes, Monday through Friday, with one party per time and at least 24 hours ahead. The live booking card shows exact openings, and submitting it reserves the selected time.
+- Tours are 30 minutes, one party per time, and must be requested at least 24 hours ahead. The live booking card shows the exact openings currently published by the Luxor team; visitors may also request a different date or time for confirmation.
 - Never invent availability, pricing, features, services, policies, or confirmation steps. Direct visitors to the relevant site page when an exact answer is not available.`
 
 export async function POST(request: Request) {
@@ -87,6 +88,14 @@ export async function POST(request: Request) {
       // Public chat still works from the verified venue facts if pricing is unavailable.
     }
 
+    let liveTourContext = ''
+    try {
+      const slots = await listAvailableLuxorTourSlots(24)
+      liveTourContext = `\n\nLIVE TOUR AVAILABILITY (read at request time): ${JSON.stringify(slots.map((slot) => ({ date: slot.date, time: slot.time, label: slot.label })))}. Only describe these exact openings. If the visitor asks for another day or time, direct them to the booking card to request it and say the team will confirm.`
+    } catch {
+      // Availability is a helpful supplement; the concierge remains usable if it is unavailable.
+    }
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8_000)
 
@@ -106,7 +115,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: 'system',
-            content: `${SYSTEM_PROMPT}${publicPricingContext}`,
+            content: `${SYSTEM_PROMPT}${publicPricingContext}${liveTourContext}`,
           },
           ...messages.slice(-8),
         ],

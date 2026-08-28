@@ -6,7 +6,6 @@ import {
   isLuxorTourSlotAtLeast24HoursAway,
   isLuxorTourTime,
   luxorTourTimeDisplayOrder,
-  LUXOR_TOUR_TIMES,
   LuxorTourSlot,
   PublicLuxorTourSlot,
   toPublicTourSlot,
@@ -137,7 +136,12 @@ export async function publishLuxorTourDays(dates: string[]) {
   const cleanDates = [...new Set(dates)].filter(isLuxorTourDay).sort()
   if (cleanDates.length !== dates.length) throw new Error('Choose future weekdays only.')
   const schedules = await availabilityMap()
-  const rows = cleanDates.flatMap((slotDate) => tourTimesForAvailability(schedules.get(weekdayForTourDate(slotDate)) || { start_time: '16:00', end_time: '19:00' }).map((time) => ({
+  const rows = cleanDates.flatMap((slotDate) => {
+    const schedule = schedules.get(weekdayForTourDate(slotDate))
+    if (!schedule?.is_open) return []
+    const times = tourTimesForAvailability(schedule)
+    if (!times.length || !isLuxorTourSlotAtLeast24HoursAway(slotDate, times[0].startTime)) return []
+    return times.map((time) => ({
     slot_date: slotDate,
     start_time: time.startTime,
     end_time: time.endTime,
@@ -145,7 +149,8 @@ export async function publishLuxorTourDays(dates: string[]) {
     capacity: 1,
     booked_count: 0,
     title: 'Private venue tour',
-  })))
+    }))
+  })
 
   if (rows.length) {
     await supabaseRest<LuxorTourSlot[]>('luxor_tour_slots?on_conflict=slot_date,start_time', {

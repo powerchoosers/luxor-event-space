@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
+import { formatTourSlotTime, LUXOR_TOUR_TIME_OPTIONS } from '@/lib/luxorTourSlots'
 import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, type LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
@@ -34,6 +35,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const [guestCount, setGuestCount] = useState('')
   const [budget, setBudget] = useState('')
   const [slotId, setSlotId] = useState('')
+  const [customTourTime, setCustomTourTime] = useState('')
   const [tourWindow, setTourWindow] = useState('')
   const [tourLanguage, setTourLanguage] = useState<Locale | 'none'>(locale)
   const [fullName, setFullName] = useState('')
@@ -45,13 +47,13 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const dates = useMemo(() => Array.from(new Map(slots.map((slot) => [slot.date, slot.dateLabel])).entries()), [slots])
   const dateSlots = useMemo(() => slots.filter((slot) => slot.date === targetDate), [slots, targetDate])
   const selectedSlot = slots.find((slot) => slot.id === slotId)
 
   function changeDate(value: string) {
     setTargetDate(value)
     setSlotId('')
+    setCustomTourTime('')
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -71,7 +73,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     }
     setSubmitting(true)
     const preferredTourDate = selectedSlot?.date || targetDate
-    const preferredTourTime = selectedSlot?.time || tourWindow
+    const preferredTourTime = selectedSlot?.time || (customTourTime ? formatTourSlotTime(`${customTourTime}:00`) : tourWindow)
     const payload: LuxorInquiryInput = {
       fullName: fullName.trim(), email: email.trim(), phone: phone.trim(), eventType,
       targetDate: eventDate, guestCount, budget, preferredTourDate, preferredTourTime, message: message.trim(),
@@ -80,6 +82,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       metadata: {
         selectedTourSlotId: slotId || null,
         preferredTourWindow: tourWindow || null,
+        customTourTime: customTourTime || null,
         websiteLocale: locale,
         tourLanguagePreference: tourLanguage,
       },
@@ -108,8 +111,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
         <Field label={spanish ? 'Invitados esperados' : 'Expected guests'}><input value={guestCount} onChange={(event) => setGuestCount(event.target.value)} inputMode="numeric" placeholder="For example, 120" className={inputClass} />{isGuestCountOverCapacity(guestCount) ? <span role="alert" className="mt-2 block text-xs leading-5 text-rose-700">{spanish ? LUXOR_GUEST_CAPACITY_MESSAGE_ES : LUXOR_GUEST_CAPACITY_MESSAGE}</span> : null}</Field>
         <Field label={spanish ? 'Presupuesto estimado' : 'Planning budget'}><PortalSelect theme="light" value={budget} onChange={setBudget} options={BUDGET_OPTIONS.map(([value, label]) => ({ value, label: spanish && value === 'Not sure yet' ? 'Aún no estoy seguro' : label }))} placeholder={spanish ? 'Selecciona un rango' : 'Choose a range'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
         <Field label={spanish ? 'Fecha del evento' : 'Event date'}><PortalDatePicker theme="light" value={eventDate} onChange={setEventDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us your event date'} className="w-full" /></Field>
-        <Field label={spanish ? 'Fecha preferida' : 'Preferred date'}>{slots.length ? <PortalSelect theme="light" value={targetDate} onChange={changeDate} options={dates.map(([value, label]) => ({ value, label }))} placeholder={spanish ? 'Selecciona una fecha' : 'Choose a date'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /> : <PortalDatePicker theme="light" value={targetDate} onChange={changeDate} placeholder={spanish ? 'Indica una fecha' : 'Tell us a date'} className="w-full" />}</Field>
-        <Field label={spanish ? 'Hora preferida' : 'Preferred time'}>{slots.length ? <PortalSelect theme="light" value={slotId} onChange={setSlotId} disabled={!targetDate || slotsLoading} options={dateSlots.map((slot) => ({ value: slot.id, label: slot.time }))} placeholder={targetDate ? (spanish ? 'Selecciona una hora' : 'Choose a time') : (spanish ? 'Primero elige una fecha' : 'Choose a date first')} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /> : <PortalSelect theme="light" value={tourWindow} onChange={setTourWindow} options={WINDOWS.map(([value, label]) => ({ value, label: spanish && value === 'Flexible' ? 'Soy flexible' : label }))} placeholder={spanish ? 'Selecciona una ventana' : 'Choose a window'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" />}</Field>
+        <Field label={spanish ? 'Fecha preferida' : 'Preferred date'}><PortalDatePicker theme="light" value={targetDate} onChange={changeDate} placeholder={spanish ? 'Indica una fecha' : 'Choose a date'} className="w-full" /><span className="mt-2 block text-[11px] text-[#827567]">{spanish ? 'Elige cualquier fecha; confirmaremos la disponibilidad.' : 'Choose any date; we will confirm availability.'}</span></Field>
+        <Field label={spanish ? 'Hora preferida' : 'Preferred time'}><PortalSelect theme="light" value={slotId || (customTourTime ? `custom:${customTourTime}` : '')} onChange={(value) => { if (value.startsWith('custom:')) { setSlotId(''); setCustomTourTime(value.slice(7)) } else { setSlotId(value); setCustomTourTime('') } }} disabled={!targetDate || slotsLoading} options={[...dateSlots.map((slot) => ({ value: slot.id, label: `${slot.time} · available` })), ...LUXOR_TOUR_TIME_OPTIONS.map((option) => ({ value: `custom:${option.value}`, label: `${option.label} · request this time` }))]} placeholder={targetDate ? (spanish ? 'Selecciona una hora' : 'Choose a time') : (spanish ? 'Primero elige una fecha' : 'Choose a date first')} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /><span className="mt-2 block text-[11px] text-[#827567]">{dateSlots.length ? (spanish ? 'Las horas disponibles se muestran primero.' : 'Available times are shown first.') : (spanish ? 'Puedes solicitar una hora específica.' : 'You can request a specific time.')}</span></Field>
         <Field label={spanish ? 'Idioma del recorrido' : 'Tour language'}><PortalSelect theme="light" value={tourLanguage} onChange={(value) => setTourLanguage(value as Locale | 'none')} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }, { value: 'none', label: spanish ? 'Sin preferencia' : 'No preference' }]} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
         <Field label={spanish ? 'Nombre completo' : 'Full name'}><input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" className={inputClass} required /></Field>
         <Field label={spanish ? 'Correo electrónico' : 'Email'}><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" className={inputClass} /></Field>
