@@ -275,7 +275,7 @@ export function LuxorInquiryForm({
                   <PortalSelect value={eventType} onChange={setEventType} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Select event type" options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} />
                 </FieldLabel>
                 <FieldLabel label="Target event date">
-                  <PortalDatePicker value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
+                  <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
                 <div>
                   <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />

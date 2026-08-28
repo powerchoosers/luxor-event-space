@@ -109,19 +109,20 @@ export default function PricingPageContent() {
 
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate overflow-hidden pt-28">
-        <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall prepared for dinner and dancing" fill priority sizes="100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,.96),rgba(5,5,5,.7)_55%,rgba(5,5,5,.3)),linear-gradient(180deg,rgba(5,5,5,.45),#050505_96%)]" />
-        <div className="absolute inset-0 luxor-noise opacity-20" />
-        <div className="relative z-10 mx-auto flex min-h-[72svh] max-w-7xl items-center px-5 py-16 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <p className="font-mono text-xs font-bold uppercase tracking-[.28em] text-[#f1d27a]">Packages & rates</p>
-            <h1 className="mt-5 font-serif text-5xl leading-[.9] sm:text-7xl lg:text-8xl">Real numbers before you fall in love with the room.</h1>
-            <p className="mt-7 max-w-2xl text-base leading-7 text-[#eadcc8]/82 sm:text-lg">See the venue rates, compare complete celebration packages, and request a final calculated proposal for your date. No tour is required just to learn whether Luxor fits your budget.</p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+      <section className="relative isolate overflow-hidden bg-[#f7f3ec] pt-28">
+        <div className="relative z-10 mx-auto grid min-h-[72svh] max-w-7xl items-center gap-12 px-5 py-16 sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8">
+          <div className="min-w-0 text-center lg:text-left">
+            <p className="font-mono text-xs font-bold uppercase tracking-[.28em] text-[#805b1f]">Packages & rates</p>
+            <h1 className="mx-auto mt-5 max-w-xl font-serif text-5xl leading-[.9] text-[#241d17] sm:text-7xl lg:mx-0 lg:text-8xl">Real numbers before you fall in love with the room.</h1>
+            <p className="mx-auto mt-7 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">See the venue rates, compare complete celebration packages, and request a final calculated proposal for your date. No tour is required just to learn whether Luxor fits your budget.</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
               <Link href="#packages" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Compare packages <ArrowRight className="h-4 w-4" /></Link>
-              <Link href="#quote" data-conversion="inquiry_cta_click" data-conversion-label="Pricing hero" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em]">Get my final proposal</Link>
+              <Link href="#quote" data-conversion="inquiry_cta_click" data-conversion-label="Pricing hero" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#9b6f24]/35 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em] text-[#241d17] transition hover:border-[#9b6f24]/60 hover:bg-white">Get my final proposal</Link>
             </div>
+          </div>
+          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:min-h-[calc(100vh-11rem)]">
+            <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall prepared for dinner and dancing" fill priority sizes="(min-width: 1024px) 58vw, 100vw" className="object-cover object-center" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/25 to-transparent" />
           </div>
         </div>
       </section>

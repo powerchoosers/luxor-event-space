@@ -1380,3 +1380,28 @@ body[data-luxor-site] .luxor-concierge-panel textarea {
   color: #241d17 !important;
   border-color: rgba(155, 111, 36, 0.28) !important;
 }
+
+/* The footer shares the header's warm light surface. */
+body[data-luxor-site] footer.site-footer--light {
+  background: #faf7f1 !important;
+  color: #241d17 !important;
+  border-top: 1px solid rgba(155, 111, 36, 0.16);
+}
+
+body[data-luxor-site] footer.site-footer--light > .absolute {
+  display: none;
+}
+
+body[data-luxor-site] footer.site-footer--light [class*="text-[#f8f3ed]"],
+body[data-luxor-site] footer.site-footer--light [class*="text-[#f7efe3]"],
+body[data-luxor-site] footer.site-footer--light [class*="text-white"] {
+  color: #241d17 !important;
+}
+
+body[data-luxor-site] footer.site-footer--light [class*="text-[#d7c29a]"] {
+  color: #665a4e !important;
+}
+
+body[data-luxor-site] footer.site-footer--light [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
