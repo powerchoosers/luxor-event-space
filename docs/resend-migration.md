@@ -2,6 +2,10 @@
 
 The migration is **not ready for production cutover**. Keep `LUXOR_MAIL_PROVIDER=zoho` (the default) and keep the existing Zoho MX records until the checklist below is complete. The Settings calendar tester can select Resend independently of normal mail.
 
+### Repository test-file policy
+
+The committed mail/calendar test scripts, fixtures, test-only API route, and generated test results were intentionally removed after verification. Keep the repository free of committed test files; if future verification needs temporary code, create it outside the repository and delete it before completing the work. Historical references below describe completed checks and do not indicate files that should be restored.
+
 ## Implemented foundation
 
 - Provider selection for ordinary mail and queued email/agreement delivery, preserving the approved sender allowlist.
@@ -104,7 +108,7 @@ The complete ten-suite `npm run test:mail`, typecheck, targeted lint, and whites
 
 ### Existing Zoho calendar source checks
 
-`readLuxorZohoCalendarEvent` reads only the exact saved event UID from the configured/default own calendar. It verifies the returned UID, calendar, organizer role, and approved mailbox; uses bounded requests; and does not update or notify attendees. `scripts/check-calendar-source.cjs` is a read-only local diagnostic that reports timing/version-field availability without credentials or attendee information. Offline tests cover identity mismatches, permission errors, read-only requests, and preserving the distinction between an API etag and an ICS sequence.
+`readLuxorZohoCalendarEvent` reads only the exact saved event UID from the configured/default own calendar. It verifies the returned UID, calendar, organizer role, and approved mailbox; uses bounded requests; and does not update or notify attendees. The former read-only diagnostic and offline fixtures were removed after verification; future checks must use disposable files outside the repository.
 
 On August 28, the portal database contained 19 Zoho-linked inquiries and no local calendar events. The two pending entries dated today were 9:30 AM and 11:00 AM Central, both already ended at inspection time. These portal records are not proof of current Zoho state. Source checks could not authenticate with the local refresh token. Vercel CLI authentication succeeded for the Luxor project, but its protected production secrets cannot be pulled; `env run` loaded local values and the same rejected local token. Do not interpret that as a failed production credential, overwrite `.env.local`, or rotate production credentials just to fix local migration reads. Refresh the local Zoho setup credentials securely before source inspection/history import.
 
@@ -164,7 +168,7 @@ August 28 Settings QA used the Codex browser at localhost:3000/portal/settings, 
 
 `scripts/test-mail-import-progress.sql` verifies atomic page rollback, read/unread cursor transitions, duplicate/conflicting observations, stale/expired/paused leases, fenced item commits, manifest compare/swap, and private privileges. Execute the entire transaction including rollback. The August 28 run passed; both import tables and its temporary mailbox fixture were confirmed empty afterward. Read-only REST checks also confirmed the status query and staged-message filter work against the linked project. The security advisor has no new warnings for these objects; the new FK index is expected to be unused before any real import.
 
-Use the repository's npm commands (`npm run typecheck`, `npm run lint -- --quiet`, and `npm run test:mail`). The mail tests are offline: no real credentials, network, email, or production data. They cover signatures, replay tolerance, sender restrictions, durable/idempotent sending, webhook races, unrelated-domain filtering, actual REQUEST/CANCEL MIME, cryptographically signed RSVP fixtures, revision supersession, notification retries, and no-send cron health. They are not a substitute for end-to-end delivery tests.
+Use the repository's npm commands (`npm run typecheck` and `npm run lint -- --quiet`). The former offline mail regression suite was removed after verification in accordance with the repository test-file policy; use disposable files outside the repository for any future local checks. Offline checks are not a substitute for end-to-end delivery tests.
 
 `scripts/test-calendar-lifecycle.sql` is a transaction-only database regression test: it creates synthetic `.invalid` fixtures, exercises create/update/cancel, replay and stale-response rules as `service_role`, then rolls everything back. Run the entire file in one call; never remove the transaction/rollback wrapper. No fixture jobs become visible to the worker.
 

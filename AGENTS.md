@@ -25,6 +25,10 @@ These instructions apply to this entire repository.
 
 ## Development
 
+### Test-file policy
+
+This repository intentionally contains no committed test files or test-only routes. The former mail/calendar regression fixtures and test scripts were removed during the Resend migration cleanup. Do not recreate or recommit them; use disposable files outside the repository for any future local verification, and remove any temporary test artifacts before finishing work.
+
 - This repository uses npm and `package-lock.json` as its dependency source of truth. Do not run pnpm for normal development or validation. If `pnpm-lock.yaml` or `pnpm-workspace.yaml` appears as an untracked file, delete those generated files before committing; do not add them to `.gitignore` or commit them.
 
 ```bash
