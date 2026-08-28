@@ -11,7 +11,7 @@ import {
   unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
 } from '@/lib/luxorTourSlotsServer'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, isLuxorTourTime, LUXOR_TOUR_EARLIEST_START_TIME } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, type LuxorTourAvailability } from '@/lib/luxorTourSlots'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     if (!DATE_PATTERN.test(slotDate) || !isLuxorTourDay(slotDate) || !isLuxorTourSlotAtLeast24HoursAway(slotDate, startTime)) {
       return NextResponse.json({ error: 'Choose a weekday at least 24 hours away.' }, { status: 400 })
     }
-    if (!isLuxorTourTime(startTime)) return NextResponse.json({ error: 'Choose one of Luxor’s tour times.' }, { status: 400 })
+    if (timeMinutes(startTime) % 30 !== 0) return NextResponse.json({ error: 'Tour times must use 30-minute intervals.' }, { status: 400 })
     if (endTime) {
       const duration = (timeMinutes(endTime) - timeMinutes(startTime) + (24 * 60)) % (24 * 60)
       if (duration <= 0 || duration > 180) {

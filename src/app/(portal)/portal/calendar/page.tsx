@@ -255,8 +255,8 @@ export default function CalendarPage() {
         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl sm:p-5">
           <TourAvailabilityManager
             title="Publish tour availability"
-            description="Select one or several weekdays. Publishing a day adds the approved tour times to the public booking page."
-            publishLabel="Publish"
+            description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
+            publishLabel="Open selected dates"
             onUpdated={loadData}
           />
         </section>
