@@ -1338,3 +1338,45 @@ body[data-portal-theme='light'] .portal-search-dropdown {
     display: none;
   }
 }
+
+/* Public Elena concierge follows the light site theme while remaining a
+   distinct floating utility surface. */
+body[data-luxor-site] .luxor-concierge-panel,
+body[data-luxor-site] .luxor-concierge-launcher {
+  border-color: rgba(155, 111, 36, 0.3) !important;
+  color: #241d17 !important;
+  box-shadow: 0 24px 60px -28px rgba(61, 43, 23, 0.34) !important;
+}
+
+body[data-luxor-site] .luxor-concierge-panel {
+  background: #fffdf9 !important;
+}
+
+body[data-luxor-site] .luxor-concierge-launcher,
+body[data-luxor-site] .luxor-concierge-panel [class*="bg-[#0d0908]"],
+body[data-luxor-site] .luxor-concierge-panel [class*="bg-[#080706]"],
+body[data-luxor-site] .luxor-concierge-panel [class*="bg-[#120d0c]"] {
+  background-color: #f1e9df !important;
+}
+
+body[data-luxor-site] .luxor-concierge-panel [class*="bg-black/"],
+body[data-luxor-site] .luxor-concierge-panel [class*="bg-white/"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+body[data-luxor-site] .luxor-concierge-panel [class*="text-[#f7efe3]"],
+body[data-luxor-site] .luxor-concierge-panel [class*="text-[#eadcc8]"],
+body[data-luxor-site] .luxor-concierge-launcher [class*="text-[#f7efe3]"] {
+  color: #241d17 !important;
+}
+
+body[data-luxor-site] .luxor-concierge-panel [class*="text-[#d7c29a]"] {
+  color: #665a4e !important;
+}
+
+body[data-luxor-site] .luxor-concierge-panel input,
+body[data-luxor-site] .luxor-concierge-panel textarea {
+  background: #ffffff !important;
+  color: #241d17 !important;
+  border-color: rgba(155, 111, 36, 0.28) !important;
+}

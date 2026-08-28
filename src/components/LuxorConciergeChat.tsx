@@ -643,7 +643,7 @@ export function LuxorConciergeChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute bottom-0 right-0 flex h-[min(560px,calc(100svh-6rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)] sm:h-[min(560px,calc(100svh-3rem))]"
+            className="luxor-concierge-panel absolute bottom-0 right-0 flex h-[min(560px,calc(100svh-6rem))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-md border border-[#caa24c]/28 bg-[#080706] text-[#f7efe3] shadow-[0_30px_90px_-36px_rgba(0,0,0,1)] sm:h-[min(560px,calc(100svh-3rem))]"
             role="dialog"
             aria-modal="true"
             aria-label="Luxor concierge chat"
@@ -872,7 +872,7 @@ export function LuxorConciergeChat() {
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             type="button"
             onClick={() => setOpen(true)}
-            className="absolute bottom-0 right-0 group flex h-16 w-16 items-center justify-center rounded-full border border-[#f1d27a]/45 bg-[#0d0908] p-1 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap"
+            className="luxor-concierge-launcher absolute bottom-0 right-0 group flex h-16 w-16 items-center justify-center rounded-full border border-[#f1d27a]/45 bg-[#0d0908] p-1 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap"
             aria-label="Open Luxor concierge chat"
           >
             <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
