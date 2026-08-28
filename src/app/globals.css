@@ -377,7 +377,7 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
 /* Public Luxor site: restrained gold hardware against the dark venue palette. */
 html:has(body[data-luxor-site]),
 body[data-luxor-site] {
-  scrollbar-color: rgba(202, 162, 76, 0.8) #080706;
+  scrollbar-color: rgba(202, 162, 76, 0.8) #ffffff;
   scrollbar-width: thin;
 }
 
@@ -391,14 +391,14 @@ html:has(body[data-luxor-site])::-webkit-scrollbar-track,
 body[data-luxor-site]::-webkit-scrollbar-track {
   background:
     linear-gradient(180deg, rgba(202, 162, 76, 0.06), transparent 26%),
-    #080706;
+    #ffffff;
   border-left: 1px solid rgba(202, 162, 76, 0.09);
 }
 
 html:has(body[data-luxor-site])::-webkit-scrollbar-thumb,
 body[data-luxor-site]::-webkit-scrollbar-thumb {
   min-height: 3.5rem;
-  border: 0.15rem solid #080706;
+  border: 0.15rem solid #ffffff;
   border-radius: 999px;
   background: linear-gradient(180deg, #e7c36f 0%, #b27d2b 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 240, 190, 0.18);
