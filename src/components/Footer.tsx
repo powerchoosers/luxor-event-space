@@ -23,7 +23,7 @@ const socialLinks = [
 
 export const Footer = () => {
   return (
-    <footer id="shared-footer" className="relative isolate overflow-hidden bg-[#050505] pt-24 pb-12 text-[#f8f3ed] sm:pt-32 sm:pb-16">
+    <footer id="shared-footer" className="site-footer--light relative isolate overflow-hidden bg-[#faf7f1] pt-24 pb-12 text-[#241d17] sm:pt-32 sm:pb-16">
       <div className="absolute inset-0 luxor-noise opacity-30" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_28rem),linear-gradient(180deg,rgba(5,5,5,0.1),rgba(5,5,5,0.96))]" />
       

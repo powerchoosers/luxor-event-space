@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
-import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { PublicFaqList } from '@/components/PublicFaqList'
 
@@ -118,12 +117,6 @@ function PrimaryButton({ href, children }: { href: string; children: React.React
   )
 }
 
-function CenteredLuxorLockup() {
-  return (
-    <LuxorAxisLockup className="mx-auto w-full max-w-[290px] sm:max-w-[360px]" />
-  )
-}
-
 function EventCardView({ event }: { event: EventCard }) {
   return (
     <article className="overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)]">
@@ -156,10 +149,7 @@ export default function Home() {
       <section id="hero" className="relative isolate min-h-[92svh] overflow-hidden pt-28 sm:min-h-screen">
         <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8 lg:pt-14">
           <div className="min-w-0 text-center lg:text-left">
-            <div className="mx-auto max-w-[290px] lg:mx-0 lg:max-w-[330px]">
-              <CenteredLuxorLockup />
-            </div>
-            <h1 className="mx-auto mt-7 max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
+            <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
               San Antonio celebrations with a room that already feels special.
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
