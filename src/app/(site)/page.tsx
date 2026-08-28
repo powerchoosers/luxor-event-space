@@ -172,7 +172,7 @@ export default function Home() {
               San Antonio celebrations with a room that already feels special.
             </h1>
             <p className="mx-auto mt-4 max-w-[22rem] text-base leading-7 text-[#d7c29a]/82 sm:max-w-2xl sm:text-lg">
-              Weddings, quinceañeras, showers, and private events in an elegant dark-and-gold venue made for photos, dinner, and dancing.
+              Weddings, quinceañeras, showers, and private events in an elegant gold-accented venue made for photos, dinner, and dancing.
             </p>
             <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
               <PrimaryButton href="/tour#tour-availability">Check tour times</PrimaryButton>
@@ -202,7 +202,7 @@ export default function Home() {
           {[
             ['Events', 'Weddings and private parties'],
             ['Tours', 'Private appointments'],
-            ['Style', 'Dark-and-gold setting'],
+            ['Style', 'Warm, gold-accented setting'],
             ['Location', '803 Castroville Rd #402'],
           ].map(([label, value], index) => (
             <Reveal key={label} delay={index * 70} variant="scale" amount={16}>

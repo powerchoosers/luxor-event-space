@@ -6,6 +6,8 @@ import {
   listAvailableLuxorTourSlots,
   listUpcomingLuxorTourSlots,
   publishLuxorTourDays,
+  listLuxorTourAvailability,
+  saveLuxorTourAvailability,
   unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
 } from '@/lib/luxorTourSlotsServer'
@@ -26,7 +28,8 @@ export async function GET(request: Request) {
     if (manage) {
       if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
       const slots = await listUpcomingLuxorTourSlots()
-      return NextResponse.json({ slots })
+      const availability = await listLuxorTourAvailability()
+      return NextResponse.json({ slots, availability })
     }
     const slots = await listAvailableLuxorTourSlots()
     return NextResponse.json({ slots })
@@ -95,6 +98,10 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>
+    if (Array.isArray(body.availability)) {
+      const availability = await saveLuxorTourAvailability(body.availability as never[])
+      return NextResponse.json({ availability })
+    }
     if (Array.isArray(body.dates) && body.action === 'unpublish') {
       const dates = body.dates.map(String)
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {

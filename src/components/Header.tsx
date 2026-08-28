@@ -20,7 +20,6 @@ export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
-  const isLightTourPage = pathname === '/tour' || pathname.startsWith('/es/tour')
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -66,7 +65,7 @@ export const Header = () => {
   return (
     <header 
       id="shared-header"
-      className={`fixed top-0 left-0 right-0 z-[90] border-b transition-all duration-500 ease-in-out ${isLightTourPage ? 'site-header--light' : ''}
+      className={`site-header--light fixed top-0 left-0 right-0 z-[90] border-b transition-all duration-500 ease-in-out
         ${isScrolled 
           ? 'h-[4.5rem] border-[#caa24c]/20 bg-black/[0.82] py-3 shadow-2xl backdrop-blur-xl' 
           : 'h-28 border-[#caa24c]/10 bg-black/20 py-6 backdrop-blur-[2px]'
@@ -138,10 +137,10 @@ export const Header = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.48, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[100] h-[100dvh] w-screen bg-[#050505] lg:hidden"
+            className="fixed inset-0 z-[100] h-[100dvh] w-screen bg-[#f7f3ec] lg:hidden"
           >
             <div className="absolute inset-0 luxor-noise opacity-20" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_24rem),linear-gradient(180deg,#120d0c,#050505_58%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.14),transparent_24rem),linear-gradient(180deg,#fffdf9,#f1e9df_58%)]" />
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -164,7 +163,7 @@ export const Header = () => {
                   <Link
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#f8f3ed] transition-colors hover:text-[#caa24c]"
+                    className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
                   >
                     {item.label}
                   </Link>

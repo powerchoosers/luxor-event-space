@@ -1048,6 +1048,103 @@ body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabin
   outline-offset: 3px;
 }
 
+/* Public site light theme. Keep this scoped so the owner portal can retain its
+   independent theme tokens and dark-mode behavior. */
+body[data-luxor-site] {
+  --background: #f7f3ec;
+  --foreground: #241d17;
+  --surface: #ffffff;
+  --surface-soft: #f1e9df;
+  --surface-dark: #10100f;
+  --muted: #665a4e;
+  --accent: #9b6f24;
+  --accent-bright: #b98a3d;
+  background: linear-gradient(180deg, #fffdf9 0%, #f7f3ec 52%, #f4eee6 100%);
+  color: #241d17;
+  color-scheme: light;
+}
+
+body[data-luxor-site] main,
+body[data-luxor-site] main > section {
+  color: #241d17;
+}
+
+/* Re-map the original dark utility surfaces into a light tonal rhythm. */
+body[data-luxor-site] main [class*="bg-[#050505]"],
+body[data-luxor-site] main [class*="bg-[#080706]"],
+body[data-luxor-site] main [class*="bg-[#0a0807]"],
+body[data-luxor-site] main [class*="bg-[#0b0908]"],
+body[data-luxor-site] main [class*="bg-[#120d0c]"],
+body[data-luxor-site] main [class*="bg-[#17100d]"] {
+  background-color: #ffffff !important;
+}
+
+body[data-luxor-site] main [class*="bg-[#0b0908]"],
+body[data-luxor-site] main [class*="bg-[#120d0c]"] {
+  background-color: #f1e9df !important;
+}
+
+body[data-luxor-site] main [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+body[data-luxor-site] main [class*="text-[#f7efe3]"],
+body[data-luxor-site] main [class*="text-[#f6efe8]"],
+body[data-luxor-site] main [class*="text-[#f8f3ed]"],
+body[data-luxor-site] main [class*="text-[#fffaf3]"],
+body[data-luxor-site] main [class*="text-white"] {
+  color: #241d17 !important;
+}
+
+body[data-luxor-site] main [class*="text-[#d7c29a]"],
+body[data-luxor-site] main [class*="text-[#eadcc8]"],
+body[data-luxor-site] main [class*="text-[#c9c0b7]"],
+body[data-luxor-site] main [class*="text-zinc-400"],
+body[data-luxor-site] main [class*="text-zinc-500"] {
+  color: #665a4e !important;
+}
+
+body[data-luxor-site] main [class*="text-[#f1d27a]"],
+body[data-luxor-site] main [class*="text-[#d7b964]"] {
+  color: #805b1f !important;
+}
+
+body[data-luxor-site] main [class*="border-white/"],
+body[data-luxor-site] main [class*="border-[#caa24c]"] {
+  border-color: rgba(155, 111, 36, 0.24) !important;
+}
+
+/* Brighten image-led hero treatments while preserving the photography. */
+body[data-luxor-site] main [class*="bg-[linear-gradient"] {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.28)) !important;
+}
+
+body[data-luxor-site] main [class*="bg-[radial-gradient"] {
+  background-image: linear-gradient(180deg, #fffdf9, #f1e9df) !important;
+}
+
+body[data-luxor-site] #hero > img {
+  opacity: 0.36;
+}
+
+body[data-luxor-site] main input,
+body[data-luxor-site] main textarea,
+body[data-luxor-site] main select {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #241d17 !important;
+  border-color: rgba(155, 111, 36, 0.28) !important;
+}
+
+body[data-luxor-site] main input::placeholder,
+body[data-luxor-site] main textarea::placeholder {
+  color: #827567 !important;
+}
+
+body[data-luxor-site] footer {
+  background-color: #10100f !important;
+  color: #f8f3ed;
+}
+
 /* Sticky table header cells with glassmorphic blur */
 thead.sticky th,
 .portal-sticky-th th {

@@ -10,10 +10,14 @@ import {
   LuxorTourSlot,
   PublicLuxorTourSlot,
   toPublicTourSlot,
+  LuxorTourAvailability,
+  weekdayForTourDate,
+  tourTimesForAvailability,
 } from './luxorTourSlots'
 import { supabaseRest } from './supabaseRestServer'
 
 const TOUR_SLOT_SELECT = 'id,created_at,updated_at,slot_date,start_time,end_time,status,capacity,booked_count,title,notes'
+const TOUR_AVAILABILITY_SELECT = 'weekday,is_open,start_time,end_time,updated_at'
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10)
@@ -35,6 +39,16 @@ export async function listAvailableLuxorTourSlots(limit = 500): Promise<PublicLu
     slots.filter((slot) => slot.capacity > slot.booked_count && isLuxorTourSlotAtLeast24HoursAway(slot.slot_date, slot.start_time)),
   )
     .map(toPublicTourSlot)
+}
+
+export async function listLuxorTourAvailability(): Promise<LuxorTourAvailability[]> {
+  const rows = await supabaseRest<LuxorTourAvailability[]>(`luxor_tour_availability?select=${TOUR_AVAILABILITY_SELECT}&order=weekday.asc`)
+  return rows
+}
+
+async function availabilityMap() {
+  const rows = await listLuxorTourAvailability()
+  return new Map(rows.map((row) => [row.weekday, row]))
 }
 
 export async function listUpcomingLuxorTourSlots(limit = 1000): Promise<LuxorTourSlot[]> {
@@ -100,8 +114,7 @@ export async function createLuxorTourSlot(input: {
   title?: string | null
   notes?: string | null
 }) {
-  if (!isLuxorTourDay(input.slotDate)) throw new Error('Tours are available Monday through Friday.')
-  if (!isLuxorTourTime(input.startTime)) throw new Error('Choose one of Luxor’s published tour times.')
+  if (!isLuxorTourDay(input.slotDate)) throw new Error('Choose a valid tour date.')
   const [created] = await supabaseRest<LuxorTourSlot[]>('luxor_tour_slots?select=' + TOUR_SLOT_SELECT, {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
@@ -123,8 +136,8 @@ export async function createLuxorTourSlot(input: {
 export async function publishLuxorTourDays(dates: string[]) {
   const cleanDates = [...new Set(dates)].filter(isLuxorTourDay).sort()
   if (cleanDates.length !== dates.length) throw new Error('Choose future weekdays only.')
-
-  const rows = cleanDates.flatMap((slotDate) => LUXOR_TOUR_TIMES.map((time) => ({
+  const schedules = await availabilityMap()
+  const rows = cleanDates.flatMap((slotDate) => tourTimesForAvailability(schedules.get(weekdayForTourDate(slotDate)) || { start_time: '16:00', end_time: '19:00' }).map((time) => ({
     slot_date: slotDate,
     start_time: time.startTime,
     end_time: time.endTime,
@@ -152,6 +165,27 @@ export async function publishLuxorTourDays(dates: string[]) {
   }
 
   return listUpcomingLuxorTourSlots()
+}
+
+export async function saveLuxorTourAvailability(rows: LuxorTourAvailability[]) {
+  const cleanRows = rows.map((row) => ({ weekday: Number(row.weekday), is_open: Boolean(row.is_open), start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5) }))
+  if (cleanRows.length !== 7 || new Set(cleanRows.map((row) => row.weekday)).size !== 7 || cleanRows.some((row) => row.weekday < 0 || row.weekday > 6 || row.end_time <= row.start_time)) {
+    throw new Error('Save one valid schedule for each day of the week.')
+  }
+  await supabaseRest<LuxorTourAvailability[]>('luxor_tour_availability?on_conflict=weekday', {
+    method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(cleanRows.map((row) => ({ ...row, updated_at: new Date().toISOString() }))),
+  })
+
+  const current = await listUpcomingLuxorTourSlots()
+  const dated = [...new Set(current.map((slot) => slot.slot_date))]
+  const byWeekday = new Map(cleanRows.map((row) => [row.weekday, row]))
+  await Promise.all(current.filter((slot) => slot.booked_count === 0).map((slot) => supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(slot.id)}`, { method: 'DELETE' })))
+  const regenerated = dated.flatMap((slotDate) => {
+    const schedule = byWeekday.get(weekdayForTourDate(slotDate))
+    return schedule?.is_open ? tourTimesForAvailability(schedule).map((time) => ({ slot_date: slotDate, start_time: time.startTime, end_time: time.endTime, status: 'available', capacity: 1, booked_count: 0, title: 'Private venue tour' })) : []
+  })
+  if (regenerated.length) await supabaseRest<LuxorTourSlot[]>('luxor_tour_slots?on_conflict=slot_date,start_time', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify(regenerated) })
+  return listLuxorTourAvailability()
 }
 
 export async function unpublishLuxorTourDays(dates: string[]) {

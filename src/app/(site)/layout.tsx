@@ -85,7 +85,7 @@ export default function RootLayout({
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <body data-luxor-site className="min-h-full bg-[#050505] pb-16 text-[#f6efe8] sm:pb-0">
+      <body data-luxor-site className="min-h-full bg-[#f7f3ec] pb-16 text-[#241d17] sm:pb-0">
         <SmoothScroll />
         <script
           type="application/ld+json"

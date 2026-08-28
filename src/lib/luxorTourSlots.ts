@@ -2,6 +2,14 @@ import { LUXOR_TIME_DROPDOWN_OPTIONS } from './luxorTimeOptions'
 
 export type LuxorTourSlotStatus = 'available' | 'held' | 'booked' | 'unavailable'
 
+export type LuxorTourAvailability = {
+  weekday: number
+  is_open: boolean
+  start_time: string
+  end_time: string
+  updated_at?: string
+}
+
 export type LuxorTourSlot = {
   id: string
   created_at: string
@@ -27,6 +35,7 @@ export type PublicLuxorTourSlot = {
 
 export const LUXOR_TOUR_TIME_ZONE = 'America/Chicago'
 export const LUXOR_TOUR_MIN_NOTICE_HOURS = 24
+export const LUXOR_WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
 
 function addMinutesToClockTime(value: string, minutesToAdd: number) {
   const [hours, minutes] = value.split(':').map(Number)
@@ -38,6 +47,30 @@ export const LUXOR_TOUR_TIMES = LUXOR_TIME_DROPDOWN_OPTIONS.map(({ value }) => (
   startTime: `${value}:00`,
   endTime: `${addMinutesToClockTime(value, 30)}:00`,
 }))
+
+export const LUXOR_TOUR_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const minutes = index * 30
+  const hours = Math.floor(minutes / 60)
+  const clock = `${String(hours).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  return { value: clock, label: formatTourSlotTime(`${clock}:00`) }
+})
+
+export function weekdayForTourDate(date: string) {
+  return new Date(`${date}T12:00:00Z`).getUTCDay()
+}
+
+export function tourTimesForAvailability(availability: Pick<LuxorTourAvailability, 'start_time' | 'end_time'>) {
+  const start = availability.start_time.slice(0, 5)
+  const end = availability.end_time.slice(0, 5)
+  const startMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3))
+  const endMinutes = Number(end.slice(0, 2)) * 60 + Number(end.slice(3))
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes) || endMinutes <= startMinutes) return []
+  return Array.from({ length: Math.floor((endMinutes - startMinutes) / 30) }, (_, index) => {
+    const minutes = startMinutes + index * 30
+    const value = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+    return { startTime: `${value}:00`, endTime: `${String(Math.floor((minutes + 30) / 60)).padStart(2, '0')}:${String((minutes + 30) % 60).padStart(2, '0')}:00` }
+  })
+}
 
 // The picker is deliberately presented as a business day (8 AM through 1 AM),
 // but a date plus 12–1 AM is still an earlier clock time. Use this value when
@@ -59,7 +92,7 @@ export function luxorTourTimeDisplayOrder(time: string) {
 export function isLuxorTourDay(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
   const day = new Date(`${date}T12:00:00Z`).getUTCDay()
-  return day >= 1 && day <= 5
+  return day >= 0 && day <= 6
 }
 
 export function isLuxorTourTime(time: string) {
