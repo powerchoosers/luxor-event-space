@@ -91,6 +91,7 @@ export function PortalCalendar({
     }, {})
   }, [items])
   const formattedRange = React.useMemo(() => formatRange(anchor, view), [anchor, view])
+  const todayIso = toIsoDate(new Date())
 
   return (
     <section className="portal-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
@@ -98,6 +99,7 @@ export function PortalCalendar({
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">{title}</p>
           <h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">{formattedRange}</h2>
+          {dayStatuses ? <p className="mt-2 max-w-xl text-[10px] leading-4 text-[color:var(--portal-muted)]">“No tour times” means no public tour slot is currently available that day; it does not mean the venue is closed.</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
@@ -127,17 +129,19 @@ export function PortalCalendar({
       </div>
 
       <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-4">
-        <div className={`grid gap-3 ${view === 'day' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-7'}`}>
+        <div className={`grid gap-3 ${view === 'day' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-7'} ${view === 'month' ? 'min-w-[52rem]' : ''}`}>
           {visibleDays.map((day) => {
             const iso = toIsoDate(day)
             const dayItems = itemsByDate[iso] || []
             const outsideMonth = view === 'month' && day.getMonth() !== anchor.getMonth()
-            const visibleItems = view === 'month' ? dayItems.slice(0, 2) : dayItems
+            const visibleItems = dayItems
+            const isToday = iso === todayIso
 
             return (
               <div
                 key={iso}
-                className={`flex h-[15rem] min-h-[15rem] flex-col rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 hover:border-[#caa24c]/40 transition-colors duration-150 ${outsideMonth ? 'opacity-45' : ''}`}
+                aria-label={`${formatDayHeading(iso)}${isToday ? ', today' : ''}`}
+                className={`flex h-[15rem] min-h-[15rem] flex-col rounded-xl border p-3 transition-colors duration-150 ${isToday ? 'border-[#caa24c] bg-[#caa24c]/[0.07] shadow-[0_0_0_1px_rgba(202,162,76,0.18)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/40'} ${outsideMonth ? 'opacity-45' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -155,11 +159,14 @@ export function PortalCalendar({
                     ) : (
                       <p className="mt-1 font-mono text-sm font-bold text-[color:var(--portal-text)]">{day.getDate()}</p>
                     )}
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {isToday ? <span className="rounded bg-[#caa24c]/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#a8792f]">Today</span> : null}
                     {dayStatuses ? (
-                      <p className={`mt-1 text-[9px] font-black uppercase tracking-wider ${dayStatuses[iso] === 'open' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                        {dayStatuses[iso] === 'open' ? 'OPEN DAY' : 'CLOSED DAY'}
+                      <p title={dayStatuses[iso] === 'open' ? 'At least one public tour time is available.' : 'No public tour times are currently available. This does not mean the venue is closed.'} className={`text-[9px] font-black uppercase tracking-wider ${dayStatuses[iso] === 'open' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {dayStatuses[iso] === 'open' ? 'TOUR TIMES OPEN' : 'NO TOUR TIMES'}
                       </p>
                     ) : null}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -169,12 +176,12 @@ export function PortalCalendar({
                     Open day
                   </button>
                 </div>
-                <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+                <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
                   {dayItems.length === 0 ? (
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--portal-faint)]">No items</p>
                   ) : (
                     <>
-                      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+                      <div className="portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                         {visibleItems.map((item) => (
                           <button
                             key={item.id}
@@ -187,15 +194,6 @@ export function PortalCalendar({
                           </button>
                         ))}
                       </div>
-                      {dayItems.length > visibleItems.length ? (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDay(iso)}
-                          className="mt-auto text-left text-[10px] font-black uppercase tracking-widest text-[#f1d27a] hover:text-[#f7de98]"
-                        >
-                          +{dayItems.length - visibleItems.length} more
-                        </button>
-                      ) : null}
                     </>
                   )}
                 </div>

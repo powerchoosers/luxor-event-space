@@ -897,6 +897,24 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                   <span>Elena</span>
                 </button>
               </div>
+              <div className="mt-4 flex items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-xs font-bold text-[#18130d]"
+                  style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
+                >
+                  {userProfile.avatarUrl ? null : userInitials}
+                </div>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-[color:var(--portal-muted)]">{userProfile.email}</span>
+                </span>
+                <form action="/api/auth/logout" method="post">
+                  <button type="submit" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-red-500/20 px-3 text-xs font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+                    <LogOut size={16} />
+                    Log out
+                  </button>
+                </form>
+              </div>
             </motion.section>
           </motion.div>
         )}

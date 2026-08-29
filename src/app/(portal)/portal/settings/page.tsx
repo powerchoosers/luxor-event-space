@@ -28,13 +28,15 @@ import {
   Tag,
   ChevronDown,
   X,
-  Menu
+  Menu,
+  LogOut
 } from 'lucide-react'
 import {
   PortalPageFrame,
   PortalPageHeader,
   PortalTableCard,
-  PortalSelect
+  PortalSelect,
+  PortalTabTransition
 } from '@/components/portal/PortalUI'
 import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -357,7 +359,7 @@ export default function SettingsPage() {
       <div className="space-y-3">
         <PortalSettingsSearch onSelect={selectSettingsTab} />
         <div className="hidden items-center gap-x-5 gap-y-2 text-xs sm:flex">
-          <span className="font-semibold text-[color:var(--portal-muted)]">Common tasks</span>
+          <span className="border-r border-[color:var(--portal-border)] pr-5 font-semibold text-[color:var(--portal-muted)]">Common tasks</span>
           <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
           <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
           <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
@@ -394,6 +396,12 @@ export default function SettingsPage() {
               </section>
             ))}
           </nav>
+          <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3 lg:hidden">
+            <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+              <LogOut size={16} />
+              Log out
+            </button>
+          </form>
         </aside>
 
         <div className="min-w-0 flex-1">
@@ -420,7 +428,7 @@ export default function SettingsPage() {
           {/* Settings Forms */}
           <div className="min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-8">
             <form onSubmit={handleSave} className="w-full space-y-6">
-          <div key={activeTab} className="space-y-6">
+          <PortalTabTransition activeKey={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
           {activeTab === 'business' && (
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)_minmax(20rem,0.85fr)]">
@@ -870,7 +878,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          </div>
+          </PortalTabTransition>
 
           {/* Submit button */}
           {(activeTab === 'notifications' || activeTab === 'team') && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
@@ -927,6 +935,12 @@ export default function SettingsPage() {
                 </section>
               ))}
             </nav>
+            <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3">
+              <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+                <LogOut size={17} />
+                Log out of Luxor Portal
+              </button>
+            </form>
           </section>
         </div>
       ) : null}

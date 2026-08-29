@@ -156,7 +156,7 @@ export function PortalSettingsSearch({ onSelect }: { onSelect: (tab: SettingsTab
   }
 
   return (
-    <div ref={containerRef} className="relative z-20 w-full max-w-2xl shrink-0">
+    <div ref={containerRef} className="relative z-20 mx-auto w-full max-w-2xl shrink-0">
       <label htmlFor="settings-search" className="sr-only">Search settings</label>
       <div className={`flex items-center gap-3 rounded-xl border bg-[color:var(--portal-card)] px-4 transition-colors ${isOpen ? 'border-[#caa24c]/55 ring-2 ring-[#caa24c]/10' : 'border-[color:var(--portal-border)]'}`}>
         <Search size={17} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />

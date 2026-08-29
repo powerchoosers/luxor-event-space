@@ -257,6 +257,7 @@ export default function CalendarPage() {
             title="Publish tour availability"
             description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
             publishLabel="Open selected dates"
+            defaultExpanded={false}
             onUpdated={loadData}
           />
         </section>
