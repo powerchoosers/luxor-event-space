@@ -130,10 +130,6 @@ export function verifyLuxorPortalSessionCookie(value: string | undefined) {
     return null
   }
 
-  if (!isAuthorizedLuxorPortalEmail(session.email)) {
-    return null
-  }
-
   return session
 }
 

@@ -2,6 +2,7 @@ import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { PortalPasswordLogin } from './PortalPasswordLogin'
+import { PortalMagicLinkLogin } from './PortalMagicLinkLogin'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 
 type LoginPageProps = {
@@ -84,6 +85,7 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
             ) : null}
 
             <PortalPasswordLogin />
+            <PortalMagicLinkLogin />
 
             <div className="mt-6 rounded-lg border border-zinc-800 bg-black/35 px-4 py-3">
               <div className="flex items-start gap-3">

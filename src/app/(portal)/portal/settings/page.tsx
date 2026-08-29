@@ -49,6 +49,7 @@ import { CustomCalendarInviteTester } from '@/components/portal/CustomCalendarIn
 import { MailMigrationSettings } from '@/components/portal/MailMigrationSettings'
 import { CalendarReplyReview } from '@/components/portal/CalendarReplyReview'
 import { MailProviderSettings } from '@/components/portal/MailProviderSettings'
+import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -365,8 +366,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-6">
-        <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-[color:var(--portal-border)] pr-4 md:block lg:w-60">
-          <nav aria-label="Settings categories" className="space-y-6 pb-6">
+        <aside className="hidden w-56 shrink-0 self-start rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-sm md:sticky md:top-0 md:block md:max-h-[calc(100dvh-11rem)] md:overflow-y-auto lg:w-64">
+          <nav aria-label="Settings categories" className="space-y-6">
             {SETTINGS_NAVIGATION.map((group) => (
               <section key={group.label} aria-labelledby={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`}>
                 <h2 id={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`} className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h2>
@@ -727,7 +728,7 @@ export default function SettingsPage() {
 
           {/* TEAM & PERMISSIONS */}
           {activeTab === 'team' && (
-            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
+            <div className="space-y-6">
               <div className="luxor-glass-card space-y-5 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Your Email Identity</h3>
@@ -772,10 +773,8 @@ export default function SettingsPage() {
                 <PortalPhoneRoleSettings mode="profile" />
               </div>
 
-              <div className="luxor-glass-card space-y-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Portal Access</h3>
-                <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">Portal access is controlled by the approved Zoho email list. Profile names and titles do not change anyone&apos;s permissions.</p>
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-[10px] leading-relaxed text-amber-700 dark:text-amber-200">Approved users retain normal portal access, but only Arianna&apos;s approved owner login can search for and purchase new phone numbers.</div>
+              <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+                <TeamAccessManager />
               </div>
             </div>
           )}

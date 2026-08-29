@@ -5,6 +5,7 @@ import { PortalShell } from "@/components/portal/PortalShell";
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { redirect } from 'next/navigation'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { cookies } from 'next/headers'
 import '../globals.css'
 
@@ -57,6 +58,9 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
     redirect('/portal/login')
   }
 
+  const member = await getLuxorPortalMember(session.email)
+  if (!member || member.status === 'suspended') redirect('/portal/login?error=unauthorized')
+
   const userProfile = await getLuxorUserProfile(session.email)
   const themeCookie = (await cookies()).get('luxor-portal-theme')?.value
   const initialTheme = themeCookie === 'dark' || themeCookie === 'light' ? themeCookie : 'light'
@@ -66,7 +70,7 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme}>{children}</PortalShell>
+      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} permissions={member.permissions} role={member.role}>{children}</PortalShell>
     </html>
   );
 }

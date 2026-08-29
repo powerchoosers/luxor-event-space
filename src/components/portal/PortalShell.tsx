@@ -40,6 +40,7 @@ import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { RouteTransition } from '@/components/RouteTransition'
 import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
+import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
@@ -101,17 +102,17 @@ const PortalElenaChat = dynamic(
 )
 
 const navItems = [
-  { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview' },
-  { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients' },
-  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone' },
-  { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails' },
-  { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages' },
-  { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar' },
-  { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events' },
-  { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances' },
-  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', isDropdown: true },
-  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true },
-  { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports' },
+  { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview', permission: 'overview' },
+  { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients', permission: 'leads' },
+  { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone', permission: 'calls' },
+  { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails', permission: 'emails' },
+  { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages', permission: 'messages' },
+  { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar', permission: 'calendar' },
+  { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events', permission: 'events' },
+  { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances', permission: 'finances' },
+  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', isDropdown: true, permission: 'operations' },
+  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true, permission: 'marketing' },
+  { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports', permission: 'reports' },
 ]
 
 const mobilePrimaryNavItems = [
@@ -154,18 +155,19 @@ function getPortalMobileViewportSnapshot() {
   return window.matchMedia(PORTAL_MOBILE_MEDIA_QUERY).matches
 }
 
-export function PortalShell({ children, session, initialProfile, initialTheme }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme }) {
+export function PortalShell({ children, session, initialProfile, initialTheme, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; permissions: PortalPermission[]; role: PortalRole }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} permissions={permissions} role={role}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session, initialProfile, initialTheme }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme }) {
+function PortalShellContent({ children, session, initialProfile, initialTheme, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; permissions: PortalPermission[]; role: PortalRole }) {
   const pathname = usePathname()
+  const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -457,7 +459,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           </div>
 
           <nav className="flex-1 space-y-1">
-            {navItems.map((item) => {
+            {navItems.filter((item) => canAccess(item.permission as PortalPermission)).map((item) => {
               if (item.isDropdown) {
                 const isCurrentGroup = item.href === '/portal/marketing'
                   ? pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails'
@@ -563,7 +565,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           </nav>
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} />
+            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} /> : null}
             <div className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
@@ -805,7 +807,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
           }`}
           aria-label="Primary portal navigation"
         >
-          {mobilePrimaryNavItems.map((item) => {
+          {mobilePrimaryNavItems.filter((item) => canAccess(item.href === '/portal' ? 'overview' : item.href === '/portal/leads' ? 'leads' : item.href === '/portal/calendar' ? 'calendar' : 'messages')).map((item) => {
             const active = isActivePath(pathname, item.href, searchParams)
             return (
               <Link
@@ -868,7 +870,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {navItems.filter((item) => !mobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
+                {navItems.filter((item) => canAccess(item.permission as PortalPermission) && !mobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
                   const active = isActivePath(pathname, item.href, searchParams)
                   return (
                     <Link
@@ -884,10 +886,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme }:
                     </Link>
                   )
                 })}
-                <Link href="/portal/settings" onClick={() => setMobileMoreOpen(false)} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
+                {canAccess('settings') ? <Link href="/portal/settings" onClick={() => setMobileMoreOpen(false)} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
                   <Settings size={18} className="text-[#caa24c]" />
                   <span>Settings</span>
-                </Link>
+                </Link> : null}
                 <button type="button" onClick={() => { setMobileMoreOpen(false); setElenaOpen(true) }} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
                   <span className="relative inline-flex h-[22px] w-[22px] overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                     <Image src="/luxor-concierge.png" alt="Elena AI Assistant" fill sizes="22px" className="object-cover" />
