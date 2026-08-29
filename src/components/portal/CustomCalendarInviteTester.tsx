@@ -24,7 +24,7 @@ const DURATION_OPTIONS = [
 
 type ConfigResponse = {
   configured?: boolean
-  provider?: 'zoho-smtp' | 'resend-smtp'
+  provider?: 'zoho-smtp' | 'resend-api'
   activeProvider?: 'zoho' | 'resend'
   providers?: Partial<Record<'zoho' | 'resend', { configured: boolean }>>
   fromAddress?: string
@@ -141,7 +141,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
   }
 
   const providerReady = config?.providers?.[provider]?.configured ?? config?.configured === true
-  const providerLabel = provider === 'resend' ? 'Resend SMTP' : 'Zoho SMTP'
+  const providerLabel = provider === 'resend' ? 'Resend API' : 'Zoho SMTP'
 
   return (
     <section data-testid="calendar-invite-tester" className="luxor-glass-card min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 xl:col-span-2">
@@ -172,7 +172,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
           <div className="space-y-1.5">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Test delivery provider</p>
             <PortalSelect value={provider} disabled={config === null || busyAction !== null} onChange={(value) => { setProvider(value === 'resend' ? 'resend' : 'zoho'); setLastMessageId('') }}
-              options={[{ value: 'zoho', label: 'Zoho SMTP' }, { value: 'resend', label: 'Resend SMTP' }]} />
+              options={[{ value: 'zoho', label: 'Zoho SMTP' }, { value: 'resend', label: 'Resend API' }]} />
             <p className="text-[10px] leading-5 text-[color:var(--portal-muted)]">Normal mail still uses {config?.activeProvider === 'resend' ? 'Resend' : 'Zoho'}. A configured credential does not confirm domain verification or client compatibility.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">

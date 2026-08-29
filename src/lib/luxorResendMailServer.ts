@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { createHash, randomUUID } from 'node:crypto'
-import nodemailer from 'nodemailer'
 import { luxorMailAddress, luxorMailFrom } from './luxorMailConfig'
 import { luxorResendApi } from './luxorResendApiServer'
 import { prepareLuxorOutbox, saveLuxorMailAttachment, updateLuxorMailRow } from './luxorMailboxServer'
@@ -16,8 +15,7 @@ export type LuxorSendMailInput = {
 }
 
 export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
-  const key = process.env.RESEND_API_KEY?.trim()
-  if (!key) throw new Error('Missing RESEND_API_KEY on the server.')
+  if (!process.env.RESEND_API_KEY?.trim()) throw new Error('Missing RESEND_API_KEY on the server.')
   const from = luxorMailFrom(input.from)
   const to = luxorMailAddress(input.to)
   if (!to) throw new Error('Please add one valid recipient email address.')
@@ -39,7 +37,7 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
     inReplyTo: input.inReplyTo, references, calendar: input.calendar,
     attachments: attachments.map((a) => ({ filename: a.filename, type: a.contentType, hash: createHash('sha256').update(a.content).digest('hex') })) })).digest('hex')
   const row = await prepareLuxorOutbox({ from, to, subject, html, text, idempotencyKey, payloadHash,
-    smtpMessageId: Boolean(input.calendar),
+    smtpMessageId: false,
     threadId: input.threadId, references, metadata: { ...input.metadata,
       ...(idempotencyKey.startsWith('email-job/') || idempotencyKey.startsWith('agreement-job/') ? { emailJobId: idempotencyKey.split('/')[1] } : {}),
       hasAttachments: attachments.length > 0 || Boolean(input.calendar) } })
@@ -63,43 +61,31 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   let providerId: string | null = null
   let internetMessageId = row.internet_message_id
   try {
-    if (input.calendar) {
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.resend.com', port: 465, secure: true, auth: { user: 'resend', pass: key },
-        tls: { minVersion: 'TLSv1.2' }, connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 30_000,
-      })
-      try {
-        const receipt = await transporter.sendMail({ from: { name: fromName, address: from }, to, replyTo: from,
-          subject, text, html: html || undefined, messageId: row.internet_message_id || undefined, date: new Date(row.created_at),
-          headers: { ...headers, 'Content-Class': 'urn:content-classes:calendarmessage', 'Resend-Idempotency-Key': idempotencyKey },
-          // Keep the invitation as the calendar alternative of the message.
-          // Nodemailer's `icalEvent` convenience option also adds a downloadable
-          // `application/ics` attachment; Resend/Outlook then treat both parts as
-          // ordinary attachments instead of recognizing the meeting request.
-          alternatives: [{
-            content: input.calendar.content,
-            contentType: `text/calendar; method=${input.calendar.method}; charset=UTF-8`,
-            contentDisposition: 'inline',
-            headers: { 'Content-Class': 'urn:content-classes:calendarmessage' },
-          }],
-        })
-        if (!receipt.accepted?.length || receipt.rejected?.length) throw new Error('Resend did not accept the calendar invitation recipient.')
-        internetMessageId = receipt.messageId
-      } finally { transporter.close() }
-    } else {
-      const result = await luxorResendApi<{ id: string }>('/emails', { method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({ from: `${fromName} <${from}>`, to: [to], reply_to: from, subject,
-          text, ...(html ? { html } : {}), headers,
-          attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64'), content_type: a.contentType })),
-          tags: [{ name: 'luxor_message_id', value: row.id }],
-        }),
-      })
-      if (!result.id) throw new Error('Resend did not return a delivery identifier.')
-      providerId = result.id
-      // Resend assigns the final Message-ID; the sent webhook/retrieval reconciles it.
-      internetMessageId = null
-    }
+    const requestedCalendarFilename = input.calendar?.filename.replace(/[\\\r\n"]/g, '').trim()
+    const calendarFilename = input.calendar
+      ? (/\.ics$/i.test(requestedCalendarFilename || '')
+          ? requestedCalendarFilename!
+          : `${requestedCalendarFilename || 'luxor-event-space-invitation'}.ics`)
+      : null
+    const result = await luxorResendApi<{ id: string }>('/emails', { method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ from: `${fromName} <${from}>`, to: [to], reply_to: from, subject,
+        text, ...(html ? { html } : {}),
+        headers: input.calendar
+          ? { ...headers, 'Content-Class': 'urn:content-classes:calendarmessage',
+              'Content-Disposition': `attachment; filename="${calendarFilename}"` }
+          : headers,
+        attachments: input.calendar
+          ? [{ filename: calendarFilename, content: Buffer.from(input.calendar.content, 'utf8').toString('base64'),
+              content_type: `text/calendar; charset="UTF-8"; method=${input.calendar.method}` }]
+          : attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64'), content_type: a.contentType })),
+        tags: [{ name: 'luxor_message_id', value: row.id }],
+      }),
+    })
+    if (!result.id) throw new Error('Resend did not return a delivery identifier.')
+    providerId = result.id
+    // Resend assigns the final Message-ID; the sent webhook/retrieval reconciles it.
+    internetMessageId = null
   } catch (error) {
     // A transport timeout is not a provider rejection. A webhook may already
     // have confirmed delivery while this call was waiting for its response.

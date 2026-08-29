@@ -228,7 +228,7 @@ export async function sendLuxorCalendarInvite(input: LuxorCalendarInviteInput, p
 
 export function luxorCalendarInviteConfig(provider: LuxorMailProvider = luxorMailProvider()) {
   if (provider === 'resend') return {
-    configured: luxorResendConfigured(), provider: 'resend-smtp', fromAddress: LUXOR_ORGANIZER_EMAIL,
+    configured: luxorResendConfigured(), provider: 'resend-api', fromAddress: LUXOR_ORGANIZER_EMAIL,
     organizerEmail: LUXOR_ORGANIZER_EMAIL, timezone: LUXOR_TIMEZONE,
   }
   const smtpUser = normalizedEmail(process.env.LUXOR_ZOHO_SMTP_USER || '')
