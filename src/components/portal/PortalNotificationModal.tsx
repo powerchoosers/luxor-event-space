@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -175,7 +176,7 @@ export function PortalNotificationModal({
 
   const billingUnread = (unreadCountsByType?.invoice_paid || 0) + (unreadCountsByType?.checkout_opened || 0) + (unreadCountsByType?.bill_due || 0)
 
-  return (
+  const modal = (
     <AnimatePresence mode="wait">
       {isOpen && (
         <React.Fragment key="luxor-notification-center">
@@ -186,7 +187,7 @@ export function PortalNotificationModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="portal-modal-layer fixed inset-0 z-40 bg-black/50 backdrop-blur-xs sm:hidden"
+            className="portal-modal-layer fixed inset-0 z-[200] bg-black/50 backdrop-blur-xs sm:hidden"
             onClick={onClose}
           />
 
@@ -200,7 +201,7 @@ export function PortalNotificationModal({
             role="dialog"
             aria-modal="true"
             aria-label="Notifications"
-            className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[90] flex max-h-none w-auto flex-col overflow-hidden overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:max-h-[85vh] sm:w-[min(28rem,calc(100vw-2rem))]"
+            className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex max-h-none w-auto flex-col overflow-hidden overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:max-h-[85vh] sm:w-[min(28rem,calc(100vw-2rem))]"
           >
 
             {/* Modal Header */}
@@ -497,4 +498,6 @@ export function PortalNotificationModal({
       )}
     </AnimatePresence>
   )
+
+  return typeof document === 'undefined' ? null : createPortal(modal, document.body)
 }
