@@ -800,10 +800,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
         </div>
 
         <nav
-          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] lg:hidden ${
+          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
             portalTheme === 'light'
-              ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
-              : 'border-[#caa24c]/15 bg-[color:var(--portal-card)]/97 backdrop-blur-xl'
+              ? 'border-[color:var(--portal-border)] bg-[#fffdf9]/85'
+              : 'border-[#caa24c]/15 bg-[#080706]/85'
           }`}
           aria-label="Primary portal navigation"
         >
@@ -843,7 +843,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
-            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 lg:hidden"
+            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/45 px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -853,7 +853,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
               role="dialog"
               aria-modal="true"
               aria-label="More portal sections"
-              className="portal-sheet max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:max-w-xl"
+              className="portal-sheet max-h-[calc(100dvh-6.5rem-env(safe-area-inset-bottom))] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[#fffdf9]/95 p-4 shadow-2xl backdrop-blur-2xl dark:bg-[#12110f]/95 sm:max-w-xl"
               initial={reduceMotion ? false : { opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
