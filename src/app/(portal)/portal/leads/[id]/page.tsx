@@ -49,6 +49,7 @@ import {
   PartyPopper,
   Loader2,
   Upload,
+  Languages,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
@@ -115,6 +116,13 @@ function tourDisplayStatus(lead: LuxorInquiry) {
   if (lead.status === 'tour_confirmed') return 'Confirmed'
   if (lead.preferred_tour_date || lead.preferred_tour_time || lead.status === 'tour_requested') return 'Requested'
   return 'Not scheduled'
+}
+
+function getRequestedTourLanguage(lead: LuxorInquiry) {
+  const preference = String(lead.metadata?.tourLanguagePreference || '').trim().toLowerCase()
+  if (preference === 'es' || preference === 'spanish' || preference === 'español') return 'Spanish'
+  if (preference === 'en' || preference === 'english') return 'English'
+  return null
 }
 
 type LeadMarketingEvent = {
@@ -3562,6 +3570,7 @@ export default function LeadDetailPage({
   const displayEventType = activeEventForDisplay?.event_type || lead.event_type || 'Event'
   const displayEventDate = activeEventForDisplay?.target_date || lead.target_date
   const displayGuestCount = activeEventForDisplay?.guest_count ?? lead.guest_count
+  const requestedTourLanguage = getRequestedTourLanguage(lead)
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0">
@@ -3607,6 +3616,11 @@ export default function LeadDetailPage({
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+                {requestedTourLanguage ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
+                    <Languages size={12} /> {requestedTourLanguage}-speaking
+                  </span>
+                ) : null}
                 {lead.email && (
                   <div className="flex items-center gap-3">
                     <button
@@ -3712,6 +3726,15 @@ export default function LeadDetailPage({
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
               </p>
+              {requestedTourLanguage ? (
+                <div role="note" className="mt-3 flex max-w-xl items-start gap-2.5 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/8 px-3 py-2.5 text-xs text-[color:var(--portal-text)]">
+                  <Languages size={15} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
+                  <div>
+                    <p className="font-bold">{requestedTourLanguage}-speaking client</p>
+                    <p className="mt-0.5 leading-5 text-[color:var(--portal-muted)]">They requested their tour in {requestedTourLanguage}.</p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

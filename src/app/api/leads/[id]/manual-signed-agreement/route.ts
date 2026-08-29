@@ -8,6 +8,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { syncLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorDocument } from '@/lib/luxorInquiryTypes'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 
 export const runtime = 'nodejs'
 
@@ -59,6 +60,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       status: 'confirmed', contract_status: 'signed', contract_signed_at: uploadedAt,
       metadata: { ...booking.metadata, manual_signed_agreement_document_id: document.id, manual_signed_agreement_uploaded_at: uploadedAt, manual_signed_agreement_uploaded_by: session.email, reservation_state: 'awaiting_initial_payment' },
     }) || booking
+    if (booking.status !== 'confirmed' && signedBooking.status === 'confirmed') {
+      await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: signedBooking.id, inquiryId: inquiry.id })
+        .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+    }
     await syncLuxorPaymentInstallments({ booking: { ...signedBooking, created_at: uploadedAt }, invoice })
     await Promise.all([
       updateLuxorInquiry(inquiry.id, { status: 'booked', pipeline_stage: 'deposit', metadata: { ...inquiry.metadata, contract_signed_at: uploadedAt, contract_signature_method: 'manual_upload' } }),

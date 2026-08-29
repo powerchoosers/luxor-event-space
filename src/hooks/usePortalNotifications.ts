@@ -675,6 +675,9 @@ export function usePortalNotifications() {
           .on('broadcast', { event: 'contract-status' }, () => {
             void fetchNotifications(true)
           })
+          .on('broadcast', { event: 'booking-confirmed' }, () => {
+            void fetchNotifications(true)
+          })
           .on('broadcast', { event: 'layout-review-feedback' }, () => {
             void fetchNotifications(true)
           })

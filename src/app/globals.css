@@ -850,6 +850,24 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg, rgba(147, 197, 253, 1), rgba(37, 99, 235, 0.95));
   }
 
+  .portal-scrollbar-light {
+    scrollbar-color: #b98a3d #f8f1e6;
+  }
+
+  .portal-scrollbar-light::-webkit-scrollbar-track {
+    background: #f8f1e6;
+    border-left-color: #e6d6bd;
+  }
+
+  .portal-scrollbar-light::-webkit-scrollbar-thumb {
+    border-color: #f8f1e6;
+    background: linear-gradient(180deg, #d5ad57, #b98a3d);
+  }
+
+  .portal-scrollbar-light::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #c99b40, #9d722e);
+  }
+
   .portal-render-surface {
     content-visibility: auto;
     contain-intrinsic-size: auto 28rem;

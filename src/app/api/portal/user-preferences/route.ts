@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { safeProfileAvatarUrl } from '@/lib/luxorUserProfileServer'
 
@@ -19,9 +20,12 @@ export async function GET() {
     }
 
     const email = session.email.toLowerCase()
-    const preferences = await supabaseRest<UserPreferences[]>(
-      `luxor_user_preferences?email=eq.${encodeURIComponent(email)}&select=theme,notification_emails,display_name,role_title,avatar_url`
-    )
+    const [preferences, member] = await Promise.all([
+      supabaseRest<UserPreferences[]>(
+        `luxor_user_preferences?email=eq.${encodeURIComponent(email)}&select=theme,notification_emails,display_name,role_title,avatar_url`,
+      ),
+      getLuxorPortalMember(email),
+    ])
     const pref = preferences?.[0]
 
     return NextResponse.json({
@@ -31,6 +35,7 @@ export async function GET() {
       display_name: pref?.display_name || '',
       role_title: pref?.role_title || '',
       avatar_url: safeProfileAvatarUrl(pref?.avatar_url),
+      portal_role: member?.role || 'agent',
     })
   } catch (error) {
     console.error('Failed to get user theme preference:', error)

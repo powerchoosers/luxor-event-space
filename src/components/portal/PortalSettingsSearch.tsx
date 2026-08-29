@@ -111,7 +111,7 @@ function scoreItem(item: SettingsSearchItem, rawQuery: string) {
   return score
 }
 
-export function PortalSettingsSearch({ onSelect }: { onSelect: (tab: SettingsTab) => void }) {
+export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab: SettingsTab) => void; allowedTabs?: readonly SettingsTab[] }) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -121,12 +121,13 @@ export function PortalSettingsSearch({ onSelect }: { onSelect: (tab: SettingsTab
   const results = useMemo(() => {
     if (!query.trim()) return []
     return SETTINGS_SEARCH_ITEMS
+      .filter((item) => !allowedTabs || allowedTabs.includes(item.tab))
       .map((item) => ({ item, score: scoreItem(item, query) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title))
       .slice(0, 6)
       .map(({ item }) => item)
-  }, [query])
+  }, [allowedTabs, query])
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {

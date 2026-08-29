@@ -186,6 +186,14 @@ export async function POST(request: NextRequest) {
     await broadcastLuxorPortalNotification('contract-status', { signatureId: signature.id, status: signature.status })
       .catch((notificationError) => console.error('Agreement signature was saved, but portal notification failed:', notificationError))
 
+    const confirmedBooking = pendingSignature.status !== 'signed'
+      ? await getLuxorBooking(signature.booking_id)
+      : null
+    if (confirmedBooking?.status === 'confirmed') {
+      await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: confirmedBooking.id, inquiryId: confirmedBooking.inquiry_id })
+        .catch((notificationError) => console.error('Booking confirmation was saved, but portal notification failed:', notificationError))
+    }
+
     return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to submit signature.'

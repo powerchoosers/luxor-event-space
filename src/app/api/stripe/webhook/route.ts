@@ -13,6 +13,7 @@ import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { saveLuxorInvoicePdf } from '@/lib/luxorDocumentsServer'
 import { queueLuxorTransactionalNotice } from '@/lib/luxorTransactionalNoticeServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -227,6 +228,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           ...(kind === 'final' && luxorOnlyCollection ? { luxor_services_paid_at: paidAt, luxor_services_payment_invoice_id: invoice.id } : {}),
         },
       })
+      if (reservationConfirmed && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
+        await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
+          .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+      }
       if (finalPaymentScheduleMissing && inquiryId && !booking.metadata?.final_payment_schedule_configuration_required_at) {
         await createNote(
           inquiryId,

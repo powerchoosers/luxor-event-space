@@ -13,6 +13,7 @@ import { getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerp
 import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 
 function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
   return Boolean(
@@ -279,6 +280,10 @@ export async function PATCH(request: NextRequest) {
       ...(updates.security_deposit_amount === undefined ? {} : { security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT }),
     }
     let booking = await updateLuxorBooking(id, normalizedUpdates)
+    if (booking?.status === 'confirmed' && existing.status !== 'confirmed') {
+      await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: booking.id, inquiryId: booking.inquiry_id })
+        .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+    }
     if (booking) {
       const activeAgreement = await getActiveLuxorSignatureRequestByBooking(booking.id)
       const currentFingerprint = getLuxorBookingContractFingerprint(booking)

@@ -14,6 +14,8 @@ const NATIVE_SCROLL_SELECTOR = [
   'textarea',
 ].join(',')
 
+const SCROLL_LOCK_SELECTOR = '[data-scroll-lock]'
+
 function isScrollable(element: Element, deltaY: number) {
   if (!(element instanceof HTMLElement) || deltaY === 0) return false
   const style = window.getComputedStyle(element)
@@ -31,6 +33,10 @@ function findNativeScroller(event: Event, deltaY: number) {
   return null
 }
 
+function locksPageScroll(event: Event) {
+  return event.composedPath().some((item) => item instanceof HTMLElement && item.matches(SCROLL_LOCK_SELECTOR))
+}
+
 /**
  * Smooth page-level scrolling with explicit native-panel handoff.
  * Reduced-motion users retain the browser's native behavior.
@@ -46,7 +52,7 @@ export function SmoothScroll() {
       smoothWheel: true,
       allowNestedScroll: false,
       prevent: (node) => node.matches(NATIVE_SCROLL_SELECTOR),
-      virtualScroll: ({ deltaY, event }) => findNativeScroller(event, deltaY) === null,
+      virtualScroll: ({ deltaY, event }) => !locksPageScroll(event) && findNativeScroller(event, deltaY) === null,
       stopInertiaOnNavigate: true,
     })
 

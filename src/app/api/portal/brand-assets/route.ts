@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+
+async function canManageBrandAssets() {
+  const session = await getLuxorPortalSession()
+  const member = session ? await getLuxorPortalMember(session.email) : null
+  return Boolean(member && member.role !== 'agent' && memberCan(member, 'settings'))
+}
 
 export async function GET() {
   try {
-    const session = await getLuxorPortalSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
-    }
+    if (!await canManageBrandAssets()) return NextResponse.json({ error: 'Brand assets are managed by an administrator.' }, { status: 403 })
 
     const assets = await supabaseRest<Array<{
       id: string
@@ -28,10 +32,7 @@ export async function GET() {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getLuxorPortalSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
-    }
+    if (!await canManageBrandAssets()) return NextResponse.json({ error: 'Brand assets are managed by an administrator.' }, { status: 403 })
 
     const id = request.nextUrl.searchParams.get('id')
     if (!id) {

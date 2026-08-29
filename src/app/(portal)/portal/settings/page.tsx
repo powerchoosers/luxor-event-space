@@ -121,6 +121,30 @@ const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string }> = {
   content: { title: 'Site content', description: 'Edit the information guests see across the public Luxor website.' },
 }
 
+const AGENT_TABS: Tab[] = ['team', 'notifications', 'branding']
+
+const AGENT_SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[] }> = [
+  {
+    label: 'Your account',
+    items: [
+      { id: 'team', label: 'My profile', description: 'Your name, photo, and email identity', icon: <UserRound size={16} /> },
+    ],
+  },
+  {
+    label: 'Preferences',
+    items: [
+      { id: 'notifications', label: 'Notifications', description: 'Alerts on this device', icon: <Bell size={16} /> },
+      { id: 'branding', label: 'Appearance', description: 'Theme and navigation layout', icon: <Image size={16} /> },
+    ],
+  },
+]
+
+const AGENT_TAB_COPY: Partial<Record<Tab, { title: string; description: string }>> = {
+  team: { title: 'My profile', description: 'Keep your personal profile and email identity up to date.' },
+  notifications: { title: 'Notifications', description: 'Choose how Luxor alerts you on this device.' },
+  branding: { title: 'Appearance', description: 'Choose the workspace theme and navigation layout you prefer.' },
+}
+
 type BrandAsset = {
   id: string
   name: string
@@ -132,8 +156,9 @@ type BrandAsset = {
 
 export default function SettingsPage() {
   const { notify } = useToast()
-  const [activeTab, setActiveTab] = useState<Tab>('business')
+  const [activeTab, setActiveTab] = useState<Tab>('team')
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
+  const [portalRole, setPortalRole] = useState<'owner' | 'admin' | 'agent'>('agent')
   const [saving, setSaving] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [sidebarLayout, setSidebarLayout] = useState<'expanded' | 'compact'>('expanded')
@@ -168,6 +193,10 @@ export default function SettingsPage() {
         setDisplayName(typeof data.display_name === 'string' ? data.display_name : '')
         setRoleTitle(typeof data.role_title === 'string' ? data.role_title : '')
         setAvatarUrl(typeof data.avatar_url === 'string' ? data.avatar_url : null)
+        if (data.portal_role === 'owner' || data.portal_role === 'admin' || data.portal_role === 'agent') {
+          setPortalRole(data.portal_role)
+          if (data.portal_role !== 'agent') setActiveTab((current) => current === 'team' ? 'business' : current)
+        }
       })
       .catch(err => console.error('Failed to sync settings from Supabase:', err))
   }, [])
@@ -217,9 +246,11 @@ export default function SettingsPage() {
   const [previewAsset, setPreviewAsset] = useState<BrandAsset | null>(null)
   const [assetPage, setAssetPage] = useState(1)
 
+  const isAgent = portalRole === 'agent'
+
   useEffect(() => {
-    void fetchAssets()
-  }, [])
+    if (!isAgent) void fetchAssets()
+  }, [isAgent])
 
   const fetchAssets = async () => {
     try {
@@ -331,10 +362,12 @@ export default function SettingsPage() {
   const ASSETS_PER_PAGE = 6
   const assetPageCount = Math.max(1, Math.ceil(assets.length / ASSETS_PER_PAGE))
   const visibleAssets = assets.slice((assetPage - 1) * ASSETS_PER_PAGE, assetPage * ASSETS_PER_PAGE)
-  const activeSettingsItem = SETTINGS_NAVIGATION.flatMap((group) => group.items).find((item) => item.id === activeTab)
-  const activeSettingsCopy = SETTINGS_TAB_COPY[activeTab]
+  const settingsNavigation = isAgent ? AGENT_SETTINGS_NAVIGATION : SETTINGS_NAVIGATION
+  const activeSettingsItem = settingsNavigation.flatMap((group) => group.items).find((item) => item.id === activeTab)
+  const activeSettingsCopy = (isAgent ? AGENT_TAB_COPY[activeTab] : undefined) || SETTINGS_TAB_COPY[activeTab]
 
   const selectSettingsTab = (tab: Tab) => {
+    if (isAgent && !AGENT_TABS.includes(tab)) return
     setActiveTab(tab)
     setIsSettingsMenuOpen(false)
   }
@@ -370,20 +403,26 @@ export default function SettingsPage() {
       />
 
       <div className="space-y-3">
-        <PortalSettingsSearch onSelect={selectSettingsTab} />
+        <PortalSettingsSearch onSelect={selectSettingsTab} allowedTabs={isAgent ? AGENT_TABS : undefined} />
         <div className="hidden items-center gap-x-5 gap-y-2 text-xs sm:flex">
           <span className="border-r border-[color:var(--portal-border)] pr-5 font-semibold text-[color:var(--portal-muted)]">Common tasks</span>
-          <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
-          <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
-          <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
-          <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
+          {isAgent ? <>
+            <button type="button" onClick={() => selectSettingsTab('team')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update my profile</button>
+            <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage my alerts</button>
+            <button type="button" onClick={() => selectSettingsTab('branding')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Change appearance</button>
+          </> : <>
+            <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
+            <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
+            <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
+            <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
+          </>}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 gap-6">
         <aside className="hidden w-56 shrink-0 self-start rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-sm md:sticky md:top-0 md:block md:max-h-[calc(100dvh-11rem)] md:overflow-y-auto lg:w-64">
           <nav aria-label="Settings categories" className="space-y-6">
-            {SETTINGS_NAVIGATION.map((group) => (
+            {settingsNavigation.map((group) => (
               <section key={group.label} aria-labelledby={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`}>
                 <h2 id={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`} className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h2>
                 <div className="space-y-1">
@@ -475,7 +514,7 @@ export default function SettingsPage() {
           {activeTab === 'branding' && (
             <div className="grid gap-6 xl:grid-cols-2">
               {/* Style Guide */}
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              {!isAgent ? <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Branding & Style Guide</h3>
                 <div className="space-y-4 text-xs text-[color:var(--portal-muted)]">
                   <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
@@ -498,10 +537,10 @@ export default function SettingsPage() {
                     <p className="text-[9px] text-[color:var(--portal-faint)]">Display only. Public-site copy is managed in Site Content.</p>
                   </div>
                 </div>
-              </div>
+              </div> : null}
 
               {/* Appearance Settings */}
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              <div className={`luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-4 ${isAgent ? 'xl:col-span-2' : ''}`}>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Workspace Appearance</h3>
                 <div className="space-y-3">
                   <p className="text-xs text-[color:var(--portal-muted)]">Choose your portal theme and the navigation layout you want while working.</p>
@@ -552,7 +591,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Brand Assets Manager */}
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 xl:col-span-2">
+              {!isAgent ? <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 xl:col-span-2">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Brand Assets Manager</h3>
                   <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
@@ -712,7 +751,7 @@ export default function SettingsPage() {
                 </div>
                 <BrandAssetLightbox asset={previewAsset} onClose={() => setPreviewAsset(null)} />
 
-              </div>
+              </div> : null}
             </div>
           )}
 
@@ -720,15 +759,15 @@ export default function SettingsPage() {
           {activeTab === 'notifications' && (
             <div className="grid gap-6 xl:grid-cols-2">
               <PortalPushNotifications />
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              {!isAgent ? <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Automated Notifications</h3>
                 <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                   <p className="text-xs font-bold text-[color:var(--portal-text)]">New inquiry alerts use the configured email provider and are saved in the delivery queue.</p>
                   <p className="mt-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">Tour emails can be queued from the calendar and client dossier. General reminder switches are hidden until each automation has a saved setting and a verified delivery job.</p>
                 </div>
-              </div>
+              </div> : null}
 
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+              {!isAgent ? <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Internal Notification Recipients</h3>
                 <div className="space-y-4">
                   <p className="text-xs text-[color:var(--portal-muted)]">Configure target email addresses to receive branded alerts and AI-summarized dossiers when inquiries are submitted.</p>
@@ -743,7 +782,7 @@ export default function SettingsPage() {
                     />
                   </div>
                 </div>
-              </div>
+              </div> : null}
             </div>
           )}
 
@@ -791,12 +830,18 @@ export default function SettingsPage() {
                   <span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Signed-in Email</span>
                   <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-muted)]">{profileEmail || 'Loading...'}</div>
                 </label>
-                <PortalPhoneRoleSettings mode="profile" />
+                {!isAgent ? <PortalPhoneRoleSettings mode="profile" /> : (
+                  <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Call access</p>
+                    <p className="mt-1.5 text-xs font-semibold text-[color:var(--portal-text)]">Your CRM calling access is managed by an administrator.</p>
+                    <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Ask an administrator if you need a different assigned phone line.</p>
+                  </div>
+                )}
               </div>
 
-              <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
+              {!isAgent ? <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
                 <TeamAccessManager />
-              </div>
+              </div> : null}
             </div>
           )}
 
@@ -894,7 +939,7 @@ export default function SettingsPage() {
           </PortalTabTransition>
 
           {/* Submit button */}
-          {(activeTab === 'notifications' || activeTab === 'team') && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
+          {(activeTab === 'team' || (!isAgent && activeTab === 'notifications')) && <div className="pt-4 border-t border-[color:var(--portal-border)] flex justify-end">
             <button
               type="submit"
               disabled={saving}
@@ -942,7 +987,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
                   <nav aria-label="Settings categories" className="space-y-5">
-                    {SETTINGS_NAVIGATION.map((group) => (
+                    {settingsNavigation.map((group) => (
                       <section key={group.label}>
                         <h3 className="mb-1 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h3>
                         <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">

@@ -177,7 +177,8 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     }
   }
 
-  if (created?.email && created.preferred_tour_date) {
+  const autoScheduleTour = created?.metadata?.autoScheduleTour === true
+  if (created?.email && created.preferred_tour_date && !autoScheduleTour) {
     try {
       const token = created.tour_response_token || createPublicToken()
       await updateLuxorInquiry(created.id, { tour_response_token: token })

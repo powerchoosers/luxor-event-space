@@ -18,6 +18,7 @@ import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -215,8 +216,12 @@ export async function POST(request: NextRequest) {
             final_payment_recorded_manually_at: booking.metadata?.final_payment_recorded_manually_at || now,
             final_payment_invoice_id: invoice.id,
           },
-        }
+      }
       const updatedBooking = await updateLuxorBooking(booking.id, bookingUpdate)
+      if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
+        await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
+          .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+      }
       return NextResponse.json({ invoice, booking: updatedBooking || booking, alreadyPaid: true })
     }
 
@@ -293,6 +298,11 @@ export async function POST(request: NextRequest) {
           final_payment_invoice_id: invoice.id,
         },
       })
+
+    if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
+      await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
+        .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+    }
 
     if (inquiryId) {
       if (inquiry) {

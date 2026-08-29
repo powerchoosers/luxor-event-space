@@ -947,11 +947,12 @@ export function PortalSelect({
                 ref={dropdownRef}
                 role="listbox"
                 data-portal-popover="true"
+                data-scroll-lock="true"
                 initial={{ opacity: 0, y: -8, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className={`portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
+                className={`portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto overscroll-contain rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,

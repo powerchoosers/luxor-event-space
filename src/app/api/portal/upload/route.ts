@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export async function POST(request: NextRequest) {
@@ -21,6 +22,13 @@ export async function POST(request: NextRequest) {
     const category = formData.get('category') as string | null
     const makeBrandAsset = formData.get('makeBrandAsset') === 'true'
     const profileImage = formData.get('profileImage') === 'true'
+
+    if (makeBrandAsset) {
+      const member = await getLuxorPortalMember(session.email)
+      if (!member || member.role === 'agent' || !memberCan(member, 'settings')) {
+        return NextResponse.json({ error: 'Brand assets are managed by an administrator.' }, { status: 403 })
+      }
+    }
 
     if (!file || typeof file.arrayBuffer !== 'function') {
       return NextResponse.json({ error: 'No valid file uploaded.' }, { status: 400 })

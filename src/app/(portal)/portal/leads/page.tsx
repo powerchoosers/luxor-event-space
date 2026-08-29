@@ -27,6 +27,7 @@ import {
   ArrowDown,
   LayoutGrid,
   List,
+  Languages,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -104,6 +105,13 @@ type ClientSortKey = 'name' | 'event' | 'guests' | 'targetDate'
 type SortDirection = 'asc' | 'desc'
 type TableSort<Key extends string> = { key: Key; direction: SortDirection }
 type ScheduledTourCategory = 'today' | 'upcoming' | 'past'
+
+function getRequestedTourLanguage(lead: LuxorInquiry) {
+  const preference = String(lead.metadata?.tourLanguagePreference || '').trim().toLowerCase()
+  if (preference === 'es' || preference === 'spanish' || preference === 'español') return 'Spanish'
+  if (preference === 'en' || preference === 'english') return 'English'
+  return null
+}
 
 const DEFAULT_LEAD_SORT: TableSort<LeadSortKey> = { key: 'intake', direction: 'desc' }
 const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direction: 'asc' }
@@ -695,7 +703,7 @@ export default function LeadsPage() {
           }
         >
           <div className="hidden overflow-x-auto md:block">
-          <PortalStickyTable minWidth="1060px">
+          <PortalStickyTable minWidth="1170px">
             <PortalStickyThead>
               <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
                 <th className="w-14 px-4 py-3.5 text-center">
@@ -704,6 +712,7 @@ export default function LeadsPage() {
                 <SortableHeader label="Full Name & Contact" sortKey="name" sort={leadSort} onSort={updateLeadSort} className="min-w-[255px]" />
                 <SortableHeader label="Step" sortKey="stage" sort={leadSort} onSort={updateLeadSort} className="min-w-[190px]" />
                 <SortableHeader label="Event Parameters" sortKey="event" sort={leadSort} onSort={updateLeadSort} className="min-w-[185px]" />
+                <th scope="col" className="min-w-[120px] whitespace-nowrap px-4 py-3.5">Language</th>
                 <SortableHeader label="Intake Date" sortKey="intake" sort={leadSort} onSort={updateLeadSort} className="min-w-[145px]" />
                 <SortableHeader label="Source Node" sortKey="source" sort={leadSort} onSort={updateLeadSort} className="min-w-[150px]" />
                 <th scope="col" className="min-w-[235px] whitespace-nowrap px-8 py-3.5 text-right">Engagement &amp; Actions</th>
@@ -711,16 +720,16 @@ export default function LeadsPage() {
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
               {loading ? (
-                <PortalTableSkeleton cols={7} rows={6} />
+                <PortalTableSkeleton cols={8} rows={6} />
               ) : error ? (
                 <tr>
-                  <td colSpan={7} className="px-8 py-12 text-sm text-red-300">
+                  <td colSpan={8} className="px-8 py-12 text-sm text-red-300">
                     {error}
                   </td>
                 </tr>
               ) : sortedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-8 py-12 text-sm text-zinc-500">
+                  <td colSpan={8} className="px-8 py-12 text-sm text-zinc-500">
                     <div className="max-w-xl">
                       <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
                       <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
@@ -776,6 +785,15 @@ export default function LeadsPage() {
                             ? `${lead.guest_count} guests`
                             : 'Guest count needed'}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {getRequestedTourLanguage(lead) === 'Spanish' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a]">
+                          <Languages size={12} /> Spanish
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || '—'}</span>
+                      )}
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-start flex-col">
@@ -1874,6 +1892,14 @@ function MobileLeadCard({
         <div className="min-w-0">
           <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p>
           <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Language</p>
+          {getRequestedTourLanguage(lead) === 'Spanish' ? (
+            <p className="mt-1 inline-flex items-center gap-1 font-semibold text-[#a8792f] dark:text-[#f1d27a]"><Languages size={12} /> Spanish</p>
+          ) : (
+            <p className="mt-1 truncate font-medium text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || 'Not specified'}</p>
+          )}
         </div>
       </div>
 
