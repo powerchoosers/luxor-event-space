@@ -547,7 +547,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                           className="fixed inset-0 z-40" 
                           onClick={() => setShowClientDropdown(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl portal-scrollbar">
+                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[#fffdf9]/95 p-1.5 shadow-2xl backdrop-blur-2xl portal-scrollbar dark:bg-[#12110f]/95">
                           {allInquiries.filter(inq => 
                             inq.full_name.toLowerCase().includes(toAddress.toLowerCase()) ||
                             (inq.email && inq.email.toLowerCase().includes(toAddress.toLowerCase()))
