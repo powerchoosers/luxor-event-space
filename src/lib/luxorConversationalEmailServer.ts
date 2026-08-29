@@ -132,7 +132,7 @@ export function buildConversationalEmailHtml(params: ConversationalEmailParams):
                 <tr>
                   <td align="center" style="text-align:center;">
                     <span class="luxor-logo" style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:500;letter-spacing:0.18em;color:#9f742b;text-transform:uppercase;">LUXOR</span>
-                    <span style="display:block;font-family:Arial,'Helvetica Neue',sans-serif;font-size:8px;font-weight:600;letter-spacing:0.34em;color:#8b8175;text-transform:uppercase;margin-top:3px;">EVENT SPACE</span>
+                    <span style="display:block;font-family:Arial,'Helvetica Neue',sans-serif;font-size:8px;font-weight:600;letter-spacing:0.34em;color:#8b8175;text-transform:uppercase;margin-top:3px;">AT LAS PALMAS EVENTS</span>
                     <a href="${visitUrl}" target="_blank" style="display:inline-block;margin-top:13px;font-family:Arial,'Helvetica Neue',sans-serif;font-size:9px;font-weight:700;color:#9f742b;text-decoration:none;letter-spacing:0.13em;text-transform:uppercase;">Book A Private Tour</a>
                   </td>
                 </tr>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Mail,
@@ -53,6 +53,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const [isExpanded, setIsExpanded] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
+  const [canSplitCompose, setCanSplitCompose] = useState(false)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
+    const updateSplitLayout = () => setCanSplitCompose(mediaQuery.matches)
+    updateSplitLayout()
+    mediaQuery.addEventListener('change', updateSplitLayout)
+    return () => mediaQuery.removeEventListener('change', updateSplitLayout)
+  }, [])
 
   useEffect(() => {
     if (isOpen) setIsClosing(false)
@@ -67,20 +76,25 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const containerRef = React.useRef<HTMLDivElement>(null)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
 
+  const fitPreviewToContainer = useCallback(() => {
+    const width = containerRef.current?.clientWidth
+    if (width) setZoomLevel(Math.min(1, Math.max(0.2, width / 600)))
+  }, [])
+
   useEffect(() => {
     if (zoomMode !== 'fit' || !containerRef.current) return
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const width = entry.contentRect.width
-        if (width > 0) {
-          const scale = Math.min(1, width / 600)
-          setZoomLevel(scale)
-        }
+        if (entry.contentRect.width > 0) fitPreviewToContainer()
       }
     })
     resizeObserver.observe(containerRef.current)
-    return () => resizeObserver.disconnect()
-  }, [zoomMode, activeTab, isExpanded])
+    const animationFrame = requestAnimationFrame(fitPreviewToContainer)
+    return () => {
+      cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+    }
+  }, [zoomMode, activeTab, isExpanded, canSplitCompose, fitPreviewToContainer])
 
   // Form Fields
   const [fromAddress, setFromAddress] = useState('booking@luxoratlaspalmas.com')
@@ -406,13 +420,21 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
     }
   }
 
+  // Portrait tablets use one focused workspace at a time. The split editor and
+  // preview needs a desktop-width canvas to keep both surfaces useful.
+  const showSplitPreview = isExpanded && canSplitCompose
+
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
-    fixed right-6 bottom-0 z-50
+    fixed right-2 bottom-16 z-50 sm:right-4 sm:bottom-0 lg:right-6
     flex flex-col
     bg-[color:var(--portal-card)] border border-[#caa24c]/30 rounded-t-2xl shadow-2xl backdrop-blur-xl
     transition-[width,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
-    ${isMinimized ? 'h-12 w-[380px]' : isExpanded ? 'h-[85vh] w-[960px]' : 'h-[600px] w-[540px]'}
+    ${isMinimized
+      ? 'h-12 w-[min(380px,calc(100vw-1rem))]'
+      : isExpanded
+        ? 'h-[calc(100dvh-5rem)] w-[calc(100vw-1rem)] sm:h-[calc(100dvh-2rem)] sm:w-[min(960px,calc(100vw-2rem))]'
+        : 'h-[min(600px,calc(100dvh-5rem))] w-[calc(100vw-1rem)] sm:h-[min(600px,calc(100dvh-1rem))] sm:w-[min(540px,calc(100vw-2rem))]'}
   `
 
   return (
@@ -458,11 +480,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
       {/* Main Drawer Body (Hidden if minimized) */}
       {!isMinimized && (
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
           {/* Main Edit Form */}
-          <div className={`flex flex-col flex-1 min-w-0 p-4 space-y-3 ${!isExpanded && activeTab === 'preview' ? 'hidden' : ''}`}>
+          <div className={`flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto p-3 portal-scrollbar sm:p-4 ${showSplitPreview || activeTab === 'edit' ? '' : 'hidden'}`}>
             {/* Senders and Recipients */}
-            <div className="grid grid-cols-2 gap-3 shrink-0">
+            <div className="grid shrink-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">From Name</label>
                 <input
@@ -483,7 +505,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 shrink-0">
+            <div className="grid shrink-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2">
               <div className="space-y-1 relative">
                 <div className="flex items-center justify-between">
                   <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">To (Client)</label>
@@ -681,11 +703,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             </div>
 
             {/* Editor Workspace */}
-            <div className="flex-1 min-h-0 flex flex-col space-y-1">
+            <div className="flex min-h-[250px] flex-1 flex-col space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Message Content</label>
                 {/* Visual tabs on standard sizing */}
-                {!isExpanded && (
+                {!showSplitPreview && (
                   <div className="flex rounded-lg border border-[color:var(--portal-border)] bg-black/20 p-0.5">
                     <button
                       type="button"
@@ -1026,14 +1048,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
           {/* Right Side Live HTML Preview (Always visible in expanded mode, or toggled on in default size) */}
           <AnimatePresence initial={false}>
-          {(isExpanded || activeTab === 'preview') && (
+          {(showSplitPreview || activeTab === 'preview') && (
             <motion.div
-              key={isExpanded ? 'expanded-preview' : 'drawer-preview'}
+              key={showSplitPreview ? 'expanded-preview' : 'drawer-preview'}
               initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 18 }}
               animate={{ opacity: 1, x: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
               transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-              className={`flex flex-col ${isExpanded ? 'w-[440px] border-l border-[color:var(--portal-border)]' : 'flex-1'} min-w-0 bg-[color:var(--portal-card)] p-4`}
+              className={`flex min-h-0 flex-col ${showSplitPreview ? 'w-1/2 max-w-[560px] shrink-0 border-l border-[color:var(--portal-border)]' : 'flex-1'} min-w-0 bg-[color:var(--portal-card)] p-3 sm:p-4`}
             >
               <div className="mb-2 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-1.5">
@@ -1043,7 +1065,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 
                 {/* Zoom Controls */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {!isExpanded && (
+                  {!showSplitPreview && (
                     <button
                       type="button"
                       onClick={() => setActiveTab('edit')}
@@ -1083,6 +1105,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     type="button"
                     onClick={() => {
                       setZoomMode('fit')
+                      fitPreviewToContainer()
                     }}
                     className={`px-1 py-0.5 text-[8px] font-black uppercase tracking-wider rounded transition-colors cursor-pointer ${
                       zoomMode === 'fit'
@@ -1130,7 +1153,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
       {/* Action Footer (Hidden if minimized) */}
       {!isMinimized && (
-        <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shrink-0">
+        <div className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between sm:p-4">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -1145,7 +1168,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             </label>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 min-[480px]:justify-end min-[480px]:gap-3">
             {errorMsg && (
               <div className="flex items-center gap-1 text-red-400 text-[10px] font-semibold bg-red-950/20 border border-red-900/35 rounded px-2.5 py-1 max-w-[240px] truncate">
                 <AlertCircle size={11} className="shrink-0" />
