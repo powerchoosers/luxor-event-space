@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
@@ -8,6 +8,8 @@ import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityMan
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import { useToast } from '@/components/portal/ToastProvider'
 
 type CalendarPayload = {
   tours: LuxorInquiry[]
@@ -23,8 +25,9 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const { notify } = useToast()
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -37,11 +40,41 @@ export default function CalendarPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadData()
-  }, [])
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+
+    let refreshTimer: number | null = null
+    const scheduleRefresh = () => {
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadData()
+        notify({ title: 'Calendar updated.', variant: 'success' })
+      }, 250)
+    }
+
+    const channel = supabase
+      .channel('luxor-calendar-realtime-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_inquiries' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_tour_slots' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_bookings' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_tasks' }, scheduleRefresh)
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Calendar realtime channel entered ${status}.`)
+      })
+
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [loadData, notify])
 
   const updateAttendance = async (tour: LuxorInquiry, attendance: string) => {
     try {
@@ -212,9 +245,6 @@ export default function CalendarPage() {
                 Booked Events
               </button>
             </div>
-            <PortalButton onClick={loadData}>
-              <RefreshCw size={13} /> Refresh
-            </PortalButton>
           </div>
         }
       />
