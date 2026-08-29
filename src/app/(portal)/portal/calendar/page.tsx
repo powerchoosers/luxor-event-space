@@ -254,15 +254,13 @@ export default function CalendarPage() {
       ) : null}
 
       {activeCalendar === 'tours' ? (
-        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl sm:p-5">
-          <TourAvailabilityManager
-            title="Publish tour availability"
-            description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
-            publishLabel="Open selected dates"
-            defaultExpanded={false}
-            onUpdated={loadData}
-          />
-        </section>
+        <TourAvailabilityManager
+          title="Publish tour availability"
+          description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
+          publishLabel="Open selected dates"
+          defaultExpanded={false}
+          onUpdated={loadData}
+        />
       ) : null}
 
       {loading ? (
@@ -279,14 +277,14 @@ export default function CalendarPage() {
         </div>
       ) : activeCalendar === 'tours' ? (
         <PortalCalendar
-          title={`${data.tours.length} tour requests / ${taskItems.length} dated tasks / ${data.slots.length} published slots`}
+          title="Tours & tasks"
           items={[...tourItems, ...taskItems]}
           view={view}
           onViewChange={setView}
           dayStatuses={tourDayStatuses}
         />
       ) : (
-        <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />
+        <PortalCalendar title="Booked events" items={eventItems} view={view} onViewChange={setView} />
       )}
     </PortalPageFrame>
   )

@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import React from 'react'
 import { PortalModal } from './PortalUI'
 
-export type PortalCalendarView = 'month' | 'week' | 'day'
+export type PortalCalendarView = 'month' | 'week' | 'day' | 'schedule'
 
 export type PortalCalendarItem = {
   id: string
@@ -33,6 +33,7 @@ function addDays(date: Date, days: number) {
 }
 
 function getVisibleDays(anchor: Date, view: PortalCalendarView) {
+  if (view === 'schedule') return []
   if (view === 'day') return [anchor]
 
   if (view === 'week') {
@@ -48,12 +49,13 @@ function getVisibleDays(anchor: Date, view: PortalCalendarView) {
 function moveAnchor(anchor: Date, view: PortalCalendarView, direction: -1 | 1) {
   const next = new Date(anchor)
   if (view === 'month') next.setMonth(anchor.getMonth() + direction)
-  if (view === 'week') next.setDate(anchor.getDate() + direction * 7)
+  if (view === 'week' || view === 'schedule') next.setDate(anchor.getDate() + direction * 7)
   if (view === 'day') next.setDate(anchor.getDate() + direction)
   return next
 }
 
 function formatRange(anchor: Date, view: PortalCalendarView) {
+  if (view === 'schedule') return 'Upcoming schedule'
   if (view === 'month') {
     return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(anchor)
   }
@@ -103,7 +105,7 @@ export function PortalCalendar({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-            {(['month', 'week', 'day'] as const).map((option) => (
+            {(['month', 'week', 'day', 'schedule'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -128,31 +130,35 @@ export function PortalCalendar({
         </div>
       </div>
 
-      <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-4">
-        <div className={`grid gap-3 ${view === 'day' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-7'} ${view === 'month' ? 'min-w-[52rem]' : ''}`}>
+      <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-3 sm:p-4">
+        {view === 'schedule' ? (
+          <ScheduleView items={items} onSelectItem={setSelectedItem} />
+        ) : (
+        <div className={`grid overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] gap-px ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7' : 'grid-cols-1 sm:grid-cols-7'}`}>
           {visibleDays.map((day) => {
             const iso = toIsoDate(day)
             const dayItems = itemsByDate[iso] || []
             const outsideMonth = view === 'month' && day.getMonth() !== anchor.getMonth()
-            const visibleItems = dayItems
+            const visibleItems = view === 'month' ? dayItems.slice(0, 2) : dayItems
+            const hiddenItemCount = dayItems.length - visibleItems.length
             const isToday = iso === todayIso
 
             return (
               <div
                 key={iso}
                 aria-label={`${formatDayHeading(iso)}${isToday ? ', today' : ''}`}
-                className={`flex h-[15rem] min-h-[15rem] flex-col rounded-xl border p-3 transition-colors duration-150 ${isToday ? 'border-[#caa24c] bg-[#caa24c]/[0.07] shadow-[0_0_0_1px_rgba(202,162,76,0.18)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/40'} ${outsideMonth ? 'opacity-45' : ''}`}
+                className={`flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'month' ? 'h-28 min-h-28 sm:h-40 sm:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] sm:text-[10px]">
                       {new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(day)}
                     </p>
                     {view !== 'day' ? (
                       <button
                         type="button"
                         onClick={() => setSelectedDay(iso)}
-                        className="mt-1 text-left font-mono text-sm font-bold text-[color:var(--portal-text)] hover:text-[#f1d27a]"
+                        className="mt-0.5 text-left font-mono text-xs font-bold text-[color:var(--portal-text)] hover:text-[#a8792f] sm:mt-1 sm:text-sm"
                       >
                         {day.getDate()}
                       </button>
@@ -160,17 +166,15 @@ export function PortalCalendar({
                       <p className="mt-1 font-mono text-sm font-bold text-[color:var(--portal-text)]">{day.getDate()}</p>
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                    {isToday ? <span className="rounded bg-[#caa24c]/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#a8792f]">Today</span> : null}
+                    {isToday ? <span className="hidden rounded bg-[#caa24c]/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#a8792f] sm:inline">Today</span> : null}
                     {dayStatuses ? (
-                      <p title={dayStatuses[iso] === 'open' ? 'At least one public tour time is available.' : 'No public tour times are currently available. This does not mean the venue is closed.'} className={`text-[9px] font-black uppercase tracking-wider ${dayStatuses[iso] === 'open' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                        {dayStatuses[iso] === 'open' ? 'TOUR TIMES OPEN' : 'NO TOUR TIMES'}
-                      </p>
+                      view === 'day' ? <p title={dayStatuses[iso] === 'open' ? 'At least one public tour time is available.' : 'No public tour times are currently available. This does not mean the venue is closed.'} className={`text-[9px] font-black uppercase tracking-wider ${dayStatuses[iso] === 'open' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{dayStatuses[iso] === 'open' ? 'TOUR TIMES OPEN' : 'NO TOUR TIMES'}</p> : <span title={dayStatuses[iso] === 'open' ? 'Public tour times are available.' : 'No public tour times are available.'} className={`h-1.5 w-1.5 rounded-full ${dayStatuses[iso] === 'open' ? 'bg-emerald-500' : 'bg-[color:var(--portal-faint)]'}`} />
                     ) : null}
                     </div>
                   </div>
                   <span aria-hidden="true" className="h-6 w-2" />
                 </div>
-                <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
+                <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-1 sm:mt-3 sm:gap-2">
                   {dayItems.length === 0 && !dayStatuses ? (
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--portal-faint)]">No items</p>
                   ) : dayItems.length > 0 ? (
@@ -181,20 +185,22 @@ export function PortalCalendar({
                             key={item.id}
                             type="button"
                             onClick={() => setSelectedItem(item)}
-                            className={`w-full rounded-lg border p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
+                            className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:w-full sm:rounded-lg sm:border sm:p-2' : 'w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
                           >
-                            <p className="text-xs font-bold text-[color:var(--portal-text)] line-clamp-1">{item.title}</p>
-                            {item.subtitle ? <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)] line-clamp-2">{item.subtitle}</p> : null}
+                            <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>
+                            {item.subtitle ? <p className={`mt-0.5 text-[9px] leading-3 text-[color:var(--portal-muted)] line-clamp-1 sm:mt-1 sm:text-[10px] sm:leading-4 ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.subtitle}</p> : null}
                           </button>
                         ))}
                       </div>
                     </>
                   ) : null}
+                  {hiddenItemCount > 0 ? <button type="button" onClick={() => setSelectedDay(iso)} className="hidden text-left text-[9px] font-bold text-[#a8792f] hover:text-[#caa24c] sm:block">+{hiddenItemCount} more</button> : null}
                 </div>
               </div>
             )
           })}
         </div>
+        )}
       </div>
 
       <PortalModal
@@ -233,6 +239,50 @@ export function PortalCalendar({
         ) : null}
       </PortalModal>
     </section>
+  )
+}
+
+function ScheduleView({
+  items,
+  onSelectItem,
+}: {
+  items: PortalCalendarItem[]
+  onSelectItem: (item: PortalCalendarItem) => void
+}) {
+  const itemsByDate = items.reduce<Record<string, PortalCalendarItem[]>>((groups, item) => {
+    groups[item.date] ??= []
+    groups[item.date].push(item)
+    return groups
+  }, {})
+  const dates = Object.keys(itemsByDate).sort()
+
+  if (!dates.length) {
+    return <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-6 text-center"><p className="text-sm text-[color:var(--portal-muted)]">No scheduled items yet.</p></div>
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6 py-2">
+      {dates.map((date) => (
+        <section key={date} className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-6">
+          <div className="border-b border-[color:var(--portal-border)] pb-2 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8792f]">{new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</p>
+            <p className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`))}</p>
+          </div>
+          <div className="space-y-2">
+            {itemsByDate[date].map((item) => (
+              <button key={item.id} type="button" onClick={() => onSelectItem(item)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
+                <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                  {item.subtitle ? <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
+                </span>
+                <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
   )
 }
 
