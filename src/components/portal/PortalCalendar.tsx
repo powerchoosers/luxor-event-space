@@ -97,20 +97,20 @@ export function PortalCalendar({
 
   return (
     <section className="portal-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
-      <div className="flex flex-col gap-4 border-b border-[color:var(--portal-border)] p-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[color:var(--portal-border)] p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">{title}</p>
           <h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">{formattedRange}</h2>
           {dayStatuses ? <p className="mt-2 max-w-xl text-[10px] leading-4 text-[color:var(--portal-muted)]">“No tour times” means no public tour slot is currently available that day; it does not mean the venue is closed.</p> : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
+        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:w-auto lg:overflow-visible lg:pb-0">
+          <div className="flex shrink-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
             {(['month', 'week', 'day', 'schedule'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => onViewChange(option)}
-                className={`rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
+                className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
                   view === option ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                 }`}
               >
@@ -118,13 +118,13 @@ export function PortalCalendar({
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, -1))} className="rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, -1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             <ChevronLeft size={16} />
           </button>
-          <button type="button" onClick={() => setAnchor(new Date())} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+          <button type="button" onClick={() => setAnchor(new Date())} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             Today
           </button>
-          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, 1))} className="rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, 1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             <ChevronRight size={16} />
           </button>
         </div>
