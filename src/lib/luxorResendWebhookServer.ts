@@ -66,8 +66,13 @@ export async function storeLuxorResendEvent(id: string, event: ResendEvent) {
 async function downloadProviderAttachment(urlValue: string, raw = false) {
   const url = new URL(urlValue)
   // Only fetch signed URLs returned by the authenticated Resend API, never webhook/user URLs.
-  const allowedHost = raw ? url.hostname === 'cdn.resend.app' || url.hostname.endsWith('.resend.com') || url.hostname.endsWith('.cloudfront.net')
-    : ['inbound-cdn.resend.com', 'cdn.resend.com'].includes(url.hostname)
+  // Resend uses cdn.resend.app for inbound file parts (including inline CID
+  // images), while older messages may point at the two resend.com hosts.
+  // Keep the allowlist explicit so a malformed provider response cannot turn
+  // this server-side fetch into a generic URL fetcher.
+  const allowedHost = raw
+    ? url.hostname === 'cdn.resend.app' || url.hostname.endsWith('.resend.com') || url.hostname.endsWith('.cloudfront.net')
+    : ['inbound-cdn.resend.com', 'cdn.resend.com', 'cdn.resend.app'].includes(url.hostname)
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || !allowedHost) {
     throw new Error('Resend returned an unsupported attachment download host.')
   }
