@@ -104,7 +104,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   const [senderPhone, setSenderPhone] = useState<string | null>(null)
   const [toAddress, setToAddress] = useState('')
   const [subject, setSubject] = useState('')
-  const [track, setTrack] = useState(true)
+  // Direct CRM messages should feel like a note from a person, not a campaign.
+  // Tracking remains available when intentionally needed, but is off by default.
+  const [track, setTrack] = useState(false)
 
   // Message Types & Templates
   const [selectedTemplateId, setSelectedTemplateId] = useState('regular')
@@ -426,15 +428,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
-    fixed right-2 bottom-16 z-50 sm:right-4 sm:bottom-0 lg:right-6
+    fixed right-2 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-50 sm:right-4 lg:right-6 lg:bottom-0
     flex flex-col
     bg-[color:var(--portal-card)] border border-[#caa24c]/30 rounded-t-2xl shadow-2xl backdrop-blur-xl
     transition-[width,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
     ${isMinimized
       ? 'h-12 w-[min(380px,calc(100vw-1rem))]'
       : isExpanded
-        ? 'h-[calc(100dvh-5rem)] w-[calc(100vw-1rem)] sm:h-[calc(100dvh-2rem)] sm:w-[min(960px,calc(100vw-2rem))]'
-        : 'h-[min(600px,calc(100dvh-5rem))] w-[calc(100vw-1rem)] sm:h-[min(600px,calc(100dvh-1rem))] sm:w-[min(540px,calc(100vw-2rem))]'}
+        ? 'h-[calc(100dvh-6.75rem-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] sm:w-[min(960px,calc(100vw-2rem))] lg:h-[calc(100dvh-2rem)]'
+        : 'h-[min(600px,calc(100dvh-6.75rem-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] sm:w-[min(540px,calc(100vw-2rem))] lg:h-[min(600px,calc(100dvh-1rem))]'}
   `
 
   return (

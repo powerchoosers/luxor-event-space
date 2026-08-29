@@ -24,12 +24,14 @@ export function PortalPageFrame({
 export function PortalPageHeader({
   icon,
   title,
+  titleAccessory,
   description,
   actions,
   mobileActionsInline = false,
 }: {
   icon?: React.ReactNode
   title: string
+  titleAccessory?: React.ReactNode
   description?: string
   actions?: React.ReactNode
   mobileActionsInline?: boolean
@@ -64,6 +66,7 @@ export function PortalPageHeader({
           ) : null}
           {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
           <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${mobileActionsInline ? 'truncate text-xl sm:text-3xl' : 'text-2xl sm:text-3xl'}`}>{title}</h1>
+          {titleAccessory}
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>

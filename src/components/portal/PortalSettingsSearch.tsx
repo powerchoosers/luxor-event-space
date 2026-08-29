@@ -197,9 +197,7 @@ export function PortalSettingsSearch({ onSelect }: { onSelect: (tab: SettingsTab
           <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus() }} aria-label="Clear settings search" className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
             <X size={14} />
           </button>
-        ) : (
-          <kbd className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-bold text-[color:var(--portal-faint)] sm:block">/</kbd>
-        )}
+        ) : null}
       </div>
 
       {isOpen && query.trim() ? (

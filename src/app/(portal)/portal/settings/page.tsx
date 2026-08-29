@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Settings,
   Building,
@@ -169,6 +171,16 @@ export default function SettingsPage() {
       })
       .catch(err => console.error('Failed to sync settings from Supabase:', err))
   }, [])
+
+  useEffect(() => {
+    if (!isSettingsMenuOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isSettingsMenuOpen])
 
 
   const handleUpdateTheme = (newTheme: 'light' | 'dark') => {
@@ -354,6 +366,7 @@ export default function SettingsPage() {
       <PortalPageHeader
         icon={<Settings size={18} />}
         title="Settings"
+        titleAccessory={<kbd className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-bold text-[color:var(--portal-faint)] sm:block">/</kbd>}
       />
 
       <div className="space-y-3">
@@ -895,54 +908,73 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {isSettingsMenuOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/45 p-3 md:hidden" role="presentation" onMouseDown={() => setIsSettingsMenuOpen(false)}>
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-menu-title"
-            className="max-h-[82vh] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h2 id="settings-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse settings</h2>
-                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Choose what you want to manage.</p>
-              </div>
-              <button type="button" onClick={() => setIsSettingsMenuOpen(false)} aria-label="Close settings menu" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
-                <X size={18} />
-              </button>
-            </div>
-            <nav aria-label="Settings categories" className="space-y-5">
-              {SETTINGS_NAVIGATION.map((group) => (
-                <section key={group.label}>
-                  <h3 className="mb-1 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h3>
-                  <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
-                    {group.items.map((item) => {
-                      const selected = activeTab === item.id
-                      return (
-                        <button key={item.id} type="button" onClick={() => selectSettingsTab(item.id)} className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
-                          <span className="shrink-0">{item.icon}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-bold">{item.label}</span>
-                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
-                          </span>
-                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
-                        </button>
-                      )
-                    })}
+      {typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {isSettingsMenuOpen ? (
+            <motion.div
+              role="presentation"
+              className="fixed inset-0 z-[90] flex items-end bg-black/45 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-16 backdrop-blur-sm md:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onMouseDown={() => setIsSettingsMenuOpen(false)}
+            >
+              <motion.section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-menu-title"
+                className="flex max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                initial={{ opacity: 0, y: 56, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.985 }}
+                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-4 py-4 backdrop-blur-xl">
+                  <div>
+                    <h2 id="settings-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse settings</h2>
+                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Choose what you want to manage.</p>
                   </div>
-                </section>
-              ))}
-            </nav>
-            <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3">
-              <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
-                <LogOut size={17} />
-                Log out of Luxor Portal
-              </button>
-            </form>
-          </section>
-        </div>
+                  <button type="button" onClick={() => setIsSettingsMenuOpen(false)} aria-label="Close settings menu" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+                  <nav aria-label="Settings categories" className="space-y-5">
+                    {SETTINGS_NAVIGATION.map((group) => (
+                      <section key={group.label}>
+                        <h3 className="mb-1 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h3>
+                        <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
+                          {group.items.map((item) => {
+                            const selected = activeTab === item.id
+                            return (
+                              <button key={item.id} type="button" onClick={() => selectSettingsTab(item.id)} className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
+                                <span className="shrink-0">{item.icon}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-bold">{item.label}</span>
+                                  <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                                </span>
+                                <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </nav>
+                  <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3">
+                    <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+                      <LogOut size={17} />
+                      Log out of Luxor Portal
+                    </button>
+                  </form>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
       ) : null}
     </PortalPageFrame>
   )
