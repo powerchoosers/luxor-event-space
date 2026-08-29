@@ -43,27 +43,6 @@ export default function CalendarPage() {
     loadData()
   }, [])
 
-  const updatePublishedSlot = async (slot: LuxorTourSlot, action: 'toggle' | 'delete') => {
-    const deleting = action === 'delete'
-    if (deleting && !window.confirm('Remove this published tour time?')) return
-
-    try {
-      setBusyId(`slot-${slot.id}`)
-      const response = await fetch(deleting ? `/api/tour-slots?id=${encodeURIComponent(slot.id)}` : '/api/tour-slots', {
-        method: deleting ? 'DELETE' : 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: deleting ? undefined : JSON.stringify({ id: slot.id, status: slot.status === 'available' ? 'unavailable' : 'available' }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Unable to update this tour time.')
-      await loadData()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Unable to update this tour time.')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   const updateAttendance = async (tour: LuxorInquiry, attendance: string) => {
     try {
       setBusyId(tour.id)
@@ -158,16 +137,9 @@ export default function CalendarPage() {
         ),
       } satisfies PortalCalendarItem))
 
-    const slotCards = data.slots.map((slot) => ({
-      id: `slot-${slot.id}`,
-      date: slot.slot_date,
-      title: slot.title || 'Published tour slot',
-      subtitle: `${formatTime(slot.start_time)}${slot.end_time ? ` - ${formatTime(slot.end_time)}` : ''} • ${Math.max(0, slot.capacity - slot.booked_count)} open`,
-      tone: 'blue',
-      content: <SlotControls slot={slot} busy={busyId === `slot-${slot.id}`} onUpdate={updatePublishedSlot} />,
-    } satisfies PortalCalendarItem))
-
-    return [...tourCards, ...slotCards]
+    // Published availability is represented by the day status, not as a placeholder
+    // calendar item. Only actual tour requests belong in the calendar contents.
+    return tourCards
   }, [busyId, data.slots, data.tours])
 
   const tourDayStatuses = useMemo<Record<string, PortalCalendarDayStatus>>(() => {
@@ -287,21 +259,6 @@ export default function CalendarPage() {
         <PortalCalendar title={`${data.bookings.length} booked event records`} items={eventItems} view={view} onViewChange={setView} />
       )}
     </PortalPageFrame>
-  )
-}
-
-function SlotControls({ slot, busy, onUpdate }: { slot: LuxorTourSlot; busy: boolean; onUpdate: (slot: LuxorTourSlot, action: 'toggle' | 'delete') => void }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <PortalStatusBadge status={slot.status} />
-        <span className="text-[10px] text-[color:var(--portal-muted)]">{slot.booked_count} of {slot.capacity} reserved</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <ActionButton disabled={busy || slot.status === 'booked'} onClick={() => onUpdate(slot, 'toggle')} icon={<Check size={11} />} label={slot.status === 'available' ? 'Hide time' : 'Publish again'} />
-        <ActionButton disabled={busy || slot.booked_count > 0} onClick={() => onUpdate(slot, 'delete')} icon={<Trash2 size={11} />} label="Delete" />
-      </div>
-    </div>
   )
 }
 
@@ -477,9 +434,3 @@ function getTaskRouting(task: LuxorTask): {
   return { tab: 'tasks', section: 'lead-tasks' }
 }
 
-function formatTime(value: string) {
-  const [hours = '0', minutes = '0'] = value.split(':')
-  const date = new Date()
-  date.setHours(Number(hours), Number(minutes), 0, 0)
-  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date)
-}

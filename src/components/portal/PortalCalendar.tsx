@@ -168,18 +168,12 @@ export function PortalCalendar({
                     ) : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDay(iso)}
-                    className="rounded-md border border-[color:var(--portal-border)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
-                  >
-                    Open day
-                  </button>
+                  <span aria-hidden="true" className="h-6 w-2" />
                 </div>
                 <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
-                  {dayItems.length === 0 ? (
+                  {dayItems.length === 0 && !dayStatuses ? (
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--portal-faint)]">No items</p>
-                  ) : (
+                  ) : dayItems.length > 0 ? (
                     <>
                       <div className="portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                         {visibleItems.map((item) => (
@@ -195,7 +189,7 @@ export function PortalCalendar({
                         ))}
                       </div>
                     </>
-                  )}
+                  ) : null}
                 </div>
               </div>
             )
