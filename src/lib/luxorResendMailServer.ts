@@ -14,6 +14,12 @@ export type LuxorSendMailInput = {
   metadata?: Record<string, unknown>
 }
 
+type EmailJobMetadataRow = { metadata: Record<string, unknown> | null }
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
 export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   if (!process.env.RESEND_API_KEY?.trim()) throw new Error('Missing RESEND_API_KEY on the server.')
   const from = luxorMailFrom(input.from)
@@ -33,12 +39,21 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   if (attachments.reduce((size, item) => size + item.content.byteLength, 0) > 25 * 1024 * 1024) throw new Error('Email attachments exceed the 25 MB sending limit.')
   const idempotencyKey = input.idempotencyKey || `manual/${randomUUID()}`
   if (!/^[\x21-\x7E]{1,256}$/.test(idempotencyKey)) throw new Error('Invalid email delivery key.')
+  const metadata: Record<string, unknown> = { ...input.metadata }
+  const jobId = idempotencyKey.match(/^email-job\/([0-9a-f-]{36})$/i)?.[1]
+  if (jobId && isUuid(jobId)) {
+    const jobs = await supabaseRest<EmailJobMetadataRow[]>(`luxor_email_jobs?select=metadata&id=eq.${jobId}&limit=1`)
+    const jobMetadata = jobs[0]?.metadata || {}
+    metadata.emailJobId = jobId
+    if (isUuid(jobMetadata.campaign_id)) metadata.marketingCampaignId = jobMetadata.campaign_id
+    if (isUuid(jobMetadata.marketing_recipient_id)) metadata.marketingRecipientId = jobMetadata.marketing_recipient_id
+  }
   const payloadHash = createHash('sha256').update(JSON.stringify({ from, fromName, to, subject, html, text,
     inReplyTo: input.inReplyTo, references, calendar: input.calendar,
     attachments: attachments.map((a) => ({ filename: a.filename, type: a.contentType, hash: createHash('sha256').update(a.content).digest('hex') })) })).digest('hex')
   const row = await prepareLuxorOutbox({ from, to, subject, html, text, idempotencyKey, payloadHash,
     smtpMessageId: false,
-    threadId: input.threadId, references, metadata: { ...input.metadata,
+    threadId: input.threadId, references, metadata: { ...metadata,
       ...(idempotencyKey.startsWith('email-job/') || idempotencyKey.startsWith('agreement-job/') ? { emailJobId: idempotencyKey.split('/')[1] } : {}),
       hasAttachments: attachments.length > 0 || Boolean(input.calendar) } })
   if (row.accepted_at) return { messageId: `mail-${row.id}`, providerMessageId: row.provider_id, from, to }

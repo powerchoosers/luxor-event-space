@@ -248,37 +248,17 @@ export function parseMarketingRecipients(raw: string) {
   return recipients
 }
 
-function normalizeRedirectUrl(url: string) {
-  const value = url.trim()
-  if (!value || value.startsWith('#')) return null
-  if (/^(mailto:|tel:|https?:\/\/)/i.test(value)) return value
-  if (/^\/\//.test(value)) return `https:${value}`
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null
-  if (value.startsWith('/')) return absoluteUrl(value)
-  if (/[.][a-z]{2,}([/?#]|$)/i.test(value)) return `https://${value}`
-  return null
-}
-
 export function instrumentMarketingHtml(html: string, trackingToken: string) {
-  const tracked = html.replace(/href=(["'])(.*?)\1/gi, (match, quote: string, rawUrl: string) => {
+  // Resend now owns open/click measurement through its verified tracking
+  // domain and signed webhooks. Keep only Luxor's first-party unsubscribe
+  // endpoint; rewriting every link or inserting a second pixel duplicates
+  // engagement events and can hurt deliverability.
+  return html.replace(/href=(["'])(.*?)\1/gi, (match, quote: string, rawUrl: string) => {
     if (rawUrl.trim() === '#unsubscribe') {
       return `href=${quote}${absoluteUrl(`/api/marketing/unsubscribe/${trackingToken}`)}${quote}`
     }
-
-    const normalized = normalizeRedirectUrl(rawUrl)
-    if (!normalized) return match
-
-    const clickUrl = absoluteUrl(`/api/marketing/click/${trackingToken}?u=${encodeURIComponent(normalized)}`)
-    return `href=${quote}${clickUrl}${quote}`
+    return match
   })
-
-  const pixel = `<img src="${absoluteUrl(`/api/marketing/track/${trackingToken}.png`)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;max-width:1px;max-height:1px;opacity:0;overflow:hidden;border:0;" />`
-
-  if (/<\/body>/i.test(tracked)) {
-    return tracked.replace(/<\/body>/i, `${pixel}</body>`)
-  }
-
-  return `${tracked}${pixel}`
 }
 
 function summarizeCampaign(

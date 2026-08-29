@@ -9,12 +9,8 @@ export function MailProviderSettings() {
   const [settings, setSettings] = useState<LuxorMailSettings | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [zohoSetup, setZohoSetup] = useState<{ webhookUrl: string; initialized: boolean } | null>(null)
-  const [zohoLoading, setZohoLoading] = useState(false)
-  const [zohoError, setZohoError] = useState('')
   const [copied, setCopied] = useState('')
   const requestRef = useRef<AbortController | null>(null)
-  const zohoRequestRef = useRef<AbortController | null>(null)
 
   const refresh = useCallback(async () => {
     requestRef.current?.abort()
@@ -33,24 +29,8 @@ export function MailProviderSettings() {
 
   useEffect(() => {
     void refresh()
-    return () => { requestRef.current?.abort(); zohoRequestRef.current?.abort() }
+    return () => { requestRef.current?.abort() }
   }, [refresh])
-
-  const loadZohoSetup = async () => {
-    if (zohoSetup) { setZohoSetup(null); setCopied(''); return }
-    zohoRequestRef.current?.abort()
-    const controller = new AbortController()
-    zohoRequestRef.current = controller
-    setZohoLoading(true); setZohoError('')
-    try {
-      const response = await fetch('/api/portal/zoho-webhook-config', { cache: 'no-store', signal: controller.signal })
-      const payload = await response.json()
-      if (!response.ok || typeof payload.webhookUrl !== 'string') throw new Error('Unavailable')
-      if (!controller.signal.aborted) setZohoSetup({ webhookUrl: payload.webhookUrl, initialized: payload.initialized === true })
-    } catch {
-      if (!controller.signal.aborted) setZohoError('Zoho setup could not be loaded. Try again without changing mail providers.')
-    } finally { if (!controller.signal.aborted) setZohoLoading(false) }
-  }
 
   const copy = async (value: string, label: string) => {
     try { await navigator.clipboard.writeText(value); setCopied(label + ' copied.') }
@@ -75,36 +55,17 @@ export function MailProviderSettings() {
           <SettingRow title="Resend webhook signing secret" value={settings.resend.webhookSecretPresent ? 'Present — endpoint not verified' : 'Not configured'} />
           <SettingRow title="Latest saved Resend webhook" value={!settings.resend.activityAvailable ? 'Activity could not be checked' : settings.resend.lastWebhookAt
             ? new Date(settings.resend.lastWebhookAt).toLocaleString() + (settings.resend.lastWebhookProcessedAt ? ' · processed' : ' · awaiting processing') : 'No event recorded'} />
-          <SettingRow title="Zoho mail credentials" value={settings.zoho.credentialsPresent ? 'Present — credentials not verified' : 'Incomplete'} />
-          <SettingRow title="Zoho calendar SMTP" value={settings.zoho.calendarCredentialsPresent ? 'Credentials present — delivery not verified' : 'Incomplete'} />
-          <SettingRow title="Portal sign-in" value="Zoho OAuth — replacement login and recovery still required" />
+          <SettingRow title="Legacy Zoho archive" value={settings.zoho.credentialsPresent ? 'Retained temporarily for the protected history archive' : 'Not configured'} />
+          <SettingRow title="Portal sign-in" value="Luxor email and password" />
         </dl>
         <div className="space-y-2 text-xs text-[color:var(--portal-muted)]">
           <p>Checked {new Date(settings.checkedAt).toLocaleString()} · this deployment only</p>
           <p className="font-semibold text-[color:var(--portal-text)]">Resend webhook endpoint</p>
           <p className="break-all select-text">{settings.resend.webhookUrl}</p>
           <PortalButton variant="secondary" onClick={() => void copy(settings.resend.webhookUrl, 'Resend endpoint')}>Copy Resend endpoint</PortalButton>
-          <p>Saved activity does not prove incoming mail routing, domain verification, or RSVP behavior. Keep Zoho available until the migration checks are complete.</p>
+          <p>Saved activity does not prove incoming mail routing, domain verification, or RSVP behavior. The former Zoho connection is retained only while its history archive remains unfinished.</p>
         </div>
       </> : null}
-      <div className="flex flex-wrap items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
-        <PortalButton variant="secondary" onClick={() => void loadZohoSetup()} disabled={zohoLoading} aria-expanded={Boolean(zohoSetup)} aria-controls="zoho-mail-setup">
-          {zohoLoading ? 'Loading Zoho setup…' : zohoSetup ? 'Hide Zoho setup' : 'Show Zoho setup'}
-        </PortalButton>
-        <a href="/api/auth/zoho/login?setup=1" className="text-xs font-semibold text-[color:var(--portal-text)] underline underline-offset-4">Reconnect Zoho</a>
-      </div>
-      {zohoError ? <p role="alert" className="text-xs text-[color:var(--portal-text)]">{zohoError}</p> : null}
-      {zohoSetup ? <div id="zoho-mail-setup" className="space-y-3 text-xs leading-relaxed text-[color:var(--portal-muted)]">
-        <p>{zohoSetup.initialized ? 'Zoho signing secret saved. This is not a live delivery check.' : 'Awaiting Zoho webhook initialization.'}</p>
-        <p className="break-all select-text">{zohoSetup.webhookUrl}</p>
-        <PortalButton variant="secondary" onClick={() => void copy(zohoSetup.webhookUrl, 'Zoho webhook URL')}>Copy Zoho webhook URL</PortalButton>
-        <ol className="list-decimal space-y-2 pl-5">
-          <li>In Zoho Mail, open Settings → Integrations → Developer Space → Outgoing Webhooks.</li>
-          <li>Add a Mail webhook, paste the secure URL, and choose incoming mail.</li>
-          <li>Enable Limited Data List so Zoho sends sender, recipient, subject, and time—not the body.</li>
-          <li>Save it. The first signed request records the signing secret.</li>
-        </ol>
-      </div> : null}
       <p role="status" className="text-xs text-[color:var(--portal-muted)]">{copied}</p>
     </section>
   )

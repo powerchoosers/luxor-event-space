@@ -39,6 +39,8 @@ function signPayload(payload: string) {
 
 export function getAllowedZohoPortalEmails() {
   const values = [
+    ...(process.env.LUXOR_PORTAL_ALLOWED_EMAILS || '').split(','),
+    ...(process.env.LUXOR_MAIL_ALLOWED_SENDERS || '').split(','),
     process.env.LUXOR_ZOHO_LOGIN_EMAIL,
     ...(process.env.LUXOR_ZOHO_ALLOWED_SENDERS || '').split(','),
   ]
@@ -50,6 +52,28 @@ export function getAllowedZohoPortalEmails() {
         .filter(Boolean)
     )
   )
+}
+
+/**
+ * Validates the password hash stored only in the server environment. The
+ * format is deliberately self-contained so the portal can rotate a password
+ * without a database migration: scrypt$N$r$p$salt$derivedKey.
+ */
+export function verifyLuxorPortalPassword(password: string) {
+  const encoded = process.env.LUXOR_PORTAL_PASSWORD_HASH || ''
+  const [algorithm, nRaw, rRaw, pRaw, salt, expectedKey] = encoded.split('$')
+  const N = Number(nRaw)
+  const r = Number(rRaw)
+  const p = Number(pRaw)
+  if (algorithm !== 'scrypt' || !Number.isSafeInteger(N) || !Number.isSafeInteger(r) || !Number.isSafeInteger(p)
+    || N < 16_384 || N > 262_144 || r < 1 || r > 32 || p < 1 || p > 16 || !salt || !expectedKey) return false
+  try {
+    const actual = crypto.scryptSync(password, salt, Buffer.from(expectedKey, 'base64url').byteLength, { N, r, p, maxmem: 128 * 1024 * 1024 })
+    const expected = Buffer.from(expectedKey, 'base64url')
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+  } catch {
+    return false
+  }
 }
 
 export function isAuthorizedLuxorPortalEmail(email: string) {

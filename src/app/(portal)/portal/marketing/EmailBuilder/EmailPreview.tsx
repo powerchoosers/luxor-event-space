@@ -25,6 +25,11 @@ interface EmailPreviewProps {
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error'
 type EditableEmailLink = { blockId: string; field: 'ctaUrl' | 'url'; label: string; url: string }
+const MARKETING_SENDERS = [
+  { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email — campaigns' },
+  { value: 'booking@luxoratlaspalmas.com', label: 'Booking Email — client updates' },
+  { value: 'a.patterson@luxoratlaspalmas.com', label: 'Arianna Patterson' },
+]
 
 type MarketingList = {
   id: string
@@ -44,6 +49,7 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
   const [contactsLoading, setContactsLoading] = useState(false)
   const [sendSubject, setSendSubject] = useState(subject)
   const [campaignName, setCampaignName] = useState(subject)
+  const [senderFrom, setSenderFrom] = useState('hello@luxoratlaspalmas.com')
   const [audienceLabel, setAudienceLabel] = useState(initialAudienceLabel)
   const [selectedMarketingListId, setSelectedMarketingListId] = useState<string | null>(null)
   const [marketingLists, setMarketingLists] = useState<MarketingList[]>([])
@@ -328,6 +334,8 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
           marketingListId: selectedMarketingListId,
           scheduledFor: isScheduled ? new Date(scheduledFor).toISOString() : null,
           sendNow: !isScheduled,
+          senderFrom,
+          senderName: senderFrom === 'a.patterson@luxoratlaspalmas.com' ? 'Arianna Patterson' : 'Luxor Event Space',
         }),
       })
       const data = await res.json()
@@ -701,6 +709,11 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
+                      <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Send from</label>
+                      <PortalSelect value={senderFrom} onChange={setSenderFrom} className="w-full" options={MARKETING_SENDERS} />
+                      <p className="text-[10px] text-zinc-600">Use a client-facing address that matches this campaign.</p>
+                    </div>
+                    <div className="space-y-1.5">
                       <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Audience Label</label>
                       <PortalSelect
                         value={audienceLabel === '__create_new__' ? '__create_new__' : selectedMarketingListId || '__manual__'}
@@ -811,7 +824,7 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
                 </button>
 
                 <p className="text-[10px] text-zinc-700 text-center">
-                  Sent from <span className="text-zinc-500">booking@luxoratlaspalmas.com</span>. Scheduled campaigns are delivered automatically at the selected time.
+                  Sent from <span className="text-zinc-500">{senderFrom}</span>. Scheduled campaigns are delivered automatically at the selected time.
                 </p>
               </div>
             </div>

@@ -25,6 +25,7 @@ const GENERAL_POLL_INTERVAL_MS = 30_000
 const INTERNAL_EMAIL_ADDRESSES = [
   'booking@luxoratlaspalmas.com',
   'hello@luxoratlaspalmas.com',
+  'a.patterson@luxoratlaspalmas.com',
 ]
 
 function getStoredReadIds(): Set<string> {
@@ -667,6 +668,12 @@ export function usePortalNotifications() {
           .channel(data.realtimeChannel)
           .on('broadcast', { event: 'email-arrived' }, () => {
             void fetchNotifications(true, true)
+          })
+          .on('broadcast', { event: 'email-status' }, () => {
+            void fetchNotifications(true, true)
+          })
+          .on('broadcast', { event: 'contract-status' }, () => {
+            void fetchNotifications(true)
           })
           .on('broadcast', { event: 'layout-review-feedback' }, () => {
             void fetchNotifications(true)

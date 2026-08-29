@@ -9,6 +9,7 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -119,6 +120,8 @@ export async function GET(request: NextRequest) {
           results.filter((result) => result.status === 'rejected').forEach((result) => {
             console.error('Agreement view was recorded, but a follow-up activity action failed:', result.reason)
           })
+          await broadcastLuxorPortalNotification('contract-status', { signatureId: firstView.id, status: 'viewed' })
+            .catch((error) => console.error('Agreement view was saved, but portal notification failed:', error))
         } else {
           // A concurrent view or signature may already have progressed this
           // agreement. Return the current state instead of a stale "sent" one.
@@ -179,6 +182,9 @@ export async function POST(request: NextRequest) {
       ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
       userAgent: request.headers.get('user-agent'),
     })
+
+    await broadcastLuxorPortalNotification('contract-status', { signatureId: signature.id, status: signature.status })
+      .catch((notificationError) => console.error('Agreement signature was saved, but portal notification failed:', notificationError))
 
     return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature) })
   } catch (error) {

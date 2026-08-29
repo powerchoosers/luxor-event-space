@@ -25,12 +25,14 @@ import {
   PanelLeftClose,
   ChevronLeft,
   ChevronRight,
-  Tag
+  Tag,
+  ChevronDown,
+  X,
+  Menu
 } from 'lucide-react'
 import {
   PortalPageFrame,
   PortalPageHeader,
-  PortalAnimatedTabs,
   PortalTableCard,
   PortalSelect
 } from '@/components/portal/PortalUI'
@@ -65,6 +67,55 @@ type Tab =
   | 'promotions'
   | 'content'
 
+type SettingsNavItem = {
+  id: Tab
+  label: string
+  description: string
+  icon: React.ReactNode
+}
+
+const SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[] }> = [
+  {
+    label: 'Workspace',
+    items: [
+      { id: 'business', label: 'Venue information', description: 'Details, phone, and payments', icon: <Building size={16} /> },
+      { id: 'hours', label: 'Hours & availability', description: 'Tour dates and times', icon: <Clock size={16} /> },
+      { id: 'team', label: 'Team & access', description: 'Your profile and access', icon: <Lock size={16} /> },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { id: 'notifications', label: 'Notifications', description: 'Alerts and recipients', icon: <Bell size={16} /> },
+      { id: 'integrations', label: 'Email & connections', description: 'Inbox, calendar, and services', icon: <Cpu size={16} /> },
+    ],
+  },
+  {
+    label: 'Venue & growth',
+    items: [
+      { id: 'promotions', label: 'Promotions', description: 'Offers on the website', icon: <Tag size={16} /> },
+    ],
+  },
+  {
+    label: 'Website',
+    items: [
+      { id: 'branding', label: 'Branding', description: 'Portal appearance and assets', icon: <Image size={16} /> },
+      { id: 'content', label: 'Site content', description: 'Public page content', icon: <Building size={16} /> },
+    ],
+  },
+]
+
+const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string }> = {
+  business: { title: 'Venue information', description: 'Manage the details, phone identity, and payment setup that keep Luxor running.' },
+  hours: { title: 'Hours & availability', description: 'Choose when guests can request a private venue tour.' },
+  team: { title: 'Team & access', description: 'Keep your personal workspace profile and access details up to date.' },
+  notifications: { title: 'Notifications', description: 'Control how the team hears about new activity and where alerts go.' },
+  integrations: { title: 'Email & connections', description: 'Manage email delivery, calendar invitations, phone services, and connected tools.' },
+  promotions: { title: 'Promotions', description: 'Create and manage the offers that appear on the Luxor website.' },
+  branding: { title: 'Branding', description: 'Set the portal appearance and manage the assets that represent Luxor.' },
+  content: { title: 'Site content', description: 'Edit the information guests see across the public Luxor website.' },
+}
+
 type BrandAsset = {
   id: string
   name: string
@@ -77,6 +128,7 @@ type BrandAsset = {
 export default function SettingsPage() {
   const { notify } = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('business')
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [sidebarLayout, setSidebarLayout] = useState<'expanded' | 'compact'>('expanded')
@@ -264,6 +316,13 @@ export default function SettingsPage() {
   const ASSETS_PER_PAGE = 6
   const assetPageCount = Math.max(1, Math.ceil(assets.length / ASSETS_PER_PAGE))
   const visibleAssets = assets.slice((assetPage - 1) * ASSETS_PER_PAGE, assetPage * ASSETS_PER_PAGE)
+  const activeSettingsItem = SETTINGS_NAVIGATION.flatMap((group) => group.items).find((item) => item.id === activeTab)
+  const activeSettingsCopy = SETTINGS_TAB_COPY[activeTab]
+
+  const selectSettingsTab = (tab: Tab) => {
+    setActiveTab(tab)
+    setIsSettingsMenuOpen(false)
+  }
 
   const handleProfileImageUpload = async (file: File | undefined) => {
     if (!file) return
@@ -291,32 +350,75 @@ export default function SettingsPage() {
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
       <PortalPageHeader
         icon={<Settings size={18} />}
-        title="System Settings"
+        title="Settings"
       />
 
-      <PortalSettingsSearch onSelect={setActiveTab} />
-
-      {/* Sub-tab navigation */}
-      <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
-        <PortalAnimatedTabs
-          tabs={[
-            { id: 'business', label: 'Venue Information', icon: <Building size={15} /> },
-            { id: 'branding', label: 'Portal Branding', icon: <Image size={15} /> },
-            { id: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
-            { id: 'team', label: 'Team & Permissions', icon: <Lock size={15} /> },
-            { id: 'integrations', label: 'Integrations', icon: <Cpu size={15} /> },
-            { id: 'hours', label: 'Business Hours', icon: <Clock size={15} /> },
-            { id: 'promotions', label: 'Promotions', icon: <Tag size={15} /> },
-            { id: 'content', label: 'Site Content', icon: <Building size={15} /> }
-          ]}
-          activeTab={activeTab}
-          onTabChange={(tab) => setActiveTab(tab as Tab)}
-        />
+      <div className="space-y-3">
+        <PortalSettingsSearch onSelect={selectSettingsTab} />
+        <div className="hidden items-center gap-x-5 gap-y-2 text-xs sm:flex">
+          <span className="font-semibold text-[color:var(--portal-muted)]">Common tasks</span>
+          <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
+          <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
+          <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
+          <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
+        </div>
       </div>
 
-      {/* Settings Forms */}
-      <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-8">
-        <form onSubmit={handleSave} className="w-full space-y-6">
+      <div className="flex min-h-0 flex-1 gap-6">
+        <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-[color:var(--portal-border)] pr-4 md:block lg:w-60">
+          <nav aria-label="Settings categories" className="space-y-6 pb-6">
+            {SETTINGS_NAVIGATION.map((group) => (
+              <section key={group.label} aria-labelledby={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`}>
+                <h2 id={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`} className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h2>
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const selected = activeTab === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectSettingsTab(item.id)}
+                        aria-current={selected ? 'page' : undefined}
+                        className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                      >
+                        <span className="mt-0.5 shrink-0">{item.icon}</span>
+                        <span className="min-w-0">
+                          <span className="block text-xs font-bold">{item.label}</span>
+                          <span className="mt-0.5 block text-[10px] leading-4 text-[color:var(--portal-faint)]">{item.description}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setIsSettingsMenuOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={isSettingsMenuOpen}
+            className="mb-5 flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 md:hidden"
+          >
+            <Menu size={18} className="text-[#a8792f]" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse settings</span>
+              <span className="mt-0.5 block truncate text-sm font-bold">{activeSettingsItem?.label}</span>
+            </span>
+            <ChevronDown size={17} className="text-[color:var(--portal-muted)]" aria-hidden="true" />
+          </button>
+
+          <div className="mb-6 border-b border-[color:var(--portal-border)] pb-5">
+            <h1 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)] sm:text-2xl">{activeSettingsCopy.title}</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[color:var(--portal-muted)]">{activeSettingsCopy.description}</p>
+          </div>
+
+          {/* Settings Forms */}
+          <div className="min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-8">
+            <form onSubmit={handleSave} className="w-full space-y-6">
           <div key={activeTab} className="space-y-6">
           {/* VENUE INFORMATION */}
           {activeTab === 'business' && (
@@ -782,7 +884,53 @@ export default function SettingsPage() {
             </button>
           </div>}
         </form>
+          </div>
+        </div>
       </div>
+
+      {isSettingsMenuOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/45 p-3 md:hidden" role="presentation" onMouseDown={() => setIsSettingsMenuOpen(false)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-menu-title"
+            className="max-h-[82vh] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 id="settings-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse settings</h2>
+                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Choose what you want to manage.</p>
+              </div>
+              <button type="button" onClick={() => setIsSettingsMenuOpen(false)} aria-label="Close settings menu" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+                <X size={18} />
+              </button>
+            </div>
+            <nav aria-label="Settings categories" className="space-y-5">
+              {SETTINGS_NAVIGATION.map((group) => (
+                <section key={group.label}>
+                  <h3 className="mb-1 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h3>
+                  <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
+                    {group.items.map((item) => {
+                      const selected = activeTab === item.id
+                      return (
+                        <button key={item.id} type="button" onClick={() => selectSettingsTab(item.id)} className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
+                          <span className="shrink-0">{item.icon}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold">{item.label}</span>
+                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                          </span>
+                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
+            </nav>
+          </section>
+        </div>
+      ) : null}
     </PortalPageFrame>
   )
 }

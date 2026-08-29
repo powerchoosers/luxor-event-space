@@ -1,4 +1,4 @@
-import { after, NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { verifyLuxorResendSignature } from '@/lib/luxorResendSignature'
 import { processLuxorResendEvent, storeLuxorResendEvent, type ResendEvent } from '@/lib/luxorResendWebhookServer'
 
@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
       || !Number.isFinite(Date.parse(event.created_at))) return NextResponse.json({ error: 'Invalid event.' }, { status: 400 })
     const eventId = request.headers.get('svix-id')!
     const stored = await storeLuxorResendEvent(eventId, event)
-    if (stored) after(async () => {
-      try { await processLuxorResendEvent(eventId) }
-      catch { console.warn('[resend] saved webhook awaits retry') }
-    })
-    // Provider can stop retrying because the event is durable; the worker resumes failures.
+    // Save first for idempotency, then process before acknowledging the webhook so
+    // portal Realtime receives inbound, open, and click activity immediately.
+    // If processing fails, the event stays durable for the worker and Resend retries
+    // this non-2xx response as an additional recovery path.
+    if (stored) await processLuxorResendEvent(eventId)
     return NextResponse.json({ received: true })
   } catch {
     return NextResponse.json({ error: 'Could not save email event.' }, { status: 500 })

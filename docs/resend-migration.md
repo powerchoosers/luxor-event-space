@@ -1,6 +1,15 @@
 # Resend migration — staged rollout
 
-The migration is **not ready for production cutover**. Keep `LUXOR_MAIL_PROVIDER=zoho` (the default) and keep the existing Zoho MX records until the checklist below is complete. The Settings calendar tester can select Resend independently of normal mail.
+Resend is the active Luxor mail provider in production. Zoho remains retained only as a protected rollback/archive source; it is not the normal portal login, inbound, or outbound path.
+
+## Live migration record — August 28, 2026
+
+- Production normal mail uses `LUXOR_MAIL_PROVIDER=resend`; Resend sending and receiving are enabled for `luxoratlaspalmas.com`.
+- The signed Resend webhook at `/api/webhooks/resend` stores incoming, delivery, open, click, bounce, complaint, suppression, and failure events durably. Portal Realtime refreshes secured notifications immediately for inbound mail and delivery activity; polling remains only as a recovery fallback.
+- Resend native open/click tracking is enabled through the verified `track` subdomain. It is the preferred event source; open data remains best-effort because privacy features and image blocking can prevent an open from being reported. Contract view/sign status continues to come from the contract workflow, not a tracking pixel.
+- Zoho archive run `85690392-6f14-4a16-a7ec-08839e6c595b` completed two matching inventories of all 11 folders plus a content audit: 0 messages observed, 0 mismatches, 0 failures. The run is preserved in review; no Zoho data was deleted.
+- DNS rollback record: the former Zoho root MX values were `mx.zoho.com` (priority 10), `mx2.zoho.com` (priority 20), and `mx3.zoho.com` (priority 50), all with a four-hour TTL. They were removed only after the Resend inbound MX was verified. Zoho TXT/DKIM records remain intentionally until final retirement.
+- Current Resend DNS records: root MX `inbound-smtp.us-east-1.amazonaws.com` (priority 9); `send` MX `feedback-smtp.us-east-1.amazonses.com` (priority 10); `send` SPF TXT `v=spf1 include:amazonses.com ~all`; `resend._domainkey` TXT; and `track` CNAME `links1.resend-dns.com`. All are verified by Resend.
 
 ### Repository test-file policy
 
@@ -46,7 +55,7 @@ The latest August 28 project environment metadata check confirms `RESEND_API_KEY
 
 ## Required before cutover
 
-1. Squarespace DNS editing was unlocked after Lewis completed Google verification on August 28. Saved the Resend-requested `send` MX (priority 10, `feedback-smtp.us-east-1.amazonses.com`) and `send` SPF TXT (`v=spf1 include:amazonses.com ~all`), both with the existing four-hour TTL default. The existing `resend._domainkey` TXT was retained. The latest authenticated Resend domain read reports overall status **verified**, with DKIM and both sending MX/SPF records verified. Receiving remains disabled. A fresh public DNS lookup still returns only Zoho's three root MX records. Sending-domain verification is complete; do not replace root MX until the remaining cutover gates pass.
+1. Squarespace DNS cutover completed on August 29 after explicit approval. The archived Zoho root MX values were `mx.zoho.com` (priority 10), `mx2.zoho.com` (priority 20), and `mx3.zoho.com` (priority 50), all with a four-hour TTL. They were replaced by the Resend receiving MX `inbound-smtp.us-east-1.amazonaws.com` (root name, priority 9, four-hour TTL). The existing `send` MX/SPF and `resend._domainkey` DKIM records were preserved. Public DNS returns only the Resend inbound MX, and Resend reports the domain verified with sending and receiving enabled.
 2. Provision credentials securely, deploy the staged code with normal mail still on Zoho, configure the signed webhook, and test replay/retry recovery. Confirm the webhook does not ingest unrelated Resend domains.
 3. Send to explicitly approved test recipients. Inspect the **delivered** MIME in Outlook/Gmail/Zoho and verify native RSVP controls. A local `text/calendar; method=REQUEST` assertion does not establish that Resend preserves it or that clients render it correctly. Reconcile SMTP provider IDs and actual delivered Internet Message-IDs before relying on delivery tracking/threading.
 4. Calendar persistence, queue delivery, update/cancel, matched RSVP processing, and atomic/idempotent branded confirmation/reminder scheduling are implemented and covered by offline/rollback tests. Finish active Zoho event continuity (import original UID/sequence before switching existing tours), rendered verification of owner review for unverified replies, attendee status UI, and live client lifecycle tests. Existing Zoho appointments must not be silently duplicated.
@@ -54,7 +63,7 @@ The latest August 28 project environment metadata check confirms `RESEND_API_KEY
 6. Durable read/unread state and outbox delivery presentation are implemented and tested with no-send fixtures, including reader refresh and mobile navigation. Campaign delivery/suppression reconciliation is implemented and tested; live provider events remain unverified. Finish provider-neutral integration Settings. Internal inquiry alerts now queue atomically, render once in the worker and remain eligible overnight; they are no longer fire-and-forget sends. Notification retry and queue-health provider labels are implemented; live verification remains. Finish auditing the remaining automated send paths.
 7. Choose and verify a replacement portal login/recovery method with Lewis. Do not change the approved identity allowlist based on names or browser accounts. Email login codes cannot be delivered only to a mailbox inside the locked portal they are meant to unlock. Keep Zoho OAuth until replacement and recovery are proven.
 8. Finish desktop/mobile light/dark QA, full type/lint/build checks, and live mail/attachment/reply/calendar lifecycle tests. Dark-mode QA must not silently change the user's shared theme preference.
-9. Obtain explicit commit/push authorization. Deploy, verify no-send cron health endpoints and fresh worker heartbeats, then approve receiving MX cutover separately. MX priorities do not mirror incoming mail to both providers. Preserve Zoho/history during DNS propagation and monitor both paths.
+9. Obtain explicit commit/push authorization. Deploy, verify no-send cron health endpoints and fresh worker heartbeats, then test real inbound receipt and webhook processing. The MX cutover does not mirror messages to Zoho; preserve Zoho/history access until the inbox migration and recovery paths are proven.
 
 ## Regression checks
 

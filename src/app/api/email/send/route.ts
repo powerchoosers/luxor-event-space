@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+      return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       : session.mailboxAddress || senderProfile.email
 
     let finalContent = String(content || '')
+    let trackingMetadata: Record<string, string> = {}
 
     // Convert plain text or explicitly requested conversational format to HTML
     if (format === 'conversational' || (!finalContent.toLowerCase().includes('<!doctype html') && !finalContent.toLowerCase().includes('<html'))) {
@@ -91,6 +92,11 @@ export async function POST(request: NextRequest) {
         throw new Error('Failed to register email tracking recipient.')
       }
 
+      trackingMetadata = {
+        marketingCampaignId: campaign.id,
+        marketingRecipientId: recipient.id,
+      }
+
       // 4. Instrument HTML content with open/click tracking token
       finalContent = instrumentMarketingHtml(finalContent, trackingToken)
     }
@@ -101,11 +107,12 @@ export async function POST(request: NextRequest) {
       content: String(finalContent || ''),
       from: typeof from === 'string' ? from : undefined,
       fromName: senderProfile.displayName,
+      metadata: trackingMetadata,
     })
 
     console.log(JSON.stringify({
       level: 'info',
-      message: 'Zoho email send completed',
+      message: 'Luxor email send completed',
       route: '/api/email/send',
       requestId,
       tracked: Boolean(track),
@@ -115,13 +122,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...result, trackingToken })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send email.'
-    const missingConfig = message.includes('Missing Zoho email credentials')
+    const missingConfig = message.includes('Missing RESEND_API_KEY') || message.includes('Missing Zoho email credentials')
     const rateLimited = /too many requests|rate.?limit|429/i.test(message)
     const authorizationRequired = isLuxorZohoAuthorizationError(error)
 
     console.error(JSON.stringify({
       level: rateLimited ? 'warning' : 'error',
-      message: 'Zoho email send failed',
+      message: 'Luxor email send failed',
       route: '/api/email/send',
       requestId,
       rateLimited,
@@ -131,8 +138,8 @@ export async function POST(request: NextRequest) {
     if (rateLimited) {
       return NextResponse.json(
         {
-          error: 'Zoho is temporarily pacing email activity. Your draft is safe—please wait about a minute before sending again.',
-          code: 'ZOHO_RATE_LIMITED',
+          error: 'Email delivery is temporarily pacing activity. Your draft is safe—please wait about a minute before sending again.',
+          code: 'MAIL_RATE_LIMITED',
           retryAfterSeconds: 60,
         },
         { status: 429, headers: { 'Retry-After': '60' } },
@@ -142,8 +149,8 @@ export async function POST(request: NextRequest) {
     if (authorizationRequired) {
       return NextResponse.json(
         {
-          error: 'Email is not connected to Zoho right now. No email was sent. Reconnect the Luxor mailbox, then try again.',
-          code: 'ZOHO_AUTHORIZATION_REQUIRED',
+          error: 'Email delivery is not connected right now. No email was sent. Check the Luxor mail connection, then try again.',
+          code: 'MAIL_AUTHORIZATION_REQUIRED',
         },
         { status: 503 },
       )

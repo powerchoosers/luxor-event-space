@@ -33,10 +33,11 @@ import { BrandAssetPicker } from './BrandAssetPicker'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
 
-// Allowed Zoho email senders
+// These addresses are explicitly approved for Luxor's Resend domain.
 const ALLOWED_SENDERS = [
   { value: 'booking@luxoratlaspalmas.com', label: 'Booking Email' },
-  { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email' }
+  { value: 'hello@luxoratlaspalmas.com', label: 'Hello Email' },
+  { value: 'a.patterson@luxoratlaspalmas.com', label: 'Arianna Patterson' },
 ]
 
 interface EmailComposeDrawerProps {

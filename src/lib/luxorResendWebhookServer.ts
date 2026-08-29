@@ -6,12 +6,12 @@ import { luxorResendApi } from './luxorResendApiServer'
 import { luxorMailAddress, luxorMailSenders } from './luxorMailConfig'
 import { downloadLuxorMailAttachment, listLuxorMailAttachments, luxorMailMessage, saveLuxorMailAttachment, updateLuxorMailRow, type LuxorMailRow } from './luxorMailboxServer'
 import { recordLuxorCalendarReplies } from './luxorCalendarReplyServer'
-import { broadcastLuxorEmailArrival } from './luxorZohoWebhookServer'
+import { broadcastLuxorEmailArrival, broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
 import { sendLuxorWebPush } from './luxorWebPushServer'
 
 export type ResendEvent = {
   type: string; created_at: string
-  data: { email_id?: string; from?: string; to?: string[]; subject?: string; tags?: Record<string, string> }
+  data: { email_id?: string; message_id?: string; from?: string; to?: string[]; subject?: string; tags?: Record<string, string> }
 }
 type EventRow = {
   event_id: string; payload: ResendEvent; processed_at: string | null; attempts: number; lease_until: string | null
@@ -23,15 +23,34 @@ type ReceivedEmail = {
   raw?: { download_url: string; expires_at: string } | null
 }
 type ResendAttachment = { id: string; filename: string; content_type: string; content_id: string | null; size: number; download_url: string }
+type MarketingRecipient = {
+  id: string; campaign_id: string; open_count: number | null; click_count: number | null
+  first_opened_at: string | null
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
 
 function address(value: string) {
   return luxorMailAddress(value.match(/<([^<>]+)>/)?.[1] || value)
 }
 
+/**
+ * Resend receives the domain as a whole. Keep the owner inbox complete by
+ * accepting every valid Luxor alias, not only the addresses currently offered
+ * as outbound senders. This lets booking@ remain the single place to review
+ * messages sent to future aliases such as events@ or arianna@.
+ */
+function isLuxorMailboxRecipient(value: string) {
+  const email = address(value)
+  return luxorMailSenders().includes(email) || email.endsWith('@luxoratlaspalmas.com')
+}
+
 function isLuxorEvent(event: ResendEvent) {
   const senders = luxorMailSenders()
   return event.type === 'email.received'
-    ? (event.data.to || []).some((value) => senders.includes(address(value)))
+    ? (event.data.to || []).some(isLuxorMailboxRecipient)
     : senders.includes(address(event.data.from || ''))
 }
 
@@ -47,7 +66,7 @@ export async function storeLuxorResendEvent(id: string, event: ResendEvent) {
 async function downloadProviderAttachment(urlValue: string, raw = false) {
   const url = new URL(urlValue)
   // Only fetch signed URLs returned by the authenticated Resend API, never webhook/user URLs.
-  const allowedHost = raw ? url.hostname.endsWith('.resend.com') || url.hostname.endsWith('.cloudfront.net')
+  const allowedHost = raw ? url.hostname === 'cdn.resend.app' || url.hostname.endsWith('.resend.com') || url.hostname.endsWith('.cloudfront.net')
     : ['inbound-cdn.resend.com', 'cdn.resend.com'].includes(url.hostname)
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || !allowedHost) {
     throw new Error('Resend returned an unsupported attachment download host.')
@@ -71,7 +90,7 @@ async function downloadProviderAttachment(urlValue: string, raw = false) {
 
 async function receiveEmail(providerId: string) {
   const email = await luxorResendApi<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(providerId)}?html_format=cid`)
-  if (!email.to.some((value) => luxorMailSenders().includes(address(value)))) return
+  if (!email.to.some(isLuxorMailboxRecipient)) return
   const headers = Object.fromEntries(Object.entries(email.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
   const references = `${headers.references || ''} ${headers['in-reply-to'] || ''}`.match(/<[^<>\s]+>/g) || []
   let threadKey = ''
@@ -93,6 +112,33 @@ async function receiveEmail(providerId: string) {
   const row = rows[0]
   if (!row) throw new Error('Incoming email was not saved.')
   const archived = await listLuxorMailAttachments(row.id)
+
+  // The inbox record is durable at this point. Alert the portal before optional
+  // attachment/raw-MIME archiving so a large attachment never delays the owner
+  // seeing a newly received email. Attachment work remains in this event's
+  // retry boundary below.
+  const eventKey = `resend:${email.id}`
+  const cachedMessage = luxorMailMessage(row, archived)
+  await supabaseRest<Array<{ id: string }>>('luxor_email_events?on_conflict=event_key&select=id', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ event_key: eventKey, message_id: cachedMessage.id, sender_email: row.from_address,
+      recipient_email: row.to_addresses[0], subject: row.subject, received_at: row.occurred_at,
+      metadata: { source: 'resend', limitedData: false, cachedAt: new Date().toISOString(), cachedMessage } }),
+  })
+  const initialMetadata = { ...row.metadata }
+  if (!initialMetadata.arrivalBroadcastAt) {
+    await broadcastLuxorEmailArrival(eventKey)
+    initialMetadata.arrivalBroadcastAt = new Date().toISOString()
+    await updateLuxorMailRow(row.id, { metadata: initialMetadata })
+  }
+  if (!initialMetadata.arrivalPushAt) {
+    const push = await sendLuxorWebPush('email', { title: 'New Luxor email', body: 'A new message arrived in the owner inbox.',
+      url: `/portal/emails?messageId=${cachedMessage.id}`, tag: `luxor-email-${eventKey}` })
+    if (push.failed) throw new Error('Email notification delivery needs a retry.')
+    initialMetadata.arrivalPushAt = new Date().toISOString()
+    await updateLuxorMailRow(row.id, { metadata: initialMetadata })
+  }
+
   for (const attachment of email.attachments) {
     if (archived.some((item) => item.source_key === attachment.id)) continue
     const detail = await luxorResendApi<ResendAttachment>(`/emails/receiving/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(attachment.id)}`)
@@ -110,50 +156,34 @@ async function receiveEmail(providerId: string) {
     if (!savedRaw) await saveLuxorMailAttachment({ messageId: row.id, sourceKey: 'raw-message', filename: 'original-message.eml', contentType: 'message/rfc822', bytes: raw })
     await recordLuxorCalendarReplies(row.id, raw, row.from_address)
   }
-  const cachedMessage = luxorMailMessage(row, archived)
-  const eventKey = `resend:${email.id}`
-  await supabaseRest<Array<{ id: string }>>('luxor_email_events?on_conflict=event_key&select=id', {
-    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
-    body: JSON.stringify({ event_key: eventKey, message_id: cachedMessage.id, sender_email: row.from_address,
-      recipient_email: row.to_addresses[0], subject: row.subject, received_at: row.occurred_at,
-      metadata: { source: 'resend', limitedData: false, cachedAt: new Date().toISOString(), cachedMessage } }),
-  })
-  // Persist each notification stage so a transient failure is retried even
-  // after the inbox event was already inserted. Browser tags collapse repeats
-  // if the process dies after push acceptance but before the checkpoint.
-  const metadata = { ...row.metadata }
-  if (!metadata.arrivalBroadcastAt) {
-    await broadcastLuxorEmailArrival(eventKey)
-    metadata.arrivalBroadcastAt = new Date().toISOString()
-    await updateLuxorMailRow(row.id, { metadata })
-  }
-  if (!metadata.arrivalPushAt) {
-    const push = await sendLuxorWebPush('email', { title: 'New Luxor email', body: 'A new message arrived in the owner inbox.',
-      url: `/portal/emails?messageId=${cachedMessage.id}`, tag: `luxor-email-${eventKey}` })
-    if (push.failed) throw new Error('Email notification delivery needs a retry.')
-    metadata.arrivalPushAt = new Date().toISOString()
-    await updateLuxorMailRow(row.id, { metadata })
-  }
 }
 
 async function processDelivery(event: ResendEvent, eventId: string) {
   const providerId = event.data.email_id
   if (!providerId) return
-  const email = await luxorResendApi<{ id: string; message_id: string; tags?: Array<{ name: string; value: string }> }>(`/emails/${encodeURIComponent(providerId)}`)
-  const localId = event.data.tags?.luxor_message_id || email.tags?.find((tag) => tag.name === 'luxor_message_id')?.value
-  let rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&provider_id=eq.${encodeURIComponent(providerId)}&limit=1`)
+  // Resend includes custom tags in every lifecycle webhook. Use the signed
+  // payload rather than retrieving the email again: that makes delivery,
+  // open, and click processing immediate and avoids requiring a second API
+  // permission or retention-dependent lookup for every event.
+  const localId = event.data.tags?.luxor_message_id
+  let rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&provider_id=eq.${encodeURIComponent(providerId)}&limit=1`)
   if (!rows[0] && localId && /^[0-9a-f-]{36}$/i.test(localId)) {
-    rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&id=eq.${localId}&limit=1`)
+    rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&id=eq.${localId}&limit=1`)
   }
-  if (!rows[0] && email.message_id) rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&internet_message_id=eq.${encodeURIComponent(email.message_id)}&limit=1`)
+  if (!rows[0] && event.data.message_id) rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&internet_message_id=eq.${encodeURIComponent(event.data.message_id)}&limit=1`)
   const row = rows[0]
-  if (!row) throw new Error('Sent email has not been linked to the local outbox yet.')
+  // This Resend account can receive lifecycle events for mail that predates
+  // the portal outbox, or that was sent from another approved application.
+  // Keep the signed event audit trail, but do not retry forever for an event
+  // that cannot belong to a local portal message. Current Luxor sends carry
+  // both a provider id and a Luxor message tag, so they continue below.
+  if (!row) return
   // Events may arrive out of order. Retain the event log, but never regress status.
   const rank: Record<string, number> = { prepared: 0, sending: 1, sent: 2, delivery_delayed: 3, delivered: 4, opened: 5, clicked: 6, failed: 7, bounced: 8, suppressed: 9, complained: 10 }
   const next = event.type.replace(/^email\./, '')
   const updated = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?id=eq.${row.id}&status=eq.${encodeURIComponent(row.status)}&select=id`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
-      provider_id: providerId, internet_message_id: email.message_id || row.internet_message_id,
+      provider_id: providerId, internet_message_id: event.data.message_id || row.internet_message_id,
       accepted_at: row.accepted_at || event.created_at,
       status: (rank[next] || 0) >= (rank[row.status] || 0) ? next : row.status,
     }),
@@ -163,6 +193,39 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   // write failure must not leave the event marked processed.
   await supabaseRest('rpc/luxor_resend_marketing_delivery', { method: 'POST',
     body: JSON.stringify({ p_message_id: row.id, p_event_id: eventId }) })
+  await recordResendMarketingEngagement(row, event, eventId)
+  // Send only an opaque signal. The authenticated browser refetches protected
+  // records and shows its normal deduplicated toast for opens/clicks instantly.
+  await broadcastLuxorPortalNotification('email-status', { eventId, eventType: event.type })
+}
+
+async function recordResendMarketingEngagement(row: LuxorMailRow, event: ResendEvent, eventId: string) {
+  const kind = event.type === 'email.opened' ? 'open' : event.type === 'email.clicked' ? 'click' : null
+  if (!kind) return
+  const metadata = row.metadata || {}
+  const campaignId = metadata.marketingCampaignId
+  const recipientId = metadata.marketingRecipientId
+  if (!isUuid(campaignId) || !isUuid(recipientId)) return
+
+  const recipientRows = await supabaseRest<MarketingRecipient[]>(
+    `luxor_marketing_recipients?select=id,campaign_id,open_count,click_count,first_opened_at&id=eq.${recipientId}&campaign_id=eq.${campaignId}&limit=1`,
+  )
+  const recipient = recipientRows[0]
+  if (!recipient) return
+  const known = await supabaseRest<Array<{ id: string }>>(
+    `luxor_marketing_events?select=id&recipient_id=eq.${recipientId}&metadata->>resendEventId=eq.${encodeURIComponent(eventId)}&limit=1`,
+  )
+  if (known.length) return
+  const now = event.created_at || new Date().toISOString()
+  await supabaseRest('luxor_marketing_events', {
+    method: 'POST', body: JSON.stringify({ campaign_id: campaignId, recipient_id: recipientId, event_type: kind,
+      metadata: { source: 'resend_webhook', resendEventId: eventId, providerEmailId: event.data.email_id || null } }),
+  })
+  await supabaseRest(`luxor_marketing_recipients?id=eq.${recipientId}`, {
+    method: 'PATCH', body: JSON.stringify(kind === 'open'
+      ? { open_count: Number(recipient.open_count || 0) + 1, first_opened_at: recipient.first_opened_at || now, last_opened_at: now }
+      : { click_count: Number(recipient.click_count || 0) + 1, last_clicked_at: now }),
+  })
 }
 
 export async function processLuxorResendEvent(eventId: string) {

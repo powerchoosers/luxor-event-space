@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+      return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
     }
 
     const campaigns = await listMarketingCampaigns(30)
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+      return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -62,6 +62,8 @@ export async function POST(request: NextRequest) {
       scheduledFor: typeof body.scheduledFor === 'string' && body.scheduledFor ? body.scheduledFor : null,
       audienceLabel: selectedList?.name || (typeof body.audienceLabel === 'string' ? body.audienceLabel : null),
       createdBy: session.email,
+      senderFrom: typeof body.senderFrom === 'string' ? body.senderFrom : undefined,
+      senderName: typeof body.senderName === 'string' ? body.senderName : undefined,
       metadata: selectedList ? { marketing_list_id: selectedList.id } : {},
     })
 

@@ -1,7 +1,7 @@
 import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ZohoLoginButton } from './ZohoLoginButton'
+import { PortalPasswordLogin } from './PortalPasswordLogin'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 
 type LoginPageProps = {
@@ -14,9 +14,9 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
   const params = await searchParams
   const error = params?.error
   const message = error === 'unauthorized'
-    ? 'That Zoho account is not approved for the Luxor owner portal.'
+    ? 'That account is not approved for the Luxor owner portal.'
     : error
-      ? 'Zoho could not complete the login. Use the approved Luxor mailbox and try again.'
+      ? 'The portal could not complete sign-in. Check your email and password and try again.'
       : null
 
   return (
@@ -42,13 +42,13 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
             Luxor owner portal.
           </h1>
           <p className="mt-6 max-w-md text-sm leading-7 text-[#d7c29a]/68">
-            Client follow-up, event operations, invoices, and Zoho communications are protected behind the Luxor mailbox.
+            Client follow-up, event operations, invoices, and Resend communications are protected behind the Luxor owner account.
           </p>
 
           <div className="mt-9 grid max-w-md gap-2">
-            <StatusLine label="Zoho identity" value="Required" />
-            <StatusLine label="Approved mailbox" value="booking@luxoratlaspalmas.com" />
-            <StatusLine label="Alias sending" value="hello@luxoratlaspalmas.com" />
+            <StatusLine label="Luxor identity" value="Required" />
+            <StatusLine label="Owner login" value="a.patterson@luxoratlaspalmas.com" />
+            <StatusLine label="Business mailbox" value="booking@luxoratlaspalmas.com" />
           </div>
           </div>
         </div>
@@ -67,13 +67,13 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
 
             <div className="mt-7 text-center">
               <p className="font-mono text-[10px] font-black uppercase tracking-[0.3em] text-[#caa24c]">
-                Zoho Authentication
+                Secure Luxor Access
               </p>
               <h2 className="mt-3 font-serif text-4xl leading-none text-white">
                 Sign in to continue.
               </h2>
               <p className="mx-auto mt-4 max-w-sm text-sm leading-6 text-zinc-400">
-                Use the Luxor Zoho account to unlock the CRM workspace and activate email sending.
+                Use your approved Luxor email and password to unlock the CRM workspace.
               </p>
             </div>
 
@@ -83,13 +83,13 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
               </div>
             ) : null}
 
-            <ZohoLoginButton />
+            <PortalPasswordLogin />
 
             <div className="mt-6 rounded-lg border border-zinc-800 bg-black/35 px-4 py-3">
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#f1d27a]" />
                 <p className="text-xs leading-5 text-zinc-500">
-                  Access is limited to approved Luxor Zoho addresses. Logging out clears this browser&apos;s portal session.
+                  Access is limited to approved Luxor owner addresses. Logging out clears this browser&apos;s portal session.
                 </p>
               </div>
             </div>

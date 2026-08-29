@@ -18,7 +18,7 @@ const cormorant = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: 'Luxor | Owner Portal Login',
-  description: 'Secure Zoho login for the Luxor owner portal.',
+  description: 'Secure owner login for the Luxor owner portal.',
   manifest: '/luxor-portal.webmanifest',
   appleWebApp: {
     capable: true,

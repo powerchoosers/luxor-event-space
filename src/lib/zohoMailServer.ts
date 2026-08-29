@@ -366,6 +366,8 @@ export async function sendLuxorZohoEmail(input: {
   fromName?: string
   attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
   idempotencyKey?: string
+  /** Provider-neutral metadata used by the Resend adapter; Zoho ignores it. */
+  metadata?: Record<string, unknown>
 }) {
   if (luxorMailProvider() === 'resend') {
     const { sendLuxorResendEmail } = await import('./luxorResendMailServer')

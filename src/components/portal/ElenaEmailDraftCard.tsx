@@ -5,7 +5,13 @@ import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
-import { PortalCloseButton } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalSelect } from '@/components/portal/PortalUI'
+
+const LUXOR_SENDER_OPTIONS = [
+  { value: 'booking@luxoratlaspalmas.com', label: 'Luxor Bookings · booking@luxoratlaspalmas.com' },
+  { value: 'hello@luxoratlaspalmas.com', label: 'Luxor Hello · hello@luxoratlaspalmas.com' },
+  { value: 'a.patterson@luxoratlaspalmas.com', label: 'Arianna Patterson · a.patterson@luxoratlaspalmas.com' },
+]
 
 export interface EmailDraftPayload {
   recipientEmail: string
@@ -49,6 +55,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
     roleTitle: 'Venue Team',
     avatarUrl: null,
   })
+  const [senderAddress, setSenderAddress] = useState(draft.senderProfile?.email || 'booking@luxoratlaspalmas.com')
 
   useEffect(() => {
     if (draft.senderProfile) return
@@ -100,7 +107,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
     body: body || '',
     senderName: senderProfile.displayName,
     senderRole: senderProfile.roleTitle,
-    senderEmail: senderProfile.email,
+    senderEmail: senderAddress,
     senderPhone,
     senderImageUrl: senderProfile.avatarUrl,
   })
@@ -139,6 +146,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
           recipientName: recipientName.trim() || undefined,
           subject: subject.trim(),
           content: body.trim(),
+          from: senderAddress,
           format: 'conversational',
           track: trackEmail,
         }),
@@ -176,7 +184,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
       <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3.5">
         <div>
           <h4 className="text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--portal-text)]">Elena Email Draft</h4>
-          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Personal email • {senderProfile.displayName} signature</p>
+          <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Personal email • choose the Luxor sender below</p>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -238,6 +246,17 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
           />
         </label>
 
+        <div className="flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5">
+          <span className="w-12 shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">From</span>
+          <PortalSelect
+            value={senderAddress}
+            onChange={setSenderAddress}
+            disabled={isSent}
+            className="min-w-0 flex-1"
+            options={LUXOR_SENDER_OPTIONS}
+          />
+        </div>
+
         {/* Subject Field */}
         <label className="group flex items-center gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-2.5 transition-colors focus-within:border-[#caa24c]/45 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/8">
           <span className="w-12 shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Subject</span>
@@ -278,7 +297,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
               <p className="mt-0.5 text-[10px] leading-4 text-[#9a6e28] dark:text-[#caa24c]">{senderProfile.roleTitle} • Luxor Event Space</p>
             </div>
           </div>
-          <span className="break-all text-[10px] text-[color:var(--portal-muted)] sm:text-right">{senderProfile.email}</span>
+          <span className="break-all text-[10px] text-[color:var(--portal-muted)] sm:text-right">{senderAddress}</span>
         </div>
 
         {/* Error Alert */}
