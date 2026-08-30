@@ -621,7 +621,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
       </aside>
 
       <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <header className={`z-50 flex h-16 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md sm:px-6 lg:px-8 ${
+        <header className={`z-50 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b px-4 backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-[#caa24c]/10 bg-[#050505]/75'
@@ -650,9 +650,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
             >
               {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
+          </div>
 
-            {/* Header Search Command Bar */}
-            <div className="relative hidden w-[min(24rem,36vw)] items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex group">
+          {/* Header Search Command Bar */}
+          <div className="group relative col-start-2 hidden w-full max-w-96 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex">
               <Search size={14} className="shrink-0 text-zinc-500 group-focus-within:text-[#caa24c] transition-colors" />
               <input
                 type="text"
@@ -727,9 +728,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 )}
               </AnimatePresence>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-5">
+          <div className="flex items-center justify-self-end gap-2 sm:gap-5">
             <PortalPhoneButton />
             
             {/* Bell Notifications */}
