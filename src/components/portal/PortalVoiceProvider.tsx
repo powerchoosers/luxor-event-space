@@ -17,6 +17,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar, PortalCloseButton } from '@/components/portal/PortalUI'
 import { formatPhoneDisplay, formatUsDialInput, removeLastDialDigit, toUsE164 } from '@/lib/luxorPhoneClient'
@@ -65,8 +66,7 @@ type VoiceContextValue = {
 const VoiceContext = createContext<VoiceContextValue | null>(null)
 
 export function PortalVoiceProvider({ children }: { children: React.ReactNode }) {
-  const { notify, dismiss } = useToast()
-  const incomingCallToastIdRef = useRef<string | null>(null)
+  const { notify } = useToast()
   const [phoneState, setPhoneState] = useState<PhoneState>('disabled')
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
@@ -153,13 +153,9 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setIncomingCall(null)
     setIsMuted(false)
     setCallQuality('good')
-    if (incomingCallToastIdRef.current) {
-      dismiss(incomingCallToastIdRef.current)
-      incomingCallToastIdRef.current = null
-    }
     window.dispatchEvent(new Event('luxor-call-history-refresh'))
     window.setTimeout(loadUnreadCount, 1000)
-  }, [loadUnreadCount, dismiss])
+  }, [loadUnreadCount])
 
   const attachCallEvents = useCallback((call: Call, initial: ActiveCall) => {
     currentCallRef.current = call
@@ -172,10 +168,6 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
       setActiveCall((current) => current ? { ...current, phase: 'active', startedAt: Date.now() } : current)
       setIncomingCall(null)
       setIsPanelOpen(true)
-      if (incomingCallToastIdRef.current) {
-        dismiss(incomingCallToastIdRef.current)
-        incomingCallToastIdRef.current = null
-      }
     })
     call.on('warning', (name) => {
       const warningName = String(name || '').toLowerCase()
@@ -222,77 +214,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
     setIsPanelOpen(false)
     setUnreadCount((count) => count + 1)
 
-    // Trigger the incoming call toast notification
-    let toastId = ''
-    toastId = notify({
-      title: (
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Incoming Call</span>
-          {inquiryId ? (
-            <Link
-              href={`/portal/leads/${inquiryId}`}
-              onClick={() => dismiss(toastId)}
-              className="mt-0.5 inline-block text-sm font-bold text-white hover:text-[#caa24c] hover:underline transition-colors"
-            >
-              {contactName}
-            </Link>
-          ) : (
-            <span className="mt-0.5 text-sm font-bold text-white">{contactName}</span>
-          )}
-        </div>
-      ),
-      description: (
-        <span className="font-mono text-zinc-400 text-[11px]">
-          {formatPhoneDisplay(phoneNumber)}
-        </span>
-      ),
-      icon: (
-        <PortalContactAvatar
-          name={contactName}
-          size="sm"
-          className="border-[#caa24c]/40 bg-[#caa24c]/15 text-[#caa24c]"
-        />
-      ),
-      variant: 'warning',
-      durationMs: 0,
-      action: (
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (toastId) dismiss(toastId)
-              call.reject()
-            }}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 text-[10px] font-black uppercase tracking-wider text-red-300 hover:bg-red-500/15"
-          >
-            <PhoneOff size={11} /> Decline
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (toastId) dismiss(toastId)
-              call.accept()
-            }}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-emerald-500 px-3 text-[10px] font-black uppercase tracking-wider text-black hover:bg-emerald-400"
-          >
-            <PhoneCall size={11} /> Answer
-          </button>
-        </div>
-      )
-    })
-    incomingCallToastIdRef.current = toastId
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const notification = new Notification(`Incoming Luxor call: ${contactName}`, {
-        body: phoneNumber,
-        icon: '/favicon.ico',
-        tag: parentCallSid || `luxor-call-${phoneNumber}`,
-      })
-      notification.onclick = () => {
-        window.focus()
-        notification.close()
-      }
-    }
+    navigator.vibrate?.([180, 90, 180])
   }, [attachCallEvents])
 
   const initializeDevice = useCallback(async () => {
@@ -451,9 +373,17 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   }, [incomingCall, loadUnreadCount])
 
   const rejectIncoming = useCallback(() => {
-    incomingCall?.call.reject()
+    if (!incomingCall) return
+    incomingCall.call.reject()
+    if (incomingCall.twilioCallSid) {
+      void fetch('/api/twilio/calls', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ twilioCallSid: incomingCall.twilioCallSid, isRead: true }),
+      }).then(loadUnreadCount)
+    }
     setIncomingCall(null)
-  }, [incomingCall])
+  }, [incomingCall, loadUnreadCount])
 
   const hangUp = useCallback(() => {
     currentCallRef.current?.disconnect()
@@ -506,7 +436,96 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         onSendDigit={(digit) => currentCallRef.current?.sendDigits(digit)}
         onToggleMute={toggleMute}
       />
+      {incomingCall && typeof document !== 'undefined'
+        ? createPortal(
+            <IncomingCallOverlay
+              call={incomingCall}
+              onAnswer={answerIncoming}
+              onDecline={rejectIncoming}
+            />,
+            document.body,
+          )
+        : null}
     </VoiceContext.Provider>
+  )
+}
+
+function IncomingCallOverlay({
+  call,
+  onAnswer,
+  onDecline,
+}: {
+  call: IncomingCall
+  onAnswer: () => void
+  onDecline: () => void
+}) {
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[240] flex items-end justify-center bg-[#090806]/92 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] text-white backdrop-blur-xl sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="luxor-incoming-call-title"
+    >
+      <motion.section
+        initial={reduceMotion ? undefined : { y: 28, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+        className="w-full overflow-hidden rounded-[1.75rem] border border-[#caa24c]/30 bg-[#15120e] px-5 pb-6 pt-7 shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:max-w-md sm:px-8 sm:pb-8 sm:pt-9"
+      >
+        <div className="text-center">
+          <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">
+            <motion.span
+              animate={reduceMotion ? undefined : { opacity: [1, 0.35, 1] }}
+              transition={{ duration: 1.1, repeat: Infinity }}
+              className="h-2 w-2 rounded-full bg-emerald-400"
+            />
+            Incoming Luxor call
+          </div>
+
+          <motion.div
+            animate={reduceMotion ? undefined : { scale: [1, 1.045, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+            className="mx-auto mt-8 w-fit rounded-full ring-8 ring-[#caa24c]/8"
+          >
+            <PortalContactAvatar
+              name={call.contactName}
+              size="xl"
+              className="border-[#caa24c]/40 bg-[#caa24c]/15 text-[#f1d27a]"
+            />
+          </motion.div>
+
+          <h2 id="luxor-incoming-call-title" className="mt-6 text-2xl font-black tracking-tight text-white">
+            {call.contactName}
+          </h2>
+          <p className="mt-2 font-mono text-sm text-white/60">{formatPhoneDisplay(call.phoneNumber)}</p>
+          <p className="mt-3 text-xs leading-5 text-white/45">Calling the Luxor business line</p>
+        </div>
+
+        <div className="mt-8 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={onDecline}
+            className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-red-400/25 bg-red-500/12 px-4 text-sm font-black text-red-200 transition active:scale-[0.98] hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+            aria-label={`Decline call from ${call.contactName}`}
+          >
+            <PhoneOff size={21} /> Decline
+          </button>
+          <button
+            type="button"
+            onClick={onAnswer}
+            className="flex min-h-16 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-black text-[#07120d] shadow-[0_14px_35px_rgba(16,185,129,0.2)] transition active:scale-[0.98] hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#15120e]"
+            aria-label={`Answer call from ${call.contactName}`}
+          >
+            <PhoneCall size={21} /> Answer
+          </button>
+        </div>
+      </motion.section>
+    </motion.div>
   )
 }
 
@@ -555,7 +574,7 @@ const indicatorCoreVariants = {
     borderColor: '#f59e0b',
     borderWidth: '1.75px',
     boxShadow: '0 0 6px rgba(245, 158, 11, 0.5)',
-    scale: [0.95, 1.1, 0.95],
+    scale: 1.05,
     opacity: 1,
   },
   active_good: {

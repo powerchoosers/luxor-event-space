@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { createOrUpdateLuxorCall, findLuxorInquiryByPhone, normalizePhoneNumber } from '@/lib/luxorCallsServer'
 import {
   buildTwilioCallbackUrl,
@@ -9,6 +10,7 @@ import {
   validateTwilioWebhook,
 } from '@/lib/luxorTwilioServer'
 import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
+import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 
 export const runtime = 'nodejs'
 
@@ -41,6 +43,20 @@ export async function POST(request: Request) {
         caller_country: params.FromCountry || null,
         stir_status: params.StirStatus || null,
       },
+    })
+
+    after(async () => {
+      const callerLabel = callerName === 'Unknown caller'
+        ? callerNumber
+        : `${callerName} · ${callerNumber}`
+      await sendLuxorWebPush('call', {
+        title: 'Incoming Luxor call',
+        body: callerLabel,
+        url: '/portal/calls',
+        tag: `luxor-call-${params.CallSid}`,
+      }).catch((pushError) => {
+        console.error('Incoming Luxor call stored, but Web Push delivery failed:', pushError)
+      })
     })
 
     const statusCallback = buildTwilioCallbackUrl('/api/twilio/status', {

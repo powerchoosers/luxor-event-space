@@ -4,7 +4,7 @@ import { BellOff, BellRing, Check, Loader2, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
 
-type PushType = 'email' | 'booking'
+type PushType = 'email' | 'booking' | 'call'
 type PushState = 'loading' | 'unsupported' | 'install-required' | 'unconfigured' | 'denied' | 'disabled' | 'enabled' | 'error'
 
 type NavigatorWithStandalone = Navigator & { standalone?: boolean }
@@ -29,7 +29,7 @@ export function PortalPushNotifications() {
   const [state, setState] = useState<PushState>('loading')
   const [busy, setBusy] = useState(false)
   const [publicKey, setPublicKey] = useState('')
-  const [types, setTypes] = useState<PushType[]>(['email', 'booking'])
+  const [types, setTypes] = useState<PushType[]>(['email', 'booking', 'call'])
 
   const loadState = useCallback(async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
@@ -179,10 +179,11 @@ export function PortalPushNotifications() {
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         {([
           { type: 'email' as const, title: 'New emails', copy: 'Alert when a new message reaches the Luxor inbox.' },
           { type: 'booking' as const, title: 'Inquiries & bookings', copy: 'Alert for new inquiries and newly created event bookings.' },
+          { type: 'call' as const, title: 'Incoming calls', copy: 'Show who is calling and open the Luxor call workspace.' },
         ]).map((option) => {
           const selected = types.includes(option.type)
           return (
@@ -206,7 +207,7 @@ export function PortalPushNotifications() {
             {busy || state === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />} {state === 'install-required' ? 'How to install' : 'Enable notifications'}
           </button>
         )}
-        <p className="text-[9px] leading-relaxed text-[color:var(--portal-faint)]">Notification previews avoid client names and private event details.</p>
+        <p className="text-[9px] leading-relaxed text-[color:var(--portal-faint)]">Email and booking previews avoid private details. Call alerts show the caller name and number.</p>
       </div>
     </section>
   )

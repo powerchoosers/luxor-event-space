@@ -3,7 +3,7 @@ import 'server-only'
 import webPush, { type PushSubscription, type WebPushError } from 'web-push'
 import { supabaseRest } from './supabaseRestServer'
 
-export type LuxorPushType = 'email' | 'booking'
+export type LuxorPushType = 'email' | 'booking' | 'call'
 
 export type LuxorPushPayload = {
   title: string

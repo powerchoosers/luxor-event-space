@@ -7,7 +7,7 @@ import {
   upsertLuxorPushSubscription,
 } from '@/lib/luxorWebPushServer'
 
-const VALID_NOTIFICATION_TYPES = new Set<LuxorPushType>(['email', 'booking'])
+const VALID_NOTIFICATION_TYPES = new Set<LuxorPushType>(['email', 'booking', 'call'])
 const BASE64_URL = /^[A-Za-z0-9_-]+$/
 
 function validPushEndpoint(value: string) {
@@ -26,7 +26,7 @@ function validPushEndpoint(value: string) {
 }
 
 function cleanNotificationTypes(value: unknown): LuxorPushType[] {
-  if (!Array.isArray(value)) return ['email', 'booking']
+  if (!Array.isArray(value)) return ['email', 'booking', 'call']
   const types = value.filter((item): item is LuxorPushType => typeof item === 'string' && VALID_NOTIFICATION_TYPES.has(item as LuxorPushType))
   return Array.from(new Set(types))
 }
