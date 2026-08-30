@@ -188,6 +188,11 @@ export function LuxorConciergeChat() {
   const [pending, setPending] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<(typeof eventCards)[number] | null>(null)
   const [tourSelection, setTourSelection] = useState<TourSelection | null>(null)
+  useEffect(() => {
+    const openElena = () => setOpen(true)
+    window.addEventListener('luxor:open-elena', openElena)
+    return () => window.removeEventListener('luxor:open-elena', openElena)
+  }, [])
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots({ enabled: open })
   const [bookingStep, setBookingStep] = useState<1 | 2>(1)
   const [selectedTourDate, setSelectedTourDate] = useState('')
@@ -752,7 +757,7 @@ export function LuxorConciergeChat() {
                     }}
                     className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#050505] transition hover:bg-[#f1d27a]"
                   >
-                    Check tour times
+                    Book a tour
                   </button>
                   <button
                     type="button"

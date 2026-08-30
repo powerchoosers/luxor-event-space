@@ -1005,12 +1005,16 @@ export function PortalDatePicker({
   className = '',
   placeholder = 'Select Date...',
   theme = 'portal',
+  minDate,
+  availableDates,
 }: {
   value: string
   onChange: (val: string) => void
   className?: string
   placeholder?: string
   theme?: 'portal' | 'light'
+  minDate?: string
+  availableDates?: Set<string>
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
@@ -1128,9 +1132,13 @@ export function PortalDatePicker({
   }
 
   const handleSelectDay = (date: Date) => {
-    onChange(formatYYYYMMDD(date))
+    const formatted = formatYYYYMMDD(date)
+    if (isDisabled(formatted)) return
+    onChange(formatted)
     setIsOpen(false)
   }
+
+  const isDisabled = (date: string) => Boolean((minDate && date < minDate) || (availableDates && !availableDates.has(date)))
 
   const formattedDisplay = value
     ? new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
@@ -1198,9 +1206,11 @@ export function PortalDatePicker({
                     >
                       ◀
                     </button>
+                    <button type="button" onClick={() => setViewDate(new Date(year - 1, month, 1))} aria-label="Previous year" className={`rounded px-1 text-[9px] font-bold ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`}>−1y</button>
                     <span className={`font-bold uppercase tracking-wider ${isLight ? 'text-[#3b2b1d]' : 'text-[color:var(--portal-text)]'}`}>
                       {monthNames[month]} {year}
                     </span>
+                    <button type="button" onClick={() => setViewDate(new Date(year + 1, month, 1))} aria-label="Next year" className={`rounded px-1 text-[9px] font-bold ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`}>+1y</button>
                     <button
                       type="button"
                       onClick={handleNextMonth}
@@ -1224,13 +1234,15 @@ export function PortalDatePicker({
 
                       const isSelected = value && formatYYYYMMDD(day) === value
                       const isToday = formatYYYYMMDD(day) === formatYYYYMMDD(new Date())
+                      const disabled = isDisabled(formatYYYYMMDD(day))
                       
                       return (
                         <button
                           key={day.getTime()}
                           type="button"
                           onClick={() => handleSelectDay(day)}
-                          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md font-mono transition-all border ${
+                          disabled={disabled}
+                          className={`relative flex h-7 w-7 items-center justify-center rounded-md font-mono transition-all border ${disabled ? 'cursor-not-allowed border-transparent text-[#b9ad9f] opacity-55' : 'cursor-pointer'} ${
                             isSelected
                               ? isLight ? 'border-[#b98a3d]/50 bg-[#f5ead8] font-bold text-[#6f4d1f] shadow' : 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                               : isToday
@@ -1238,7 +1250,7 @@ export function PortalDatePicker({
                               : isLight ? 'border-transparent text-[#5b4632] hover:border-[#d8c4a4] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-text,#f7efe3)] hover:border-[#caa24c]/50 hover:bg-black/5 hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
                         >
-                          {day.getDate()}
+                          {day.getDate()}{availableDates?.has(formatYYYYMMDD(day)) ? <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-emerald-600" /> : null}
                         </button>
                       )
                     })}
