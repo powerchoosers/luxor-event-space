@@ -3,16 +3,17 @@
 import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { CalendarDays, Mail, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
-  { label: 'Events', href: '/events' },
-  { label: 'Spaces', href: '/spaces' },
-  { label: 'Gallery', href: '/gallery' },
-  { label: 'Packages & Rates', href: '/pricing' },
-  { label: 'Visit', href: '/tour' },
+  { label: 'Events', labelEs: 'Eventos', href: '/events' },
+  { label: 'Spaces', labelEs: 'Espacios', href: '/spaces' },
+  { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
+  { label: 'Packages & Rates', labelEs: 'Paquetes y tarifas', href: '/pricing' },
+  { label: 'Visit', labelEs: 'Visita', href: '/tour' },
 ]
 
 const socialLinks = [
@@ -22,25 +23,27 @@ const socialLinks = [
 ] as const
 
 export const Footer = () => {
+  const spanish = usePathname().startsWith('/es')
+
   return (
     <footer id="shared-footer" className="site-footer--light relative isolate overflow-hidden bg-[#faf7f1] pt-24 pb-12 text-[#241d17] sm:pt-32 sm:pb-16">
       <div className="absolute inset-0 luxor-noise opacity-30" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(202,162,76,0.16),transparent_28rem),linear-gradient(180deg,rgba(5,5,5,0.1),rgba(5,5,5,0.96))]" />
       
       <div className="relative z-10 mx-auto max-w-7xl px-6 lg:px-8">
-        <Link href="/" className="mx-auto block w-full max-w-[460px]">
+        <Link href={spanish ? '/es' : '/'} className="mx-auto block w-full max-w-[460px]">
           <LuxorAxisLockup dividerClassName="text-[#8e6829]" />
         </Link>
 
         <div className="mt-14 grid grid-cols-1 gap-12 text-center lg:grid-cols-12 lg:text-left">
           {/* Quick Links */}
           <div className="lg:col-span-3">
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">Navigation</h3>
+            <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">{spanish ? 'Navegación' : 'Navigation'}</h3>
             <ul className="mt-6 space-y-4">
               {navLinks.map((link) => (
                 <li key={link.label}>
                   <Link href={link.href} className="text-sm text-[#d7c29a]/62 transition-colors hover:text-[#f8f3ed]">
-                    {link.label}
+                    {spanish ? link.labelEs : link.label}
                   </Link>
                 </li>
               ))}
@@ -50,8 +53,7 @@ export const Footer = () => {
           {/* Brand Info */}
           <div className="lg:col-span-5">
             <p className="mx-auto max-w-sm text-base leading-7 text-[#d7c29a]/68 lg:mx-0">
-              A modern San Antonio event space built for the celebrations families remember.
-              Host your wedding, quinceañera, or baby shower in elegance.
+              {spanish ? 'Un espacio moderno para eventos en San Antonio, creado para celebraciones familiares inolvidables. Celebra tu boda, quinceañera o baby shower con elegancia.' : 'A modern San Antonio event space built for the celebrations families remember. Host your wedding, quinceañera, or baby shower in elegance.'}
             </p>
             <div className="mt-8 space-y-3 text-sm text-[#d7c29a]/62">
               <a
@@ -70,32 +72,32 @@ export const Footer = () => {
                 <Mail className="h-4 w-4 shrink-0 text-[#caa24c]" />
                 <span>booking@luxoratlaspalmas.com</span>
               </a>
-              <PublicPhoneLink className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start" />
-              <p>Private venue tours by appointment.</p>
+              <PublicPhoneLink loadingLabel={spanish ? 'Cargando teléfono…' : 'Loading phone…'} className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start" />
+              <p>{spanish ? 'Recorridos privados con cita previa.' : 'Private venue tours by appointment.'}</p>
             </div>
           </div>
 
           {/* Contact / Action */}
           <div className="lg:col-span-4">
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">Get in Touch</h3>
+            <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">{spanish ? 'Contáctanos' : 'Get in Touch'}</h3>
             <div className="mt-6 flex flex-col gap-4">
               <Link 
-                href="/tour#tour-booking"
+                href={`${spanish ? '/es/tour' : '/tour'}#tour-booking`}
                 data-conversion="tour_cta_click"
                 data-conversion-label="Footer"
                 className="mt-4 inline-flex items-center justify-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
               >
                 <CalendarDays className="h-4 w-4" />
-                Book Your Tour
+                {spanish ? 'Reserva tu recorrido' : 'Book Your Tour'}
               </Link>
-              <div className="flex items-center justify-center gap-3 lg:justify-start" aria-label="Luxor social media">
+              <div className="flex items-center justify-center gap-3 lg:justify-start" aria-label={spanish ? 'Redes sociales de Luxor' : 'Luxor social media'}>
                 {socialLinks.map((social) => (
                   <a
                     key={social.label}
                     href={social.href}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`Follow Luxor on ${social.label}`}
+                    aria-label={`${spanish ? 'Sigue a Luxor en' : 'Follow Luxor on'} ${social.label}`}
                     className="flex h-11 w-11 items-center justify-center rounded-md border border-[#caa24c]/24 bg-black/30 transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f1d27a]"
                   >
                     <Image src={social.icon} alt="" width={20} height={20} />
@@ -113,13 +115,13 @@ export const Footer = () => {
 
         <div className="mt-8 overflow-hidden">
           <p className="hidden text-center font-mono text-[10px] uppercase tracking-[0.55em] text-[#caa24c]/85 sm:block">
-            Timeless <span className="mx-4 text-[#caa24c]">◆</span> Elegant <span className="mx-4 text-[#caa24c]">◆</span> Celebratory <span className="mx-4 text-[#caa24c]">◆</span> Luxurious
+            {spanish ? 'Atemporal' : 'Timeless'} <span className="mx-4 text-[#caa24c]">◆</span> {spanish ? 'Elegante' : 'Elegant'} <span className="mx-4 text-[#caa24c]">◆</span> {spanish ? 'Festivo' : 'Celebratory'} <span className="mx-4 text-[#caa24c]">◆</span> {spanish ? 'Lujoso' : 'Luxurious'}
           </p>
-          <div className="luxor-footer-marquee sm:hidden" aria-label="Timeless, elegant, celebratory, luxurious">
+          <div className="luxor-footer-marquee sm:hidden" aria-label={spanish ? 'Atemporal, elegante, festivo, lujoso' : 'Timeless, elegant, celebratory, luxurious'}>
             <div className="luxor-footer-marquee-track">
               {[0, 1].map((item) => (
                 <span key={item} className="luxor-footer-marquee-line">
-                  Timeless <span>◆</span> Elegant <span>◆</span> Celebratory <span>◆</span> Luxurious <span>◆</span>
+                  {spanish ? 'Atemporal' : 'Timeless'} <span>◆</span> {spanish ? 'Elegante' : 'Elegant'} <span>◆</span> {spanish ? 'Festivo' : 'Celebratory'} <span>◆</span> {spanish ? 'Lujoso' : 'Luxurious'} <span>◆</span>
                 </span>
               ))}
             </div>
@@ -128,12 +130,12 @@ export const Footer = () => {
 
         <div className="mt-10 flex flex-col items-center justify-between gap-6 border-t border-[#caa24c]/18 pt-8 sm:flex-row">
           <p className="text-xs text-[#d7c29a]/60">
-            &copy; {new Date().getFullYear()} Luxor Event Space. Built with Elegance in San Antonio.
+            &copy; {new Date().getFullYear()} Luxor Event Space. {spanish ? 'Creado con elegancia en San Antonio.' : 'Built with Elegance in San Antonio.'}
           </p>
           <div className="flex gap-8 text-[10px] font-mono uppercase tracking-[0.2em] text-[#d7c29a]/60 transition-colors hover:text-[#f7efe3]">
-            <Link href="/sms-signup">Text Preferences</Link>
-            <Link href="/privacy">Privacy Policy</Link>
-            <Link href="/terms">Terms of Service</Link>
+            <Link href="/sms-signup">{spanish ? 'Preferencias de mensajes' : 'Text Preferences'}</Link>
+            <Link href="/privacy">{spanish ? 'Política de privacidad' : 'Privacy Policy'}</Link>
+            <Link href="/terms">{spanish ? 'Términos de servicio' : 'Terms of Service'}</Link>
           </div>
         </div>
       </div>

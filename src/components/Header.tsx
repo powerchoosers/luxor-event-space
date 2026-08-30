@@ -9,17 +9,18 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 const navLinks = [
-  { label: 'Events', href: '/events' },
-  { label: 'Spaces', href: '/spaces' },
-  { label: 'Gallery', href: '/gallery' },
-  { label: 'Rates', href: '/pricing' },
-  { label: 'Visit', href: '/tour' },
+  { label: 'Events', labelEs: 'Eventos', href: '/events' },
+  { label: 'Spaces', labelEs: 'Espacios', href: '/spaces' },
+  { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
+  { label: 'Rates', labelEs: 'Tarifas', href: '/pricing' },
+  { label: 'Visit', labelEs: 'Visita', href: '/tour' },
 ]
 
 export const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const spanish = pathname.startsWith('/es')
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export const Header = () => {
         }`}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 lg:px-8 h-full">
-        <Link href="/" className="group transition-transform duration-300 hover:scale-[1.015]">
+        <Link href={spanish ? '/es' : '/'} className="group transition-transform duration-300 hover:scale-[1.015]">
           <LuxorWordmark compact horizontal subline={false} markClassName="!h-12 !w-12" />
         </Link>
 
@@ -84,7 +85,7 @@ export const Header = () => {
               href={item.href}
               className="site-header-link group relative font-serif text-[13px] font-semibold uppercase tracking-[0.22em] text-[#e5d2ac]/82 transition-colors hover:text-[#f1d27a]"
             >
-              {item.label}
+              {spanish ? item.labelEs : item.label}
               <motion.span 
                 className="absolute -bottom-2 left-0 h-px bg-[#caa24c]" 
                 initial={{ width: 0 }}
@@ -97,20 +98,20 @@ export const Header = () => {
 
         <div className="flex items-center gap-4">
 
-          <PublicPhoneLink compact className="site-header-phone hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
+          <PublicPhoneLink compact label={spanish ? 'Llamar a Luxor' : 'Call Luxor'} className="site-header-phone hidden items-center gap-2 rounded-md border border-[#caa24c]/25 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7c29a]/80 transition-colors hover:border-[#caa24c]/50 hover:text-[#f1d27a] md:inline-flex" />
 
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
             <Link
-              href="/tour#tour-booking"
+              href={`${spanish ? '/es/tour' : '/tour'}#tour-booking`}
               data-conversion="tour_cta_click"
               data-conversion-label="Header"
               className="hidden rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#050505] shadow-[0_18px_36px_-24px_rgba(202,162,76,0.8)] transition-all duration-300 hover:bg-[#dfbd68] sm:inline-flex sm:items-center sm:gap-2"
             >
               <CalendarDays className="h-3.5 w-3.5 text-[#050505]" />
-              Book a Tour
+              {spanish ? 'Reservar recorrido' : 'Book a Tour'}
             </Link>
           </motion.div>
 
@@ -119,7 +120,7 @@ export const Header = () => {
             ref={mobileMenuButtonRef}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="site-header-menu relative z-[120] p-2 text-[#d7c29a]/80 transition-colors hover:text-[#f1d27a] lg:hidden"
-            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-label={mobileMenuOpen ? (spanish ? 'Cerrar menú de navegación' : 'Close navigation menu') : (spanish ? 'Abrir menú de navegación' : 'Open navigation menu')}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
           >
@@ -165,7 +166,7 @@ export const Header = () => {
                     onClick={() => setMobileMenuOpen(false)}
                     className="block font-serif text-4xl leading-none tracking-[0.16em] text-[#241d17] transition-colors hover:text-[#8d672b]"
                   >
-                    {item.label}
+                    {spanish ? item.labelEs : item.label}
                   </Link>
                 </motion.div>
               ))}
@@ -175,14 +176,14 @@ export const Header = () => {
                 transition={{ delay: 0.3 }}
               >
                 <Link
-                  href="/tour#tour-booking"
+                  href={`${spanish ? '/es/tour' : '/tour'}#tour-booking`}
                   data-conversion="tour_cta_click"
                   data-conversion-label="Mobile menu"
                   onClick={() => setMobileMenuOpen(false)}
                   className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/60 bg-[#caa24c] px-8 py-4 text-sm font-bold uppercase tracking-[0.18em] text-black shadow-xl"
                 >
                   <CalendarDays size={18} />
-                  Book a Tour
+                  {spanish ? 'Reservar recorrido' : 'Book a Tour'}
                 </Link>
                 <PublicPhoneLink className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#f1d27a]" />
               </motion.div>

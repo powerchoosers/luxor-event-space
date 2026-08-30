@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
@@ -183,6 +184,7 @@ function getVisitorGreeting() {
 }
 
 export function LuxorConciergeChat() {
+  const spanish = usePathname().startsWith('/es')
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
@@ -878,16 +880,16 @@ export function LuxorConciergeChat() {
             type="button"
             onClick={() => setOpen(true)}
             className="luxor-concierge-launcher absolute bottom-0 right-0 group flex h-16 w-16 items-center justify-center rounded-full border border-[#f1d27a]/45 bg-[#0d0908] p-1 text-left shadow-[0_20px_70px_-30px_rgba(0,0,0,1)] transition hover:border-[#f1d27a]/70 hover:bg-[#120d0c] sm:h-auto sm:w-auto sm:justify-start sm:gap-3 sm:py-2 sm:pl-2 sm:pr-4 sm:whitespace-nowrap"
-            aria-label="Open Luxor concierge chat"
+            aria-label={spanish ? 'Abrir el chat de la concierge de Luxor' : 'Open Luxor concierge chat'}
           >
             <span className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/55 bg-[#120d0c]">
               <Image src="/luxor-concierge.png" alt="" fill sizes="56px" className="object-cover" />
             </span>
             <span className="hidden sm:block">
-              <span className="block font-serif text-lg leading-none text-[#f7efe3]">Ask Elena</span>
+              <span className="block font-serif text-lg leading-none text-[#f7efe3]">{spanish ? 'Pregúntale a Elena' : 'Ask Elena'}</span>
               <span className="mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#caa24c]">
                 <MessageCircle className="h-3 w-3" />
-                Book a tour
+                {spanish ? 'Reservar recorrido' : 'Book a tour'}
               </span>
             </span>
             <ChevronLeft className="hidden h-4 w-4 text-[#caa24c] transition sm:block" />
