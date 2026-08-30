@@ -185,7 +185,7 @@ export const Header = () => {
                   <CalendarDays size={18} />
                   {spanish ? 'Reservar recorrido' : 'Book a Tour'}
                 </Link>
-                <PublicPhoneLink className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#f1d27a]" />
+                <PublicPhoneLink className="mt-3 flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/45 px-8 py-3 text-sm font-bold uppercase tracking-[0.18em] text-[#241d17] transition-colors hover:border-[#8d672b] hover:text-[#8d672b]" />
               </motion.div>
             </motion.div>
           </motion.div>
