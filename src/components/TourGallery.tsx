@@ -11,16 +11,16 @@ type Locale = 'en' | 'es'
 
 const slides = {
   en: [
-    { title: 'Main Hall', subtitle: 'Up to 180 Guests', image: '/images/dining-hall/main-hall-reception-professional.png' },
-    { title: 'VIP Room', subtitle: 'Private VIP Room', image: '/images/dining-hall/main-hall-conversation-candid.png' },
-    { title: 'Lounge Room', subtitle: 'Lounge Room', image: '/images/luxor-lounge/luxor-lounge-empty.png' },
-    { title: 'Kitchenette', subtitle: 'Kitchenette', image: '/images/dining-hall/main-hall-dinner-service-candid.png' },
+    { title: 'Main Hall', subtitle: 'Up to 180 Guests', image: '/images/dining-hall/main-hall-reception-professional.png', width: 1472, height: 1069 },
+    { title: 'VIP Room', subtitle: 'Private VIP Room', image: '/images/dining-hall/main-hall-conversation-candid.png', width: 1536, height: 1024 },
+    { title: 'Lounge Room', subtitle: 'Lounge Room', image: '/images/luxor-lounge/luxor-lounge-empty.png', width: 941, height: 1672 },
+    { title: 'Kitchenette', subtitle: 'Kitchenette', image: '/images/dining-hall/main-hall-dinner-service-candid.png', width: 1536, height: 1024 },
   ],
   es: [
-    { title: 'Salón principal', subtitle: 'Hasta 180 invitados', image: '/images/dining-hall/main-hall-reception-professional.png' },
-    { title: 'Sala VIP', subtitle: 'Sala VIP privada', image: '/images/dining-hall/main-hall-conversation-candid.png' },
-    { title: 'Sala lounge', subtitle: 'Sala lounge', image: '/images/luxor-lounge/luxor-lounge-empty.png' },
-    { title: 'Cocineta', subtitle: 'Cocineta', image: '/images/dining-hall/main-hall-dinner-service-candid.png' },
+    { title: 'Salón principal', subtitle: 'Hasta 180 invitados', image: '/images/dining-hall/main-hall-reception-professional.png', width: 1472, height: 1069 },
+    { title: 'Sala VIP', subtitle: 'Sala VIP privada', image: '/images/dining-hall/main-hall-conversation-candid.png', width: 1536, height: 1024 },
+    { title: 'Sala lounge', subtitle: 'Sala lounge', image: '/images/luxor-lounge/luxor-lounge-empty.png', width: 941, height: 1672 },
+    { title: 'Cocineta', subtitle: 'Cocineta', image: '/images/dining-hall/main-hall-dinner-service-candid.png', width: 1536, height: 1024 },
   ],
 } as const
 
@@ -121,8 +121,11 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
         dragElastic={0.08}
         dragMomentum={false}
         onDragStart={() => {
-          draggingRef.current = true
+          draggingRef.current = false
           x.stop()
+        }}
+        onDrag={(_, info) => {
+          if (Math.abs(info.offset.x) > 8) draggingRef.current = true
         }}
         onDragEnd={handleDragEnd}
       >
@@ -130,8 +133,8 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
           if (!draggingRef.current) setLightboxIndex(index)
         }} className="relative h-full w-full shrink-0 cursor-zoom-in text-left">
           <Image src={slide.image} alt={slide.title} fill draggable={false} loading={index === 0 ? 'eager' : 'lazy'} fetchPriority={index === 0 ? 'high' : 'auto'} sizes="(max-width: 639px) 100vw, (max-width: 1024px) 110vw, 100vw" className="select-none object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent via-45% to-black/70" />
-          <div className="absolute inset-x-5 bottom-16 rounded-xl border border-[#f2dfb1]/35 bg-[rgba(12,9,7,0.68)] px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.4)] backdrop-blur-md sm:inset-x-auto sm:bottom-9 sm:left-8 sm:max-w-[calc(100%-8rem)] sm:px-8 sm:py-6 lg:left-10"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] !text-[#f9d889] drop-shadow-[0_2px_5px_rgba(0,0,0,0.95)] sm:text-[11px] sm:tracking-[0.28em]">{slide.subtitle}</p><h2 className="mt-2 font-serif text-4xl leading-none !text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.95)] sm:mt-2.5 sm:text-6xl">{slide.title}</h2></div>
+          <div aria-hidden="true" className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.12), transparent 42%), linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.42) 26%, transparent 58%)' }} />
+          <div className="absolute inset-x-0 bottom-0 px-7 pb-20 pt-28 text-left sm:px-10 sm:pb-9 sm:pr-48 sm:pt-36"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] !text-[#f9d889] drop-shadow-[0_2px_7px_rgba(0,0,0,1)] sm:text-[11px] sm:tracking-[0.28em]">{slide.subtitle}</p><h2 className="mt-2 font-serif text-4xl leading-none !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:mt-2.5 sm:text-6xl">{slide.title}</h2></div>
         </button>)}
       </motion.div>
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-black/55 via-black/20 to-transparent sm:h-36" />
@@ -148,11 +151,12 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
   {typeof document !== 'undefined' ? createPortal(<AnimatePresence>
     {lightboxSlide ? <motion.div role="dialog" aria-modal="true" aria-label={`${text.dialog}: ${lightboxSlide.title}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(0,0,0,0.95)] p-3 sm:p-8">
       <button type="button" aria-label={text.close} onClick={() => setLightboxIndex(null)} className="absolute inset-0 cursor-zoom-out" />
-      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="pointer-events-none relative h-[min(88dvh,900px)] w-full max-w-7xl">
-        <Image src={lightboxSlide.image} alt={lightboxSlide.title} fill priority sizes="100vw" className="object-contain" />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-5 pb-4 pt-16 text-center sm:px-8 sm:pb-6">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#f9d889]">{lightboxSlide.subtitle}</p>
-          <p className="mt-1 font-serif text-3xl text-white sm:text-4xl">{lightboxSlide.title}</p>
+      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} style={{ width: `min(100%, calc(88dvh * ${lightboxSlide.width / lightboxSlide.height}))`, aspectRatio: `${lightboxSlide.width} / ${lightboxSlide.height}` }} className="pointer-events-none relative max-w-7xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.75)]">
+        <Image src={lightboxSlide.image} alt={lightboxSlide.title} fill priority sizes="100vw" className="object-cover" />
+        <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.78)_0%,rgba(0,0,0,0.38)_24%,transparent_54%),linear-gradient(to_right,rgba(0,0,0,0.18),transparent_20%,transparent_80%,rgba(0,0,0,0.18))]" />
+        <div className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-20 text-center sm:px-8 sm:pb-7 sm:pt-28">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#f9d889] drop-shadow-[0_2px_7px_rgba(0,0,0,1)]">{lightboxSlide.subtitle}</p>
+          <p className="mt-1 font-serif text-3xl text-white drop-shadow-[0_3px_12px_rgba(0,0,0,1)] sm:text-4xl">{lightboxSlide.title}</p>
         </div>
       </motion.div>
       <button type="button" aria-label={text.close} onClick={() => setLightboxIndex(null)} className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur transition hover:bg-white hover:text-black sm:right-7 sm:top-7"><X size={22} /></button>
