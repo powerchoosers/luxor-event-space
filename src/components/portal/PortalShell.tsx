@@ -653,7 +653,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
           </div>
 
           {/* Header Search Command Bar */}
-          <div className="group relative col-start-2 hidden w-full max-w-96 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 sm:flex">
+          <div className="group relative col-start-2 hidden w-full max-w-80 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 transition-[max-width,padding,border-color,box-shadow] duration-200 ease-out hover:max-w-[22rem] hover:border-[#caa24c]/35 hover:py-2 focus-within:!max-w-96 focus-within:border-[#caa24c]/50 focus-within:py-2 focus-within:shadow-[0_8px_24px_rgba(202,162,76,0.10)] sm:flex">
               <Search size={14} className="shrink-0 text-zinc-500 group-focus-within:text-[#caa24c] transition-colors" />
               <input
                 type="text"
