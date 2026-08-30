@@ -38,7 +38,7 @@ export function TourPageContent({ locale }: { locale: Locale }) {
   const text = copy[locale]
 
   return (
-    <main lang={locale} className="min-h-screen bg-[#f4efe7] pt-28 text-[#241d17]">
+    <main lang={locale} className="min-h-screen overflow-x-clip bg-[#f4efe7] pt-28 text-[#241d17]">
       <section className="px-5 pb-16 sm:px-6 lg:px-8 lg:pb-24">
         <div className="mx-auto max-w-7xl">
           <TourGallery locale={locale} />
