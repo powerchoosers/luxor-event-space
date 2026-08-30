@@ -18,6 +18,7 @@ export default function EmailsPage() {
 function EmailsPageContent() {
   const searchParams = useSearchParams()
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
+  const [readerOpen, setReaderOpen] = useState(Boolean(searchParams?.get('messageId')))
 
   useEffect(() => {
     let active = true
@@ -35,26 +36,29 @@ function EmailsPageContent() {
 
   return (
     <PortalPageFrame className="h-full flex-1 min-h-0 overflow-clip">
-      <PortalPageHeader
-        icon={<Mail size={18} />}
-        title="Emails"
-        mobileActionsInline
-        actions={
-          <PortalButton
-            variant="primary"
-            className="min-h-11 whitespace-nowrap"
-            aria-label="Compose email"
-            onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
-          >
-            <Plus size={13} aria-hidden="true" />
-            <span>Compose<span className="hidden sm:inline"> Email</span></span>
-          </PortalButton>
-        }
-      />
+      <div className={readerOpen ? 'hidden xl:block' : ''}>
+        <PortalPageHeader
+          icon={<Mail size={18} />}
+          title="Emails"
+          mobileActionsInline
+          actions={
+            <PortalButton
+              variant="primary"
+              className="min-h-11 whitespace-nowrap"
+              aria-label="Compose email"
+              onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
+            >
+              <Plus size={13} aria-hidden="true" />
+              <span>Compose<span className="hidden sm:inline"> Email</span></span>
+            </PortalButton>
+          }
+        />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AllEmailsTab
           inquiries={inquiries}
           initialMessageId={searchParams?.get('messageId') || undefined}
+          onReaderOpenChange={setReaderOpen}
         />
       </div>
     </PortalPageFrame>

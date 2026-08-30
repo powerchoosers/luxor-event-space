@@ -182,9 +182,10 @@ const PANEL_TRANSITION = { duration: 0.32, ease: [0.23, 1, 0.32, 1] as const }
 interface AllEmailsTabProps {
   inquiries?: LuxorInquiry[]
   initialMessageId?: string
+  onReaderOpenChange?: (open: boolean) => void
 }
 
-export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabProps) {
+export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenChange }: AllEmailsTabProps) {
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
@@ -241,6 +242,19 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
   // Starred items tracking (persisted in local state)
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
+  const [portalTheme, setPortalTheme] = useState<'light' | 'dark'>('dark')
+
+  useEffect(() => {
+    onReaderOpenChange?.(compactReaderOpen)
+  }, [compactReaderOpen, onReaderOpenChange])
+
+  useEffect(() => {
+    const syncTheme = () => setPortalTheme(document.body.dataset.portalTheme === 'light' ? 'light' : 'dark')
+    syncTheme()
+    const observer = new MutationObserver(syncTheme)
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-portal-theme'] })
+    return () => observer.disconnect()
+  }, [])
 
   const pageSnapshot = useRef<{ key: string; value: string | null }>({ key: '', value: null })
   const pageRequest = useRef<AbortController | null>(null)
@@ -638,8 +652,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <EmailQueueHealthWidget />
-      <div className="portal-surface flex min-h-0 flex-1 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm font-sans text-[color:var(--portal-text)]">
+      <div className={compactReaderOpen ? 'hidden xl:block' : ''}>
+        <EmailQueueHealthWidget />
+      </div>
+      <div className="portal-surface flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-sm sm:rounded-2xl">
       {/* PANE 1: Mailbox Folders & Navigation */}
       <AnimatePresence initial={false}>
       {folderPaneOpen && !readerExpanded && <motion.div
@@ -906,7 +922,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
-        <div className="shrink-0 border-b border-[color:var(--portal-border)] px-3 py-2 lg:hidden">
+        <div className="shrink-0 border-b border-[color:var(--portal-border)] px-2 py-1.5 lg:hidden">
           <button type="button" onClick={() => { setCompactReaderOpen(false); setReaderExpanded(false); setReaderMenuOpen(false) }} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
             <ArrowLeft size={18} /> Back to inbox
           </button>
@@ -956,8 +972,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
-            <div className="shrink-0 p-4 sm:p-6 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-4 pb-3 pt-2 sm:space-y-4 sm:p-6">
+              <div className="flex items-start justify-between gap-3 sm:gap-4">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <DirectionBadge direction={messageDetail.direction} />
@@ -970,20 +986,21 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                       </span>
                     )}
                   </div>
-                  <h2 className="text-lg font-bold text-[color:var(--portal-text)] leading-tight">{decodeHtmlEntities(messageDetail.subject)}</h2>
+                  <h2 className="text-base font-bold leading-snug text-[color:var(--portal-text)] sm:text-lg sm:leading-tight">{decodeHtmlEntities(messageDetail.subject)}</h2>
                   {messageDetail.folderPath && (
                     <p className="mt-1 break-words text-xs text-[color:var(--portal-muted)]">Folder: {messageDetail.folderPath}</p>
                   )}
                 </div>
 
                 {/* Main Action Buttons */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setReplyOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-[#d4b060] transition-all cursor-pointer shadow-xs"
+                    className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-[#caa24c] text-xs font-bold uppercase tracking-widest text-white shadow-xs transition-all hover:bg-[#d4b060] sm:h-auto sm:w-auto sm:gap-2 sm:px-4 sm:py-2"
+                    aria-label="Reply to email"
                   >
-                    <Send size={13} /> Reply
+                    <Send size={14} /> <span className="hidden sm:inline">Reply</span>
                   </button>
                   <button
                     type="button"
@@ -1001,7 +1018,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     <button
                       type="button"
                       onClick={() => setReaderMenuOpen((open) => !open)}
-                      className="rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                      className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-transparent text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
                       title="More email actions"
                       aria-label="More email actions"
                       aria-expanded={readerMenuOpen}
@@ -1128,28 +1145,28 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
               {messageDetail.deliveryError && (
                 <p role="status" className="text-xs text-[color:var(--portal-text)]">{messageDetail.deliveryError}</p>
               )}
-              <div className="flex items-center justify-between gap-4 pt-2 border-t border-[color:var(--portal-border)]">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-3 border-t border-[color:var(--portal-border)] pt-3 sm:items-center sm:gap-4">
+                <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                   <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="md" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-bold text-[color:var(--portal-text)]" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
                       {currentInquiry && (
                         <Link
                           href={`/portal/leads/${currentInquiry.id}`}
-                          className="inline-flex items-center gap-1 rounded bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20 hover:bg-[#caa24c]/20"
+                          className="hidden items-center gap-1 rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:bg-[#caa24c]/20 dark:text-[#f1d27a] sm:inline-flex"
                         >
                           View Lead File <ExternalLink size={10} />
                         </Link>
                       )}
                     </div>
-                    <p className="text-[10px] font-mono text-[color:var(--portal-muted)] mt-0.5">
+                    <p className="mt-0.5 truncate font-mono text-[9px] text-[color:var(--portal-muted)] sm:text-[10px]">
                       To: {mailboxLabel(messageDetail.to, inquiryByEmail, 'Client')} {selectedCcLabel ? `| CC: ${selectedCcLabel}` : ''}
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right font-mono text-[10px] text-[color:var(--portal-muted)]">
+                <div className="max-w-24 shrink-0 text-right font-mono text-[9px] leading-4 text-[color:var(--portal-muted)] sm:max-w-none sm:text-[10px]">
                   <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
                 </div>
               </div>
@@ -1157,7 +1174,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
             </div>
 
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto [overflow-anchor:none] p-5 portal-scrollbar bg-[color:var(--portal-soft)]/20">
+            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-soft)]/20 p-2 [overflow-anchor:none] sm:p-4 lg:p-5">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -1184,6 +1201,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId }: AllEmailsTabP
                     expanded={message.id === selectedId || index === all.length - 1}
                     viewMode={viewMode}
                     blockExternalImages={blockExternalImages}
+                    portalTheme={portalTheme}
                     inquiryByEmail={inquiryByEmail}
                     onOpenAttachment={openAttachmentPreview}
                     openingAttachment={openingAttachment}
@@ -1343,6 +1361,7 @@ function ThreadMessage({
   expanded: initiallyExpanded,
   viewMode,
   blockExternalImages,
+  portalTheme,
   inquiryByEmail,
   onOpenAttachment,
   openingAttachment,
@@ -1351,6 +1370,7 @@ function ThreadMessage({
   expanded: boolean
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
+  portalTheme: 'light' | 'dark'
   inquiryByEmail: Map<string, LuxorInquiry>
   onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
   openingAttachment: string | null
@@ -1358,23 +1378,75 @@ function ThreadMessage({
   const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
-  const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
+  const frameObserverRef = useRef<ResizeObserver | null>(null)
+  const frameInteractionCleanupRef = useRef<(() => void) | null>(null)
+  const html = useMemo(() => buildMessageDocument(message, blockExternalImages, portalTheme), [message, blockExternalImages, portalTheme])
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
     const document = frame.contentDocument
     if (!document) return
-    const height = Math.max(
-      document.body?.scrollHeight || 0,
-      document.documentElement?.scrollHeight || 0,
-      220,
-    )
-    setFrameHeight(height + 8)
+    const updateHeight = () => {
+      const height = Math.max(
+        document.body?.scrollHeight || 0,
+        document.documentElement?.scrollHeight || 0,
+        220,
+      )
+      setFrameHeight(height + 8)
+    }
+
+    frameObserverRef.current?.disconnect()
+    frameInteractionCleanupRef.current?.()
+    const observer = new ResizeObserver(updateHeight)
+    if (document.documentElement) observer.observe(document.documentElement)
+    if (document.body) observer.observe(document.body)
+    frameObserverRef.current = observer
+    updateHeight()
+    window.requestAnimationFrame(updateHeight)
+    void document.fonts?.ready.then(updateHeight)
+
+    const scrollContainer = frame.closest<HTMLElement>('[data-email-thread-scroll]')
+    if (scrollContainer) {
+      let lastTouchY: number | null = null
+      const handOffWheel = (event: WheelEvent) => {
+        scrollContainer.scrollTop += event.deltaY
+        event.preventDefault()
+      }
+      const beginTouch = (event: TouchEvent) => {
+        lastTouchY = event.touches[0]?.clientY ?? null
+      }
+      const handOffTouch = (event: TouchEvent) => {
+        const nextTouchY = event.touches[0]?.clientY
+        if (lastTouchY === null || nextTouchY === undefined) return
+        scrollContainer.scrollTop += lastTouchY - nextTouchY
+        lastTouchY = nextTouchY
+        event.preventDefault()
+      }
+      const endTouch = () => { lastTouchY = null }
+
+      document.addEventListener('wheel', handOffWheel, { passive: false })
+      document.addEventListener('touchstart', beginTouch, { passive: true })
+      document.addEventListener('touchmove', handOffTouch, { passive: false })
+      document.addEventListener('touchend', endTouch, { passive: true })
+      document.addEventListener('touchcancel', endTouch, { passive: true })
+      frameInteractionCleanupRef.current = () => {
+        document.removeEventListener('wheel', handOffWheel)
+        document.removeEventListener('touchstart', beginTouch)
+        document.removeEventListener('touchmove', handOffTouch)
+        document.removeEventListener('touchend', endTouch)
+        document.removeEventListener('touchcancel', endTouch)
+      }
+    }
   }
 
+  useEffect(() => () => {
+    frameObserverRef.current?.disconnect()
+    frameInteractionCleanupRef.current?.()
+  }, [])
+
   return (
-    <article className={`overflow-hidden rounded-2xl border transition-colors ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
-      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center gap-3 p-4 text-left cursor-pointer">
+    <article className={`overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
         <PortalContactAvatar name={mailboxLabel(message.from, inquiryByEmail)} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
@@ -1395,7 +1467,7 @@ function ThreadMessage({
           animate={{ height: 'auto', opacity: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
           transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-          className="overflow-hidden border-t border-[color:var(--portal-border)] bg-white"
+          className="overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"
           style={{ willChange: 'height, opacity' }}
         >
           {viewMode === 'html' ? (
@@ -1403,14 +1475,14 @@ function ThreadMessage({
               key={`${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
-              className="w-full border-0"
+              className="w-full border-0 bg-transparent"
               style={{ height: frameHeight }}
               scrolling="no"
               onLoad={(event) => resizeFrame(event.currentTarget)}
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             />
           ) : (
-            <div className="min-h-36 whitespace-pre-wrap p-6 font-mono text-xs leading-relaxed text-zinc-800 bg-white">
+            <div className="min-h-36 whitespace-pre-wrap bg-white p-4 font-mono text-xs leading-relaxed text-zinc-800 sm:p-6">
               {message.content || message.summary || 'No message body available.'}
             </div>
           )}
@@ -1467,12 +1539,15 @@ function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['e
   )
 }
 
-function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean) {
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark') {
   let content = stripTrackingPixels(message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>html{overflow:hidden;scrollbar-width:thin;scrollbar-color:#caa24c #f4efe7}*{box-sizing:border-box}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:#f4efe7}::-webkit-scrollbar-thumb{background:#caa24c;border:2px solid #f4efe7;border-radius:999px}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:#18181b;background:#fff;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:#8a6426}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}</style></head><body>${content}</body></html>`
+  const pageBackground = portalTheme === 'light' ? '#ffffff' : '#0c0b0a'
+  const pageText = portalTheme === 'light' ? '#18181b' : '#eee9df'
+  const quoteText = portalTheme === 'light' ? '#52525b' : '#b8b0a3'
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow:hidden}*{box-sizing:border-box;max-width:100%}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:${pageText};background:${pageBackground};font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:${quoteText}}table{width:100%!important;max-width:100%!important}td,th{max-width:100%!important}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:768px){body{padding:16px;font-size:15px;line-height:1.55}}</style></head><body>${content}</body></html>`
 }
 
 function FolderNavItem({
