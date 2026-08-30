@@ -53,6 +53,12 @@ const planningSteps = [
   ['Celebrate', 'Arrive to a room prepared for your event.'],
 ]
 
+const celebrationRhythm = [
+  ['01', 'Arrive', 'Families settle in and feel welcomed from the first step.'],
+  ['02', 'Gather', 'Dinner and formal moments stay connected to the whole room.'],
+  ['03', 'Celebrate', 'The energy rises naturally when the dance floor comes alive.'],
+]
+
 const tourPrepPoints = [
   'Confirm your guest flow',
   'Talk through package fit',
@@ -297,11 +303,12 @@ export default function Home() {
           <Reveal delay={120}>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                ['/images/dining-hall/main-hall-wedding-wide.png', 'Main hall reception'],
-                ['/images/dining-hall/main-hall-conversation-candid.png', 'Wedding guests in conversation'],
-                ['/images/dining-hall/main-hall-side-dance-candid.png', 'Guests dancing in the main hall'],
-              ].map(([src, alt], index) => (
-                <Reveal key={src} delay={index * 90} variant="scale" amount={18}>
+                ['/images/dining-hall/main-hall-wedding-wide.png', 'Main hall reception', ''],
+                ['/images/dining-hall/main-hall-conversation-candid.png', 'Wedding guests in conversation', ''],
+                ['/images/dining-hall/main-hall-side-dance-candid.png', 'Guests dancing in the main hall', ''],
+                ['/images/dining-hall/main-hall-table-toast-candid.png', 'Guests sharing a toast', 'hidden md:block lg:hidden'],
+              ].map(([src, alt, visibility], index) => (
+                <Reveal key={src} delay={index * 90} variant="scale" amount={18} className={visibility}>
                   <figure className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/22">
                     <Image src={src} alt={alt} fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
                     <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.82))]" />
@@ -317,20 +324,56 @@ export default function Home() {
       </section>
 
       <section className="relative isolate overflow-hidden border-y border-[#caa24c]/16 bg-[#120d0c] py-16 sm:py-24">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_15%,rgba(202,162,76,.12),transparent_24rem)]" />
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:px-8">
-          <Reveal>
-            <div className="relative mx-auto max-w-xl pb-10 pr-8 sm:pr-16">
-              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/25"><Image src="/images/arianna-patterson-headshot.png" alt="Arianna Patterson, owner of Luxor Event Space" fill sizes="(min-width:1024px) 46vw,90vw" className="object-cover" /></div>
-              <div className="absolute bottom-0 right-0 h-36 w-44 overflow-hidden rounded-md border-4 border-[#120d0c] bg-[#080706] shadow-2xl sm:h-44 sm:w-56"><Image src="/images/dining-hall/main-hall-table-toast-candid.png" alt="Guests sharing a toast inside Luxor" fill sizes="224px" className="object-cover" /></div>
-            </div>
-          </Reveal>
-          <Reveal delay={100}>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#caa24c]">Arianna’s approach</p>
-            <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">The room matters. How people feel inside it matters more.</h2>
-            <p className="mt-6 text-base leading-7 text-[#d7c29a]/76">Luxor owner Arianna Patterson built the venue around the real rhythm of a celebration: families arriving, formal moments landing, dinner feeling connected, and the dance floor coming alive.</p>
-            <p className="mt-4 text-base leading-7 text-[#d7c29a]/70">That is why the first conversation is practical. Bring the guest count, the date, and the moments you care about. The team will help you see what works in the actual room.</p>
-            <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Owner story" className="mt-7 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#f1d27a]">Meet us for a walkthrough <ArrowRight className="h-4 w-4" /></Link>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(202,162,76,.12),transparent_26rem)]" />
+        <div className="relative z-10 mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
+          <div className="grid gap-10 md:grid-cols-[.88fr_1.12fr] md:items-center lg:gap-16">
+            <Reveal>
+              <div className="max-w-xl">
+                <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#caa24c]">Arianna’s approach</p>
+                <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">The room matters. How people feel inside it matters more.</h2>
+                <p className="mt-6 text-base leading-7 text-[#d7c29a]/76">Luxor owner Arianna Patterson built the venue around the real rhythm of a celebration: families arriving, formal moments landing, dinner feeling connected, and the dance floor coming alive.</p>
+                <p className="mt-4 text-base leading-7 text-[#d7c29a]/70">That is why the first conversation is practical. Bring the guest count, the date, and the moments you care about. The team will help you see what works in the actual room.</p>
+                <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Owner story" className="mt-7 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#f1d27a]">Meet us for a walkthrough <ArrowRight className="h-4 w-4" /></Link>
+              </div>
+            </Reveal>
+
+            <Reveal delay={100} variant="scale" amount={18}>
+              <figure className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#caa24c]/25 md:aspect-[4/5] lg:aspect-[6/5]">
+                <Image
+                  src="/images/dining-hall/main-hall-dinner-service-candid.png"
+                  alt="Guests gathering for dinner inside Luxor Event Space"
+                  fill
+                  sizes="(min-width:1024px) 52vw, (min-width:768px) 56vw, 100vw"
+                  className="object-cover"
+                />
+                <div className="absolute inset-x-0 bottom-0 h-32" style={{ backgroundImage: 'linear-gradient(180deg, transparent, rgba(0, 0, 0, .74))' }} />
+                <figcaption
+                  className="absolute bottom-5 left-5 max-w-[calc(100%-2.5rem)] rounded-sm px-4 py-3 font-mono text-[10px] font-bold uppercase leading-5 tracking-[0.2em] sm:bottom-6 sm:left-6 sm:max-w-[calc(100%-3rem)]"
+                  style={{
+                    backgroundColor: 'rgba(18, 13, 12, .9)',
+                    border: '1px solid rgba(202, 162, 76, .38)',
+                    boxShadow: '0 14px 30px rgba(0, 0, 0, .28)',
+                    color: '#fffaf2',
+                  }}
+                >
+                  Built for the way a celebration actually unfolds
+                </figcaption>
+              </figure>
+            </Reveal>
+          </div>
+
+          <Reveal delay={160}>
+            <ol className="mt-12 grid border-t border-[#caa24c]/24 sm:grid-cols-3 md:mt-14">
+              {celebrationRhythm.map(([number, title, copy]) => (
+                <li key={number} className="border-b border-[#caa24c]/24 py-6 sm:border-b-0 sm:border-r sm:px-6 sm:first:pl-0 sm:last:border-r-0 sm:last:pr-0">
+                  <div className="flex items-baseline gap-4">
+                    <span className="font-mono text-[10px] tracking-[0.2em] text-[#caa24c]">{number}</span>
+                    <h3 className="font-serif text-2xl">{title}</h3>
+                  </div>
+                  <p className="mt-2 pl-9 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
+                </li>
+              ))}
+            </ol>
           </Reveal>
         </div>
       </section>

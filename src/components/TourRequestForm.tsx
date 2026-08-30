@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatTourSlotTime } from '@/lib/luxorTourSlots'
 import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_GUEST_CAPACITY_MESSAGE_ES, type LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
@@ -106,7 +107,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   }
 
   return (
-    <form id="tour-booking" onSubmit={submit} className="scroll-mt-6 rounded-2xl border border-[#b98a3d]/30 bg-white p-5 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:p-8">
+    <form id="tour-booking" onSubmit={submit} className="scroll-mt-28 rounded-2xl border border-[#b98a3d]/30 bg-white p-5 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:scroll-mt-32 sm:p-8">
       <div className="border-b border-[#b98a3d]/20 pb-5"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#8d672b]">{spanish ? 'Solicita un recorrido' : 'Schedule a tour'}</p><h2 className="mt-2 font-serif text-3xl text-[#241d17]">{spanish ? 'Cuéntanos cuándo te gustaría venir.' : 'Tell us when you would like to come.'}</h2></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Field label={spanish ? 'Tipo de evento' : 'Event type'}><PortalSelect theme="light" value={eventType} onChange={setEventType} options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} placeholder={spanish ? 'Selecciona una opción' : 'Select an event'} className="w-full" buttonClassName="min-h-12 rounded-lg bg-[#fffdfa] px-3 text-sm normal-case tracking-normal" /></Field>
@@ -120,7 +121,13 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
         <Field label={spanish ? 'Correo electrónico' : 'Email'}><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" className={inputClass} /></Field>
         <Field label={spanish ? 'Teléfono' : 'Phone'}><input value={phone} onChange={(event) => setPhone(formatPhoneNumber(event.target.value))} type="tel" inputMode="numeric" autoComplete="tel" className={inputClass} /></Field>
       </div>
-      {!customMode ? <button type="button" onClick={() => { setCustomMode(true); setSlotId(''); setCustomTourTime('') }} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#8d672b] underline underline-offset-4">Can’t make these times? Request a different time <span aria-hidden="true">↓</span></button> : <div className="mt-6 rounded-xl border border-[#b98a3d]/20 bg-[#fbf7ef] p-4"><p className="text-sm font-semibold text-[#241d17]">Request a different time</p><p className="mt-1 text-xs text-[#665a4e]">This request is reviewed by the Luxor team.</p><div className="mt-4"><Field label="Optional alternate date"><PortalDatePicker theme="light" value={alternateDate} onChange={setAlternateDate} minDate={new Date().toISOString().slice(0, 10)} placeholder="Choose another date" className={publicDatePickerClass} /></Field></div><button type="button" onClick={() => { setCustomMode(false); setCustomTourTime(''); setAlternateDate('') }} className="mt-3 text-xs font-semibold text-[#8d672b] underline underline-offset-4">Choose an available slot instead</button></div>}
+      <AnimatePresence initial={false} mode="wait">
+        {!customMode ? <motion.div key="custom-time-prompt" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}>
+          <button type="button" onClick={() => { setCustomMode(true); setSlotId(''); setCustomTourTime('') }} aria-expanded="false" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#8d672b] underline underline-offset-4">Can’t make these times? Request a different time <motion.span aria-hidden="true" animate={{ rotate: 0 }}>↓</motion.span></button>
+        </motion.div> : <motion.div key="custom-time-panel" initial={{ height: 0, opacity: 0, y: -8 }} animate={{ height: 'auto', opacity: 1, y: 0 }} exit={{ height: 0, opacity: 0, y: -8 }} transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }} className="overflow-hidden">
+          <div className="mt-6 rounded-xl border border-[#b98a3d]/20 bg-[#fbf7ef] p-4"><p className="text-sm font-semibold text-[#241d17]">Request a different time</p><p className="mt-1 text-xs text-[#665a4e]">This request is reviewed by the Luxor team.</p><div className="mt-4"><Field label="Optional alternate date"><PortalDatePicker theme="light" value={alternateDate} onChange={setAlternateDate} minDate={new Date().toISOString().slice(0, 10)} placeholder="Choose another date" className={publicDatePickerClass} /></Field></div><button type="button" onClick={() => { setCustomMode(false); setCustomTourTime(''); setAlternateDate('') }} aria-expanded="true" className="mt-3 text-xs font-semibold text-[#8d672b] underline underline-offset-4">Choose an available slot instead</button></div>
+        </motion.div>}
+      </AnimatePresence>
       {slotsError ? <p className="mt-4 text-sm text-rose-700">{slotsError}</p> : null}
       <label className="mt-5 block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">{spanish ? 'Notas (opcional)' : 'Notes (optional)'}</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} maxLength={3000} rows={3} placeholder={spanish ? 'Cuéntanos qué estás planeando…' : 'Tell us what you are planning…'} className={`${inputClass} h-auto resize-none py-3`} /></label>
       <label className="mt-4 flex items-start gap-3 text-xs leading-5 text-[#665a4e]"><input type="checkbox" checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-[#b98a3d] accent-[#b98a3d]" />{spanish ? 'Envíame ocasionalmente noticias y consejos de planificación.' : 'Email me occasional Luxor news and planning ideas.'}</label>
