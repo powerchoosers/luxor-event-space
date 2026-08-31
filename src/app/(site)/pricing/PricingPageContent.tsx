@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import {
-  Armchair,
   ArrowRight,
   CalendarDays,
   CalendarRange,
@@ -8,6 +7,8 @@ import {
   ChefHat,
   Crown,
   DoorOpen,
+  Layers3,
+  Sofa,
   Star,
   Wifi,
   type LucideIcon,
@@ -15,6 +16,15 @@ import {
 import type { ComponentType } from 'react'
 
 type AmenityIcon = ComponentType<{ 'aria-hidden'?: boolean | 'true' | 'false'; className?: string; strokeWidth?: number }>
+
+function BanquetChairIcon({ className, strokeWidth = 1.25, ...props }: { 'aria-hidden'?: boolean | 'true' | 'false'; className?: string; strokeWidth?: number }) {
+  return (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="7" y="3" width="10" height="9" rx="1.25" />
+      <path d="M6 12h12M7 12v9M17 12v9M7 16h10" />
+    </svg>
+  )
+}
 
 function RoundTableIcon({ className, strokeWidth = 1.25, ...props }: { 'aria-hidden'?: boolean | 'true' | 'false'; className?: string; strokeWidth?: number }) {
   return (
@@ -57,11 +67,11 @@ type PricingDay = {
 const inclusions: Inclusion[] = [
   { title: 'Round Tables', description: 'Round tables are included with your venue rental.', icon: RoundTableIcon },
   { title: 'Rectangle Tables', description: 'Rectangle tables are included for flexible event layouts.', icon: RectangleTableIcon },
-  { title: 'Chairs', description: 'Chairs are included for your guests.', icon: Crown },
-  { title: 'Black or White Linens', description: 'Choose black or white linens to complement your event design.', icon: Star },
+  { title: 'Chairs', description: 'Chairs are included for your guests.', icon: BanquetChairIcon },
+  { title: 'Black or White Linens', description: 'Choose black or white linens to complement your event design.', icon: Layers3 },
   { title: 'Flexible Rental Options', description: 'Choose a half-day or full-day rental to fit your event.', icon: CalendarRange },
   { title: 'Kitchenette', description: 'Convenient kitchenette space for event prep and service.', icon: ChefHat },
-  { title: 'Luxor Lounge', description: 'A stylish lounge space for guests to relax and gather.', icon: Armchair },
+  { title: 'Luxor Lounge', description: 'A stylish lounge space for guests to relax and gather.', icon: Sofa },
   { title: 'VIP Room', description: 'A private VIP space for special moments and added comfort.', icon: DoorOpen },
   { title: 'Ample Parking', description: 'Convenient onsite parking for you and your guests.', icon: CarFront },
   { title: 'Free Wi-Fi', description: 'Complimentary Wi-Fi is available throughout the venue.', icon: Wifi },
