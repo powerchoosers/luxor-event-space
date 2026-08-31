@@ -75,3 +75,28 @@ final result: passed
 ## Final result
 
 passed
+
+---
+
+# Design QA: Responsive gallery navigation
+
+- Source visual truth: Lewis's annotated 412 x 915 gallery viewer screenshot and the checked-in `TourGallery` swipe behavior used as the interaction reference.
+- Implementation evidence:
+  - `C:\Users\lewis\AppData\Local\Temp\luxor-gallery-pagination-qa\mobile-dot-jump.png`
+  - `C:\Users\lewis\AppData\Local\Temp\luxor-gallery-pagination-qa\mobile-viewer.png`
+  - `C:\Users\lewis\AppData\Local\Temp\luxor-gallery-pagination-qa\desktop-page-two-before-loading-fix.png`
+- Viewports: 412 x 915 CSS pixels at density 1 for mobile; 1440 x 900 CSS pixels for desktop.
+- State: All filter selected; mobile carousel advanced by drag and dot click; mobile viewer open and advanced by drag; desktop gallery advanced from page 1 to page 2.
+- Full-view comparison: the mobile implementation uses one edge-to-edge photo frame, the same bottom gradient hierarchy as the tour carousel, and a directly clickable dot track. The full-screen viewer removes the former stacked image-and-sidebar card.
+- Focused comparison: the active mobile dot changed from `The main hall` to `Around the table` after a left drag, then to `Quinceañera reception` after a dot click. The viewer dot changed from `Quinceañera reception` to `On the dance floor` after a left drag. Desktop page text changed from `Page 1 of 2` to `Page 2 of 2` and displayed the lounge set.
+- Fonts and typography: preserved the Luxor serif display and monospaced gold labels with explicit white overlay text.
+- Spacing and layout: mobile is a single 4:5 carousel with overlay dots; desktop retains the mosaic and adds a separate pagination row.
+- Colors and tokens: preserved the tour carousel's white, gold, and black-gradient treatment.
+- Image quality: existing checked-in venue photography is used without generated or relabeled assets.
+- Copy: existing truthful gallery titles and captions are preserved.
+- Iteration history:
+  1. Moved mobile dots from below the carousel into the image frame so they remain visible above the sticky action bar.
+  2. The first desktop page-two capture showed lazy images before they completed loading. Changed the six visible desktop-page images to load eagerly when rendered.
+- Remaining verification blocker: the in-app Browser blocked the final post-fix desktop reload through its URL safety policy. TypeScript, focused ESLint, and whitespace checks remain available, but the final page-two image-loading state could not be recaptured without violating the required browser constraint.
+
+final result: blocked
