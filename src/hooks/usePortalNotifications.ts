@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback'
 
 export interface PortalNotificationItem {
   id: string
@@ -20,6 +20,8 @@ export interface PortalNotificationItem {
 const READ_STORAGE_KEY = 'luxor_read_notification_ids_v1'
 const NOTIFIED_TOAST_STORAGE_KEY = 'luxor_notified_toast_ids_v1'
 const GENERAL_POLL_INTERVAL_MS = 30_000
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+const NOTIFICATION_ATTENTION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 // Internal/self email addresses to filter out — never show emails to/from ourselves
 const INTERNAL_EMAIL_ADDRESSES = [
@@ -140,7 +142,7 @@ export function usePortalNotifications() {
 
       const shouldFetchEmails = !silent || refreshEmails
 
-      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes, layoutReviewsRes] = await Promise.allSettled([
+      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes, layoutReviewsRes, calendarResponsesRes] = await Promise.allSettled([
         fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         shouldFetchEmails
           ? fetch('/api/email/events?limit=25', { headers: { Accept: 'application/json' }, cache: 'no-store' })
@@ -154,6 +156,7 @@ export function usePortalNotifications() {
         fetch('/api/signatures?limit=100', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/marketing/events?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
         fetch('/api/portal/layout-reviews/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
+        fetch('/api/portal/calendar-responses/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
       ])
 
       const aggregated: PortalNotificationItem[] = []
@@ -164,11 +167,53 @@ export function usePortalNotifications() {
         ? await invoicesRes.value.json() as RawRecord[]
         : []
       const inquiryByEmail = new Map<string, RawRecord>()
+      const inquiryById = new Map<string, RawRecord>()
       const invoiceById = new Map<string, RawRecord>()
       if (Array.isArray(inquiries)) {
         inquiries.forEach((inquiry) => {
+          inquiryById.set(String(inquiry.id || ''), inquiry)
           const email = normalizeEmail(inquiry.email)
           if (email && !inquiryByEmail.has(email)) inquiryByEmail.set(email, inquiry)
+        })
+      }
+
+      // Calendar RSVP replies are separate from the generic inbound email alert.
+      // Verified replies state the attendance change; unverified replies remain review-only.
+      if (calendarResponsesRes.status === 'fulfilled' && calendarResponsesRes.value.ok) {
+        const data = await calendarResponsesRes.value.json() as { responses?: RawRecord[] }
+        const calendarResponses = Array.isArray(data.responses) ? data.responses : []
+        calendarResponses.forEach((response) => {
+          const responseId = String(response.id || '').trim()
+          if (!responseId) return
+          const inquiryId = String(response.inquiry_id || '').trim()
+          const inquiry = inquiryById.get(inquiryId)
+          const attendeeEmail = normalizeEmail(response.attendee_email)
+          const guestName = String(inquiry?.full_name || attendeeEmail || 'Guest')
+          const partstat = String(response.partstat || '').toUpperCase()
+          const disposition = String(response.disposition || '')
+          const eventTitle = String(response.event_title || 'Calendar invitation')
+          const responseLabel = partstat === 'ACCEPTED'
+            ? 'accepted'
+            : partstat === 'DECLINED'
+              ? 'declined'
+              : 'responded tentative'
+          const notificationId = `calendar_response_${responseId}`
+          const needsReview = disposition === 'pending_review'
+
+          aggregated.push({
+            id: notificationId,
+            type: 'calendar_response',
+            title: needsReview ? 'Calendar response needs review' : `${guestName} ${responseLabel}`,
+            subtitle: needsReview
+              ? `${guestName} replied ${responseLabel} to ${eventTitle}. Verify the reply before attendance changes.`
+              : `${eventTitle} attendance updated to ${partstat === 'TENTATIVE' ? 'Tentative' : partstat === 'DECLINED' ? 'Declined' : 'Accepted'}.`,
+            timestamp: String(response.reply_stamp || response.created_at || new Date().toISOString()),
+            isRead: currentReadIds.has(notificationId),
+            targetUrl: needsReview
+              ? '/portal/settings?tab=integrations#calendar-reply-review-title'
+              : leadUrl(inquiryId, 'overview', 'planning'),
+            metadata: { responseId, inquiryId, attendeeEmail, partstat, disposition, eventId: response.event_id },
+          })
         })
       }
       if (Array.isArray(invoiceRecords)) {
@@ -599,8 +644,19 @@ export function usePortalNotifications() {
       }
 
       // Detect genuinely new items since last poll and fire toast callbacks (deduped via localStorage)
+      const retained = aggregated.filter((item) => {
+        const timestamp = new Date(item.timestamp).getTime()
+        return Number.isFinite(timestamp) && Date.now() - timestamp <= NOTIFICATION_RETENTION_MS
+      }).map((item) => {
+        const timestamp = new Date(item.timestamp).getTime()
+        return Date.now() - timestamp > NOTIFICATION_ATTENTION_WINDOW_MS
+          ? { ...item, isRead: true }
+          : item
+      })
+      retained.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
       const previousIds = seenIdsRef.current
-      const currentIds = new Set(aggregated.map((i) => i.id))
+      const currentIds = new Set(retained.map((i) => i.id))
       if (notifiedToastIdsRef.current === null) {
         notifiedToastIdsRef.current = getStoredNotifiedIds()
       }
@@ -611,7 +667,7 @@ export function usePortalNotifications() {
       // On initial page mount, mark ALL existing historical items as already notified
       // so opening/reloading the portal never floods the UI with popups for existing items
       if (isFirstLoad) {
-        aggregated.forEach((item) => {
+        retained.forEach((item) => {
           notifiedToastIds.add(item.id)
         })
         saveStoredNotifiedIds(notifiedToastIds)
@@ -619,7 +675,7 @@ export function usePortalNotifications() {
 
       // Fire toasts for brand new items that have NEVER been notified before
       if (onNewItemRef.current) {
-        for (const item of aggregated) {
+        for (const item of retained) {
           if (!item.isRead && !notifiedToastIds.has(item.id)) {
             notifiedToastIds.add(item.id)
             saveStoredNotifiedIds(notifiedToastIds)
@@ -636,7 +692,7 @@ export function usePortalNotifications() {
       }
 
       seenIdsRef.current = currentIds
-      setItems(aggregated)
+      setItems(retained)
       setError(null)
     } catch (err) {
       console.error('Failed to fetch portal notifications:', err)
@@ -814,6 +870,7 @@ export function usePortalNotifications() {
       sms: 0,
       form: 0,
       booking: 0,
+      calendar_response: 0,
       invoice_paid: 0,
       proposal_opened: 0,
       checkout_opened: 0,

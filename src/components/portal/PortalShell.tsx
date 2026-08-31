@@ -435,6 +435,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         sms: 'info',
         email: 'info',
         booking: 'success',
+        calendar_response: 'success',
         contract: 'success',
         email_open: 'info',
         layout_feedback: 'info',

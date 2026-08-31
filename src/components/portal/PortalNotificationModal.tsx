@@ -1,31 +1,10 @@
 'use client'
 
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Bell,
-  Mail,
-  PhoneMissed,
-  PhoneCall,
-  MessageSquare,
-  ClipboardList,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  RotateCw,
-  Check,
-  ExternalLink,
-  Receipt,
-  Sparkles,
-  Search,
-  UserCheck,
-  ArrowRight,
-  CalendarCheck2,
-  FileSignature,
-  Eye,
-} from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertCircle, ArrowRight, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from 'lucide-react'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
 interface PortalNotificationModalProps {
@@ -41,463 +20,164 @@ interface PortalNotificationModalProps {
   onRefresh: () => void
 }
 
-type TabType = 'all' | 'email' | 'call' | 'sms' | 'form' | 'billing'
+type ViewType = 'unread' | 'history'
+type CategoryType = 'all' | 'messages' | 'leads' | 'billing'
+const HISTORY_LIMIT = 40
 
-export function PortalNotificationModal({
-  isOpen,
-  triggerRef,
-  onClose,
-  items,
-  unreadCount,
-  loading,
-  unreadCountsByType,
-  onMarkAsRead,
-  onMarkAllAsRead,
-  onRefresh,
-}: PortalNotificationModalProps) {
+function notificationCategory(type: NotificationType): CategoryType {
+  if (type === 'email' || type === 'email_open' || type === 'call' || type === 'sms') return 'messages'
+  if (type === 'invoice_paid' || type === 'checkout_opened' || type === 'bill_due') return 'billing'
+  return 'leads'
+}
+
+function notificationIcon(type: NotificationType) {
+  switch (type) {
+    case 'email': return <Mail size={16} className="text-blue-500 dark:text-blue-400" />
+    case 'email_open':
+    case 'proposal_opened': return <Eye size={16} className="text-blue-500 dark:text-blue-400" />
+    case 'call': return <PhoneMissed size={16} className="text-rose-500 dark:text-rose-400" />
+    case 'sms':
+    case 'layout_feedback': return <MessageSquare size={16} className="text-emerald-500 dark:text-emerald-400" />
+    case 'form': return <ClipboardList size={16} className="text-[#b78b2f] dark:text-[#d8b45e]" />
+    case 'booking':
+    case 'calendar_response': return <CalendarCheck2 size={16} className="text-emerald-500 dark:text-emerald-400" />
+    case 'contract': return <FileSignature size={16} className="text-emerald-500 dark:text-emerald-400" />
+    case 'checkout_opened': return <Receipt size={16} className="text-violet-500 dark:text-violet-400" />
+    case 'invoice_paid': return <CheckCircle2 size={16} className="text-emerald-500 dark:text-emerald-400" />
+    case 'bill_due': return <AlertCircle size={16} className="text-rose-500 dark:text-rose-400" />
+    default: return <Bell size={16} className="text-[color:var(--portal-muted)]" />
+  }
+}
+
+function relativeTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'Now'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
+  if (seconds < 172800) return 'Yesterday'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, unreadCount, loading, unreadCountsByType: _unreadCountsByType, onMarkAsRead, onMarkAllAsRead, onRefresh }: PortalNotificationModalProps) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabType>('all')
-  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [view, setView] = useState<ViewType>('unread')
+  const [category, setCategory] = useState<CategoryType>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLElement>(null)
 
-  // Handle click outside & escape key to close
   useEffect(() => {
     if (!isOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      const targetNode = e.target as Node
-      if (triggerRef?.current && triggerRef.current.contains(targetNode)) {
-        return
-      }
-      if (containerRef.current && !containerRef.current.contains(targetNode)) {
-        onClose()
-      }
+    const outside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (triggerRef?.current?.contains(target)) return
+      if (containerRef.current && !containerRef.current.contains(target)) onClose()
     }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', outside)
+    document.addEventListener('keydown', escape)
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('mousedown', outside)
+      document.removeEventListener('keydown', escape)
     }
   }, [isOpen, onClose, triggerRef])
 
-  const filteredItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return items.filter((item) => {
-      if (unreadOnly && item.isRead) return false
-
-      if (activeTab === 'email' && item.type !== 'email' && item.type !== 'email_open') return false
-      if (activeTab === 'call' && item.type !== 'call') return false
-      if (activeTab === 'sms' && item.type !== 'sms') return false
-      if (activeTab === 'form' && item.type !== 'form' && item.type !== 'booking' && item.type !== 'proposal_opened' && item.type !== 'contract' && item.type !== 'layout_feedback') return false
-      if (activeTab === 'billing' && item.type !== 'invoice_paid' && item.type !== 'checkout_opened' && item.type !== 'bill_due') return false
-
-      if (q) {
-        const matchesTitle = item.title.toLowerCase().includes(q)
-        const matchesSub = item.subtitle.toLowerCase().includes(q)
-        return matchesTitle || matchesSub
-      }
-
-      return true
+  const visibleItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    const matching = items.filter((item) => {
+      if (view === 'unread' ? item.isRead : !item.isRead) return false
+      if (category !== 'all' && notificationCategory(item.type) !== category) return false
+      return !query || item.title.toLowerCase().includes(query) || item.subtitle.toLowerCase().includes(query)
     })
-  }, [items, activeTab, unreadOnly, searchQuery])
+    return view === 'history' ? matching.slice(0, HISTORY_LIMIT) : matching
+  }, [category, items, searchQuery, view])
 
-  const handleItemClick = (item: PortalNotificationItem) => {
+  const categoryCounts = useMemo(() => {
+    const counts: Record<CategoryType, number> = { all: 0, messages: 0, leads: 0, billing: 0 }
+    items.forEach((item) => {
+      if (item.isRead) return
+      counts.all += 1
+      counts[notificationCategory(item.type)] += 1
+    })
+    return counts
+  }, [items])
+
+  const openItem = (item: PortalNotificationItem) => {
     onMarkAsRead(item.id)
     onClose()
     router.push(item.targetUrl)
   }
-
-  const handleQuickCall = (e: React.MouseEvent, fromNumber?: unknown) => {
-    e.stopPropagation()
-    if (typeof fromNumber === 'string' && fromNumber) {
-      window.dispatchEvent(new CustomEvent('luxor-start-call', { detail: { number: fromNumber } }))
-      onClose()
-    }
+  const handleItem = (event: React.MouseEvent, item: PortalNotificationItem) => {
+    event.stopPropagation()
+    onMarkAsRead(item.id)
   }
+  const categories: Array<{ id: CategoryType; label: string }> = [
+    { id: 'all', label: 'All' }, { id: 'messages', label: 'Messages' }, { id: 'leads', label: 'Leads' }, { id: 'billing', label: 'Billing' },
+  ]
 
-  const handleQuickEmail = (e: React.MouseEvent, fromAddress?: unknown) => {
-    e.stopPropagation()
-    if (typeof fromAddress === 'string' && fromAddress) {
-      window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { email: fromAddress } }))
-      onClose()
-    }
-  }
+  const modal = <AnimatePresence>{isOpen ? <React.Fragment key="notification-center">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} className="portal-modal-layer fixed inset-0 z-[200] bg-black/40 backdrop-blur-xs sm:hidden" onClick={onClose} />
+    <motion.section
+      ref={containerRef}
+      initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
+      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }} role="dialog" aria-modal="true" aria-label="Notifications"
+      className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex w-auto flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:h-[min(42rem,calc(100vh-6rem))] sm:w-[min(27rem,calc(100vw-2rem))]"
+    >
+      <header className="flex items-start justify-between border-b border-[color:var(--portal-border)] px-4 py-4">
+        <div>
+          <h3 className="text-[15px] font-bold tracking-tight">Notifications</h3>
+          <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{unreadCount ? `${unreadCount} need attention` : 'You are all caught up'}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50" aria-label="Refresh notifications"><RotateCw size={15} className={loading ? 'animate-spin' : ''} /></button>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close notifications"><X size={16} /></button>
+        </div>
+      </header>
 
-  function getNotificationIcon(type: NotificationType) {
-    switch (type) {
-      case 'email':
-        return <Mail size={16} className="text-blue-500 dark:text-blue-400" />
-      case 'call':
-        return <PhoneMissed size={16} className="text-red-500 dark:text-red-400" />
-      case 'sms':
-        return <MessageSquare size={16} className="text-emerald-500 dark:text-emerald-400" />
-      case 'form':
-        return <ClipboardList size={16} className="text-[#caa24c]" />
-      case 'layout_feedback':
-        return <MessageSquare size={16} className="text-[#caa24c]" />
-      case 'booking':
-        return <CalendarCheck2 size={16} className="text-[#caa24c]" />
-      case 'contract':
-        return <FileSignature size={16} className="text-emerald-500 dark:text-emerald-400" />
-      case 'proposal_opened':
-        return <Eye size={16} className="text-[#caa24c]" />
-      case 'checkout_opened':
-        return <Receipt size={16} className="text-purple-500 dark:text-purple-400" />
-      case 'email_open':
-        return <Eye size={16} className="text-blue-500 dark:text-blue-400" />
-      case 'invoice_paid':
-        return <CheckCircle2 size={16} className="text-emerald-500 dark:text-emerald-400" />
-      case 'bill_due':
-        return <AlertCircle size={16} className="text-rose-500 dark:text-rose-400" />
-      default:
-        return <Bell size={16} className="text-[color:var(--portal-muted)]" />
-    }
-  }
+      <div className="border-b border-[color:var(--portal-border)] px-3 pt-3">
+        <div className="grid grid-cols-2 rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Notification status">
+          {(['unread', 'history'] as ViewType[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => setView(option)} className={`relative rounded-md px-3 py-1.5 text-xs font-semibold ${view === option ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>
+            {view === option ? <motion.span layoutId="notification-view" className="absolute inset-0 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xs" /> : null}
+            <span className="relative">{option === 'unread' ? `Unread${unreadCount ? ` (${unreadCount})` : ''}` : 'Earlier'}</span>
+          </button>)}
+        </div>
+        <div className="portal-scrollbar mt-3 flex items-center gap-1 overflow-x-auto pb-3">
+          {categories.map((option) => <button key={option.id} type="button" onClick={() => setCategory(option.id)} className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${category === option.id ? 'border-[#caa24c]/40 bg-[#caa24c]/12 text-[#9b7425] dark:text-[#dfbd6d]' : 'border-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
+            {option.label}{view === 'unread' && categoryCounts[option.id] ? ` ${categoryCounts[option.id]}` : ''}
+          </button>)}
+        </div>
+      </div>
 
-  function formatRelativeTime(dateString: string) {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) return ''
+      {(view === 'history' || items.length > 12) ? <div className="border-b border-[color:var(--portal-border)] px-3 py-2"><div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+        <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search notifications" className="h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 pr-3 text-xs outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/60" />
+      </div></div> : null}
 
-    const now = new Date()
-    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-    if (diffSeconds < 60) return 'Just now'
-    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`
-    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`
-    if (diffSeconds < 172800) return 'Yesterday'
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-
-  const billingUnread = (unreadCountsByType?.invoice_paid || 0) + (unreadCountsByType?.checkout_opened || 0) + (unreadCountsByType?.bill_due || 0)
-
-  const modal = (
-    <AnimatePresence mode="wait">
-      {isOpen && (
-        <React.Fragment key="luxor-notification-center">
-          {/* Mobile backdrop */}
-          <motion.div
-            key="notification-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="portal-modal-layer fixed inset-0 z-[200] bg-black/50 backdrop-blur-xs sm:hidden"
-            onClick={onClose}
-          />
-
-          <motion.div
-            key="notification-popover"
-            ref={containerRef}
-            initial={{ opacity: 0, x: 12, scale: 0.96 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 12, scale: 0.96 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Notifications"
-            className="portal-modal-body fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[210] flex max-h-none w-auto flex-col overflow-hidden overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-20 sm:max-h-[85vh] sm:w-[min(28rem,calc(100vw-2rem))]"
-          >
-
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-4 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#caa24c]">
-                  <Bell size={18} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-[color:var(--portal-text)] tracking-tight">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <span className="rounded-full bg-[#caa24c]/20 px-2 py-0.5 font-mono text-[10px] font-bold text-[#caa24c] border border-[#caa24c]/30">
-                        {unreadCount} new
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[color:var(--portal-muted)]">Live communication & activity feed</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={onRefresh}
-                  disabled={loading}
-                  className="rounded-lg p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50 cursor-pointer"
-                  title="Refresh notifications"
-                >
-                  <RotateCw size={14} className={loading ? 'animate-spin' : ''} />
-                </button>
-                {unreadCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={onMarkAllAsRead}
-                    className="flex items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)] cursor-pointer"
-                    title="Mark all as read"
-                  >
-                    <Check size={12} className="text-[#caa24c]" />
-                    <span>Read all</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-lg p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] cursor-pointer"
-                  aria-label="Close notifications modal"
-                >
-                  <X size={16} />
-                </button>
-              </div>
+      <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <AnimatePresence initial={false} mode="popLayout">
+          {visibleItems.length ? visibleItems.map((item) => <motion.div layout key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 20, height: 0 }} transition={{ duration: 0.18 }} onClick={() => openItem(item)} className="group relative flex cursor-pointer items-start gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3.5 hover:bg-[color:var(--portal-soft)]/65">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--portal-soft)]">{notificationIcon(item.type)}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3"><h4 className={`line-clamp-2 text-xs leading-5 ${item.isRead ? 'font-medium' : 'font-bold'}`}>{item.title}</h4><span className="shrink-0 pt-0.5 text-[10px] text-[color:var(--portal-faint)]">{relativeTime(item.timestamp)}</span></div>
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[color:var(--portal-muted)]">{item.subtitle}</p>
+              <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9b7425] dark:text-[#dfbd6d]">Open <ArrowRight size={10} /></span>
             </div>
+            {!item.isRead ? <button type="button" onClick={(event) => handleItem(event, item)} className="absolute bottom-3.5 right-3.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 text-[color:var(--portal-muted)] opacity-0 shadow-xs hover:border-emerald-500/40 hover:text-emerald-600 focus:opacity-100 group-hover:opacity-100 dark:hover:text-emerald-400" aria-label={`Mark ${item.title} handled`} title="Mark handled"><Check size={13} /></button> : null}
+          </motion.div>) : <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Check size={20} /></div>
+            <p className="text-sm font-semibold">{searchQuery ? 'No matches' : view === 'unread' ? 'All caught up' : 'No recent history'}</p>
+            <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
+          </motion.div>}
+        </AnimatePresence>
+      </div>
 
-            {/* Quick Search Bar */}
-            <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]/60 px-3 py-2">
-              <div className="relative flex items-center">
-                <Search size={14} className="absolute left-2.5 text-[color:var(--portal-muted)]" />
-                <input
-                  type="text"
-                  placeholder="Filter by name, number, or subject..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-1 pl-8 pr-7 text-xs text-[color:var(--portal-text)] placeholder-[color:var(--portal-faint)] focus:border-[#caa24c]/60 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Categories Tabs */}
-            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-3 py-2">
-              <div className="portal-scrollbar flex items-center gap-1 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('all')}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'all'
-                      ? 'bg-[#caa24c]/15 text-[#caa24c] border border-[#caa24c]/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('email')}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'email'
-                      ? 'bg-blue-500/15 text-blue-600 dark:text-blue-300 border border-blue-500/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  <Mail size={12} />
-                  <span>Emails</span>
-                  {((unreadCountsByType?.email || 0) + (unreadCountsByType?.email_open || 0)) > 0 && (
-                    <span className="rounded-full bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-blue-600 dark:text-blue-300">
-                      {(unreadCountsByType?.email || 0) + (unreadCountsByType?.email_open || 0)}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('call')}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'call'
-                      ? 'bg-red-500/15 text-red-600 dark:text-red-300 border border-red-500/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  <PhoneMissed size={12} />
-                  <span>Missed</span>
-                  {(unreadCountsByType?.call || 0) > 0 && (
-                    <span className="rounded-full bg-red-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-red-600 dark:text-red-300">
-                      {unreadCountsByType?.call}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('sms')}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'sms'
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  <MessageSquare size={12} />
-                  <span>Texts</span>
-                  {(unreadCountsByType?.sms || 0) > 0 && (
-                    <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-300">
-                      {unreadCountsByType?.sms}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('form')}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'form'
-                      ? 'bg-[#caa24c]/15 text-[#caa24c] border border-[#caa24c]/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  <ClipboardList size={12} />
-                  <span>Leads</span>
-                  {((unreadCountsByType?.form || 0) + (unreadCountsByType?.booking || 0) + (unreadCountsByType?.proposal_opened || 0) + (unreadCountsByType?.contract || 0) + (unreadCountsByType?.layout_feedback || 0)) > 0 && (
-                    <span className="rounded-full bg-[#caa24c]/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-[#caa24c]">
-                      {(unreadCountsByType?.form || 0) + (unreadCountsByType?.booking || 0) + (unreadCountsByType?.proposal_opened || 0) + (unreadCountsByType?.contract || 0) + (unreadCountsByType?.layout_feedback || 0)}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('billing')}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === 'billing'
-                      ? 'bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30 shadow-xs'
-                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  <Receipt size={12} />
-                  <span>Billing</span>
-                  {billingUnread > 0 && (
-                    <span className="rounded-full bg-purple-500/20 px-1.5 py-0.2 text-[9px] font-mono font-bold text-purple-600 dark:text-purple-300">
-                      {billingUnread}
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setUnreadOnly((prev) => !prev)}
-                className={`ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                  unreadOnly
-                    ? 'bg-[#caa24c] text-black font-black'
-                    : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                }`}
-              >
-                {unreadOnly ? 'Unread' : 'All'}
-              </button>
-            </div>
-
-            {/* Notifications Body List */}
-            <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain divide-y divide-[color:var(--portal-border)]/40 p-1.5 space-y-1">
-              {filteredItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-8 text-center">
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 text-[color:var(--portal-muted)]">
-                    <Sparkles size={20} />
-                  </div>
-                  <p className="text-xs font-semibold text-[color:var(--portal-text)]">All caught up!</p>
-                  <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                    {searchQuery
-                      ? 'No notifications match your search query.'
-                      : unreadOnly
-                      ? 'No unread notifications in this category.'
-                      : 'No new notifications to display right now.'}
-                  </p>
-                </div>
-              ) : (
-                filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleItemClick(item)}
-                    className={`group relative flex flex-col gap-2 rounded-xl p-3 transition-all cursor-pointer ${
-                      item.isRead
-                        ? 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]/60 border border-[color:var(--portal-border)]/40 opacity-85 hover:opacity-100'
-                        : 'bg-[color:var(--portal-soft)]/90 hover:bg-[color:var(--portal-soft)] border border-[#caa24c]/30 shadow-xs'
-                    }`}
-                  >
-                    {!item.isRead && (
-                      <span className="absolute left-1.5 top-4 h-2 w-2 rounded-full bg-[#caa24c] shadow-[0_0_8px_rgba(202,162,76,0.6)]" />
-                    )}
-
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xs group-hover:border-[#caa24c]/40">
-                        {getNotificationIcon(item.type)}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className={`truncate text-xs ${item.isRead ? 'text-[color:var(--portal-text)]/85 font-medium' : 'text-[color:var(--portal-text)] font-bold'}`}>
-                            {item.title}
-                          </h4>
-                          <span className="shrink-0 text-[10px] text-[color:var(--portal-faint)] font-mono">
-                            {formatRelativeTime(item.timestamp)}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
-                          {item.subtitle}
-                        </p>
-                      </div>
-
-                      <div className="mt-1 shrink-0 text-[color:var(--portal-muted)] opacity-0 transition-opacity group-hover:opacity-100 text-[#caa24c]">
-                        <ExternalLink size={14} />
-                      </div>
-                    </div>
-
-                    {/* Quick Context Action Button */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[color:var(--portal-border)]/30 opacity-95">
-                      {item.type === 'call' && Boolean(item.metadata?.fromNumber) && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleQuickCall(e, item.metadata?.fromNumber)}
-                          className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                        >
-                          <PhoneCall size={11} />
-                          <span>Call Back</span>
-                        </button>
-                      )}
-                      {item.type === 'email' && Boolean(item.metadata?.sender || item.metadata?.fromAddress) && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleQuickEmail(e, item.metadata?.sender || item.metadata?.fromAddress)}
-                          className="flex items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors cursor-pointer"
-                        >
-                          <Mail size={11} />
-                          <span>Reply Email</span>
-                        </button>
-                      )}
-                      {(item.type === 'form' || item.type === 'booking' || item.type === 'proposal_opened' || item.type === 'contract' || item.type === 'email_open' || item.type === 'checkout_opened' || item.type === 'invoice_paid' || item.type === 'layout_feedback') && (
-                        <span className="flex items-center gap-1 text-[10px] font-semibold text-[#caa24c] group-hover:underline">
-                          <UserCheck size={11} />
-                          <span>View Lead</span>
-                          <ArrowRight size={10} />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Footer summary */}
-            <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-4 py-2.5 text-[11px] text-[color:var(--portal-muted)]">
-              <span>Showing {filteredItems.length} notifications</span>
-              <button
-                type="button"
-                onClick={onMarkAllAsRead}
-                className="text-[#caa24c] hover:underline cursor-pointer font-medium"
-              >
-                Clear unread badges
-              </button>
-            </div>
-          </motion.div>
-        </React.Fragment>
-      )}
-    </AnimatePresence>
-  )
+      <footer className="flex min-h-12 items-center justify-between border-t border-[color:var(--portal-border)] px-4 py-2.5">
+        <span className="text-[10px] text-[color:var(--portal-muted)]">{view === 'unread' ? `${visibleItems.length} open` : `Recent ${visibleItems.length}`}</span>
+        {view === 'unread' && unreadCount ? <button type="button" onClick={onMarkAllAsRead} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-[#9b7425] hover:bg-[#caa24c]/10 dark:text-[#dfbd6d]"><Check size={13} /> Mark all handled</button> : null}
+      </footer>
+    </motion.section>
+  </React.Fragment> : null}</AnimatePresence>
 
   return typeof document === 'undefined' ? null : createPortal(modal, document.body)
 }
