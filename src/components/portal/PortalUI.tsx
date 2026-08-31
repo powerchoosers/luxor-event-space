@@ -1306,7 +1306,7 @@ export function PortalContactAvatar({
     if (!inquiryId) return
     hoverTimeoutRef.current = window.setTimeout(() => {
       setShowEditOverlay(true)
-    }, 2000)
+    }, 1600)
   }
 
   const handleMouseLeave = () => {

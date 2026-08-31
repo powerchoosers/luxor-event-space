@@ -108,7 +108,7 @@ export function PortalSmsConsentBadge({
       } font-medium text-[color:var(--portal-muted)]`}
     >
       <HelpCircle size={compact ? 10 : 12} className="shrink-0 opacity-60" />
-      <span>No SMS Consent Recorded</span>
+      <span>No SMS Consent</span>
     </span>
   )
 }

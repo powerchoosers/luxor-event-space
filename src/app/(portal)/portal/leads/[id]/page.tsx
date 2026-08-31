@@ -3441,6 +3441,16 @@ export default function LeadDetailPage({
   ]
   const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'activity', 'tasks', 'messages']
   const isPrimaryLeadTab = (tabId: LeadDetailTab) => primaryLeadTabIds.includes(tabId)
+  const primaryLeadTabs = tabItems.filter((item) => isPrimaryLeadTab(item.id))
+  const secondaryLeadTabs = tabItems.filter((item) => !isPrimaryLeadTab(item.id))
+  const selectLeadTab = (item: { id: LeadDetailTab }) => {
+    setActiveLeadTab(item.id)
+    if (!isPrimaryLeadTab(item.id)) setShowLeadTabOverflow(true)
+    if (item.id === 'messages') setActiveFeedTab('comms')
+    if (item.id === 'notes') setActiveFeedTab('notes')
+    if (item.id === 'activity') setActiveFeedTab('all')
+    if (item.id === 'tasks') setShowTaskTools(true)
+  }
   const linkedVendorRefs = (activeEventMetadata.vendors as Array<{ id: string; notes?: string }> | undefined) || []
   const linkedVendorIds = new Set(linkedVendorRefs.map((vendor) => vendor.id))
   const linkedVendors = linkedVendorRefs.map((vendorRef) => ({
@@ -3615,7 +3625,7 @@ export default function LeadDetailPage({
       <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-4">
-            <div className="relative shrink-0">
+            <div className="relative h-20 w-20 shrink-0 self-start">
               <PortalContactAvatar
                 name={lead.full_name}
                 avatarUrl={lead.metadata?.avatar_url as string | null}
@@ -3633,7 +3643,7 @@ export default function LeadDetailPage({
                 }}
               />
               <div
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
+                className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
                 title={`${displayEventType} event`}
                 aria-label={`${displayEventType} event`}
               >
@@ -3892,7 +3902,59 @@ export default function LeadDetailPage({
           WebkitBackdropFilter: 'blur(50px)',
         }}
       >
-        <div className="portal-scrollbar overflow-x-auto bg-transparent px-4">
+        <div className="lg:hidden px-3 py-2.5">
+          <div role="tablist" aria-label="Lead detail sections" className="grid grid-cols-4 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
+            {primaryLeadTabs.map((item) => {
+              const isActive = activeLeadTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => selectLeadTab(item)}
+                  className={`inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-2 text-[9px] font-black uppercase tracking-[0.08em] transition-colors ${isActive ? 'bg-[color:var(--portal-card)] text-[#a8792f] shadow-sm dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  {typeof item.count === 'number' ? <span className="shrink-0 font-mono text-[8px] opacity-70">{item.count}</span> : null}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-1.5 flex items-center justify-between px-1">
+            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[color:var(--portal-faint)]">More sections</span>
+            <button
+              type="button"
+              onClick={() => setShowLeadTabOverflow((current) => !current)}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-[0.1em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]"
+              aria-expanded={showLeadTabOverflow}
+            >
+              {showLeadTabOverflow ? 'Hide' : 'Show all'}
+              <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
+            </button>
+          </div>
+          {showLeadTabOverflow ? (
+            <div role="tablist" aria-label="Additional lead detail sections" className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 sm:grid-cols-4">
+              {secondaryLeadTabs.map((item) => {
+                const isActive = activeLeadTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => selectLeadTab(item)}
+                    className={`inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2 py-2 text-[9px] font-black uppercase tracking-[0.08em] transition-colors ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                  >
+                    <span className="truncate">{item.label}</span>
+                    {typeof item.count === 'number' ? <span className="shrink-0 font-mono text-[8px] opacity-70">{item.count}</span> : null}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden lg:block portal-scrollbar overflow-x-auto bg-transparent px-4">
           <div className="relative flex min-w-max gap-5">
             <span
               className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
@@ -3900,7 +3962,6 @@ export default function LeadDetailPage({
             />
             {tabItems.map((item) => {
               const isActive = activeLeadTab === item.id
-              const isPrimaryTab = isPrimaryLeadTab(item.id)
               return (
                 <button
                   key={item.id}
@@ -3908,40 +3969,14 @@ export default function LeadDetailPage({
                     tabButtonRefs.current[item.id] = node
                   }}
                   type="button"
-                  onClick={() => {
-                    setActiveLeadTab(item.id)
-                    if (!isPrimaryTab) setShowLeadTabOverflow(true)
-                    if (item.id === 'messages') setActiveFeedTab('comms')
-                    if (item.id === 'notes') setActiveFeedTab('notes')
-                    if (item.id === 'activity') setActiveFeedTab('all')
-                    if (item.id === 'tasks') setShowTaskTools(true)
-                  }}
-                  className={`relative shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
-                    !isPrimaryTab && !showLeadTabOverflow && isPrimaryLeadTab(activeLeadTab) ? 'hidden sm:inline-flex' : 'inline-flex'
-                  } ${
-                    isActive
-                      ? 'text-[#a8792f]'
-                      : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                  }`}
+                  onClick={() => selectLeadTab(item)}
+                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                 >
                   {item.label}
-                  {typeof item.count === 'number' ? (
-                    <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>
-                      {item.count}
-                    </span>
-                  ) : null}
+                  {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
                 </button>
               )
             })}
-            <button
-              type="button"
-              onClick={() => setShowLeadTabOverflow((current) => !current)}
-              className="inline-flex items-center gap-1 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] sm:hidden"
-              aria-expanded={showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab)}
-            >
-              {showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab) ? 'Less' : 'More'}
-              <ChevronDown size={12} className={showLeadTabOverflow || !isPrimaryLeadTab(activeLeadTab) ? 'rotate-180 transition-transform' : 'transition-transform'} />
-            </button>
           </div>
         </div>
       </div>

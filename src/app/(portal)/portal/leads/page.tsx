@@ -887,7 +887,7 @@ export default function LeadsPage() {
                     </div>
                   ) : (
                     colLeads.map((lead) => (
-                      <div key={lead.id} className="luxor-glass-card hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-zinc-850 transition-all group relative">
+                      <div key={lead.id} className="luxor-glass-card border-[color:var(--portal-border)] hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-[#caa24c]/20 transition-all group relative">
                         <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
                           <div className="flex items-center gap-3">
                             <PortalContactAvatar
@@ -896,7 +896,7 @@ export default function LeadsPage() {
                               className="w-7 h-7 text-[10px] group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/25 transition-all duration-300"
                             />
                             <div className="min-w-0 flex-1">
-                              <span className="text-xs font-bold text-white/90 group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
+                              <span className="text-xs font-bold text-[color:var(--portal-text)] group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
                                 {lead.full_name}
                               </span>
                               <p className="text-[9px] text-zinc-500 truncate font-mono">
@@ -905,9 +905,9 @@ export default function LeadsPage() {
                             </div>
                           </div>
 
-                          <div className="space-y-1.5 border-t border-zinc-900/60 pt-2.5">
+                          <div className="space-y-1.5 border-t border-[color:var(--portal-border)] pt-2.5">
                             <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono">
-                              <span className="font-semibold text-white/80">{lead.event_type || 'Quinceañera'}</span>
+                              <span className="font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</span>
                               <span className="text-zinc-500">
                                 {isGrandOpeningRsvp(lead)
                                   ? `${lead.attendee_count || lead.guest_count || 1} RSVP`
@@ -926,20 +926,20 @@ export default function LeadsPage() {
                         </Link>
 
                         {/* Card Action Controls */}
-                        <div className="flex items-center justify-between border-t border-zinc-900/40 pt-3 mt-3">
+                        <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-3 mt-3">
                           <div className="flex gap-1.5">
                             {lead.email && (
-                              <a href={`mailto:${lead.email}`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Send Email">
+                              <a href={`mailto:${lead.email}`} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]" title="Send Email">
                                 <Mail size={11} />
                               </a>
                             )}
                             {lead.phone && (
-                              <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-white transition-colors" title="Call from Luxor browser phone">
+                              <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]" title="Call from Luxor browser phone">
                                 <Phone size={11} />
                               </button>
                             )}
                             {lead.phone && (
-                              <Link href={`/portal/leads/${lead.id}?tab=messages`} className="p-1 rounded bg-zinc-900/50 border border-zinc-850 text-zinc-500 hover:text-[#caa24c] transition-colors" title="Text client">
+                              <Link href={`/portal/leads/${lead.id}?tab=messages`} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[#a8792f] dark:hover:text-[#f1d27a]" title="Text client">
                                 <MessageSquare size={11} />
                               </Link>
                             )}
@@ -950,7 +950,7 @@ export default function LeadsPage() {
                               <button
                                 type="button"
                                 onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex - 1].id)}
-                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
                                 title={`Move to ${colArray[colIndex - 1].label}`}
                               >
                                 <ChevronLeft size={12} />
@@ -960,7 +960,7 @@ export default function LeadsPage() {
                               <button
                                 type="button"
                                 onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex + 1].id)}
-                                className="p-1 rounded bg-zinc-900/60 border border-zinc-850 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
                                 title={`Move to ${colArray[colIndex + 1].label}`}
                               >
                                 <ChevronRight size={12} />
@@ -969,7 +969,7 @@ export default function LeadsPage() {
                             <LeadLifecycleActionsMenu
                               lead={lead}
                               onAction={(action) => openLeadLifecycleAction(lead, action)}
-                              className="h-7 w-7 border-zinc-850 bg-zinc-900/60 [&>svg]:h-3.5 [&>svg]:w-3.5"
+                              className="!h-7 !w-7 bg-[color:var(--portal-soft)] [&>svg]:h-3.5 [&>svg]:w-3.5"
                             />
                           </div>
                         </div>
