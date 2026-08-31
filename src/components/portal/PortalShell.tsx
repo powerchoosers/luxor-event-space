@@ -88,6 +88,10 @@ function persistPortalThemeCookie(theme: PortalTheme) {
   document.cookie = `luxor-portal-theme=${theme}; path=/; max-age=31536000; samesite=lax`
 }
 
+function persistPortalSidebarCookie(collapsed: boolean) {
+  document.cookie = `luxor-portal-sidebar=${collapsed ? 'compact' : 'expanded'}; path=/; max-age=31536000; samesite=lax`
+}
+
 function canScrollVertically(element: HTMLElement, deltaY: number) {
   if (deltaY === 0) return false
   const style = window.getComputedStyle(element)
@@ -184,17 +188,17 @@ function getPortalMobileViewportSnapshot() {
   return window.matchMedia(PORTAL_MOBILE_MEDIA_QUERY).matches
 }
 
-export function PortalShell({ children, session, initialProfile, initialTheme, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; permissions: PortalPermission[]; role: PortalRole }) {
+export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} permissions={permissions} role={role}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={permissions} role={role}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session, initialProfile, initialTheme, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; permissions: PortalPermission[]; role: PortalRole }) {
+function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole }) {
   const pathname = usePathname()
   const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
@@ -211,7 +215,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
     pathname === '/portal/emails' ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
@@ -224,7 +228,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   const contentScrollRef = useRef<HTMLDivElement>(null)
   const sidebarHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sidebarHoverSuppressedRef = useRef(false)
-  const sidebarCollapsedRef = useRef(false)
+  const sidebarCollapsedRef = useRef(initialSidebarCollapsed)
   const sidebarHoverOpenRef = useRef(false)
   const sidebarIsCollapsed = sidebarCollapsed && !sidebarHoverOpen
 
@@ -274,6 +278,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
     sidebarHoverSuppressedRef.current = next
     setSidebarCollapsed(next)
     window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
+    persistPortalSidebarCookie(next)
     window.dispatchEvent(new Event('luxor-portal-sidebar'))
   }, [clearSidebarHoverTimer, setSidebarHoverState])
 
@@ -335,7 +340,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
       setSidebarCollapsed(collapsed)
     }
 
-    applySidebarLayout()
     window.addEventListener('luxor-portal-sidebar', applySidebarLayout)
     return () => window.removeEventListener('luxor-portal-sidebar', applySidebarLayout)
   }, [])

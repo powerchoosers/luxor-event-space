@@ -1452,7 +1452,7 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
       })
       const result = await response.json().catch(() => ({})) as { error?: string; reminderJobs?: unknown[] }
       if (!response.ok) throw new Error(result.error || 'The invite could not be sent.')
-      onSuccess(`Tour invite sent to ${payload.clientName}. The calendar invite and branded confirmation are on their way${result.reminderJobs?.length ? `, with ${result.reminderJobs.length} reminder${result.reminderJobs.length === 1 ? '' : 's'} queued` : ''}.`)
+      onSuccess(`Tour invite sent to ${payload.clientName}. One branded calendar email is on its way${result.reminderJobs?.length ? `, with ${result.reminderJobs.length} reminder${result.reminderJobs.length === 1 ? '' : 's'} queued for later` : ''}.`)
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : 'The invite could not be sent.')
     } finally {

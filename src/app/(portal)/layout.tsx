@@ -62,15 +62,17 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
   if (!member || member.status === 'suspended') redirect('/portal/login?error=unauthorized')
 
   const userProfile = await getLuxorUserProfile(session.email)
-  const themeCookie = (await cookies()).get('luxor-portal-theme')?.value
+  const portalCookies = await cookies()
+  const themeCookie = portalCookies.get('luxor-portal-theme')?.value
   const initialTheme = themeCookie === 'dark' || themeCookie === 'light' ? themeCookie : 'light'
+  const initialSidebarCollapsed = portalCookies.get('luxor-portal-sidebar')?.value === 'compact'
 
   return (
     <html
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} permissions={member.permissions} role={member.role}>{children}</PortalShell>
+      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role}>{children}</PortalShell>
     </html>
   );
 }

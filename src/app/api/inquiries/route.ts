@@ -10,6 +10,7 @@ import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, type TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { assertEmailHasNoUnresolvedPlaceholders, createPublicToken, getTourResponseLinks, listLuxorEmailJobsForInquiry, processLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
+import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -71,6 +72,10 @@ async function scheduleTourFromPublicRequest(inquiry: LuxorInquiry) {
   const endUtc = new Date(startUtc.getTime() + 30 * 60_000)
   const token = inquiry.tour_response_token || createPublicToken()
   const links = getTourResponseLinks(token)
+  const contactPhone = await getActiveLuxorPhoneNumber().catch((error) => {
+    console.warn('Tour confirmation could not load the active Luxor phone number:', error)
+    return null
+  })
   const emailContext: TourEmailContext = {
     inquiry,
     meetingType: 'Private Venue Tour',
@@ -79,6 +84,7 @@ async function scheduleTourFromPublicRequest(inquiry: LuxorInquiry) {
     tourTimeLabel: formatScheduledTourTime(startUtc),
     durationMinutes: 30,
     responseUrl: links.rescheduleUrl,
+    contactPhone,
   }
   const confirmation = await buildAiTourConfirmationEmail(emailContext)
   const templates = {

@@ -231,6 +231,7 @@ export default function SettingsPage() {
   const handleUpdateSidebarLayout = (layout: 'expanded' | 'compact') => {
     setSidebarLayout(layout)
     window.localStorage.setItem('luxor-portal-sidebar', layout)
+    document.cookie = `luxor-portal-sidebar=${layout}; path=/; max-age=31536000; samesite=lax`
     window.dispatchEvent(new Event('luxor-portal-sidebar'))
     notify({ title: `Sidebar switched to ${layout} view.`, variant: 'success' })
   }

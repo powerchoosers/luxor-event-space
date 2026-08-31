@@ -5,7 +5,7 @@ import { getLuxorCalendarEvent, normalizedState, type LuxorCalendarEvent, type L
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import type { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 
-type TourTemplate = { subject: string; body: string; heroImage?: string; aiGenerated?: boolean }
+type TourTemplate = { subject: string; body: string; text?: string; heroImage?: string; aiGenerated?: boolean }
 type SavedTour = {
   event: LuxorCalendarEvent; inquiry: LuxorInquiry; replayed: boolean
   confirmationJobs: LuxorEmailJob[]; reminderJobs: LuxorEmailJob[]

@@ -78,7 +78,13 @@ export async function deliverLuxorCalendarJob(job: LuxorEmailJob) {
   if (superseded) return { status: 'skipped' as const }
   const message = buildLuxorCalendarMessage({ ...snapshot, start: new Date(snapshot.startUtc), end: new Date(snapshot.endUtc),
     stamp: new Date(snapshot.stamp), created: new Date(snapshot.createdAt) })
-  const sent = await sendLuxorResendEmail({ to: job.recipient_email, subject: message.subject, content: message.html, text: message.text,
+  const brandedRequest = snapshot.method === 'REQUEST' && job.metadata.delivery === 'branded_confirmation'
+  const frozenText = typeof job.metadata.plain_text === 'string' ? job.metadata.plain_text : ''
+  const sent = await sendLuxorResendEmail({
+    to: job.recipient_email,
+    subject: brandedRequest ? job.subject : message.subject,
+    content: brandedRequest ? job.body : message.html,
+    text: brandedRequest && frozenText ? frozenText : message.text,
     from: 'booking@luxoratlaspalmas.com', calendar: message.icalEvent, idempotencyKey: `email-job/${job.id}`,
     metadata: { calendarUid: snapshot.uid, calendarSequence: snapshot.sequence, calendarMethod: snapshot.method } })
   return { status: 'sent' as const, messageId: sent.messageId }

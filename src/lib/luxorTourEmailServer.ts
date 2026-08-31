@@ -2,6 +2,7 @@ import 'server-only'
 
 import { LuxorInquiry } from './luxorInquiryTypes'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
+import { formatPhoneDisplay } from './luxorPhoneClient'
 
 type TourCopy = {
   subject: string
@@ -19,6 +20,7 @@ export type TourEmailContext = {
   tourTimeLabel: string
   durationMinutes: number
   responseUrl?: string | null
+  contactPhone?: string | null
 }
 
 const FALLBACK_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -28,6 +30,7 @@ export async function buildAiTourConfirmationEmail(context: TourEmailContext) {
   return {
     subject: copy.subject,
     body: renderTourEmailHtml(context, copy),
+    text: renderTourEmailText(context, copy),
     aiGenerated: Boolean(process.env.OPEN_ROUTER_API_KEY),
     heroImage: eventImagePath(context.inquiry.event_type),
   }
@@ -133,6 +136,10 @@ function fallbackCopy(context: TourEmailContext): TourCopy {
 
 function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
   const baseUrl = publicBaseUrl()
+  const phoneDisplay = formatPhoneDisplay(context.contactPhone)
+  const phoneNote = phoneDisplay
+    ? `Luxor may call you from <a href="tel:${escapeHtml(context.contactPhone || '')}" style="color:#c79b43;font-weight:700">${escapeHtml(phoneDisplay)}</a> before your tour. Please save this number so you recognize our call. `
+    : ''
   return renderLuxorSystemEmail({
     previewText: copy.introduction,
     eyebrow: 'Tour confirmed',
@@ -148,9 +155,26 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
       { label: 'Location', value: escapeHtml(FALLBACK_LOCATION) },
     ],
     actions: context.responseUrl ? [{ label: 'Reschedule tour', url: context.responseUrl }] : undefined,
-    note: 'Reply to this email if your timing changes and the Luxor team will help.',
+    note: `${phoneNote}Reply to this email if your timing changes and the Luxor team will help.`,
     theme: 'brand',
   })
+}
+
+function renderTourEmailText(context: TourEmailContext, copy: TourCopy) {
+  const phoneDisplay = formatPhoneDisplay(context.contactPhone)
+  return [
+    copy.greeting,
+    copy.introduction,
+    copy.preparation,
+    copy.closing,
+    `Date: ${context.tourDateLabel}`,
+    `Time: ${context.tourTimeLabel} (${context.durationMinutes} minutes)`,
+    `Meeting: ${context.meetingType}`,
+    `Location: ${FALLBACK_LOCATION}`,
+    context.responseUrl ? `Reschedule: ${context.responseUrl}` : '',
+    phoneDisplay ? `Luxor may call you from ${phoneDisplay} before your tour. Please save this number so you recognize our call.` : '',
+    'Questions? Reply to booking@luxoratlaspalmas.com.',
+  ].filter(Boolean).join('\n\n')
 }
 
 export function renderTourEmailHtmlLegacy(context: TourEmailContext, copy: TourCopy) {

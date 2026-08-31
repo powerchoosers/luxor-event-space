@@ -3255,7 +3255,7 @@ export default function LeadDetailPage({
     pushRecommendedAction({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
-      detail: 'Create the calendar invite, confirmation, and reminders',
+      detail: 'Create one branded calendar invite and later reminders',
       onClick: openTourScheduleModal,
       disabled: !lead.email,
     })
@@ -3323,7 +3323,7 @@ export default function LeadDetailPage({
     pushRecommendedAction({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
-      detail: lead.email ? 'Create the calendar invite, confirmation, and reminders' : 'Add an email address first',
+      detail: lead.email ? 'Create one branded calendar invite and later reminders' : 'Add an email address first',
       onClick: openTourScheduleModal,
       disabled: !lead.email,
     })
@@ -7172,7 +7172,7 @@ export default function LeadDetailPage({
               <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review this field before sending. Internal staff notes are intentionally excluded unless you copy a client-safe detail here.</p>
             </div>
             <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 px-4 py-3 text-[10px] font-semibold leading-5 text-blue-950 dark:text-blue-200/90 shadow-xs">
-              This sends one calendar invite, one branded confirmation email, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
+              This sends one branded calendar invitation now, then reminder emails 24 hours and 2 hours before the tour when enough time remains.
             </div>
           </div>
 

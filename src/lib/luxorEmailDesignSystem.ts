@@ -31,7 +31,7 @@ export const LUXOR_EMAIL_THEME_PRESETS: Record<LuxorEmailThemeMode, LuxorEmailTh
     border: '#dfd3c0',
     fontHeading: 'Cormorant Garamond, Georgia, Times New Roman, serif',
     fontBody: 'Manrope, Helvetica Neue, Arial, sans-serif',
-    radius: 2,
+    radius: 20,
     contentWidth: 620,
   },
   dark: {
@@ -47,7 +47,7 @@ export const LUXOR_EMAIL_THEME_PRESETS: Record<LuxorEmailThemeMode, LuxorEmailTh
     border: '#3a2e1d',
     fontHeading: 'Cormorant Garamond, Georgia, Times New Roman, serif',
     fontBody: 'Manrope, Helvetica Neue, Arial, sans-serif',
-    radius: 2,
+    radius: 20,
     contentWidth: 620,
   },
   brand: {
@@ -63,7 +63,7 @@ export const LUXOR_EMAIL_THEME_PRESETS: Record<LuxorEmailThemeMode, LuxorEmailTh
     border: '#d9c7a6',
     fontHeading: 'Cormorant Garamond, Georgia, Times New Roman, serif',
     fontBody: 'Manrope, Helvetica Neue, Arial, sans-serif',
-    radius: 2,
+    radius: 20,
     contentWidth: 620,
   },
 }
@@ -123,12 +123,12 @@ function resolveTheme(theme: LuxorSystemEmailInput['theme']) {
 export function renderLuxorSystemEmail(input: LuxorSystemEmailInput) {
   const t = resolveTheme(input.theme)
   const details = input.details?.length
-    ? `<tr><td style="padding:0 42px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${t.surfaceAlt};border:1px solid ${t.border}"><tr>${input.details.map((detail, index) => `<td style="width:${100 / input.details!.length}%;padding:17px 18px;vertical-align:top;${index ? `border-left:1px solid ${t.border};` : ''}"><p style="margin:0 0 7px;color:${t.accent};font-family:${t.fontBody};font-size:9px;font-weight:800;letter-spacing:.19em;text-transform:uppercase">${detail.label}</p><p style="margin:0;color:${t.mode === 'brand' ? '#f7efe3' : t.text};font-family:${t.fontBody};font-size:13px;line-height:1.55">${detail.value}</p></td>`).join('')}</tr></table></td></tr>`
+    ? `<tr><td style="padding:0 42px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:${Math.max(12, t.radius - 6)}px;overflow:hidden"><tr>${input.details.map((detail, index) => `<td style="width:${100 / input.details!.length}%;padding:17px 18px;vertical-align:top;${index ? `border-left:1px solid ${t.border};` : ''}"><p style="margin:0 0 7px;color:${t.accent};font-family:${t.fontBody};font-size:9px;font-weight:800;letter-spacing:.19em;text-transform:uppercase">${detail.label}</p><p style="margin:0;color:${t.mode === 'brand' ? '#f7efe3' : t.text};font-family:${t.fontBody};font-size:13px;line-height:1.55">${detail.value}</p></td>`).join('')}</tr></table></td></tr>`
     : ''
   const actions = input.actions?.length
     ? `<tr><td align="center" style="padding:22px 42px 38px">${input.actions.map((action) => action.tone === 'secondary'
-      ? `<a href="${escapeAttribute(action.url)}" target="_blank" style="display:inline-block;margin:0 5px 10px;padding:14px 24px;border:1px solid ${t.accent};color:${t.accent};font-family:${t.fontBody};font-size:10px;font-weight:800;letter-spacing:.16em;text-decoration:none;text-transform:uppercase">${action.label}</a>`
-      : `<a href="${escapeAttribute(action.url)}" target="_blank" style="display:inline-block;margin:0 5px 10px;padding:15px 25px;border:1px solid ${t.accent};background:${t.accent};color:${t.accentText};font-family:${t.fontBody};font-size:10px;font-weight:800;letter-spacing:.16em;text-decoration:none;text-transform:uppercase">${action.label}</a>`).join('')}</td></tr>`
+      ? `<a href="${escapeAttribute(action.url)}" target="_blank" style="display:inline-block;margin:0 5px 10px;padding:14px 24px;border:1px solid ${t.accent};border-radius:999px;color:${t.accent};font-family:${t.fontBody};font-size:10px;font-weight:800;letter-spacing:.16em;text-decoration:none;text-transform:uppercase">${action.label}</a>`
+      : `<a href="${escapeAttribute(action.url)}" target="_blank" style="display:inline-block;margin:0 5px 10px;padding:15px 25px;border:1px solid ${t.accent};border-radius:999px;background:${t.accent};color:${t.accentText};font-family:${t.fontBody};font-size:10px;font-weight:800;letter-spacing:.16em;text-decoration:none;text-transform:uppercase">${action.label}</a>`).join('')}</td></tr>`
     : ''
   const previewText = input.previewText || `${input.eyebrow}: ${input.title}`
 
@@ -149,7 +149,7 @@ export function renderLuxorSystemEmail(input: LuxorSystemEmailInput) {
 <body class="luxor-canvas" style="margin:0;padding:0;background:${t.canvas};font-family:${t.fontBody};">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${previewText}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${t.canvas}"><tr><td align="center" style="padding:28px 12px">
-    <table class="luxor-shell" role="presentation" width="${t.contentWidth}" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:${t.contentWidth}px;background:${t.surface};border:1px solid ${t.border}">
+    <table class="luxor-shell" role="presentation" width="${t.contentWidth}" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:${t.contentWidth}px;background:${t.surface};border:1px solid ${t.border};border-radius:${t.radius}px;overflow:hidden">
       <tr><td style="height:3px;background:${t.accent};font-size:1px;line-height:1px">&nbsp;</td></tr>
       <tr><td class="luxor-header luxor-pad" align="center" style="padding:27px 42px 23px;background:${t.mode === 'dark' ? '#080605' : t.surface};border-bottom:1px solid ${t.border}">
         <p style="margin:0;color:${t.accent};font-family:${t.fontHeading};font-size:30px;font-weight:600;letter-spacing:.19em;text-transform:uppercase">Luxor</p>

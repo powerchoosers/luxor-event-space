@@ -21,6 +21,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
+import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -177,6 +178,10 @@ export async function POST(request: NextRequest) {
       const links = getTourResponseLinks(token)
       const tourDateLabel = formatTourDate(startUtc)
       const tourTimeLabel = formatTourTime(startUtc)
+      const contactPhone = await getActiveLuxorPhoneNumber().catch((error) => {
+        console.warn('Tour confirmation could not load the active Luxor phone number:', error)
+        return null
+      })
       const emailContext: TourEmailContext = {
         inquiry,
         meetingType,
@@ -185,6 +190,7 @@ export async function POST(request: NextRequest) {
         tourTimeLabel,
         durationMinutes,
         responseUrl: links.rescheduleUrl,
+        contactPhone,
       }
       const confirmation = await buildAiTourConfirmationEmail(emailContext)
 
@@ -229,7 +235,7 @@ export async function POST(request: NextRequest) {
           catch (error) { console.error('Tour saved; text confirmations could not be queued:', error) }
           try {
             await createNote(inquiryId,
-              `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. Calendar invitation, branded confirmation and ${saved.reminderJobs.length} reminders queued through Resend.`,
+              `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One branded calendar invitation and ${saved.reminderJobs.length} reminders queued through Resend.`,
               'email_log', session.email)
           } catch (error) { console.error('Tour saved; activity note could not be recorded:', error) }
         }
@@ -238,7 +244,7 @@ export async function POST(request: NextRequest) {
           confirmationJob: saved.confirmationJobs.find(job => job.recipient_email === inquiry.email?.toLowerCase().trim()) || saved.confirmationJobs[0],
           reminderJobs: saved.reminderJobs, replayed: saved.replayed }, { status: saved.replayed ? 200 : 201 })
       }
-      const calendar = await createLuxorZohoCalendarEvent(eventInput)
+      const calendar = await createLuxorZohoCalendarEvent({ ...eventInput, description: confirmation.text })
       const calendarMetadata = { zohoCalendarEventId: calendar.eventId, zohoCalendarEventUid: calendar.eventUid, zohoCalendarUrl: calendar.viewEventUrl }
 
       await cancelQueuedTourEmailJobs(inquiryId)
@@ -255,17 +261,6 @@ export async function POST(request: NextRequest) {
         hero_image: confirmation.heroImage,
         requested_by: session.email,
       }
-
-      const confirmationJobs = await Promise.all(recipientEmails.map((recipientEmail) => createLuxorEmailJob({
-        inquiryId,
-        jobType: 'tour_confirmation',
-        recipientEmail,
-        subject: confirmation.subject,
-        body: confirmation.body,
-        metadata: { ...sharedMetadata, ai_generated: confirmation.aiGenerated, delivery: 'branded_confirmation', sender_from: 'booking@luxoratlaspalmas.com' },
-      })))
-      const confirmationJob = confirmationJobs[0]
-      if (confirmationJobs.some((job) => !job)) throw new Error('The calendar invite was created, but a confirmation email could not be saved.')
 
       const reminderJobs = []
       for (const reminder of [
@@ -308,12 +303,12 @@ export async function POST(request: NextRequest) {
 
       await createNote(
         inquiryId,
-        `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. Zoho calendar invite sent; branded confirmation and ${reminderJobs.length} automatic reminder${reminderJobs.length === 1 ? '' : 's'} queued for Supabase delivery.`,
+        `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One calendar invitation sent through Zoho with the confirmation message; ${reminderJobs.length} automatic reminder${reminderJobs.length === 1 ? '' : 's'} queued for Supabase delivery.`,
         'email_log',
         session.email,
       )
 
-      return NextResponse.json({ inquiry: updated, calendar, confirmationJob, reminderJobs }, { status: 201 })
+      return NextResponse.json({ inquiry: updated, calendar, confirmationJob: null, reminderJobs }, { status: 201 })
     }
 
     if (action === 'send-email') {

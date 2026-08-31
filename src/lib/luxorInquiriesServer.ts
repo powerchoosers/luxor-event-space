@@ -203,7 +203,7 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     } catch (emailError) {
       console.error('Luxor tour request email queue failed:', emailError)
     }
-  } else if (created?.email) {
+  } else if (created?.email && !autoScheduleTour) {
     try {
       const { buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
       const emailHtml = buildStandardInquiryEmailHtml(created)
@@ -231,6 +231,10 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
       console.error('Luxor standard inquiry confirmation email queue failed:', emailError)
     }
   }
+
+  // Auto-scheduled tours use one combined branded calendar invitation. The
+  // scheduling transaction owns that receipt so this insert path must not
+  // send a second, generic inquiry acknowledgment first.
 
   return created
 }
