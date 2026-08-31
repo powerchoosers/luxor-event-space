@@ -5,6 +5,7 @@ import { updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
+import { createLuxorInquiry } from '@/lib/luxorInquiriesServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,63 @@ export async function POST(request: NextRequest) {
 
     if (!action) {
       return NextResponse.json({ error: 'Action type is required' }, { status: 400 })
+    }
+
+    if (action === 'CREATE_CONTACT') {
+      const contact = body.contact && typeof body.contact === 'object' ? body.contact as Record<string, unknown> : {}
+      const fullName = String(contact.fullName || '').trim().replace(/\s+/g, ' ')
+      const email = String(contact.email || '').trim().toLowerCase()
+      const phone = String(contact.phone || '').trim()
+      const eventType = String(contact.eventType || 'Other').trim().slice(0, 120)
+      const source = String(contact.source || 'Manual Entry').trim().slice(0, 120)
+      const targetDate = String(contact.targetDate || '').trim().slice(0, 120)
+      const notes = String(contact.notes || '').trim().slice(0, 3_000)
+      const parsedGuestCount = contact.guestCount === null || contact.guestCount === undefined || contact.guestCount === ''
+        ? null
+        : Number(contact.guestCount)
+
+      if (!fullName) return NextResponse.json({ error: 'Full name is required.' }, { status: 400 })
+      if (!email && !phone) return NextResponse.json({ error: 'Add an email or phone number so Luxor can follow up.' }, { status: 400 })
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
+      if (phone && phone.replace(/\D/g, '').length < 10) return NextResponse.json({ error: 'Enter a complete phone number.' }, { status: 400 })
+      if (parsedGuestCount !== null && (!Number.isInteger(parsedGuestCount) || parsedGuestCount < 1 || parsedGuestCount > 200)) {
+        return NextResponse.json({ error: 'Guest count must be between 1 and 200.' }, { status: 400 })
+      }
+
+      const [emailMatches, phoneMatches] = await Promise.all([
+        email
+          ? supabaseRest<Array<{ id: string; full_name: string }>>(`luxor_inquiries?select=id,full_name&email=eq.${encodeURIComponent(email)}&limit=1`)
+          : Promise.resolve([]),
+        phone
+          ? supabaseRest<Array<{ id: string; full_name: string }>>(`luxor_inquiries?select=id,full_name&phone=eq.${encodeURIComponent(phone)}&limit=1`)
+          : Promise.resolve([]),
+      ])
+      const existing = emailMatches[0] || phoneMatches[0]
+      if (existing) {
+        return NextResponse.json({ error: `${existing.full_name || 'This person'} is already in Luxor’s CRM. Open the existing contact instead of creating a duplicate.`, inquiryId: existing.id }, { status: 409 })
+      }
+
+      const inquiry = await createLuxorInquiry({
+        fullName,
+        email: email || undefined,
+        phone: phone || undefined,
+        eventType,
+        targetDate: targetDate || undefined,
+        guestCount: parsedGuestCount === null ? undefined : String(parsedGuestCount),
+        message: notes || 'Added from Elena internal chat.',
+        source,
+        flow: 'elena_contact',
+        marketingOptIn: false,
+        smsOptIn: false,
+        smsMarketingOptIn: false,
+        metadata: {
+          createdFrom: 'portal_elena_chat',
+          createdBy: session.email,
+        },
+      })
+
+      if (!inquiry) return NextResponse.json({ error: 'The contact could not be created.' }, { status: 500 })
+      return NextResponse.json({ success: true, inquiry: { id: inquiry.id, full_name: inquiry.full_name } })
     }
 
     // 1. Action: UPDATE_LEAD

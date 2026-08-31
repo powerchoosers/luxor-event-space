@@ -52,7 +52,7 @@ export function RouteTransition({
     : { opacity: 0, y: -10, filter: 'blur(4px)' }
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode={isPortal ? 'sync' : 'wait'} initial={false}>
       <motion.div
         id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
         key={pathname}
@@ -60,7 +60,7 @@ export function RouteTransition({
         initial={initialState}
         animate={animateState}
         exit={exitState}
-        transition={{ duration: isPortal ? 0.1 : 0.28, ease: [0.23, 1, 0.32, 1] }}
+        transition={{ duration: isPortal ? 0.06 : 0.28, ease: [0.23, 1, 0.32, 1] }}
         onAnimationComplete={() => {
           const safeId = `route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`
           const el = document.getElementById(safeId)

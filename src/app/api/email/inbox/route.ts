@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
     const email = searchParams.get('email') || ''
     const folder = (searchParams.get('folder') || 'all').toLowerCase()
     const live = searchParams.get('live') === '1'
+    const includeAttachments = searchParams.get('includeAttachments') === '1'
     const source = searchParams.get('source') || 'email-client'
     const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 1000, 1), 1000)
     if (!isLuxorMailFolderFilter(folder)) {
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
     // regardless of which provider currently sends ordinary messages.
     if (luxorMailProvider() === 'resend' || !live || !['all', 'inbox', 'sent', 'campaigns'].includes(folder)) {
       const [mail, legacy, campaigns, folders] = await Promise.all([
-        listLuxorMailboxMessages({ limit: safeLimit, email, folder }),
+        listLuxorMailboxMessages({ limit: safeLimit, email, folder, withAttachments: includeAttachments }),
         listStoredMailboxMessages(safeLimit, email),
         !email && ['all', 'sent', 'campaigns'].includes(folder) ? listMarketingCampaigns(25).catch(() => []) : Promise.resolve([]),
         listLuxorReleasedMailFolders(),

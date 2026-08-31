@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { 
   X, 
   Send, 
@@ -65,6 +65,7 @@ type Message = {
   invoiceCard?: InvoiceCardPayload
   taskCard?: TaskCardPayload
   contactCard?: LeadContactCardPayload
+  newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
 }
 
@@ -77,6 +78,17 @@ type LeadContactCardPayload = {
   targetDate?: string | null
   guestCount?: number | null
   status?: string | null
+}
+
+type NewContactCardPayload = {
+  fullName: string
+  email?: string
+  phone?: string
+  eventType?: string
+  source?: string
+  targetDate?: string
+  guestCount?: number | null
+  notes?: string
 }
 
 type TourInviteCardPayload = {
@@ -207,6 +219,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
   const suggestionCycleRef = useRef(0)
+  const suggestionRequestRef = useRef(0)
   const sessionRequestRef = useRef(0)
   const messageRequestRef = useRef(0)
 
@@ -302,31 +315,46 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isOpen) {
       suggestionCycleRef.current = 0
-      loadSmartSuggestions(false)
+      setSmartSuggestions([])
+      void loadSmartSuggestions(false)
+    } else {
+      suggestionRequestRef.current += 1
+      setSmartSuggestions([])
+      setIsLoadingSuggestions(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activePath])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isOpen) {
       setShowSessionsList(false)
-      loadSessionsList()
+      setMessages([])
+      setLoadedSessionId(null)
+      setIsLoading(true)
+      void loadSessionsList(undefined, true)
     } else {
+      sessionRequestRef.current += 1
+      messageRequestRef.current += 1
       setShowSessionsList(false)
+      setMessages([])
+      setLoadedSessionId(null)
+      setIsLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   const loadSmartSuggestions = async (advanceCycle = true) => {
     if (advanceCycle) suggestionCycleRef.current += 1
+    const requestId = ++suggestionRequestRef.current
     setIsLoadingSuggestions(true)
     try {
       const res = await fetch(`/api/portal/elena-chat/suggestions?activePath=${encodeURIComponent(activePath)}&cycle=${suggestionCycleRef.current}`)
       if (res.ok) {
         const data = (await res.json()) as { suggestions?: SmartSuggestion[] }
+        if (requestId !== suggestionRequestRef.current) return
         if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
           setSmartSuggestions(data.suggestions)
         }
@@ -334,7 +362,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     } catch (err) {
       console.error('Error loading smart suggestions:', err)
     } finally {
-      setIsLoadingSuggestions(false)
+      if (requestId === suggestionRequestRef.current) setIsLoadingSuggestions(false)
     }
   }
 
@@ -342,7 +370,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const loadSessionsList = async (selectSessionId?: string) => {
+  const loadSessionsList = async (selectSessionId?: string, forceReload = false) => {
     const requestId = ++sessionRequestRef.current
     try {
       const response = await fetch('/api/portal/elena-chat/sessions')
@@ -354,7 +382,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       if (data.length > 0) {
         const targetId = selectSessionId || currentSessionId || data[0].id
         // Only load messages if we switch to a different active session or initializing
-        if (targetId !== currentSessionId || messages.length <= 1 || loadedSessionId !== targetId) {
+        if (forceReload || targetId !== currentSessionId || messages.length <= 1 || loadedSessionId !== targetId) {
           setCurrentSessionId(targetId)
           await loadSessionMessages(targetId)
         }
@@ -363,12 +391,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       }
     } catch (err) {
       console.error(err)
+      if (requestId === sessionRequestRef.current) setIsLoading(false)
     }
   }
 
   const loadSessionMessages = async (sessionId: string) => {
     const requestId = ++messageRequestRef.current
     setLoadedSessionId(null)
+    setMessages([])
     setIsLoading(true)
     try {
       const response = await fetch(`/api/portal/elena-chat/sessions?id=${sessionId}`)
@@ -397,8 +427,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const handleCreateSession = async () => {
+    sessionRequestRef.current += 1
     const requestId = ++messageRequestRef.current
+    setCurrentSessionId(null)
     setLoadedSessionId(null)
+    setMessages([])
+    setInput('')
+    setAttachments([])
     setIsLoading(true)
     try {
       const response = await fetch('/api/portal/elena-chat/sessions', {
@@ -421,7 +456,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     } catch (err) {
       console.error(err)
     } finally {
-      setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
@@ -476,6 +511,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   const handleSend = async (textToSend: string) => {
     if ((!textToSend.trim() && attachments.length === 0) || isLoading) return
+    const requestId = ++messageRequestRef.current
 
     const userMessageText = textToSend.trim()
     const currentAttachments = [...attachments]
@@ -531,16 +567,21 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         invoiceCard?: InvoiceCardPayload
         taskCard?: TaskCardPayload
         contactCard?: LeadContactCardPayload
+        newContactCard?: NewContactCardPayload
         tourInviteCard?: TourInviteCardPayload
         navigation?: { href: string }
       }
+      if (requestId !== messageRequestRef.current) return
 
       if (data.textCampaignDraft) {
         window.localStorage.setItem('luxor_elena_text_campaign_draft', JSON.stringify(data.textCampaignDraft))
         window.dispatchEvent(new CustomEvent('luxor:text-campaign-draft', { detail: data.textCampaignDraft }))
       }
 
-      if (data.navigation?.href) router.push(data.navigation.href)
+      if (data.navigation?.href) {
+        onClose()
+        router.push(data.navigation.href)
+      }
       
       setMessages(prev => [
         ...prev,
@@ -555,6 +596,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           invoiceCard: data.invoiceCard,
           taskCard: data.taskCard,
           contactCard: data.contactCard,
+          newContactCard: data.newContactCard,
           tourInviteCard: data.tourInviteCard,
         }
       ])
@@ -564,6 +606,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         loadSessionsList(currentSessionId)
       }
     } catch (err) {
+      if (requestId !== messageRequestRef.current) return
       console.error(err)
       setMessages(prev => [
         ...prev,
@@ -573,11 +616,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         }
       ])
     } finally {
-      setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
   const handleConfirmAction = async (msgIndex: number, confirmation: { query: string; summary: string }) => {
+    const requestId = ++messageRequestRef.current
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
     setIsLoading(true)
 
@@ -609,6 +653,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         reply: string
         executedQueries: ExecutedQuery[]
       }
+      if (requestId !== messageRequestRef.current) return
 
       setMessages(prev => [
         ...prev,
@@ -623,6 +668,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         loadSessionsList(currentSessionId)
       }
     } catch (err) {
+      if (requestId !== messageRequestRef.current) return
       console.error(err)
       setMessages(prev => [
         ...prev,
@@ -632,7 +678,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         }
       ])
     } finally {
-      setIsLoading(false)
+      if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
@@ -656,6 +702,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+      aria-hidden={!isOpen}
+      inert={!isOpen}
     >
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
@@ -956,6 +1004,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
                         {msg.contactCard && <ElenaContactCard payload={msg.contactCard} />}
 
+                        {msg.newContactCard && (
+                          <ElenaNewContactCard
+                            payload={msg.newContactCard}
+                            onSuccess={(successMessage) => {
+                              setMessages((prev) => [...prev, { role: 'assistant', content: successMessage }])
+                            }}
+                          />
+                        )}
+
                         {msg.tourInviteCard && (
                           <ElenaTourInviteCard
                             payload={msg.tourInviteCard}
@@ -1253,6 +1310,112 @@ function ElenaContactCard({ payload }: { payload: LeadContactCardPayload }) {
   )
 }
 
+function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPayload; onSuccess: (message: string) => void }) {
+  const [fullName, setFullName] = useState(payload.fullName || '')
+  const [email, setEmail] = useState(payload.email || '')
+  const [phone, setPhone] = useState(payload.phone || '')
+  const [eventType, setEventType] = useState(payload.eventType || 'Other')
+  const [source, setSource] = useState(payload.source || 'Manual Entry')
+  const [targetDate, setTargetDate] = useState(payload.targetDate || '')
+  const [guestCount, setGuestCount] = useState(payload.guestCount ? String(payload.guestCount) : '')
+  const [notes, setNotes] = useState(payload.notes || '')
+  const [isSaving, setIsSaving] = useState(false)
+  const [createdInquiryId, setCreatedInquiryId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const canSave = Boolean(fullName.trim() && (email.trim() || phone.trim())) && !createdInquiryId
+
+  const handleCreate = async () => {
+    if (!canSave || isSaving) return
+    setIsSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/portal/elena-chat/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE_CONTACT',
+          contact: {
+            fullName,
+            email,
+            phone,
+            eventType,
+            source,
+            targetDate,
+            guestCount: guestCount ? Number(guestCount) : null,
+            notes,
+          },
+        }),
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string; inquiry?: { id?: string; full_name?: string } }
+      if (!response.ok) throw new Error(result.error || 'The contact could not be added.')
+      const inquiryId = result.inquiry?.id || ''
+      setCreatedInquiryId(inquiryId)
+      window.dispatchEvent(new Event('luxor:inquiries-updated'))
+      onSuccess(`${result.inquiry?.full_name || fullName.trim()} is now in Luxor’s CRM. No marketing consent or campaign enrollment was added.`)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'The contact could not be added.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="ml-8 mt-3 w-[calc(96%-2rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-lg shadow-black/10">
+      <div className="flex items-start gap-2.5 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
+        <UserRoundCheck size={15} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
+        <div className="min-w-0">
+          <h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Review new contact</h4>
+          <p className="mt-0.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">Creates a CRM contact only. Marketing and SMS consent stay off.</p>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3.5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ElenaContactField label="Full name" value={fullName} onChange={setFullName} placeholder="Full name" required />
+          <ElenaContactField label="Email" value={email} onChange={setEmail} placeholder="name@example.com" type="email" />
+          <ElenaContactField label="Phone" value={phone} onChange={setPhone} placeholder="(210) 555-0199" type="tel" />
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Event type</label>
+            <PortalSelect value={eventType} onChange={setEventType} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={ELENA_CONTACT_EVENT_OPTIONS} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Source</label>
+            <PortalSelect value={source} onChange={setSource} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={ELENA_CONTACT_SOURCE_OPTIONS} />
+          </div>
+          <ElenaContactField label="Event date" value={targetDate} onChange={setTargetDate} placeholder="YYYY-MM-DD or date range" />
+          <ElenaContactField label="Guests" value={guestCount} onChange={setGuestCount} placeholder="Optional" type="number" />
+        </div>
+
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} maxLength={3000} placeholder="Context or follow-up notes (optional)" className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] leading-4 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
+
+        {!email.trim() && !phone.trim() ? <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-[10px] leading-4 text-amber-800 dark:text-amber-200">Add an email or phone number so Luxor can follow up.</p> : null}
+        {error ? <p className="rounded-lg bg-rose-500/10 px-2.5 py-2 text-[10px] leading-4 text-rose-700 dark:text-rose-200">{error}</p> : null}
+
+        {createdInquiryId ? (
+          <Link href={`/portal/leads/${createdInquiryId}`} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[10px] font-bold uppercase tracking-wider text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 dark:text-[#f1d27a]">
+            Open contact <ExternalLink size={11} />
+          </Link>
+        ) : (
+          <button type="button" onClick={handleCreate} disabled={isSaving || !canSave} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-[10px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)]">
+            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <UserRoundCheck size={12} />} {isSaving ? 'Adding contact…' : 'Add contact'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ElenaContactField({ label, value, onChange, placeholder, type = 'text', required = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: React.HTMLInputTypeAttribute; required?: boolean }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{label}{required ? ' *' : ''}</label>
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} min={type === 'number' ? 1 : undefined} max={type === 'number' ? 200 : undefined} className="min-h-9 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
+    </div>
+  )
+}
+
 function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPayload; onSuccess: (message: string) => void }) {
   const [tourDate, setTourDate] = useState(payload.tourDate)
   const [tourTime, setTourTime] = useState(normalizeLuxorTimeDropdownValue(payload.tourTime))
@@ -1348,6 +1511,27 @@ const TOUR_MEETING_TYPE_OPTIONS = [
   { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
   { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
   { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
+]
+
+const ELENA_CONTACT_EVENT_OPTIONS = [
+  { value: 'Wedding', label: 'Wedding' },
+  { value: 'Quinceañera', label: 'Quinceañera' },
+  { value: 'Baby shower', label: 'Baby shower' },
+  { value: 'Birthday', label: 'Birthday' },
+  { value: 'Corporate event', label: 'Corporate event' },
+  { value: 'Private celebration', label: 'Private celebration' },
+  { value: 'Other', label: 'Other' },
+]
+
+const ELENA_CONTACT_SOURCE_OPTIONS = [
+  { value: 'Manual Entry', label: 'Manual entry' },
+  { value: 'Phone', label: 'Phone' },
+  { value: 'Walk-in', label: 'Walk-in' },
+  { value: 'Referral', label: 'Referral' },
+  { value: 'Instagram', label: 'Instagram' },
+  { value: 'Facebook', label: 'Facebook' },
+  { value: 'The Knot', label: 'The Knot' },
+  { value: 'Vendor / Partner', label: 'Vendor / partner' },
 ]
 
 const TOUR_DURATION_OPTIONS = [

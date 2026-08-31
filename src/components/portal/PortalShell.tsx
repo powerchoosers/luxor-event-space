@@ -31,6 +31,7 @@ import {
   SlidersHorizontal,
   X,
   ArrowUpRight,
+  Loader2,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -56,6 +57,7 @@ type PortalUserProfile = {
 
 type PortalTheme = 'light' | 'dark'
 type NextBestActionKind = 'reply' | 'tour' | 'proposal' | 'followup' | 'review'
+type NextBestActionMode = 'compose' | 'open'
 
 function NextBestActionIcon({ kind }: { kind: NextBestActionKind }) {
   const Icon = kind === 'reply'
@@ -69,6 +71,17 @@ function NextBestActionIcon({ kind }: { kind: NextBestActionKind }) {
           : LayoutDashboard
 
   return <Icon size={14} aria-hidden="true" />
+}
+
+function waitingLabel(value: string | undefined) {
+  if (!value) return 'waiting for action'
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000))
+  if (!Number.isFinite(elapsedMinutes) || elapsedMinutes < 1) return 'just arrived'
+  if (elapsedMinutes < 60) return `waiting ${elapsedMinutes}m`
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours < 24) return `waiting ${elapsedHours}h`
+  const elapsedDays = Math.floor(elapsedHours / 24)
+  return `waiting ${elapsedDays}d`
 }
 
 function persistPortalThemeCookie(theme: PortalTheme) {
@@ -205,11 +218,20 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
   const contentScrollRef = useRef<HTMLDivElement>(null)
   const sidebarHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sidebarHoverSuppressedRef = useRef(false)
+  const sidebarCollapsedRef = useRef(false)
+  const sidebarHoverOpenRef = useRef(false)
   const sidebarIsCollapsed = sidebarCollapsed && !sidebarHoverOpen
+
+  const setSidebarHoverState = useCallback((open: boolean) => {
+    sidebarHoverOpenRef.current = open
+    setSidebarHoverOpen(open)
+  }, [])
 
   const clearSidebarHoverTimer = useCallback(() => {
     if (sidebarHoverTimerRef.current) {
@@ -219,42 +241,74 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   }, [])
 
   const handleSidebarHoverStart = useCallback(() => {
-    if (!sidebarCollapsed) return
+    if (!sidebarCollapsed || sidebarHoverSuppressedRef.current) return
     clearSidebarHoverTimer()
     sidebarHoverTimerRef.current = setTimeout(() => {
-      setSidebarHoverOpen(true)
+      setSidebarHoverState(true)
       sidebarHoverTimerRef.current = null
     }, 2000)
-  }, [clearSidebarHoverTimer, sidebarCollapsed])
+  }, [clearSidebarHoverTimer, setSidebarHoverState, sidebarCollapsed])
 
   const handleSidebarHoverEnd = useCallback(() => {
     clearSidebarHoverTimer()
-    if (sidebarHoverOpen) setSidebarHoverOpen(false)
-  }, [clearSidebarHoverTimer, sidebarHoverOpen])
+    sidebarHoverSuppressedRef.current = false
+    if (sidebarHoverOpenRef.current) setSidebarHoverState(false)
+  }, [clearSidebarHoverTimer, setSidebarHoverState])
+
+  const handleSidebarNavigate = useCallback((href: string) => {
+    clearSidebarHoverTimer()
+    setSidebarHoverState(false)
+    sidebarHoverSuppressedRef.current = true
+    setPendingNavigationHref(href)
+    router.push(href)
+  }, [clearSidebarHoverTimer, router, setSidebarHoverState])
 
   const toggleSidebar = useCallback(() => {
     clearSidebarHoverTimer()
-    setSidebarHoverOpen(false)
-    setSidebarCollapsed((current) => {
-      const next = !current
-      window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
-      window.dispatchEvent(new Event('luxor-portal-sidebar'))
-      return next
-    })
-  }, [clearSidebarHoverTimer])
+    const isVisiblyCollapsed = sidebarCollapsedRef.current && !sidebarHoverOpenRef.current
+    const next = !isVisiblyCollapsed
+    setSidebarHoverState(false)
+    sidebarCollapsedRef.current = next
+    // A deliberate collapse wins over hover until the pointer fully leaves
+    // the rail. This prevents the panel from reopening beneath the cursor.
+    sidebarHoverSuppressedRef.current = next
+    setSidebarCollapsed(next)
+    window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
+    window.dispatchEvent(new Event('luxor-portal-sidebar'))
+  }, [clearSidebarHoverTimer, setSidebarHoverState])
 
   const handleSidebarEmptyClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest('a, button')) return
-    if (sidebarHoverOpen) {
+    // Inspect the complete event path because icon clicks may target a nested
+    // SVG/path rather than the button itself. Any link or button in that path
+    // owns the click and must not also trigger the empty-rail behavior.
+    const clickedControl = event.nativeEvent.composedPath().some((target) => {
+      if (!target || typeof (target as Element).matches !== 'function') return false
+      return (target as Element).matches('a, button')
+    })
+    if (clickedControl) return
+    if (sidebarHoverOpenRef.current) {
       clearSidebarHoverTimer()
-      setSidebarHoverOpen(false)
+      setSidebarHoverState(false)
+      sidebarHoverSuppressedRef.current = true
       return
     }
     toggleSidebar()
-  }, [clearSidebarHoverTimer, sidebarHoverOpen, toggleSidebar])
+  }, [clearSidebarHoverTimer, setSidebarHoverState, toggleSidebar])
 
   useEffect(() => () => clearSidebarHoverTimer(), [clearSidebarHoverTimer])
+
+  useEffect(() => {
+    const destinations = [
+      ...navItems.map((item) => item.href),
+      ...operationsSubItems.map((item) => item.href),
+      ...marketingSubItems.map((item) => item.href),
+      '/portal/settings',
+    ]
+    const timer = window.setTimeout(() => {
+      destinations.forEach((href) => router.prefetch(href))
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [router])
 
   // Header, mobile navigation, and the desktop sidebar sit beside the page
   // scroll area. If a wheel gesture starts there, hand it to the page—unless
@@ -276,7 +330,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
 
   useEffect(() => {
     const applySidebarLayout = () => {
-      setSidebarCollapsed(window.localStorage.getItem('luxor-portal-sidebar') === 'compact')
+      const collapsed = window.localStorage.getItem('luxor-portal-sidebar') === 'compact'
+      sidebarCollapsedRef.current = collapsed
+      setSidebarCollapsed(collapsed)
     }
 
     applySidebarLayout()
@@ -467,21 +523,32 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
         detail: 'Keep leads, tours, and proposals moving.',
         href: '/portal/leads',
         kind: 'review' as const,
+        mode: 'open' as NextBestActionMode,
+        inquiry: null,
       }
     }
 
     const name = candidate.full_name || 'this inquiry'
+    const waiting = waitingLabel(candidate.updated_at || candidate.created_at)
     if (candidate.status === 'new') {
-      return { title: `Reply to ${name}`, detail: `New ${candidate.event_type || 'event'} inquiry`, href: `/portal/leads/${candidate.id}`, kind: 'reply' as const }
+      return { title: `Reply to ${name}`, detail: `${candidate.event_type || 'Event'} inquiry · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'reply' as const, mode: candidate.email ? 'compose' as NextBestActionMode : 'open' as NextBestActionMode, inquiry: candidate }
     }
     if (candidate.status === 'tour_requested') {
-      return { title: `Confirm ${name}'s tour`, detail: 'Tour request waiting for a next step.', href: `/portal/leads/${candidate.id}`, kind: 'tour' as const }
+      return { title: `Schedule ${name}'s tour`, detail: `Tour request · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'tour' as const, mode: 'open' as NextBestActionMode, inquiry: candidate }
     }
     if (candidate.status === 'proposal_sent') {
-      return { title: `Follow up with ${name}`, detail: 'Proposal ready for a check-in.', href: `/portal/leads/${candidate.id}`, kind: 'proposal' as const }
+      return { title: `Follow up on ${name}'s proposal`, detail: `Proposal sent · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'proposal' as const, mode: candidate.email ? 'compose' as NextBestActionMode : 'open' as NextBestActionMode, inquiry: candidate }
     }
-    return { title: `Follow up with ${name}`, detail: 'Keep this inquiry moving.', href: `/portal/leads/${candidate.id}`, kind: 'followup' as const }
+    return { title: `Follow up with ${name}`, detail: `${candidate.status.replace(/_/g, ' ')} · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'followup' as const, mode: candidate.email ? 'compose' as NextBestActionMode : 'open' as NextBestActionMode, inquiry: candidate }
   }, [inquiries])
+
+  const handleNextBestAction = useCallback(() => {
+    if (nextBestAction.mode === 'compose' && nextBestAction.inquiry) {
+      window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: nextBestAction.inquiry } }))
+      return
+    }
+    router.push(nextBestAction.href)
+  }, [nextBestAction, router])
 
   // Load inquiries for header search bar
   useEffect(() => {
@@ -497,8 +564,23 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
         console.error('Failed to load inquiries for search:', err)
       }
     }
-    loadInquiries()
-    return () => { active = false }
+    void loadInquiries()
+    const refreshTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadInquiries()
+    }, 60_000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadInquiries()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('luxor:inquiries-updated', loadInquiries)
+    return () => {
+      active = false
+      window.clearInterval(refreshTimer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('luxor:inquiries-updated', loadInquiries)
+    }
   }, [])
 
   useEffect(() => {
@@ -680,6 +762,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                                 label={sub.label}
                                 icon={sub.icon}
                                 active={isSubActive}
+                                pending={pendingNavigationHref === sub.href}
+                                onNavigate={handleSidebarNavigate}
                               />
                             )
                           })}
@@ -690,13 +774,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 )
               }
               return (
-                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarIsCollapsed} />
+                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarIsCollapsed} pending={pendingNavigationHref === item.href} onNavigate={handleSidebarNavigate} />
               )
             })}
           </nav>
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarIsCollapsed} /> : null}
+            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarIsCollapsed} pending={pendingNavigationHref === '/portal/settings'} onNavigate={handleSidebarNavigate} /> : null}
             <div className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
@@ -768,8 +852,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
               />
             </Link>
 
-            <Link
-              href={nextBestAction.href}
+            <button
+              type="button"
+              onClick={handleNextBestAction}
               className="group/next-action hidden h-11 min-w-0 max-w-[19rem] items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[color:var(--portal-soft)]/70 px-2.5 transition-[border-color,background-color,transform] duration-200 hover:-translate-y-px hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] xl:flex"
               aria-label={`Next best action: ${nextBestAction.title}`}
             >
@@ -781,7 +866,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 <span className="mt-0.5 block truncate text-[8px] text-[color:var(--portal-muted)]">{nextBestAction.detail}</span>
               </span>
               <ArrowUpRight size={13} className="ml-auto shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 group-hover/next-action:-translate-y-0.5 group-hover/next-action:translate-x-0.5 group-hover/next-action:text-[#caa24c]" aria-hidden="true" />
-            </Link>
+            </button>
 
           </div>
 
@@ -1072,31 +1157,42 @@ function SidebarLink({
   label,
   active,
   collapsed,
+  pending,
+  onNavigate,
 }: {
   href: string
   icon: React.ReactNode
   label: string
   active: boolean
   collapsed: boolean
+  pending: boolean
+  onNavigate: (href: string) => void
 }) {
+  const isPending = pending && !active
+
   return (
     <Link
       href={href}
       prefetch
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+        event.preventDefault()
+        onNavigate(href)
+      }}
       title={collapsed ? label : undefined}
       aria-label={label}
       className={`group relative flex items-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-all ${
         collapsed ? 'px-[18px]' : 'px-3'
       } ${
-        active
+        active || isPending
           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
       }`}
     >
-      {active && (
+      {(active || isPending) && (
         <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c] shadow-[0_0_8px_rgba(202,162,76,0.6)]" />
       )}
-      <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
+      <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${active || isPending ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors ${isPending ? 'animate-pulse' : ''}`}>
         {icon}
       </span>
       {collapsed && (
@@ -1113,6 +1209,7 @@ function SidebarLink({
       >
         {label}
       </span>
+      {isPending && !collapsed ? <Loader2 size={13} className="ml-auto shrink-0 animate-spin text-[#caa24c]" aria-hidden="true" /> : null}
     </Link>
   )
 }
@@ -1135,26 +1232,38 @@ function SidebarSubLink({
   label,
   icon: Icon,
   active,
+  pending,
+  onNavigate,
 }: {
   href: string
   label: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   active: boolean
+  pending: boolean
+  onNavigate: (href: string) => void
 }) {
+  const isPending = pending && !active
+
   return (
     <Link
       href={href}
       prefetch
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+        event.preventDefault()
+        onNavigate(href)
+      }}
       className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
-        active
+        active || isPending
           ? 'text-[#f1d27a] font-bold bg-[#caa24c]/5'
           : 'text-zinc-550 hover:text-zinc-300 hover:bg-zinc-950/20'
       }`}
     >
-      <span className={active ? 'text-[#caa24c]' : 'text-zinc-650'}>
+      <span className={active || isPending ? 'text-[#caa24c]' : 'text-zinc-650'}>
         <Icon size={14} />
       </span>
       <span>{label}</span>
+      {isPending ? <Loader2 size={12} className="ml-auto animate-spin text-[#caa24c]" aria-hidden="true" /> : null}
     </Link>
   )
 }

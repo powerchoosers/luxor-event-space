@@ -97,6 +97,14 @@ type ZohoEmailMessage = {
   direction?: 'incoming' | 'outgoing' | 'matched'
   folderId?: string
   threadId?: string
+  attachments?: Array<{
+    filename: string
+    mimeType?: string
+    size?: number
+    messageId: string
+    attachmentId?: string
+    attachmentPath?: string
+  }>
 }
 
 function emailReaderUrl(email: ZohoEmailMessage) {
@@ -116,6 +124,21 @@ function tourDisplayStatus(lead: LuxorInquiry) {
   if (lead.status === 'tour_confirmed') return 'Confirmed'
   if (lead.preferred_tour_date || lead.preferred_tour_time || lead.status === 'tour_requested') return 'Requested'
   return 'Not scheduled'
+}
+
+function emailAttachmentUrl(email: ZohoEmailMessage, attachment: NonNullable<ZohoEmailMessage['attachments']>[number]) {
+  const query = new URLSearchParams({ filename: attachment.filename })
+  if (attachment.attachmentId) query.set('attachmentId', attachment.attachmentId)
+  if (attachment.attachmentPath) query.set('attachmentPath', attachment.attachmentPath)
+  if (email.folderId) query.set('folderId', email.folderId)
+  return `/api/email/attachments/${encodeURIComponent(attachment.messageId || email.id)}?${query.toString()}`
+}
+
+function formatAttachmentSize(size?: number) {
+  if (!size || size < 1) return null
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`
 }
 
 function getRequestedTourLanguage(lead: LuxorInquiry) {
@@ -832,8 +855,12 @@ export default function LeadDetailPage({
     () => activityEntries.slice(0, visibleActivityCount),
     [activityEntries, visibleActivityCount],
   )
+  const sharedFiles = useMemo(
+    () => emailMessages.flatMap((email) => (email.attachments || []).map((attachment) => ({ email, attachment }))).slice(0, 4),
+    [emailMessages],
+  )
   const sharedAttachmentEmails = useMemo(
-    () => emailMessages.filter((email) => email.hasAttachment).slice(0, 4),
+    () => emailMessages.filter((email) => email.hasAttachment && !email.attachments?.length).slice(0, 4),
     [emailMessages],
   )
   const hiddenActivityCount = Math.max(0, activityEntries.length - visibleActivityEntries.length)
@@ -1486,7 +1513,7 @@ export default function LeadDetailPage({
       setLoadingEmailMessages(true)
       setEmailThreadError(null)
       setZohoReconnectRequired(false)
-      const response = await fetch(`/api/email/inbox?limit=1000&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
+      const response = await fetch(`/api/email/inbox?limit=1000&includeAttachments=1&email=${encodeURIComponent(email)}`, { cache: 'no-store' })
       const payload = await response.json().catch(() => ({})) as {
         messages?: ZohoEmailMessage[]
         error?: string
@@ -3606,7 +3633,7 @@ export default function LeadDetailPage({
                 }}
               />
               <div
-                className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
                 title={`${displayEventType} event`}
                 aria-label={`${displayEventType} event`}
               >
@@ -3726,15 +3753,6 @@ export default function LeadDetailPage({
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
               </p>
-              {requestedTourLanguage ? (
-                <div role="note" className="mt-3 flex max-w-xl items-start gap-2.5 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/8 px-3 py-2.5 text-xs text-[color:var(--portal-text)]">
-                  <Languages size={15} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-                  <div>
-                    <p className="font-bold">{requestedTourLanguage}-speaking client</p>
-                    <p className="mt-0.5 leading-5 text-[color:var(--portal-muted)]">They requested their tour in {requestedTourLanguage}.</p>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -4526,7 +4544,19 @@ export default function LeadDetailPage({
                         </div>
                         <Link href="/portal/emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
                       </div>
-                      {sharedAttachmentEmails.length ? (
+                      {sharedFiles.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {sharedFiles.map(({ email, attachment }) => {
+                            const size = formatAttachmentSize(attachment.size)
+                            return (
+                            <a key={`${email.id}-${attachment.attachmentId || attachment.attachmentPath || attachment.filename}`} href={emailAttachmentUrl(email, attachment)} target="_blank" rel="noreferrer" aria-label={`Open ${attachment.filename}`} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
+                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{attachment.filename}</span><span className="mt-1 block truncate text-[9px] text-[color:var(--portal-muted)]">{size ? `${size} · ` : ''}{decodeHtmlEntities(email.subject) || 'Email attachment'}</span></span>
+                            </a>
+                            )
+                          })}
+                        </div>
+                      ) : sharedAttachmentEmails.length ? (
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                           {sharedAttachmentEmails.map((email) => (
                             <Link key={email.id} href={emailReaderUrl(email)} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
@@ -4667,7 +4697,7 @@ export default function LeadDetailPage({
                             type="button"
                             onClick={() => setPlanningSubTab(tab)}
                             className={`py-2 px-1 font-bold uppercase tracking-wider border-b-2 transition-colors shrink-0 cursor-pointer ${
-                              isCurrent ? 'border-[#caa24c] text-[#caa24c]' : 'border-transparent text-zinc-500 hover:text-white'
+                              isCurrent ? 'border-[#caa24c] text-[#a8792f] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                             }`}
                           >
                             {labels[tab]}
@@ -4796,7 +4826,7 @@ export default function LeadDetailPage({
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
                               <div className="flex items-center gap-3">
                                 <button type="button" onClick={() => beginPlanningEdit('layout')} className="text-[10px] font-bold uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Edit details</button>
-                                <button type="button" onClick={() => setLayoutDesignerOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68]">Open layout builder</button>
+                                <button type="button" onClick={() => setLayoutDesignerOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider !text-white hover:bg-[#dfbd68]">Open layout builder</button>
                               </div>
                             </div>
                             <div className="grid grid-cols-5 gap-4">
@@ -4866,17 +4896,17 @@ export default function LeadDetailPage({
 
                         {/* Planning Checklist Summary */}
                         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-4">Planning Checklist Progress</p>
+                          <p className="mb-4 text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Planning Checklist Progress</p>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                             {[
-                              { label: 'Event Details', val: 'Completed', color: 'text-emerald-400' },
-                              { label: 'Vendors', val: '0/5 Completed', color: 'text-zinc-500' },
-                              { label: 'Food & Beverage', val: '0/4 Completed', color: 'text-zinc-500' },
-                              { label: 'Décor & Design', val: '0/4 Completed', color: 'text-zinc-500' },
-                              { label: 'Timeline', val: '0/3 Completed', color: 'text-zinc-500' },
+                              { label: 'Event Details', val: 'Completed', color: 'text-emerald-700 dark:text-emerald-400' },
+                              { label: 'Vendors', val: '0/5 Completed', color: 'text-[color:var(--portal-muted)]' },
+                              { label: 'Food & Beverage', val: '0/4 Completed', color: 'text-[color:var(--portal-muted)]' },
+                              { label: 'Décor & Design', val: '0/4 Completed', color: 'text-[color:var(--portal-muted)]' },
+                              { label: 'Timeline', val: '0/3 Completed', color: 'text-[color:var(--portal-muted)]' },
                             ].map((item, idx) => (
-                              <div key={idx} className="p-3 rounded-xl border border-zinc-900 bg-zinc-950/30 text-center space-y-1">
-                                <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">{item.label}</p>
+                              <div key={idx} className="space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-center">
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{item.label}</p>
                                 <p className={`text-xs font-black uppercase ${item.color}`}>{item.val}</p>
                               </div>
                             ))}

@@ -121,10 +121,40 @@ function isOpenStatus(value: string | null | undefined) {
   return !['paid', 'completed', 'cancelled', 'canceled', 'signed', 'closed'].includes((value || '').toLowerCase())
 }
 
-function rotate<T>(items: T[], cycle: number, size = 4) {
-  if (items.length <= size) return items.slice(0, size)
+async function withFallbackTimeout<T>(request: Promise<T>, fallback: T, timeoutMs = 4_500) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      request.catch(() => fallback),
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+function chooseDiversePriorities(items: SmartSuggestion[], cycle: number, size = 4) {
+  if (items.length <= size) return items
   const start = (cycle * size) % items.length
-  return [...items.slice(start), ...items.slice(0, start)].slice(0, size)
+  const ordered = [...items.slice(start), ...items.slice(0, start)]
+  const selected: SmartSuggestion[] = []
+  const kindCounts = new Map<PriorityKind, number>()
+
+  for (const item of ordered) {
+    if ((kindCounts.get(item.kind) || 0) >= 2) continue
+    selected.push(item)
+    kindCounts.set(item.kind, (kindCounts.get(item.kind) || 0) + 1)
+    if (selected.length === size) return selected
+  }
+
+  for (const item of ordered) {
+    if (selected.some((selectedItem) => selectedItem.id === item.id)) continue
+    selected.push(item)
+    if (selected.length === size) break
+  }
+  return selected
 }
 
 export async function GET(request: Request) {
@@ -136,17 +166,23 @@ export async function GET(request: Request) {
     const cycle = Math.max(0, Number.parseInt(searchParams.get('cycle') || '0', 10) || 0)
 
     const [inquiries, bookings, invoices, tasks, signatures, unreadMessages] = await Promise.all([
-      supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,event_type,status,pipeline_stage,created_at,updated_at&order=created_at.desc&limit=24').catch(() => []),
-      supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,contract_status,final_payment_due_date&order=event_date.asc&limit=30').catch(() => []),
-      supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30').catch(() => []),
-      supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30').catch(() => []),
-      supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20').catch(() => []),
-      supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12').catch(() => []),
+      withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,event_type,status,pipeline_stage,created_at,updated_at&order=created_at.desc&limit=24'), []),
+      withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,contract_status,final_payment_due_date&order=event_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []),
+      withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []),
     ])
 
     const candidates: SmartSuggestion[] = []
 
-    inquiries
+    const distinctInquiries = inquiries.filter((inquiry, index, all) => {
+      const identity = `${(inquiry.full_name || '').trim().toLowerCase()}|${(inquiry.event_type || '').trim().toLowerCase()}`
+      if (identity === '|') return true
+      return all.findIndex((candidate) => `${(candidate.full_name || '').trim().toLowerCase()}|${(candidate.event_type || '').trim().toLowerCase()}` === identity) === index
+    })
+
+    distinctInquiries
       .filter((inquiry) => isOpenStatus(inquiry.status))
       .slice(0, 6)
       .forEach((inquiry) => {
@@ -250,7 +286,7 @@ export async function GET(request: Request) {
     const unique = Array.from(new Map(candidates.map((candidate) => [candidate.id, candidate])).values())
       .sort((a, b) => urgencyWeight[a.urgency] - urgencyWeight[b.urgency])
 
-    const suggestions = rotate(unique.length >= 4 ? unique : [...unique, ...DEFAULT_SUGGESTIONS], cycle)
+    const suggestions = chooseDiversePriorities(unique.length >= 4 ? unique : [...unique, ...DEFAULT_SUGGESTIONS], cycle)
     return NextResponse.json({ suggestions, cycle, generatedAt: new Date().toISOString() })
   } catch (error) {
     console.error('Failed to build Elena priorities:', error)

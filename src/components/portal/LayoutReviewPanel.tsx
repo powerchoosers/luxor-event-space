@@ -240,7 +240,7 @@ export function LayoutReviewPanel({ inquiryId, leadEventId, layout, clientEmail,
           type="button"
           onClick={() => void createReview()}
           disabled={creating}
-          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#b9872f] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#caa24c] disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#b9872f] px-4 text-[10px] font-black uppercase tracking-[0.14em] !text-white transition-colors hover:bg-[#caa24c] disabled:cursor-not-allowed disabled:opacity-55"
         >
           {creating ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
           {!layout ? 'Open layout builder' : currentReview ? 'Create updated link' : 'Create private link'}
