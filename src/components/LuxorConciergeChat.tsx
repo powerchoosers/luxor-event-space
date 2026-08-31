@@ -106,19 +106,7 @@ function fallbackResponse(input: string) {
 function shouldShowBookingCard(input: string) {
   const text = input.toLowerCase()
 
-  return [
-    'book',
-    'schedule',
-    'tour',
-    'appointment',
-    'visit',
-    'availability',
-    'available',
-    'date',
-    'time',
-    'call me',
-    'contact',
-  ].some((term) => text.includes(term))
+  return /\b(?:book|booking|schedule|scheduled|tour|appointment|visit|availability|available|date|time|contact)\b|\bcall me\b/i.test(text)
 }
 
 function inferEventType(messages: Message[], notes: string) {

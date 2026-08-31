@@ -10,6 +10,7 @@ import {
   Mail,
   Bell,
   Cpu,
+  Bot,
   Clock,
   Plus,
   Trash2,
@@ -54,6 +55,7 @@ import { MailMigrationSettings } from '@/components/portal/MailMigrationSettings
 import { CalendarReplyReview } from '@/components/portal/CalendarReplyReview'
 import { MailProviderSettings } from '@/components/portal/MailProviderSettings'
 import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
+import { ElenaSettingsManager } from '@/components/portal/ElenaSettingsManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -71,6 +73,7 @@ type Tab =
   | 'hours'
   | 'promotions'
   | 'content'
+  | 'elena'
 
 type SettingsNavItem = {
   id: Tab
@@ -92,6 +95,7 @@ const SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[] }> = 
     label: 'Communication',
     items: [
       { id: 'notifications', label: 'Notifications', description: 'Alerts and recipients', icon: <Bell size={16} /> },
+      { id: 'elena', label: 'Elena AI', description: 'Knowledge, flows, and behavior', icon: <Bot size={16} /> },
       { id: 'integrations', label: 'Email & connections', description: 'Inbox, calendar, and services', icon: <Cpu size={16} /> },
     ],
   },
@@ -119,6 +123,7 @@ const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string }> = {
   promotions: { title: 'Promotions', description: 'Create and manage the offers that appear on the Luxor website.' },
   branding: { title: 'Branding', description: 'Set the portal appearance and manage the assets that represent Luxor.' },
   content: { title: 'Site content', description: 'Edit the information guests see across the public Luxor website.' },
+  elena: { title: 'Elena AI', description: 'Manage Elena’s knowledge, flows, behavior, and public website preview.' },
 }
 
 const AGENT_TABS: Tab[] = ['team', 'notifications', 'branding']
@@ -414,6 +419,7 @@ export default function SettingsPage() {
           </> : <>
             <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
             <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
+            <button type="button" onClick={() => selectSettingsTab('elena')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage Elena</button>
             <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
             <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
           </>}
@@ -844,6 +850,11 @@ export default function SettingsPage() {
                 <TeamAccessManager />
               </div> : null}
             </div>
+          )}
+
+          {/* ELENA AI */}
+          {activeTab === 'elena' && (
+            <ElenaSettingsManager />
           )}
 
           {/* INTEGRATIONS */}

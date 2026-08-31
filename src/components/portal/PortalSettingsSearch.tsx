@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from 'lucide-react'
+import { Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from 'lucide-react'
 
 type SettingsTab =
   | 'business'
@@ -12,6 +12,7 @@ type SettingsTab =
   | 'hours'
   | 'promotions'
   | 'content'
+  | 'elena'
 
 type SettingsSearchItem = {
   tab: SettingsTab
@@ -36,6 +37,7 @@ const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { tab: 'team', section: 'Team & Permissions', title: 'Your email identity', description: 'Update your sender name, title, profile photo, and signature identity.', keywords: 'profile avatar photo sender email name job title signature user' },
   { tab: 'team', section: 'Team & Permissions', title: 'Portal access', description: 'Review approved-user access and permissions.', keywords: 'login security users roles permissions approved zoho account access' },
   { tab: 'integrations', section: 'Integrations', title: 'Email delivery settings', description: 'Review active mail delivery, Resend setup, and the remaining Zoho connection.', keywords: 'resend provider credentials mail webhook inbox reconnect oauth integration zoho email' },
+  { tab: 'elena', section: 'Elena AI', title: 'Elena knowledge and behavior', description: 'Manage public concierge knowledge, flows, instructions, preview, and publishing.', keywords: 'elena chatbot ai concierge knowledge faq flows prompt instructions test preview publish website' },
   { tab: 'integrations', section: 'Integrations', title: 'Twilio phone numbers', description: 'Search, purchase, and configure Luxor phone numbers.', keywords: 'twilio sms text calling phone number webhook voice purchase' },
   { tab: 'hours', section: 'Business Hours', title: 'Tour availability', description: 'Set the days and times available for venue tours.', keywords: 'hours schedule calendar availability open closed appointments tours times' },
   { tab: 'promotions', section: 'Promotions', title: 'Promotions', description: 'Manage active website promotions and offers.', keywords: 'discount offer campaign special banner marketing promo' },
@@ -51,6 +53,7 @@ const TAB_ICONS: Record<SettingsTab, typeof Bell> = {
   hours: Clock,
   promotions: Tag,
   content: Building,
+  elena: Bot,
 }
 
 function normalize(value: string) {
