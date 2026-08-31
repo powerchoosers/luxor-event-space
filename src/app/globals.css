@@ -1566,6 +1566,11 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   line-height: 1.55;
 }
 
+.pricing-inclusion:last-child {
+  grid-column: 1 / -1;
+  min-height: 12.5rem;
+}
+
 .pricing-day-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

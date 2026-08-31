@@ -9,6 +9,7 @@ import {
   Crown,
   DoorOpen,
   Star,
+  Wifi,
   type LucideIcon,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
@@ -63,6 +64,7 @@ const inclusions: Inclusion[] = [
   { title: 'Luxor Lounge', description: 'A stylish lounge space for guests to relax and gather.', icon: Armchair },
   { title: 'VIP Room', description: 'A private VIP space for special moments and added comfort.', icon: DoorOpen },
   { title: 'Ample Parking', description: 'Convenient onsite parking for you and your guests.', icon: CarFront },
+  { title: 'Free Wi-Fi', description: 'Complimentary Wi-Fi is available throughout the venue.', icon: Wifi },
 ]
 
 const pricingDays: PricingDay[] = [
