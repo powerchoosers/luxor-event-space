@@ -2,7 +2,6 @@ import { LockKeyhole, ShieldCheck } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { PortalPasswordLogin } from './PortalPasswordLogin'
-import { PortalMagicLinkLogin } from './PortalMagicLinkLogin'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 
 type LoginPageProps = {
@@ -85,13 +84,12 @@ export default async function PortalLoginPage({ searchParams }: LoginPageProps) 
             ) : null}
 
             <PortalPasswordLogin />
-            <PortalMagicLinkLogin />
 
             <div className="mt-6 rounded-lg border border-zinc-800 bg-black/35 px-4 py-3">
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#f1d27a]" />
                 <p className="text-xs leading-5 text-zinc-500">
-                  Access is limited to approved Luxor owner addresses. Logging out clears this browser&apos;s portal session.
+                  Sign in with the Luxor address assigned by an administrator. Password recovery is sent only to your private recovery email.
                 </p>
               </div>
             </div>

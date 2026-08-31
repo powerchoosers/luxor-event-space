@@ -2,6 +2,7 @@ import 'server-only'
 
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export const LUXOR_PORTAL_SESSION_COOKIE = 'luxor_portal_session'
 
@@ -145,6 +146,14 @@ export async function getVerifiedLuxorPortalSession() {
 
 export async function getLuxorPortalSession() {
   const session = await getVerifiedLuxorPortalSession()
+  if (session) {
+    const rows = await supabaseRest<Array<{ status: string; sessions_revoked_at: string | null }>>(
+      `luxor_portal_members?email=eq.${encodeURIComponent(session.email)}&select=status,sessions_revoked_at&limit=1`
+    )
+    const member = rows[0]
+    if (!member || member.status === 'suspended') return null
+    if (member.sessions_revoked_at && session.issuedAt <= new Date(member.sessions_revoked_at).getTime()) return null
+  }
   if (!session && process.env.NODE_ENV === 'development') {
     return {
       email: 'booking@luxoratlaspalmas.com',

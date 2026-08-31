@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createLuxorPortalSessionCookie, isAuthorizedLuxorPortalEmail, verifyLuxorPortalPassword } from '@/lib/luxorPortalAuth'
+import { createLuxorPortalSessionCookie } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
+import { createLuxorSupabaseAuthAdmin } from '@/lib/luxorSupabaseAuthServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export const runtime = 'nodejs'
 
@@ -19,11 +22,17 @@ export async function POST(request: Request) {
   }
   const email = String(body.email || '').trim().toLowerCase()
   const password = String(body.password || '')
-  if (!isAuthorizedLuxorPortalEmail(email) || !verifyLuxorPortalPassword(password)) {
+  const member = email.endsWith('@luxoratlaspalmas.com') ? await getLuxorPortalMember(email) : null
+  if (!member || member.status !== 'active') {
     return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 })
   }
+  const auth = createLuxorSupabaseAuthAdmin()
+  const signedIn = await auth.auth.signInWithPassword({ email, password })
+  if (signedIn.error || !signedIn.data.user) return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 })
+  const now = new Date().toISOString()
+  await supabaseRest(`luxor_portal_members?id=eq.${member.id}`, { method: 'PATCH', body: JSON.stringify({ last_signed_in_at: now, updated_at: now }) })
   const response = NextResponse.json({ ok: true })
-  const session = createLuxorPortalSessionCookie({ email, accountId: null, mailboxAddress: 'booking@luxoratlaspalmas.com' })
+  const session = createLuxorPortalSessionCookie({ email, accountId: null, mailboxAddress: member.sender_email || 'booking@luxoratlaspalmas.com' })
   response.cookies.set(session.name, session.value, {
     httpOnly: true,
     secure: new URL(request.url).protocol === 'https:',

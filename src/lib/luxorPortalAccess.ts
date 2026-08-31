@@ -15,6 +15,8 @@ export type PortalMemberStatus = 'pending' | 'active' | 'suspended'
 export type LuxorPortalMember = {
   id: string; email: string; display_name: string; role: PortalRole; status: PortalMemberStatus
   permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null
+  recovery_email: string | null; auth_user_id: string | null; password_set_at: string | null
+  password_reset_sent_at: string | null; sessions_revoked_at: string | null
   invited_at: string | null; last_signed_in_at: string | null; created_at: string
 }
 
