@@ -30,6 +30,7 @@ import {
   MoreHorizontal,
   SlidersHorizontal,
   X,
+  ArrowUpRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -54,6 +55,21 @@ type PortalUserProfile = {
 }
 
 type PortalTheme = 'light' | 'dark'
+type NextBestActionKind = 'reply' | 'tour' | 'proposal' | 'followup' | 'review'
+
+function NextBestActionIcon({ kind }: { kind: NextBestActionKind }) {
+  const Icon = kind === 'reply'
+    ? Mail
+    : kind === 'tour'
+      ? Calendar
+      : kind === 'proposal'
+        ? FileText
+        : kind === 'followup'
+          ? Handshake
+          : LayoutDashboard
+
+  return <Icon size={14} aria-hidden="true" />
+}
 
 function persistPortalThemeCookie(theme: PortalTheme) {
   document.cookie = `luxor-portal-theme=${theme}; path=/; max-age=31536000; samesite=lax`
@@ -178,6 +194,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   )
   const usesInternalTableScroll =
     (!isMobileViewport && pathname === '/portal/leads') ||
+    pathname === '/portal/events' ||
     pathname === '/portal/emails' ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
@@ -225,6 +242,17 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
       return next
     })
   }, [clearSidebarHoverTimer])
+
+  const handleSidebarEmptyClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest('a, button')) return
+    if (sidebarHoverOpen) {
+      clearSidebarHoverTimer()
+      setSidebarHoverOpen(false)
+      return
+    }
+    toggleSidebar()
+  }, [clearSidebarHoverTimer, sidebarHoverOpen, toggleSidebar])
 
   useEffect(() => () => clearSidebarHoverTimer(), [clearSidebarHoverTimer])
 
@@ -415,6 +443,46 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
     ).slice(0, 5)
   }, [deferredSearchQuery, inquiries])
 
+  const nextBestAction = useMemo(() => {
+    const priority: Record<LuxorInquiry['status'], number> = {
+      new: 0,
+      tour_requested: 1,
+      proposal_sent: 2,
+      contacted: 3,
+      tour_confirmed: 4,
+      booked: 5,
+      closed_lost: 6,
+    }
+    const candidate = [...inquiries]
+      .filter((inquiry) => inquiry.status !== 'booked' && inquiry.status !== 'closed_lost')
+      .sort((a, b) => {
+        const byStatus = priority[a.status] - priority[b.status]
+        if (byStatus !== 0) return byStatus
+        return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+      })[0]
+
+    if (!candidate) {
+      return {
+        title: 'Review today\'s priorities',
+        detail: 'Keep leads, tours, and proposals moving.',
+        href: '/portal/leads',
+        kind: 'review' as const,
+      }
+    }
+
+    const name = candidate.full_name || 'this inquiry'
+    if (candidate.status === 'new') {
+      return { title: `Reply to ${name}`, detail: `New ${candidate.event_type || 'event'} inquiry`, href: `/portal/leads/${candidate.id}`, kind: 'reply' as const }
+    }
+    if (candidate.status === 'tour_requested') {
+      return { title: `Confirm ${name}'s tour`, detail: 'Tour request waiting for a next step.', href: `/portal/leads/${candidate.id}`, kind: 'tour' as const }
+    }
+    if (candidate.status === 'proposal_sent') {
+      return { title: `Follow up with ${name}`, detail: 'Proposal ready for a check-in.', href: `/portal/leads/${candidate.id}`, kind: 'proposal' as const }
+    }
+    return { title: `Follow up with ${name}`, detail: 'Keep this inquiry moving.', href: `/portal/leads/${candidate.id}`, kind: 'followup' as const }
+  }, [inquiries])
+
   // Load inquiries for header search bar
   useEffect(() => {
     let active = true
@@ -458,7 +526,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   return (
     <body data-portal-theme={portalTheme} className="h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside onWheelCapture={handOffWheelToPage} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
+      <aside onWheelCapture={handOffWheelToPage} onClick={handleSidebarEmptyClick} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
@@ -698,6 +766,21 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 className="max-w-[9.5rem] [&_.luxor-wordmark]:!text-[1.35rem]"
                 markClassName="!h-10 !w-10"
               />
+            </Link>
+
+            <Link
+              href={nextBestAction.href}
+              className="group/next-action hidden h-11 min-w-0 max-w-[19rem] items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[color:var(--portal-soft)]/70 px-2.5 transition-[border-color,background-color,transform] duration-200 hover:-translate-y-px hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] xl:flex"
+              aria-label={`Next best action: ${nextBestAction.title}`}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
+                <NextBestActionIcon kind={nextBestAction.kind} />
+              </span>
+              <span className="min-w-0 leading-tight">
+                <span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{nextBestAction.title}</span>
+                <span className="mt-0.5 block truncate text-[8px] text-[color:var(--portal-muted)]">{nextBestAction.detail}</span>
+              </span>
+              <ArrowUpRight size={13} className="ml-auto shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 group-hover/next-action:-translate-y-0.5 group-hover/next-action:translate-x-0.5 group-hover/next-action:text-[#caa24c]" aria-hidden="true" />
             </Link>
 
           </div>
@@ -1017,7 +1100,7 @@ function SidebarLink({
         {icon}
       </span>
       {collapsed && (
-        <span className="pointer-events-none absolute left-[calc(100%+0.75rem)] z-30 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] opacity-0 shadow-xl -translate-x-1 transition-[opacity,transform] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
+        <span className="pointer-events-none absolute left-[calc(100%+0.75rem)] z-30 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] opacity-0 shadow-xl backdrop-blur-xl -translate-x-1 transition-[opacity,transform] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
           {label}
         </span>
       )}

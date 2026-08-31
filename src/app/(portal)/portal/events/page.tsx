@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useEffect, useState, useMemo, useDeferredValue } from 'react'
+import React, { useCallback, useEffect, useState, useMemo, useDeferredValue } from 'react'
 import {
   Calendar,
+  CalendarRange,
   Clock,
   DollarSign,
   FileText,
@@ -10,9 +11,7 @@ import {
   MapPin,
   Phone,
   Plus,
-  RefreshCw,
   Search,
-  Sparkles,
   User,
   Users,
   CheckSquare,
@@ -44,6 +43,7 @@ import {
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
 import type { LuxorBooking, LuxorBookingStatus, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
 const BOOKING_STATUS_OPTIONS: Array<{ value: LuxorBookingStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
@@ -73,7 +73,7 @@ export default function EventsPage() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<LuxorBookingStatus>('confirmed')
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -90,11 +90,38 @@ export default function EventsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchBookings()
-  }, [])
+    void fetchBookings()
+  }, [fetchBookings])
+
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+
+    let refreshTimer: number | null = null
+    const scheduleRefresh = () => {
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void fetchBookings()
+      }, 250)
+    }
+
+    const channel = supabase
+      .channel('luxor-events-realtime-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_bookings' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_inquiries' }, scheduleRefresh)
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Events realtime channel entered ${status}.`)
+      })
+
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [fetchBookings])
 
   // Filter bookings (Memoized for high performance)
   const filteredBookings = useMemo(() => {
@@ -167,14 +194,14 @@ export default function EventsPage() {
   const confirmedCount = useMemo(() => bookings.filter((b) => b.status === 'confirmed').length, [bookings])
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
+    <PortalPageFrame className="h-full min-h-0 overflow-clip flex flex-col gap-6">
       <PortalPageHeader
-        icon={<Sparkles size={18} />}
+        icon={<CalendarRange size={18} />}
         title="Event Operations"
         actions={
-          <PortalButton onClick={fetchBookings}>
-            <RefreshCw size={13} /> Reload Events
-          </PortalButton>
+          <Link href="/portal/leads" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c] bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-lg shadow-[#caa24c]/15 transition-all duration-150 hover:border-[#dfbd68] hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+            <Plus size={13} /> Create Event
+          </Link>
         }
       />
 
@@ -185,9 +212,9 @@ export default function EventsPage() {
       )}
 
       {/* Main split dashboard view */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-visible lg:overflow-hidden">
         {/* Left pane: Events List */}
-        <div className="lg:col-span-5 flex flex-col min-h-[300px] lg:min-h-0">
+        <div className="lg:col-span-5 flex min-h-[300px] min-w-0 flex-col overflow-hidden lg:min-h-0">
           <PortalTableCard
             controls={
               <div className="space-y-4">
@@ -272,21 +299,20 @@ export default function EventsPage() {
         </div>
 
         {/* Right pane: Inspection Panel */}
-        <div className="lg:col-span-7 flex flex-col min-h-[400px] lg:min-h-0">
+        <div className="lg:col-span-7 flex min-h-[400px] min-w-0 flex-col overflow-hidden lg:min-h-0">
           {selectedEvent ? (
             <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col h-full overflow-hidden shadow-2xl">
               {/* Event title header */}
-              <div className="p-6 border-b border-[color:var(--portal-border)] bg-[#050505]/40 flex flex-col gap-3">
+              <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-serif text-white tracking-wide">{selectedEvent.client_name}</h2>
-                    <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-[0.15em] mt-0.5">
+                    <h2 className="text-lg font-serif tracking-wide text-[color:var(--portal-text)]">{selectedEvent.client_name}</h2>
+                    <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
                       {selectedEvent.event_type || 'Quinceañera'} Setup & Coordination
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs font-mono font-bold text-zinc-400">ID: {selectedEvent.id.slice(0, 8)}</span>
-                    <p className="text-[9px] text-[#caa24c] font-black uppercase tracking-widest mt-1">Status: {selectedEvent.status}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#caa24c]">Status: {selectedEvent.status}</p>
                   </div>
                 </div>
 
