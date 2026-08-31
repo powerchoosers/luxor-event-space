@@ -181,3 +181,43 @@ Final result: passed
 4. Captured opening and closing transition states, confirmed the dialog remains during exit, and confirmed it unmounts after the animation completes.
 
 Final result: passed
+
+---
+
+# Team Access Persistent Controls QA
+
+## Scope
+
+- Surface: `/portal/settings`, Team & access, Add team member drawer
+- Browser: authenticated Chrome session
+- Viewport: 1026 × 844 CSS pixels
+- Source and implementation captures: 1026 × 844 pixels at 1× density
+- States: dark mode at the top and bottom of the form, light mode at the bottom of the form
+- Safety: no form submission, team-member creation, or invitation delivery occurred
+
+## Evidence
+
+- Source without persistent footer: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-after.png`
+- Dark implementation at top: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-sticky-top.png`
+- Dark implementation after internal scroll: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-sticky-bottom.png`
+- Light implementation after internal scroll: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-sticky-light.png`
+- Full-view comparison: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-sticky-comparison.png`
+
+## Findings
+
+- The header remains visible at the top of the drawer with the title, context, and close button at every internal scroll position.
+- The execution footer remains visible at the bottom with `Save as pending` and `Add & send invite` at every internal scroll position.
+- Only the form and permission groups scroll; the drawer shell itself remains fixed and continues to contain background wheel movement.
+- The pinned regions use the same opaque light and dark surfaces, border tokens, typography, button treatment, and spacing rhythm as the source drawer.
+- The dark and light scrolled captures show the same control visibility and separation.
+- The focused bottom-state captures were required because persistent controls could not be proved from the top-state full view alone.
+- Browser console review found no warnings or errors, and the existing entrance and exit motion remains intact.
+
+## Comparison history
+
+1. Compared the existing drawer, where the footer lived at the end of the scrolling content, against the requested persistent-control behavior.
+2. Converted the drawer into fixed header, internal scrolling body, and fixed footer regions.
+3. Captured the top state, scrolled the internal body to the end, and confirmed both regions remained visible in dark mode.
+4. Repeated the scrolled-state verification in light mode and restored the original dark theme preference.
+
+Final result: passed
