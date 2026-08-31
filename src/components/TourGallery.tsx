@@ -11,10 +11,10 @@ type Locale = 'en' | 'es'
 
 const slides = {
   en: [
-    { title: 'Main Hall', subtitle: 'Up to 180 Guests', image: '/images/dining-hall/main-hall-reception-professional.png', width: 1472, height: 1069 },
-    { title: 'VIP Room', subtitle: 'Private VIP Room', image: '/images/dining-hall/main-hall-conversation-candid.png', width: 1536, height: 1024 },
-    { title: 'Lounge Room', subtitle: 'Lounge Room', image: '/images/luxor-lounge/luxor-lounge-empty.png', width: 941, height: 1672 },
-    { title: 'Kitchenette', subtitle: 'Kitchenette', image: '/images/dining-hall/main-hall-dinner-service-candid.png', width: 1536, height: 1024 },
+    { title: 'Main Hall', subtitle: 'Up to 180 guests', image: '/images/dining-hall/main-hall-reception-professional.png', width: 1472, height: 1069 },
+    { title: 'VIP Suite', subtitle: 'Private retreat', image: '/images/dining-hall/main-hall-conversation-candid.png', width: 1536, height: 1024 },
+    { title: 'Lounge', subtitle: 'Relax & mingle', image: '/images/luxor-lounge/luxor-lounge-empty.png', width: 941, height: 1672 },
+    { title: 'Kitchenette', subtitle: 'Food prep', image: '/images/dining-hall/main-hall-dinner-service-candid.png', width: 1536, height: 1024 },
   ],
   es: [
     { title: 'Salón principal', subtitle: 'Hasta 180 invitados', image: '/images/dining-hall/main-hall-reception-professional.png', width: 1472, height: 1069 },
