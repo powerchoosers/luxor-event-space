@@ -48,28 +48,36 @@ const planningSignals = [
 export default function EventsPage() {
   return (
     <main className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section className="relative isolate overflow-hidden px-5 pb-16 pt-36 sm:px-6 lg:px-8 lg:pb-24 lg:pt-44">
-        <Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Luxor main hall prepared for guests" fill priority sizes="100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94),rgba(5,5,5,0.72)_48%,rgba(5,5,5,0.42)),linear-gradient(180deg,rgba(5,5,5,0.5),#050505_92%)]" />
-        <div className="absolute inset-0 luxor-noise opacity-[0.18]" />
-
-        <div className="relative z-10 mx-auto max-w-7xl">
-          <div className="mx-auto max-w-4xl text-center">
+      <section className="relative isolate min-h-[92svh] overflow-hidden bg-[#f7f3ec] pt-28 sm:min-h-screen">
+        <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8 lg:pt-14">
+          <div className="min-w-0 text-center lg:text-left">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Celebrations at Luxor</p>
-            <h1 className="font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-8xl">
+            <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
               Event types that fit the room.
             </h1>
-            <p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">
+            <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
               Luxor is built for celebrations that need a strong backdrop, simple guest flow, and enough polish before the decor even arrives.
             </p>
-            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Events hero" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
+              <Link href="/visit" data-conversion="tour_cta_click" data-conversion-label="Events hero" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505] shadow-[0_22px_44px_-26px_rgba(202,162,76,0.8)]">
                 Check tour times <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link href="/pricing" className="inline-flex items-center justify-center rounded-md border border-[#caa24c]/32 bg-black/35 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#f7efe3]">
+              <Link href="/pricing" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#9b6f24]/35 bg-white/70 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#241d17] transition hover:border-[#9b6f24]/60 hover:bg-white">
                 View packages
               </Link>
             </div>
+          </div>
+
+          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:min-h-[calc(100vh-11rem)]">
+            <Image
+              src="/images/dining-hall/main-hall-wedding-wide.png"
+              alt="Luxor main hall prepared for guests"
+              fill
+              priority
+              sizes="(min-width: 1024px) 58vw, 100vw"
+              className="object-cover object-center"
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/25 to-transparent" />
           </div>
         </div>
       </section>

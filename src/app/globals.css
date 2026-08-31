@@ -1423,3 +1423,349 @@ body[data-luxor-site] footer.site-footer--light [class*="text-[#d7c29a]"] {
 body[data-luxor-site] footer.site-footer--light [class*="bg-black/"] {
   background-color: rgba(255, 255, 255, 0.72) !important;
 }
+
+/* Rates retains Luxor's dark editorial direction while sharing its typography and controls. */
+body[data-luxor-site] main.pricing-page,
+body[data-luxor-site] main.pricing-page > .pricing-section {
+  color: #f8f0e2;
+  background: #10100f;
+}
+
+.pricing-page {
+  --pricing-gold: #caa24c;
+  --pricing-gold-bright: #e1c17b;
+  --pricing-cream: #f8f0e2;
+  --pricing-muted: #d7c29a;
+  --pricing-rule: rgba(202, 162, 76, 0.38);
+  overflow: hidden;
+  background-color: #10100f;
+  background-image: radial-gradient(circle at 50% 0%, rgba(202, 162, 76, 0.07), transparent 36rem);
+}
+
+.pricing-section {
+  position: relative;
+  padding: 7.5rem 1.25rem;
+}
+
+.pricing-inclusions {
+  padding-top: 12rem !important;
+}
+
+.pricing-rates {
+  background: #0b0b0a !important;
+  border-top: 1px solid rgba(201, 164, 92, 0.36);
+}
+
+.pricing-container {
+  width: min(100%, 82rem);
+  margin: 0 auto;
+}
+
+.pricing-heading {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.pricing-heading :is(h1, h2) {
+  margin: 0;
+  color: var(--pricing-cream);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: clamp(2.7rem, 5vw, 5rem);
+  font-weight: 500;
+  letter-spacing: 0.075em;
+  line-height: 0.94;
+  text-transform: uppercase;
+}
+
+.pricing-heading p {
+  margin: 1rem 0 0;
+  color: var(--pricing-cream);
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.pricing-ornament,
+.pricing-day-rule {
+  display: grid;
+  grid-template-columns: minmax(3rem, 1fr) 0.45rem minmax(3rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 17rem);
+  margin-top: 1.35rem;
+  color: var(--pricing-gold);
+}
+
+.pricing-ornament::before,
+.pricing-ornament::after,
+.pricing-day-rule::before,
+.pricing-day-rule::after {
+  height: 1px;
+  content: '';
+  background: currentColor;
+  opacity: 0.72;
+}
+
+.pricing-ornament span,
+.pricing-day-rule span {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid currentColor;
+  rotate: 45deg;
+}
+
+.pricing-inclusion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 4.3rem;
+  overflow: hidden;
+  border: 1px solid rgba(202, 162, 76, 0.28);
+  border-radius: 1.25rem;
+}
+
+.pricing-inclusion {
+  display: grid;
+  justify-items: center;
+  min-height: 15.5rem;
+  padding: 2.4rem 1.75rem 2rem;
+  border-right: 1px solid rgba(202, 162, 76, 0.28);
+  border-bottom: 1px solid rgba(202, 162, 76, 0.28);
+  text-align: center;
+}
+
+.pricing-inclusion-icon {
+  width: 3.6rem;
+  height: 3.6rem;
+  color: var(--pricing-gold-bright);
+}
+
+.pricing-inclusion h2,
+.pricing-day h2,
+.pricing-cta h2 {
+  color: var(--pricing-gold-bright);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 1.6rem;
+  font-weight: 500;
+  letter-spacing: 0.055em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.pricing-inclusion h2 {
+  margin: 1.25rem 0 0;
+}
+
+.pricing-inclusion p {
+  max-width: 17rem;
+  margin: 0.7rem 0 0;
+  color: var(--pricing-cream);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.pricing-day-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 4.3rem;
+}
+
+.pricing-day {
+  display: flex;
+  flex-direction: column;
+  min-height: 33rem;
+  border: 1px solid var(--pricing-rule);
+  border-radius: 1rem;
+  background: rgba(22, 20, 17, 0.76);
+  overflow: hidden;
+  text-align: center;
+}
+
+.pricing-day-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  margin: 1.65rem auto 0;
+  color: var(--pricing-gold-bright);
+}
+
+.pricing-day h2 {
+  min-height: 2.5rem;
+  margin: 0.65rem 1rem 0;
+  font-size: clamp(1.35rem, 1.8vw, 1.7rem);
+}
+
+.pricing-day-rule {
+  width: calc(100% - 2.7rem);
+  margin: 0.55rem auto 0;
+  gap: 0.5rem;
+}
+
+.pricing-day-rule span {
+  width: 0.3rem;
+  height: 0.3rem;
+}
+
+.pricing-options {
+  display: grid;
+  align-content: center;
+  flex: 1;
+  padding: 0.75rem 1.35rem;
+}
+
+.pricing-option {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid rgba(202, 162, 76, 0.34);
+}
+
+.pricing-option:last-child {
+  border-bottom: 0;
+}
+
+.pricing-option-label,
+.pricing-additional p {
+  margin: 0;
+  color: var(--pricing-gold-bright);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+}
+
+.pricing-option-time,
+.pricing-option-note {
+  margin: 0.34rem 0 0;
+  color: var(--pricing-cream);
+  font-size: 0.7rem;
+  letter-spacing: 0.035em;
+}
+
+.pricing-option-price {
+  margin: 0.32rem 0 0;
+  color: var(--pricing-cream);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: clamp(2rem, 2.65vw, 2.7rem);
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.pricing-option-note {
+  color: var(--pricing-muted);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pricing-additional {
+  min-height: 4.8rem;
+  padding: 1rem;
+  border-top: 1px solid var(--pricing-rule);
+}
+
+.pricing-additional strong {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--pricing-gold-bright);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pricing-cta {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  padding: 1.4rem 1.7rem;
+  border: 1px solid var(--pricing-rule);
+  border-radius: 1rem;
+  background: rgba(22, 20, 17, 0.54);
+}
+
+.pricing-cta-icon {
+  width: 2rem;
+  height: 2rem;
+  color: var(--pricing-gold-bright);
+}
+
+.pricing-cta h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.pricing-cta p {
+  margin: 0.28rem 0 0;
+  color: var(--pricing-cream);
+  font-size: 0.84rem;
+}
+
+.pricing-cta-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  min-height: 3rem;
+  padding: 0.85rem 1.35rem;
+  border-radius: 0.5rem;
+  background: var(--pricing-gold);
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-align: center;
+  text-transform: uppercase;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.pricing-cta-link:hover {
+  background: #dfbd68;
+}
+
+.pricing-cta-link svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.pricing-disclaimer {
+  margin: 1rem 0 0;
+  color: rgba(215, 194, 154, 0.75);
+  font-size: 0.57rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1023px) {
+  .pricing-section { padding-block: 6rem; }
+  .pricing-inclusions { padding-top: 10rem !important; }
+  .pricing-day-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .pricing-day { min-height: 30rem; }
+}
+
+@media (max-width: 640px) {
+  .pricing-section { padding: 4.75rem 1rem; }
+  .pricing-inclusions { padding-top: 8.5rem !important; }
+  .pricing-heading :is(h1, h2) { font-size: clamp(2.45rem, 12vw, 3.4rem); letter-spacing: 0.055em; }
+  .pricing-heading p { max-width: 20rem; font-size: 0.62rem; letter-spacing: 0.18em; }
+  .pricing-inclusion-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 3rem; }
+  .pricing-inclusion { min-height: 14.4rem; padding: 1.85rem 0.9rem 1.55rem; }
+  .pricing-inclusion-icon { width: 2.8rem; height: 2.8rem; }
+  .pricing-inclusion h2 { margin-top: 1rem; font-size: 1.25rem; }
+  .pricing-inclusion p { font-size: 0.77rem; line-height: 1.45; }
+  .pricing-day-grid { grid-template-columns: minmax(0, 1fr); margin-top: 3rem; }
+  .pricing-day { min-height: 0; }
+  .pricing-day h2 { font-size: 1.65rem; }
+  .pricing-options { padding-inline: 1.65rem; }
+  .pricing-cta { grid-template-columns: auto 1fr; padding: 1.25rem; }
+  .pricing-cta-link { grid-column: 1 / -1; width: 100%; margin-top: 0.2rem; }
+  .pricing-cta h2 { font-size: 1.15rem; }
+  .pricing-cta p { font-size: 0.78rem; }
+  .pricing-disclaimer { font-size: 0.5rem; line-height: 1.6; }
+}

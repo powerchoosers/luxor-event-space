@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import PricingPageContent from './PricingPageContent'
 
 export const metadata: Metadata = {
-  title: 'Luxor Event Space Packages & Rates | San Antonio',
-  description: 'See transparent Luxor venue rental rates, compare celebration packages, and request an exact quote for weddings, quinceañeras, showers, and private events in San Antonio.',
+  title: 'Venue Rental Rates | Luxor at Las Palmas Events',
+  description: 'See Luxor at Las Palmas venue rental rates, what is included, and availability for your San Antonio celebration.',
 }
 
 export default function PricingPage() {
