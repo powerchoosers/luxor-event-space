@@ -29,6 +29,8 @@ const galleryCopy = {
   es: { title: 'Tu recorrido de un vistazo', book: 'Reservar recorrido', label: 'Espacios del recorrido. Desliza hacia la izquierda o derecha para explorar.', previous: 'Espacio anterior', next: 'Espacio siguiente', show: 'Mostrar', view: 'Ver imagen completa de', dialog: 'Imagen completa del recorrido', close: 'Cerrar imagen completa' },
 } as const
 
+const carouselSpring = { type: 'spring' as const, stiffness: 280, damping: 30, mass: 0.78 }
+
 export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
   const gallerySlides = slides[locale]
   const text = galleryCopy[locale]
@@ -79,11 +81,8 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
     const width = slideWidth || galleryRef.current?.clientWidth || 0
     setActive(next)
     animate(x, -next * width, {
-      type: 'spring',
-      stiffness: 300,
-      damping: 34,
-      mass: 0.82,
-      velocity,
+      ...carouselSpring,
+      velocity: Math.max(-1800, Math.min(1800, velocity)),
     })
   }
 
@@ -91,10 +90,11 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
   const showNext = () => snapTo(active + 1)
 
   const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const projectedDistance = info.offset.x + info.velocity.x * 0.12
-    const next = projectedDistance < -50
+    const projectedDistance = info.offset.x + info.velocity.x * 0.14
+    const threshold = Math.max(40, slideWidth * 0.1)
+    const next = projectedDistance < -threshold
       ? active + 1
-      : projectedDistance > 50
+      : projectedDistance > threshold
         ? active - 1
         : active
     snapTo(next, info.velocity.x)
@@ -114,11 +114,11 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
       aria-roledescription="carousel"
     >
       <motion.div
-        className="flex h-full cursor-grab active:cursor-grabbing"
+        className="flex h-full cursor-grab transform-gpu will-change-transform active:cursor-grabbing"
         style={{ x }}
         drag="x"
         dragConstraints={{ left: -(gallerySlides.length - 1) * slideWidth, right: 0 }}
-        dragElastic={0.08}
+        dragElastic={0.12}
         dragMomentum={false}
         onDragStart={() => {
           draggingRef.current = false
@@ -132,7 +132,7 @@ export function TourGallery({ locale = 'en' }: { locale?: Locale }) {
         {gallerySlides.map((slide, index) => <button type="button" key={slide.title} tabIndex={index === active ? 0 : -1} aria-hidden={index !== active} aria-label={`${text.view} ${slide.title}`} onClick={() => {
           if (!draggingRef.current) setLightboxIndex(index)
         }} className="relative h-full w-full shrink-0 cursor-zoom-in text-left">
-          <Image src={slide.image} alt={slide.title} fill draggable={false} loading={index === 0 ? 'eager' : 'lazy'} fetchPriority={index === 0 ? 'high' : 'auto'} sizes="(max-width: 639px) 100vw, (max-width: 1024px) 110vw, 100vw" className="select-none object-cover" />
+          <Image src={slide.image} alt={slide.title} fill draggable={false} loading="eager" fetchPriority={index === 0 ? 'high' : 'auto'} sizes="(max-width: 639px) 100vw, (max-width: 1024px) 110vw, 100vw" className="select-none object-cover" />
           <div aria-hidden="true" className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.12), transparent 42%), linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.42) 26%, transparent 58%)' }} />
           <div className="absolute inset-x-0 bottom-0 px-7 pb-20 pt-28 text-left sm:px-10 sm:pb-9 sm:pr-48 sm:pt-36"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] !text-[#f9d889] drop-shadow-[0_2px_7px_rgba(0,0,0,1)] sm:text-[11px] sm:tracking-[0.28em]">{slide.subtitle}</p><h2 className="mt-2 font-serif text-4xl leading-none !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:mt-2.5 sm:text-6xl">{slide.title}</h2></div>
         </button>)}

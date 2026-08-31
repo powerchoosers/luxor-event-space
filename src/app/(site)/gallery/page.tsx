@@ -22,6 +22,12 @@ type GalleryItem = {
 
 const filters: GalleryCategory[] = ['All', 'Room', 'Lounge', 'Weddings', 'Celebrations', 'Corporate']
 const desktopPageSize = 6
+const carouselSpring = { type: 'spring' as const, stiffness: 280, damping: 30, mass: 0.78 }
+const viewerSlideVariants = {
+  enter: (direction: number) => ({ x: direction > 0 ? '100%' : '-100%' }),
+  center: { x: 0 },
+  exit: (direction: number) => ({ x: direction > 0 ? '-100%' : '100%' }),
+}
 
 const gallery: GalleryItem[] = [
   {
@@ -184,6 +190,7 @@ export default function GalleryPage() {
   const [desktopPage, setDesktopPage] = useState(0)
   const [mobileIndex, setMobileIndex] = useState(0)
   const [mobileSlideWidth, setMobileSlideWidth] = useState(0)
+  const [viewerDirection, setViewerDirection] = useState(1)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const mobileGalleryRef = useRef<HTMLDivElement>(null)
   const mobileDraggingRef = useRef(false)
@@ -236,11 +243,13 @@ export default function GalleryPage() {
       if (event.key === 'Escape') {
         setSelectedIndex(null)
       } else if (event.key === 'ArrowLeft') {
+        setViewerDirection(-1)
         setSelectedIndex((current) => {
           if (current === null) return current
           return current === 0 ? filteredGallery.length - 1 : current - 1
         })
       } else if (event.key === 'ArrowRight') {
+        setViewerDirection(1)
         setSelectedIndex((current) => {
           if (current === null) return current
           return current === filteredGallery.length - 1 ? 0 : current + 1
@@ -253,6 +262,7 @@ export default function GalleryPage() {
   }, [filteredGallery.length, selectedItem])
 
   function showPrevious() {
+    setViewerDirection(-1)
     setSelectedIndex((current) => {
       if (current === null) return current
       return current === 0 ? filteredGallery.length - 1 : current - 1
@@ -260,6 +270,7 @@ export default function GalleryPage() {
   }
 
   function showNext() {
+    setViewerDirection(1)
     setSelectedIndex((current) => {
       if (current === null) return current
       return current === filteredGallery.length - 1 ? 0 : current + 1
@@ -270,20 +281,18 @@ export default function GalleryPage() {
     const next = Math.max(0, Math.min(index, filteredGallery.length - 1))
     setMobileIndex(next)
     animate(mobileX, -next * mobileSlideWidth, {
-      type: 'spring',
-      stiffness: 360,
-      damping: 36,
-      mass: 0.82,
-      velocity,
+      ...carouselSpring,
+      velocity: Math.max(-1800, Math.min(1800, velocity)),
     })
   }
 
   function handleMobileDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
-    const threshold = Math.max(44, mobileSlideWidth * 0.12)
+    const projectedDistance = info.offset.x + info.velocity.x * 0.14
+    const threshold = Math.max(40, mobileSlideWidth * 0.1)
     let next = mobileIndex
 
-    if (info.offset.x < -threshold || info.velocity.x < -520) next += 1
-    if (info.offset.x > threshold || info.velocity.x > 520) next -= 1
+    if (projectedDistance < -threshold) next += 1
+    if (projectedDistance > threshold) next -= 1
 
     goToMobile(next, info.velocity.x)
     window.setTimeout(() => {
@@ -292,8 +301,9 @@ export default function GalleryPage() {
   }
 
   function handleViewerDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
-    if (info.offset.x < -56 || info.velocity.x < -520) showNext()
-    if (info.offset.x > 56 || info.velocity.x > 520) showPrevious()
+    const projectedDistance = info.offset.x + info.velocity.x * 0.14
+    if (projectedDistance < -48) showNext()
+    else if (projectedDistance > 48) showPrevious()
     window.setTimeout(() => {
       viewerDraggingRef.current = false
     }, 0)
@@ -359,11 +369,11 @@ export default function GalleryPage() {
           <div className="mt-6 lg:hidden">
             <div ref={mobileGalleryRef} className="relative aspect-[4/5] touch-pan-y overflow-hidden rounded-md bg-[#0a0807] sm:aspect-[16/10]" aria-label={`${activeFilter} photo gallery`} aria-roledescription="carousel">
               <motion.div
-                className="flex h-full cursor-grab active:cursor-grabbing"
+                className="flex h-full cursor-grab transform-gpu will-change-transform active:cursor-grabbing"
                 style={{ x: mobileX }}
                 drag="x"
                 dragConstraints={{ left: -(filteredGallery.length - 1) * mobileSlideWidth, right: 0 }}
-                dragElastic={0.08}
+                dragElastic={0.12}
                 dragMomentum={false}
                 onDragStart={() => {
                   mobileDraggingRef.current = false
@@ -507,39 +517,49 @@ export default function GalleryPage() {
                   </button>
 
                   <motion.div
-                    key={selectedItem.src}
                     initial={{ opacity: 0, scale: 0.96, y: 16 }}
                     animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96, y: 16 }}
                     transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    dragElastic={0.18}
-                    dragMomentum={false}
-                    onDragStart={() => {
-                      viewerDraggingRef.current = false
-                    }}
-                    onDrag={(_, info) => {
-                      if (Math.abs(info.offset.x) > 8) viewerDraggingRef.current = true
-                    }}
-                    onDragEnd={handleViewerDragEnd}
                     className="relative h-full w-full cursor-grab touch-pan-y overflow-hidden bg-black active:cursor-grabbing sm:h-[min(84dvh,52rem)] sm:max-w-6xl sm:rounded-md sm:border sm:border-[#caa24c]/24 sm:shadow-[0_40px_120px_-40px_rgba(0,0,0,1)]"
                   >
-                    <Image
-                      src={selectedItem.src}
-                      alt={selectedItem.title}
-                      fill
-                      priority
-                      draggable={false}
-                      sizes="(min-width: 1024px) 1152px, 100vw"
-                      className="pointer-events-none select-none object-contain"
-                    />
-                    <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.48)_25%,transparent_56%)]" />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-16 pt-28 text-left sm:px-8 sm:pb-16 sm:pt-36">
-                      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] !text-[#f1d27a] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{selectedItem.category}</p>
-                      <h2 className="mt-2 font-serif text-4xl leading-none !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:text-5xl">{selectedItem.title}</h2>
-                      <p className="mt-2 max-w-2xl text-sm leading-5 !text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,1)] sm:text-base sm:leading-6">{selectedItem.caption}</p>
+                    <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-0">
+                      {filteredGallery.map((item) => (
+                        <Image key={item.src} src={item.src} alt="" fill loading="eager" draggable={false} sizes="(min-width: 1024px) 1152px, 100vw" className="object-contain" />
+                      ))}
                     </div>
+
+                    <AnimatePresence initial={false} custom={viewerDirection}>
+                      <motion.div
+                        key={selectedItem.src}
+                        custom={viewerDirection}
+                        variants={viewerSlideVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={carouselSpring}
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={1}
+                        dragMomentum={false}
+                        onDragStart={() => {
+                          viewerDraggingRef.current = false
+                        }}
+                        onDrag={(_, info) => {
+                          if (Math.abs(info.offset.x) > 8) viewerDraggingRef.current = true
+                        }}
+                        onDragEnd={handleViewerDragEnd}
+                        className="absolute inset-0 transform-gpu will-change-transform"
+                      >
+                        <Image src={selectedItem.src} alt={selectedItem.title} fill loading="eager" draggable={false} sizes="(min-width: 1024px) 1152px, 100vw" className="pointer-events-none select-none object-contain" />
+                        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.48)_25%,transparent_56%)]" />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-16 pt-28 text-left sm:px-8 sm:pb-16 sm:pt-36">
+                          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] !text-[#f1d27a] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{selectedItem.category}</p>
+                          <h2 className="mt-2 font-serif text-4xl leading-none !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:text-5xl">{selectedItem.title}</h2>
+                          <p className="mt-2 max-w-2xl text-sm leading-5 !text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,1)] sm:text-base sm:leading-6">{selectedItem.caption}</p>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
 
                     <div className="absolute inset-x-0 bottom-5 z-20 flex items-center justify-center gap-2" aria-label="Choose preview image">
                       {filteredGallery.map((item, index) => (
@@ -548,7 +568,10 @@ export default function GalleryPage() {
                           type="button"
                           aria-label={`Preview ${item.title}`}
                           aria-current={index === selectedIndex}
-                          onClick={() => setSelectedIndex(index)}
+                          onClick={() => {
+                            if (selectedIndex !== null) setViewerDirection(index > selectedIndex ? 1 : -1)
+                            setSelectedIndex(index)
+                          }}
                           className={`h-2.5 rounded-full transition-all ${index === selectedIndex ? 'w-8 bg-[#e3bb6a]' : 'w-2.5 bg-white/45 hover:bg-white/80'}`}
                         />
                       ))}
