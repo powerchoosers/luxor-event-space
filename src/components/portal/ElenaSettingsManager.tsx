@@ -1,8 +1,9 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowUp, BookOpen, Bot, Check, ChevronRight, Database, FileUp,
+  ArrowDown, ArrowUp, BookOpen, Check, ChevronRight, Database, FileUp,
   GitBranch, History, Loader2, MessageCircle, Pencil, Plus, RefreshCw, Save, Search, Send,
   ShieldCheck, SlidersHorizontal, Trash2, Unplug, X,
 } from 'lucide-react'
@@ -317,7 +318,7 @@ export function ElenaSettingsManager() {
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
-      <div className="flex min-w-0 items-center gap-3"><span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#e0bd67]"><Bot size={19} /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Elena AI</h2><span className={`rounded-md border px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] ${hasDraftChanges ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>{hasDraftChanges ? 'Draft changes' : `Live v${state.settings.version}`}</span></div><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Manage what website Elena knows and how she responds.</p></div></div>
+      <div className="flex min-w-0 items-center gap-3"><span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/30 bg-[color:var(--portal-soft)] ring-2 ring-[#caa24c]/10"><Image src="/luxor-concierge.png" alt="Elena AI concierge" fill sizes="40px" className="object-cover" /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Elena AI</h2><span className={`rounded-md border px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] ${hasDraftChanges ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>{hasDraftChanges ? 'Draft changes' : `Live v${state.settings.version}`}</span></div><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Manage what website Elena knows and how she responds.</p></div></div>
       <div className="flex gap-2"><PortalButton onClick={() => { setActiveTab('overview'); window.setTimeout(() => previewEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60) }}><MessageCircle size={13} />Test Elena</PortalButton><PortalButton variant="primary" disabled={!hasDraftChanges || busyAction === 'publish'} onClick={() => void publish()}>{busyAction === 'publish' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Publish</PortalButton></div>
     </div>
 
