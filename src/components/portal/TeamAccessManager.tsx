@@ -11,7 +11,7 @@ const GROUPS = [
   { label: 'Workspace', items: [['settings', 'Settings'], ['team_access', 'Team access'], ['email_identity', 'Email sender identity'], ['phone_assignment', 'Phone line assignment']] },
 ] as const
 
-type Member = { id: string; email: string; display_name: string; role: 'owner' | 'admin' | 'agent'; status: 'pending' | 'active' | 'suspended'; permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null }
+type Member = { id: string; email: string; display_name: string; role: 'owner' | 'admin' | 'agent'; status: 'pending' | 'active' | 'suspended'; permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null; invited_at: string | null }
 type Phone = { id: string; phone_number: string; friendly_name: string | null }
 const defaults = { admin: GROUPS.flatMap((group) => group.items.map(([id]) => id)), agent: ['leads', 'emails', 'calls', 'messages', 'calendar', 'events'] }
 
@@ -51,8 +51,10 @@ export function TeamAccessManager() {
     setBusy(true)
     try {
       const response = await fetch('/api/auth/portal-magic-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: member.email }) })
-      if (!response.ok) throw new Error('Unable to send the sign-in link.')
-      notify({ title: `Secure sign-in link sent to ${member.email}.`, variant: 'success' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Unable to send the sign-in link.')
+      await load()
+      notify({ title: `Secure sign-in link sent to ${member.email}.`, description: 'Resend delivered the invitation and Supabase recorded it.', variant: 'success' })
     } catch (error) { notify({ title: error instanceof Error ? error.message : 'Unable to send the sign-in link.', variant: 'error' }) } finally { setBusy(false) }
   }
   const toggle = (permission: string) => setForm((current) => ({ ...current, permissions: current.permissions.includes(permission) ? current.permissions.filter((item) => item !== permission) : [...current.permissions, permission] }))
@@ -79,7 +81,7 @@ export function TeamAccessManager() {
         <button type="button" onClick={() => beginEdit(member)} className="min-w-0 text-left outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><p className="truncate text-sm font-bold text-[color:var(--portal-text)] underline-offset-4 hover:text-[#a8792f] hover:underline">{member.display_name}</p><p className="truncate text-[11px] text-[color:var(--portal-muted)]">{member.email}</p></button>
         <p className="text-xs capitalize text-[color:var(--portal-text)]">{member.role}</p><p className={`text-xs ${member.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : member.status === 'suspended' ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300'}`}>{member.status}</p>
         <p className="truncate text-xs text-[color:var(--portal-muted)]">{phones.find((phone) => phone.id === member.assigned_phone_number_id)?.phone_number || member.sender_email || 'Not assigned'}</p>
-        {member.role === 'owner' ? <button type="button" onClick={() => beginEdit(member)} className="justify-self-start text-xs font-semibold text-[color:var(--portal-faint)] hover:text-[#a8792f]">View profile</button> : <div className="flex gap-3"><button type="button" onClick={() => beginEdit(member)} className="justify-self-start text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Manage</button>{member.status === 'pending' ? <button type="button" disabled={busy} onClick={() => void sendInvite(member)} className="justify-self-start text-xs font-bold text-[#a8792f] hover:text-[#caa24c] disabled:opacity-50">Send link</button> : null}</div>}
+        {member.role === 'owner' ? <button type="button" onClick={() => beginEdit(member)} className="justify-self-start text-xs font-semibold text-[color:var(--portal-faint)] hover:text-[#a8792f]">View profile</button> : <div className="flex gap-3"><button type="button" onClick={() => beginEdit(member)} className="justify-self-start text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Manage</button>{member.status === 'pending' ? <button type="button" disabled={busy} onClick={() => void sendInvite(member)} className="justify-self-start text-xs font-bold text-[#a8792f] hover:text-[#caa24c] disabled:opacity-50">{member.invited_at ? 'Resend link' : 'Send link'}</button> : null}</div>}
       </div>)}
         </div>
       </div>

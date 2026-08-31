@@ -47,9 +47,6 @@ export function normalizedState(input: LuxorCalendarState): LuxorCalendarState {
 
 export async function scheduleLuxorCalendarEvent(inquiry: LuxorInquiry, input: Omit<LuxorCalendarState,'status'>, requestedBy: string) {
   const current = await getLuxorCalendarEvent(inquiry.id)
-  if (!current && inquiry.metadata?.zohoCalendarEventUid) {
-    throw new Error('This tour has an existing Zoho invitation. Import its original UID and sequence before moving it to Resend; a duplicate invitation was not created.')
-  }
   const state = normalizedState({ ...input, status: 'confirmed' })
   return supabaseRest<LuxorCalendarEvent>('rpc/luxor_save_calendar_revision', { method: 'POST', body: JSON.stringify({
     p_inquiry_id: inquiry.id, p_expected_sequence: current?.sequence ?? -1, p_state: state, p_requested_by: requestedBy,

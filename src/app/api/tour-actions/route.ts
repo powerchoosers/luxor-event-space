@@ -13,12 +13,10 @@ import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorL
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
-import { createLuxorZohoCalendarEvent } from '@/lib/zohoMailServer'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
@@ -35,7 +33,7 @@ function canAdvanceAttendedTour(status: string | null | undefined, pipelineStage
 export async function GET(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
-    if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
 
     const inquiryId = request.nextUrl.searchParams.get('inquiryId') || ''
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
@@ -50,7 +48,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
-    if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
 
     const body = await request.json()
     const inquiryId = String(body.inquiryId || '')
@@ -211,104 +209,31 @@ export async function POST(request: NextRequest) {
         location: TOUR_LOCATION,
         startUtc: startUtc.toISOString(),
         endUtc: endUtc.toISOString(),
-        timezone: TOUR_TIMEZONE,
-        existingEventUid: typeof inquiry.metadata?.zohoCalendarEventUid === 'string'
-          ? inquiry.metadata.zohoCalendarEventUid
-          : null,
       }
-      // A global provider rollback must not create a second meeting in Zoho
-      // for an appointment that already has a Resend-owned UID.
       const existingCalendar = await getLuxorCalendarEvent(inquiryId)
-      if (existingCalendar || luxorMailProvider() === 'resend') {
-        const templates = { confirmation, reminder_24: buildTourReminderEmail(emailContext, 'tomorrow'),
-          reminder_2: buildTourReminderEmail(emailContext, 'soon') }
-        for (const template of Object.values(templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
-        const saved = await saveLuxorTourSchedule({ inquiry, expectedSequence: existingCalendar?.sequence ?? -1,
-          state: { title: eventInput.title, description: eventInput.description, location: eventInput.location,
-            startUtc: eventInput.startUtc, endUtc: eventInput.endUtc, attendeeEmails: recipientEmails },
-          tour: { meetingType, clientFacingNotes, responseToken: token, assignees: tourAssignees },
-          templates, requestedBy: session.email })
-        // Email/event state is already committed. A best-effort secondary task
-        // must not turn a successful schedule into a retry of all its emails.
-        if (!saved.replayed) {
-          try { await queueInquiryTextJobs(saved.inquiry) }
-          catch (error) { console.error('Tour saved; text confirmations could not be queued:', error) }
-          try {
-            await createNote(inquiryId,
-              `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One branded calendar invitation and ${saved.reminderJobs.length} reminders queued through Resend.`,
-              'email_log', session.email)
-          } catch (error) { console.error('Tour saved; activity note could not be recorded:', error) }
-        }
-        return NextResponse.json({ inquiry: saved.inquiry,
-          calendar: { eventId: saved.event.id, eventUid: saved.event.uid, viewEventUrl: '/portal/calendar' },
-          confirmationJob: saved.confirmationJobs.find(job => job.recipient_email === inquiry.email?.toLowerCase().trim()) || saved.confirmationJobs[0],
-          reminderJobs: saved.reminderJobs, replayed: saved.replayed }, { status: saved.replayed ? 200 : 201 })
-      }
-      const calendar = await createLuxorZohoCalendarEvent({ ...eventInput, description: confirmation.text })
-      const calendarMetadata = { zohoCalendarEventId: calendar.eventId, zohoCalendarEventUid: calendar.eventUid, zohoCalendarUrl: calendar.viewEventUrl }
-
-      await cancelQueuedTourEmailJobs(inquiryId)
-      const sharedMetadata = {
-        meeting_type: meetingType,
-        client_facing_notes: clientFacingNotes,
-        tour_start_at: startUtc.toISOString(),
-        tour_end_at: endUtc.toISOString(),
-        timezone: TOUR_TIMEZONE,
-        calendar_provider: 'zoho',
-        calendar_event_id: calendar.eventId,
-        calendar_event_uid: calendar.eventUid,
-        calendar_url: calendar.viewEventUrl,
-        hero_image: confirmation.heroImage,
-        requested_by: session.email,
-      }
-
-      const reminderJobs = []
-      for (const reminder of [
-        { hours: 24, label: 'tomorrow' as const },
-        { hours: 2, label: 'soon' as const },
-      ]) {
-        const scheduledFor = new Date(startUtc.getTime() - reminder.hours * 60 * 60_000)
-        if (scheduledFor.getTime() <= Date.now()) continue
-        const email = buildTourReminderEmail(emailContext, reminder.label)
-        const jobs = await Promise.all(recipientEmails.map((recipientEmail) => createLuxorEmailJob({ inquiryId, jobType: 'tour_reminder', recipientEmail, subject: email.subject, body: email.body, scheduledFor: scheduledFor.toISOString(), metadata: { ...sharedMetadata, reminder_hours_before: reminder.hours, sender_from: 'booking@luxoratlaspalmas.com' } })))
-        reminderJobs.push(...jobs.filter(Boolean))
-      }
-
-      const updated = await updateLuxorInquiry(inquiryId, {
-        status: 'tour_confirmed',
-        pipeline_stage: 'tour',
-        preferred_tour_date: tourDate,
-        preferred_tour_time: formatStoredTime(tourTime),
-        tour_confirmed_at: new Date().toISOString(),
-        tour_attendance_status: 'pending',
-        tour_response_token: token,
-        metadata: {
-          ...inquiry.metadata,
-          tourMeetingType: meetingType,
-          tourClientFacingNotes: clientFacingNotes,
-          tourDurationMinutes: durationMinutes,
-          ...(tourAssignees.length ? { tour_assignees: tourAssignees } : {}),
-          tourStartAt: startUtc.toISOString(),
-          ...calendarMetadata,
-        },
-      })
-
-      if (updated) {
+      const templates = { confirmation, reminder_24: buildTourReminderEmail(emailContext, 'tomorrow'),
+        reminder_2: buildTourReminderEmail(emailContext, 'soon') }
+      for (const template of Object.values(templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
+      const saved = await saveLuxorTourSchedule({ inquiry, expectedSequence: existingCalendar?.sequence ?? -1,
+        state: { title: eventInput.title, description: eventInput.description, location: eventInput.location,
+          startUtc: eventInput.startUtc, endUtc: eventInput.endUtc, attendeeEmails: recipientEmails },
+        tour: { meetingType, clientFacingNotes, responseToken: token, assignees: tourAssignees },
+        templates, requestedBy: session.email })
+      // Supabase commits the event revision and queued Resend notices together.
+      // Secondary activity must not make a successful schedule retry its email.
+      if (!saved.replayed) {
+        try { await queueInquiryTextJobs(saved.inquiry) }
+        catch (error) { console.error('Tour saved; text confirmations could not be queued:', error) }
         try {
-          await queueInquiryTextJobs(updated)
-        } catch (automationError) {
-          console.error('Tour scheduled, but its text confirmations could not be queued:', automationError)
-        }
+          await createNote(inquiryId,
+            `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One branded calendar invitation and ${saved.reminderJobs.length} reminders queued through Resend.`,
+            'email_log', session.email)
+        } catch (error) { console.error('Tour saved; activity note could not be recorded:', error) }
       }
-
-      await createNote(
-        inquiryId,
-        `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One calendar invitation sent through Zoho with the confirmation message; ${reminderJobs.length} automatic reminder${reminderJobs.length === 1 ? '' : 's'} queued for Supabase delivery.`,
-        'email_log',
-        session.email,
-      )
-
-      return NextResponse.json({ inquiry: updated, calendar, confirmationJob: null, reminderJobs }, { status: 201 })
+      return NextResponse.json({ inquiry: saved.inquiry,
+        calendar: { eventId: saved.event.id, eventUid: saved.event.uid, viewEventUrl: '/portal/calendar' },
+        confirmationJob: saved.confirmationJobs.find(job => job.recipient_email === inquiry.email?.toLowerCase().trim()) || saved.confirmationJobs[0],
+        reminderJobs: saved.reminderJobs, replayed: saved.replayed }, { status: saved.replayed ? 200 : 201 })
     }
 
     if (action === 'send-email') {
@@ -381,12 +306,4 @@ function formatTourDate(date: Date) {
 
 function formatTourTime(date: Date) {
   return new Intl.DateTimeFormat('en-US', { timeZone: TOUR_TIMEZONE, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
-}
-
-function formatStoredTime(value: string) {
-  const parsed = parseTime(value)
-  if (!parsed) return value
-  const suffix = parsed.hours >= 12 ? 'PM' : 'AM'
-  const hours = parsed.hours % 12 || 12
-  return `${hours}:${String(parsed.minutes).padStart(2, '0')} ${suffix}`
 }

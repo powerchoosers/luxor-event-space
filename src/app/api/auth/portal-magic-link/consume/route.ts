@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const value = typeof token === 'string' ? token : ''
   if (!/^[A-Za-z0-9_-]{20,}$/.test(value)) return NextResponse.json({ error: 'This sign-in link is invalid or expired.' }, { status: 400 })
   const hash = createHash('sha256').update(value).digest('hex')
-  const rows = await supabaseRest<Array<{ id: string; member_id: string }>>(`luxor_portal_invites?token_hash=eq.${hash}&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,member_id&limit=1`)
+  const rows = await supabaseRest<Array<{ id: string; member_id: string }>>(`luxor_portal_invites?token_hash=eq.${hash}&sent_at=not.is.null&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,member_id&limit=1`)
   const invite = rows[0]
   if (!invite) return NextResponse.json({ error: 'This sign-in link is invalid or expired.' }, { status: 400 })
   await supabaseRest(`luxor_portal_invites?id=eq.${invite.id}&used_at=is.null`, { method: 'PATCH', body: JSON.stringify({ used_at: new Date().toISOString() }) })
