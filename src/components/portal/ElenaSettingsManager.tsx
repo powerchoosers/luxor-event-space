@@ -1,13 +1,13 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   ArrowDown, ArrowUp, BookOpen, Check, ChevronRight, Database, FileUp,
   GitBranch, History, Loader2, MessageCircle, Pencil, Plus, RefreshCw, Save, Search, Send,
   ShieldCheck, SlidersHorizontal, Trash2, Unplug, X,
 } from 'lucide-react'
-import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalButton, PortalSelect, PortalTabTransition } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type ElenaTab = 'overview' | 'knowledge' | 'flows' | 'instructions' | 'integrations' | 'settings'
@@ -111,8 +111,8 @@ function SectionHeading({ icon, title, description, action }: { icon: React.Reac
 }
 
 function StatusToggle({ active, disabled, onChange }: { active: boolean; disabled?: boolean; onChange: (active: boolean) => void }) {
-  return <button type="button" role="switch" aria-checked={active} disabled={disabled} onClick={() => onChange(!active)} className={`relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 ${active ? 'bg-emerald-500' : 'bg-[color:var(--portal-border)]'}`}>
-    <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${active ? 'translate-x-5' : 'translate-x-1'}`} />
+  return <button type="button" role="switch" aria-checked={active} disabled={disabled} onClick={() => onChange(!active)} className={`relative h-6 w-10 shrink-0 overflow-hidden rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 ${active ? 'bg-emerald-500' : 'bg-[color:var(--portal-border)]'}`}>
+    <span className={`pointer-events-none absolute left-0 top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out motion-reduce:transition-none ${active ? 'translate-x-5' : 'translate-x-1'}`} />
     <span className="sr-only">{active ? 'Active' : 'Inactive'}</span>
   </button>
 }
@@ -136,6 +136,45 @@ export function ElenaSettingsManager() {
   ])
   const [previewInput, setPreviewInput] = useState('')
   const previewEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!knowledgeEditor || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const frame = window.requestAnimationFrame(() => {
+      const editor = document.querySelector<HTMLButtonElement>('button[aria-label="Close knowledge editor"]')?.closest<HTMLElement>('section')
+      if (!editor) return
+      const height = editor.scrollHeight
+      editor.style.overflow = 'hidden'
+      const animation = editor.animate(
+        [{ height: '0px', opacity: 0, transform: 'translateY(-8px)' }, { height: `${height}px`, opacity: 1, transform: 'translateY(0)' }],
+        { duration: 260, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+      )
+      animation.finished.finally(() => { editor.style.height = ''; editor.style.overflow = '' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [knowledgeEditor?.id])
+
+  const closeKnowledgeEditor = async () => {
+    const editor = document.querySelector<HTMLButtonElement>('button[aria-label="Close knowledge editor"]')?.closest<HTMLElement>('section')
+    if (!editor || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setKnowledgeEditor(null); return }
+    editor.style.overflow = 'hidden'
+    const animation = editor.animate(
+      [{ height: `${editor.offsetHeight}px`, opacity: 1, transform: 'translateY(0)' }, { height: '0px', opacity: 0, transform: 'translateY(-8px)' }],
+      { duration: 220, easing: 'cubic-bezier(0.4, 0, 1, 1)' },
+    )
+    await animation.finished.catch(() => undefined)
+    setKnowledgeEditor(null)
+  }
+
+  const handleKnowledgeEditorClose = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!knowledgeEditor) return
+    const button = (event.target as Element).closest('button')
+    const editor = document.querySelector<HTMLButtonElement>('button[aria-label="Close knowledge editor"]')?.closest('section')
+    if (!button || !editor || !editor.contains(button)) return
+    if (button.getAttribute('aria-label') !== 'Close knowledge editor' && button.textContent?.trim() !== 'Cancel') return
+    event.preventDefault()
+    event.stopPropagation()
+    void closeKnowledgeEditor()
+  }
 
   const load = async () => {
     setLoading(true)
@@ -316,14 +355,15 @@ export function ElenaSettingsManager() {
     </div>
   </Panel>
 
-  return <div className="space-y-5">
+  return <div className="space-y-5" onClickCapture={handleKnowledgeEditorClose}>
     <div className="flex flex-col gap-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
       <div className="flex min-w-0 items-center gap-3"><span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-[#caa24c]/30 bg-[color:var(--portal-soft)] ring-2 ring-[#caa24c]/10"><Image src="/luxor-concierge.png" alt="Elena AI concierge" fill sizes="40px" className="object-cover" /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Elena AI</h2><span className={`rounded-md border px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] ${hasDraftChanges ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}`}>{hasDraftChanges ? 'Draft changes' : `Live v${state.settings.version}`}</span></div><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Manage what website Elena knows and how she responds.</p></div></div>
       <div className="flex gap-2"><PortalButton onClick={() => { setActiveTab('overview'); window.setTimeout(() => previewEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60) }}><MessageCircle size={13} />Test Elena</PortalButton><PortalButton variant="primary" disabled={!hasDraftChanges || busyAction === 'publish'} onClick={() => void publish()}>{busyAction === 'publish' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Publish</PortalButton></div>
     </div>
 
-    <div className="portal-scrollbar overflow-x-auto border-b border-[color:var(--portal-border)]"><nav aria-label="Elena settings sections" className="flex min-w-max gap-6">{TABS.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`border-b-2 px-0.5 pb-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${activeTab === tab.id ? 'border-[#caa24c] text-[#a8792f] dark:text-[#e0bd67]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{tab.label}</button>)}</nav></div>
+    <div className="portal-scrollbar overflow-x-auto border-b border-[color:var(--portal-border)]"><PortalAnimatedTabs tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} ariaLabel="Elena settings sections" className="gap-6" buttonClassName="pb-3" /></div>
 
+    <PortalTabTransition activeKey={activeTab}>
     {activeTab === 'overview' ? <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(24rem,0.92fr)]">
       <div className="order-2 space-y-5 xl:order-1">
         <Panel><SectionHeading icon={<BookOpen size={17} />} title="Knowledge Base" description={`${activeKnowledge.length} active draft entries across ${new Set(activeKnowledge.map((entry) => entry.category)).size} categories.`} action={<button type="button" onClick={() => setActiveTab('knowledge')} className="text-[#a8792f]"><ChevronRight size={17} /></button>} /><div className="divide-y divide-[color:var(--portal-border)]">{Array.from(new Map(activeKnowledge.map((entry) => [entry.category, activeKnowledge.filter((item) => item.category === entry.category).length]))).slice(0, 6).map(([label, count]) => <button key={label} type="button" onClick={() => { setCategory(label); setActiveTab('knowledge') }} className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-[color:var(--portal-soft)]"><span className="text-xs font-semibold text-[color:var(--portal-text)]">{label}</span><span className="text-[10px] text-[color:var(--portal-muted)]">{count} {count === 1 ? 'item' : 'items'} <ChevronRight size={12} className="ml-1 inline" /></span></button>)}</div></Panel>
@@ -334,7 +374,7 @@ export function ElenaSettingsManager() {
     </div> : null}
 
     {activeTab === 'knowledge' ? <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="relative min-w-0 flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Elena's knowledge…" className="h-10 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pl-9 pr-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></div><PortalSelect value={category} onChange={setCategory} options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES]} className="sm:w-56" /><PortalButton variant="primary" onClick={() => setKnowledgeEditor({ ...EMPTY_KNOWLEDGE })}><Plus size={13} />Add knowledge</PortalButton></div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="relative min-w-0 flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Elena's knowledge…" className="h-10 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pl-9 pr-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></div><PortalSelect value={category} onChange={setCategory} options={[{ value: 'all', label: 'All categories' }, ...CATEGORIES]} className="sm:w-56" buttonClassName="h-10" /><PortalButton variant="primary" className="h-10" onClick={() => setKnowledgeEditor({ ...EMPTY_KNOWLEDGE })}><Plus size={13} />Add knowledge</PortalButton></div>
       {knowledgeEditor ? <Panel className="p-5"><div className="flex items-center justify-between"><h3 className="text-sm font-bold text-[color:var(--portal-text)]">{knowledgeEditor.id ? 'Edit knowledge draft' : 'New knowledge draft'}</h3><button type="button" onClick={() => setKnowledgeEditor(null)} aria-label="Close knowledge editor" className="text-[color:var(--portal-muted)]"><X size={16} /></button></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><label className="space-y-1.5"><span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Title</span><input value={knowledgeEditor.title} onChange={(event) => setKnowledgeEditor({ ...knowledgeEditor, title: event.target.value })} className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label><label className="space-y-1.5"><span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Category</span><PortalSelect value={knowledgeEditor.category} onChange={(value) => setKnowledgeEditor({ ...knowledgeEditor, category: value })} options={CATEGORIES} /></label><label className="space-y-1.5 lg:col-span-2"><span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Approved answer or information</span><textarea rows={6} value={knowledgeEditor.content} onChange={(event) => setKnowledgeEditor({ ...knowledgeEditor, content: event.target.value })} className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label></div><div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-text)]"><StatusToggle active={knowledgeEditor.active} onChange={(active) => setKnowledgeEditor({ ...knowledgeEditor, active })} />Active in draft</label><div className="flex justify-end gap-2"><PortalButton onClick={() => setKnowledgeEditor(null)}>Cancel</PortalButton><PortalButton variant="primary" disabled={!knowledgeEditor.title.trim() || !knowledgeEditor.content.trim() || busyAction?.startsWith('knowledge-')} onClick={() => void saveKnowledge(knowledgeEditor)}>{busyAction?.startsWith('knowledge-') ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Save draft</PortalButton></div></div></Panel> : null}
       <Panel className="overflow-hidden"><div className="divide-y divide-[color:var(--portal-border)]">{visibleKnowledge.length ? visibleKnowledge.map((entry) => <div key={entry.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:px-5"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-xs font-bold text-[color:var(--portal-text)]">{entry.title}</p><span className="rounded-md bg-[color:var(--portal-soft)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{entry.category}</span>{!isKnowledgePublished(entry) ? <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-amber-600 dark:text-amber-300">Draft changed</span> : null}</div><p className="mt-1.5 line-clamp-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">{entry.content}</p><p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">{entry.source_label || 'Owner entry'} · Updated {formatWhen(entry.updated_at)}</p></div><div className="flex items-center gap-2"><span className="text-[9px] font-semibold text-[color:var(--portal-muted)]">{entry.active ? 'Active' : 'Inactive'}</span><StatusToggle active={entry.active} disabled={busyAction === `knowledge-${entry.id}`} onChange={(active) => void toggleKnowledge(entry, active)} /><button type="button" onClick={() => setKnowledgeEditor({ id: entry.id, title: entry.title, content: entry.content, category: entry.category, source_type: entry.source_type, source_label: entry.source_label || '', active: entry.active, sort_order: entry.sort_order })} aria-label={`Edit ${entry.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Pencil size={13} /></button><button type="button" onClick={() => void archiveKnowledge(entry)} aria-label={`Delete ${entry.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-red-500/10 hover:text-red-500"><Trash2 size={13} /></button></div></div>) : <div className="px-5 py-12 text-center"><BookOpen size={20} className="mx-auto text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">No knowledge matches these filters</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Clear the search or add a new entry.</p></div>}</div></Panel>
     </div> : null}
@@ -349,5 +389,6 @@ export function ElenaSettingsManager() {
     {activeTab === 'integrations' ? <div className="grid gap-5 xl:grid-cols-2"><Panel><SectionHeading icon={<FileUp size={17} />} title="Import Knowledge" description="Imported entries arrive inactive so you can review them first." /><div className="space-y-4 p-5"><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1.5"><span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Source label</span><input value={importLabel} onChange={(event) => setImportLabel(event.target.value)} className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /></label><label className="space-y-1.5"><span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Category</span><PortalSelect value={importCategory} onChange={setImportCategory} options={CATEGORIES} /></label></div><textarea rows={10} value={importText} onChange={(event) => setImportText(event.target.value)} placeholder="Paste FAQs, notes, or structured venue information…" className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" /><div className="flex flex-wrap gap-2"><label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] hover:border-[#caa24c]/30"><FileUp size={13} />Choose .txt or .md<input type="file" accept=".txt,.md,text/plain,text/markdown" className="sr-only" onChange={(event) => void readImportFile(event.target.files?.[0])} /></label><PortalButton variant="primary" disabled={!importText.trim() || busyAction === 'import-text'} onClick={() => void runImport(false)}>{busyAction === 'import-text' ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} />}Create review drafts</PortalButton><PortalButton disabled={busyAction === 'import-website'} onClick={() => void runImport(true)}>{busyAction === 'import-website' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}Import website data</PortalButton></div></div></Panel><Panel><SectionHeading icon={<Database size={17} />} title="Connected Data" description="Live sources Elena checks at answer time." /><div className="divide-y divide-[color:var(--portal-border)]">{Object.entries(state.connections).map(([key, connection]) => <div key={key} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-xs font-bold capitalize text-[color:var(--portal-text)]">{key === 'siteContent' ? 'Website content' : key}</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{connection.detail}</p></div><span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] ${connection.status === 'connected' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300'}`}>{connection.status === 'connected' ? <Check size={10} /> : <Unplug size={10} />}{connection.status}</span></div>)}</div></Panel></div> : null}
 
     {activeTab === 'settings' ? <div className="grid gap-5 xl:grid-cols-2"><Panel><SectionHeading icon={<ShieldCheck size={17} />} title="Publishing" description="Drafts are private until you publish them." /><div className="space-y-4 p-5"><div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Current public version</p><p className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Version {state.settings.version}</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Published {formatWhen(state.settings.published_at)}</p></div><p className="text-xs leading-5 text-[color:var(--portal-muted)]">Publishing atomically updates website Elena&apos;s active instructions, knowledge, and flows. Inactive or removed drafts are excluded from the public configuration.</p><PortalButton variant="primary" disabled={!hasDraftChanges || busyAction === 'publish'} onClick={() => void publish()}>{busyAction === 'publish' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Publish website Elena</PortalButton></div></Panel><Panel><SectionHeading icon={<ShieldCheck size={17} />} title="Accuracy Boundary" description="These safeguards remain in force for every public answer." /><div className="space-y-3 p-5 text-xs leading-5 text-[color:var(--portal-muted)]"><p>Elena uses only published knowledge and current connected data for factual venue claims.</p><p>Missing or unavailable facts trigger a human handoff instead of a guess.</p><p>Preview mode cannot book tours, create leads, send messages, or perform portal actions.</p><p>Portal Elena remains a separate authenticated internal assistant and its private context is never supplied to the public concierge.</p></div></Panel></div> : null}
+    </PortalTabTransition>
   </div>
 }
