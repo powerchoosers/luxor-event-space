@@ -1751,7 +1751,7 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 
 @media (max-width: 640px) {
   .pricing-section { padding: 4.75rem 1rem; }
-  .pricing-inclusions { padding-top: 8.5rem !important; }
+  .pricing-inclusions { padding-top: 12.25rem !important; }
   .pricing-heading :is(h1, h2) { font-size: clamp(2.45rem, 12vw, 3.4rem); letter-spacing: 0.055em; }
   .pricing-heading p { max-width: 20rem; font-size: 0.62rem; letter-spacing: 0.18em; }
   .pricing-inclusion-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 3rem; }
