@@ -644,7 +644,9 @@ export default async function PortalOverview() {
         </div>
 
         {/* Bills Due */}
-        <BillsDueCard initialBills={bills} />
+        <div className="md:col-span-2 2xl:col-span-1">
+          <BillsDueCard initialBills={bills} />
+        </div>
       </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}

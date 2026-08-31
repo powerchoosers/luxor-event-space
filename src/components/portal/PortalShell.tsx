@@ -182,6 +182,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
   const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
   const [elenaOpen, setElenaOpen] = useState(false)
@@ -190,6 +191,42 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
   const contentScrollRef = useRef<HTMLDivElement>(null)
+  const sidebarHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sidebarIsCollapsed = sidebarCollapsed && !sidebarHoverOpen
+
+  const clearSidebarHoverTimer = useCallback(() => {
+    if (sidebarHoverTimerRef.current) {
+      clearTimeout(sidebarHoverTimerRef.current)
+      sidebarHoverTimerRef.current = null
+    }
+  }, [])
+
+  const handleSidebarHoverStart = useCallback(() => {
+    if (!sidebarCollapsed) return
+    clearSidebarHoverTimer()
+    sidebarHoverTimerRef.current = setTimeout(() => {
+      setSidebarHoverOpen(true)
+      sidebarHoverTimerRef.current = null
+    }, 2000)
+  }, [clearSidebarHoverTimer, sidebarCollapsed])
+
+  const handleSidebarHoverEnd = useCallback(() => {
+    clearSidebarHoverTimer()
+    if (sidebarHoverOpen) setSidebarHoverOpen(false)
+  }, [clearSidebarHoverTimer, sidebarHoverOpen])
+
+  const toggleSidebar = useCallback(() => {
+    clearSidebarHoverTimer()
+    setSidebarHoverOpen(false)
+    setSidebarCollapsed((current) => {
+      const next = !current
+      window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
+      window.dispatchEvent(new Event('luxor-portal-sidebar'))
+      return next
+    })
+  }, [clearSidebarHoverTimer])
+
+  useEffect(() => () => clearSidebarHoverTimer(), [clearSidebarHoverTimer])
 
   // Header, mobile navigation, and the desktop sidebar sit beside the page
   // scroll area. If a wheel gesture starts there, hand it to the page—unless
@@ -421,16 +458,24 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
   return (
     <body data-portal-theme={portalTheme} className="h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside onWheelCapture={handOffWheelToPage} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+      <aside onWheelCapture={handOffWheelToPage} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
         portalTheme === 'light'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
           : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
-      } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      } ${sidebarIsCollapsed ? 'w-20' : 'w-64'}`}>
         <div className="flex flex-col min-h-full px-3 py-5">
           <div className={`mb-5 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-            sidebarCollapsed ? 'px-1.5' : 'px-1'
+            sidebarIsCollapsed ? 'px-1.5' : 'px-1'
           }`}>
-            <Link href="/portal" className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label="Luxor portal overview">
+            <div className="group/logo relative flex min-w-0 items-center">
+            <Link
+              href="/portal"
+              onClick={() => {
+                if (!sidebarIsCollapsed) toggleSidebar()
+              }}
+              className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+              aria-label="Luxor portal overview"
+            >
               <div
                 className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_5px_16px_-9px_rgba(111,77,20,0.55)] ring-1 ring-[#caa24c]/10 transition-colors ${
                   portalTheme === 'light'
@@ -443,12 +488,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                   alt=""
                   width={1254}
                   height={1254}
-                  className="h-auto w-[2rem] max-w-none object-contain"
+                  className="h-auto w-[2rem] max-w-none object-contain transition-[filter,opacity,transform] duration-300 ease-out group-hover/logo:scale-90 group-hover/logo:blur-sm group-hover/logo:opacity-20"
                   priority
                 />
               </div>
               <div className={`transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] whitespace-nowrap overflow-hidden ${
-                sidebarCollapsed ? 'max-w-0 opacity-0 -translate-x-2 pointer-events-none' : 'max-w-[180px] opacity-100 translate-x-0'
+                sidebarIsCollapsed ? 'max-w-0 opacity-0 -translate-x-2 pointer-events-none' : 'max-w-[180px] opacity-100 translate-x-0'
               }`}>
                 <p className="luxor-wordmark !text-[1.4rem] leading-none">LUXOR</p>
                 <p className="mt-1 text-[9px] font-medium uppercase leading-none tracking-widest text-[#caa24c]">
@@ -456,9 +501,28 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 </p>
               </div>
             </Link>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="absolute left-0 top-0 z-10 flex h-10 w-10 items-center justify-center text-[#caa24c] opacity-0 transition-[opacity,transform,filter] duration-300 ease-out group-hover/logo:scale-110 group-hover/logo:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60"
+              aria-label={sidebarIsCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={sidebarIsCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarIsCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className={`h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${sidebarIsCollapsed ? 'hidden' : 'inline-flex'}`}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={17} />
+            </button>
           </div>
 
-          <nav className="flex-1 space-y-1">
+          <nav className="flex-1 space-y-1" onMouseEnter={handleSidebarHoverStart} onMouseLeave={handleSidebarHoverEnd}>
             {navItems.filter((item) => canAccess(item.permission as PortalPermission)).map((item) => {
               if (item.isDropdown) {
                 const isCurrentGroup = item.href === '/portal/marketing'
@@ -472,9 +536,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                     <button
                       type="button"
                       onClick={() => {
-                        if (sidebarCollapsed) {
-                          setSidebarCollapsed(false)
-                          window.localStorage.setItem('luxor-portal-sidebar', 'expanded')
+                        if (sidebarIsCollapsed) {
+                          toggleSidebar()
                           if (item.href === '/portal/operations') {
                             setOperationsExpanded(true)
                           } else if (item.href === '/portal/marketing') {
@@ -488,10 +551,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                           }
                         }
                       }}
-                      title={sidebarCollapsed ? item.label : undefined}
+                      title={sidebarIsCollapsed ? item.label : undefined}
                       aria-label={item.label}
                       className={`group relative flex w-full items-center justify-between rounded-lg border py-2.5 text-sm font-medium transition-all cursor-pointer ${
-                        sidebarCollapsed ? 'px-[18px]' : 'px-3'
+                        sidebarIsCollapsed ? 'px-[18px]' : 'px-3'
                       } ${
                         isCurrentGroup
                           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
@@ -507,7 +570,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                         </span>
                         <span
                           className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                            sidebarCollapsed
+                            sidebarIsCollapsed
                               ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
                               : 'max-w-[200px] opacity-100 translate-x-0'
                           }`}
@@ -517,7 +580,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                       </div>
                       <span
                         className={`text-zinc-500 mr-1 shrink-0 transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                          sidebarCollapsed
+                          sidebarIsCollapsed
                             ? 'max-w-0 opacity-0 pointer-events-none'
                             : 'max-w-[20px] opacity-100'
                         }`}
@@ -527,7 +590,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                     </button>
                     
                     <AnimatePresence initial={false}>
-                      {isExpanded && !sidebarCollapsed && (
+                      {isExpanded && !sidebarIsCollapsed && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
@@ -559,13 +622,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                 )
               }
               return (
-                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarCollapsed} />
+                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarIsCollapsed} />
               )
             })}
           </nav>
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarCollapsed} /> : null}
+            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarIsCollapsed} /> : null}
             <div className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
@@ -575,7 +638,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: [0.23, 1, 0.32, 1] }}
-                    className={`absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-2xl ${sidebarCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
+                    className={`absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/88 p-2 shadow-2xl backdrop-blur-xl ${sidebarIsCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
                   >
                     <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
                       <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
@@ -596,21 +659,21 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
               <button
                 type="button"
                 onClick={() => {
-                  if (sidebarCollapsed) setSidebarCollapsed(false)
+                  if (sidebarIsCollapsed) toggleSidebar()
                   setAccountMenuOpen((current) => !current)
                 }}
-                title={sidebarCollapsed ? userProfile.displayName : undefined}
+                title={sidebarIsCollapsed ? userProfile.displayName : undefined}
                 aria-label="Open account menu"
                 aria-expanded={accountMenuOpen}
-              className={`group flex items-center rounded-lg border border-transparent py-2 transition-all hover:border-[#caa24c]/15 hover:bg-[#caa24c]/5 ${sidebarCollapsed ? 'mx-auto w-10 justify-center gap-0 px-0' : 'w-full gap-3 px-2'}`}
+              className={`group flex items-center rounded-lg border border-transparent transition-all ${sidebarIsCollapsed ? 'mx-auto h-10 w-10 justify-center gap-0 p-0 hover:border-transparent hover:bg-transparent' : 'w-full gap-3 px-2 py-2 hover:border-[#caa24c]/15 hover:bg-[#caa24c]/5'}`}
               >
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)]"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)] transition-transform duration-200 ease-out group-hover:scale-110"
                   style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
                 >
                   {userProfile.avatarUrl ? null : userInitials}
                 </div>
-                <span className={`min-w-0 overflow-hidden text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'max-w-0 opacity-0 -translate-x-1' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
+                <span className={`min-w-0 overflow-hidden text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'max-w-0 opacity-0 -translate-x-1' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
                   <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
                   <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">Account</span>
                 </span>
@@ -620,7 +683,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
         </div>
       </aside>
 
-      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <header className={`z-50 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b px-4 backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -637,19 +700,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, p
               />
             </Link>
 
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((current) => {
-                const next = !current
-                window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
-                return next
-              })}
-              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 lg:inline-flex"
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              aria-expanded={!sidebarCollapsed}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-            </button>
           </div>
 
           {/* Header Search Command Bar */}
@@ -966,6 +1016,11 @@ function SidebarLink({
       <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${active ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
         {icon}
       </span>
+      {collapsed && (
+        <span className="pointer-events-none absolute left-[calc(100%+0.75rem)] z-30 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] opacity-0 shadow-xl -translate-x-1 transition-[opacity,transform] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
+          {label}
+        </span>
+      )}
       <span
         className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
           collapsed
