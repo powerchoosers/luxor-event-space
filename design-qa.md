@@ -100,3 +100,84 @@ passed
 - Remaining verification blocker: the in-app Browser blocked the final post-fix desktop reload through its URL safety policy. TypeScript, focused ESLint, and whitespace checks remain available, but the final page-two image-loading state could not be recaptured without violating the required browser constraint.
 
 final result: blocked
+
+---
+
+# Team Access Drawer Design QA
+
+## Scope
+
+- Surface: `/portal/settings`, Team & access, Add team member drawer
+- Browser: authenticated Chrome session
+- Viewport: 1026 × 844 CSS pixels
+- Capture density: 1×
+- States: dark mode drawer open at top, dark mode actions visible at bottom, light mode drawer open at top
+- Safety: no team member was created and no invitation email was sent during QA
+
+## Visual evidence
+
+- Source baseline: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-before-dark.png`
+- Dark implementation: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-after-dark.png`
+- Dark action state: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-actions-dark.png`
+- Light implementation: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-after-light.png`
+- Combined comparison: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-dark-comparison.png`
+
+## Comparison findings
+
+- The previous dark drawer allowed underlying CRM text and controls to show through the panel.
+- The updated drawer uses an opaque warm-white surface in light mode and an opaque near-black surface in dark mode.
+- The page behind the drawer is visibly blurred and dimmed in both themes, while drawer content remains sharp.
+- The email field now explains that the address is the member's portal sign-in and that Resend delivers the link rather than creating a mailbox.
+- The primary action is now `Add & send invite`; `Save as pending` remains available as a deliberate secondary path.
+- Permission rows, close control, scroll behavior, and both bottom actions remain present and readable.
+- Both create actions remain disabled until a name and valid email are entered; they enabled after a disposable local-only form fill, without submitting or sending.
+- Chrome console contained development and Fast Refresh informational logs only, with no errors.
+
+## Iteration history
+
+1. Captured the existing dark-mode drawer as the baseline.
+2. Replaced the transparent panel treatment and added the cross-theme backdrop blur.
+3. Reworked the add-member copy and actions around the existing Resend invitation endpoint.
+4. Captured and compared the updated dark state, checked the scrolled action state, then switched the portal through its UI and captured light mode.
+5. Verified empty-form and valid-form action states without submitting, then restored the original dark theme preference.
+
+Final result: passed
+
+---
+
+# Team Access Drawer Motion QA
+
+## Scope
+
+- Surface: `/portal/settings`, Team & access, Add team member drawer
+- Browser: authenticated Chrome session
+- Viewport: 1026 × 844 CSS pixels
+- Source and implementation captures: 1026 × 844 pixels at 1× density
+- State: dark mode, empty Add team member drawer, top scroll position
+- Safety: no form submission, team-member creation, or invitation delivery occurred
+
+## Evidence
+
+- Static source: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-before.png`
+- Stable implementation: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-after.png`
+- Opening transition: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-opening.png`
+- Closing transition: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-closing.png`
+- Full-view comparison: `C:\Users\lewis\.codex\visualizations\2026\08\31\01a0590e-4469-7882-ad15-5ca5749ece8d\team-access-motion-comparison.png`
+
+## Findings
+
+- The stable open state preserves the source layout, typography, spacing, color tokens, copy, blur, and icon treatment without visible drift.
+- The backdrop now fades over 0.20 seconds while the panel eases in over 0.24 seconds using the portal's existing cubic-bezier curve.
+- Closing reverses the panel movement and keeps the dialog mounted during the visible exit before removing it from the DOM.
+- Reduced-motion preference receives an 0.08-second opacity-only transition with no translation or scale.
+- No focused-region comparison was needed because the requested change affects whole-drawer movement and the stable full-view captures are pixel-aligned and readable.
+- Browser console review found no warnings or errors after open and close interaction checks.
+
+## Comparison history
+
+1. Captured the unanimated drawer as the source state.
+2. Added coordinated backdrop and panel enter/exit motion using the portal's existing motion pattern.
+3. Captured the revised stable state and verified it against the source in a combined full-view comparison.
+4. Captured opening and closing transition states, confirmed the dialog remains during exit, and confirmed it unmounts after the animation completes.
+
+Final result: passed
