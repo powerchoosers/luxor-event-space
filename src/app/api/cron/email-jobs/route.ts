@@ -5,9 +5,10 @@ import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxor
 import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 const EMAIL_TIME_ZONE = 'America/Chicago'
 const SEND_WINDOW_START_HOUR = 8
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
   after(async () => {
     try {
       if (process.env.RESEND_WEBHOOK_SECRET && process.env.RESEND_API_KEY) await processPendingLuxorResendEvents(3)
+      if (process.env.OPEN_ROUTER_API_KEY) await processPendingLuxorBillIntakes(1)
       if (luxorMailProvider() === 'zoho') await syncPendingLuxorEmailBodies(3)
     }
     catch { console.warn('[email-archive] background sync could not run; pending records retained') }

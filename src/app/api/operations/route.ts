@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { LuxorBill } from '@/lib/luxorInquiryTypes'
-export type { LuxorBill }
+import { LuxorBill, LuxorBillIntake } from '@/lib/luxorInquiryTypes'
+export type { LuxorBill, LuxorBillIntake }
 
 export type LuxorInventoryItem = {
   id: string
@@ -64,8 +64,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     }
 
-    const [bills, inventory, vendors, utilities, cleaning, tasks] = await Promise.all([
+    const [bills, billIntakes, inventory, vendors, utilities, cleaning, tasks] = await Promise.all([
       supabaseRest<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc,created_at.desc').catch(() => []),
+      supabaseRest<LuxorBillIntake[]>('luxor_bill_intakes?select=*&order=received_at.desc&limit=100').catch(() => []),
       supabaseRest<LuxorInventoryItem[]>('luxor_inventory?select=*&order=name.asc').catch(() => []),
       supabaseRest<LuxorVendor[]>('luxor_vendors?select=*&order=name.asc').catch(() => []),
       supabaseRest<LuxorUtilityReading[]>('luxor_utility_readings?select=*&order=sensor_type.asc').catch(() => []),
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       supabaseRest<LuxorMaintenanceTask[]>('luxor_maintenance_tasks?select=*&order=due_date.asc,created_at.desc').catch(() => []),
     ])
 
-    return NextResponse.json({ bills, inventory, vendors, utilities, cleaning, tasks })
+    return NextResponse.json({ bills, billIntakes, inventory, vendors, utilities, cleaning, tasks })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch operations data.'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -107,6 +108,10 @@ export async function POST(request: NextRequest) {
           amount: Number(data.amount),
           status: data.status || 'unpaid',
           due_date: data.due_date || null,
+          source_type: 'manual',
+          extraction_status: 'ready',
+          arithmetic_status: 'not_checked',
+          currency: 'USD',
         }),
       })
       created = res

@@ -375,6 +375,21 @@ export type LuxorDocument = {
 }
 
 export type LuxorBillStatus = 'paid' | 'unpaid' | 'overdue'
+export type LuxorBillExtractionStatus = 'pending' | 'processing' | 'needs_review' | 'ready' | 'failed' | 'duplicate'
+export type LuxorBillArithmeticStatus = 'balanced' | 'mismatch' | 'not_checkable' | 'not_checked'
+
+export type LuxorBillLineItem = {
+  description: string
+  quantity: number | null
+  unit_price: number | null
+  amount: number
+}
+
+export type LuxorBillEvidence = {
+  field: string
+  quote: string
+  page_number: number | null
+}
 
 export type LuxorBill = {
   id: string
@@ -386,6 +401,63 @@ export type LuxorBill = {
   amount: number
   status: LuxorBillStatus
   due_date: string | null
+  source_type: 'manual' | 'email'
+  source_message_id: string | null
+  source_attachment_id: string | null
+  source_filename: string | null
+  source_content_type: string | null
+  source_sha256: string | null
+  source_sender: string | null
+  source_recipient: string | null
+  source_subject: string | null
+  received_at: string | null
+  invoice_number: string | null
+  issue_date: string | null
+  billing_period_start: string | null
+  billing_period_end: string | null
+  currency: string
+  line_items: LuxorBillLineItem[]
+  extraction_status: LuxorBillExtractionStatus
+  extraction_confidence: number | null
+  extraction_model: string | null
+  extraction_schema_version: string | null
+  extraction_summary: string | null
+  extracted_fields: Record<string, unknown>
+  evidence: LuxorBillEvidence[]
+  arithmetic_status: LuxorBillArithmeticStatus
+  duplicate_of_bill_id: string | null
+  review_notes: string | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+  payment_ready_at: string | null
+}
+
+export type LuxorBillIntake = {
+  id: string
+  message_id: string
+  attachment_id: string
+  bill_id: string | null
+  duplicate_of_bill_id: string | null
+  filename: string
+  content_type: string
+  size_bytes: number
+  sha256: string | null
+  sender_address: string
+  recipient_address: string
+  subject: string
+  received_at: string
+  status: 'received' | 'processing' | 'needs_review' | 'ready' | 'duplicate' | 'failed' | 'ignored'
+  attempts: number
+  last_error_code: string | null
+  last_error_message: string | null
+  extraction_model: string | null
+  extraction_schema_version: string | null
+  extraction_confidence: number | null
+  extracted_data: Record<string, unknown>
+  evidence: LuxorBillEvidence[]
+  arithmetic_status: LuxorBillArithmeticStatus
+  created_at: string
+  updated_at: string
 }
 
 // --- Note Types ---

@@ -164,6 +164,7 @@ function getSuggestionsForPath(path: string): SmartSuggestion[] {
   }
   if (path.startsWith('/portal/operations')) {
     return [
+      makeSuggestion('operations-bills', 'Bills needing review', 'Check extracted invoices, evidence, and payment readiness.', 'Show vendor bills that need review or are due soon, with the source evidence and next action.', 'task'),
       makeSuggestion('operations-stock', 'Inventory attention', 'Find what needs restocking.', 'Show inventory items that are Low or Out of Stock.', 'task'),
       makeSuggestion('operations-cleaning', 'Cleaning checks', 'Review active cleaning logs.', 'Check active cleaning logs.', 'task'),
       makeSuggestion('operations-tasks', 'Operations tasks', 'Prioritize open operational work.', 'List pending operations tasks.', 'task'),

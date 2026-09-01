@@ -20,11 +20,8 @@ import {
   Droplet,
   Trash2,
   Clock,
-  Plus,
-  ArrowUpRight,
-  Mail
+  Plus
 } from 'lucide-react'
-import Link from 'next/link'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -48,6 +45,8 @@ import {
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
+import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
+import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
 
 type SubTab =
   | 'dashboard'
@@ -97,6 +96,7 @@ function OperationsPageContent() {
 
   // Database states
   const [bills, setBills] = useState<LuxorBill[]>([])
+  const [billIntakes, setBillIntakes] = useState<LuxorBillIntake[]>([])
   const [inventory, setInventory] = useState<LuxorInventoryItem[]>([])
   const [vendors, setVendors] = useState<LuxorVendor[]>([])
   const [utilities, setUtilities] = useState<LuxorUtilityReading[]>([])
@@ -177,6 +177,7 @@ function OperationsPageContent() {
       if (!res.ok) throw new Error('Failed to load operations metrics.')
       const payload = await res.json()
       setBills(payload.bills || [])
+      setBillIntakes(payload.billIntakes || [])
       setInventory(payload.inventory || [])
       setVendors(payload.vendors || [])
       setUtilities(payload.utilities || [])
@@ -279,25 +280,6 @@ function OperationsPageContent() {
       setBillDueDate('')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save bill.')
-    }
-  }
-
-  const handleToggleBillStatus = async (bill: LuxorBill) => {
-    const nextStatus = bill.status === 'paid' ? 'unpaid' : 'paid'
-    setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, status: nextStatus } : b)))
-    try {
-      const res = await fetch('/api/operations', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'bill', id: bill.id, status: nextStatus }),
-      })
-      if (!res.ok) throw new Error('Failed to update status')
-      const updated = await res.json()
-      setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, ...updated } : b)))
-    } catch (err) {
-      console.error(err)
-      setBills(prev => prev.map(b => (b.id === bill.id ? { ...b, status: bill.status } : b)))
-      alert('Failed to update bill status.')
     }
   }
 
@@ -466,9 +448,7 @@ function OperationsPageContent() {
         icon={<Wrench size={18} />}
         title="Venue Operations"
         actions={
-          activeTab === 'bills' ? (
-            <PortalButton variant="primary" onClick={() => setIsBillModalOpen(true)}><Plus size={14} /> Log Bill</PortalButton>
-          ) : activeTab === 'maintenance' ? (
+          activeTab === 'maintenance' ? (
             <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
           ) : activeTab === 'inventory' ? (
             <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
@@ -577,66 +557,13 @@ function OperationsPageContent() {
 
       {/* BILLS & PAYMENTS TAB */}
       {activeTab === 'bills' && (
-        <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-            <InvoicesMailboxBanner />
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Operational Bills</h3>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-mono text-zinc-550 border border-zinc-900 bg-zinc-950 px-3 py-1 rounded">Next due: Rent on Jul 15</span>
-              </div>
-            </div>
-
-            <PortalTableCard>
-              <div className="overflow-x-auto">
-                <PortalStickyTable minWidth="800px">
-                  <PortalStickyThead>
-                    <tr className="text-[10px] uppercase font-bold text-zinc-550 tracking-[0.2em] border-b border-zinc-900 bg-[#0c0c0c]/80">
-                      <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(bulkRecordIds)} onChange={() => bulkSelection.selectPage(bulkRecordIds)} /></th>
-                      <th className="px-4 py-5">Recurring Service</th>
-                      <th className="px-6 py-5">Billing Frequency</th>
-                      <th className="px-6 py-5">Provider / Account</th>
-                      <th className="px-6 py-5">Status</th>
-                      <th className="px-8 py-5 text-right font-mono">Monthly Cost</th>
-                    </tr>
-                  </PortalStickyThead>
-                  <tbody className="divide-y divide-zinc-900/30">
-                    {bills.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-8 py-12 text-center text-xs text-zinc-500">No operational bills logged.</td>
-                      </tr>
-                    ) : (
-                      bills.map((bill, idx) => (
-                        <tr key={bill.id || idx} className={`hover:bg-zinc-900/40 transition-colors cursor-pointer ${bulkSelection.isSelected(bill.id) ? 'bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'bill', data: bill })}>
-                          <td className="px-4 py-5 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(bill.id)} index={idx + 1} onChange={() => bulkSelection.toggle(bill.id)} label={bill.service} /></td>
-                          <td className="px-4 py-5 font-bold text-white">{bill.service}</td>
-                          <td className="px-6 py-5 font-mono text-xs text-zinc-500">{bill.frequency}</td>
-                          <td className="px-6 py-5 text-zinc-350">{bill.provider}</td>
-                          <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleBillStatus(bill)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold border transition-all cursor-pointer ${
-                                bill.status === 'paid'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
-                              }`}
-                              title="Click to flip status"
-                            >
-                              {bill.status === 'paid' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                              <span>{bill.status === 'paid' ? 'Paid' : 'Mark Paid'}</span>
-                            </button>
-                          </td>
-                          <td className="px-8 py-5 text-right font-mono font-bold text-zinc-300">
-                            ${Number(bill.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </PortalStickyTable>
-              </div>
-            </PortalTableCard>
-          </div>
+        <BillsPayableLedger
+          bills={bills}
+          intakes={billIntakes}
+          onAddBill={() => setIsBillModalOpen(true)}
+          onRefresh={loadOperationsData}
+          onBillChanged={(bill) => setBills((current) => current.map((item) => item.id === bill.id ? bill : item))}
+        />
         )}
 
       {/* MAINTENANCE LOG TAB */}
@@ -1645,40 +1572,6 @@ function OperationsPageContent() {
       )}
       </PortalTabTransition>
     </PortalPageFrame>
-  )
-}
-
-function InvoicesMailboxBanner() {
-  const [available, setAvailable] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    fetch('/api/portal/shared-mailboxes', { cache: 'no-store' })
-      .then((response) => response.ok ? response.json() : { mailboxes: [] })
-      .then((data) => {
-        if (active) setAvailable(Array.isArray(data.mailboxes) && data.mailboxes.some((mailbox: { key?: string }) => mailbox.key === 'invoices'))
-      })
-      .catch(() => undefined)
-    return () => { active = false }
-  }, [])
-
-  if (!available) return null
-
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#e0bd66]">
-          <Mail size={16} aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-[color:var(--portal-text)]">Invoices inbox</p>
-          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Send vendor bills to <span className="font-semibold text-[color:var(--portal-text)]">invoices@luxoratlaspalmas.com</span>. All portal admins can review them here.</p>
-        </div>
-      </div>
-      <Link href="/portal/emails?mailbox=invoices" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] px-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]">
-        Open inbox <ArrowUpRight size={14} aria-hidden="true" />
-      </Link>
-    </div>
   )
 }
 

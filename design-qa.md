@@ -28,7 +28,6 @@ The full-view comparison is sufficient because the primary differences and the s
 No unresolved P0, P1, or P2 visual issues remain. Asset content differs from the concept where the implementation intentionally uses Luxor's checked-in venue photography and live portal components.
 
 final result: passed
-
 ## Clean-room refinement
 
 - Implementation capture: `C:\Users\lewis\AppData\Local\Temp\luxor-builder-clean-room.png`
@@ -221,3 +220,68 @@ Final result: passed
 4. Repeated the scrolled-state verification in light mode and restored the original dark theme preference.
 
 Final result: passed
+
+---
+
+# Luxor Payables Ledger Design QA
+
+## Comparison target
+
+- Source visual truth: `C:\Users\lewis\.codex\generated_images\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\exec-fc8e9f1a-3e81-4f68-8b0a-31771cccfadd.png`
+- Browser-rendered implementation: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\luxor-bills-desktop-1440.png`
+- Full-view comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\luxor-bills-design-comparison.png`
+- Focused drawer comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\luxor-bills-drawer-comparison.png`
+- Responsive evidence: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\luxor-bills-ipad-834.png` and `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\luxor-bills-mobile-390.png`
+
+## Normalization and state
+
+- Source pixels: 1487 x 1058.
+- Implementation pixels: 1440 x 1024 at a 1440 x 1024 CSS viewport and device scale factor 1.
+- The source was proportionally normalized to 1440 x 1025 for the full-view comparison. No density-only findings were filed.
+- Route: `/portal/operations?tab=bills`, authenticated owner portal, light theme.
+- The source shows an extracted TXU invoice. Production currently has no messages addressed to the new invoice mailbox, so the implementation comparison uses the existing manual payables rows. This changes the visible data state, not the implemented source-document or extraction-detail structure.
+
+## Full-view evidence
+
+The final implementation preserves the selected composition: quiet warm portal shell, payables title and due summary, invoice-mailbox health strip, status tabs, restrained filters, grouped ledger rows, and a persistent desktop review column. The portal keeps its existing Venue Operations hierarchy rather than replacing the route shell with a standalone page title.
+
+## Focused evidence
+
+The focused comparison verifies the right-side review hierarchy at readable scale: review state, source-document surface, extracted facts, arithmetic status, and next action. The implementation displays a manual source because no real invoice-mailbox attachment exists yet. Email-derived rows render the document link, sender, subject, received timestamp, evidence quotes, confidence, and approval action from the same component.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing Luxor display and portal UI families are preserved. Headings, small uppercase labels, tab text, amounts, and dense table metadata match the source hierarchy without introducing a new font.
+- Spacing and layout rhythm: the wide ledger plus narrow review column, low-profile status/filter rows, subtle grouped sections, and compact table density match the reference. At 834 px the ledger uses the full content width. At 390 px it measures 348 px inside a 390 px document with no horizontal overflow.
+- Colors and tokens: implementation uses the existing portal background, card, soft, text, muted, faint, and border tokens with restrained Luxor gold and semantic amber, rose, emerald, and blue states.
+- Image quality and assets: the real Luxor mark and Lucide icon system are preserved. Source invoices use the authenticated attachment route rather than a recreated or placeholder invoice asset. Manual records intentionally use a file icon because no source document exists.
+- Copy and content: operational labels are direct and owner-focused. Payables are explicitly separated from client invoices, and the primary action changes from review approval to payment recording based on state.
+
+## Interaction and responsive evidence
+
+- Search, due-date, vendor, and source filters are interactive React controls.
+- Status tabs and client-invoice navigation work.
+- Add bill, refresh, open invoice inbox, open source document, approve, keep in review, and mark paid are wired.
+- At 390 x 844, the review drawer toggles from `display: none` to a contained 366 x 684 fixed sheet after a row tap; document width remains 390 px.
+- At 834 x 1194, the ledger is 776 px wide inside an 834 px document with no horizontal overflow.
+- Chrome console contained no application errors after desktop, iPad, mobile, drawer-open, and drawer-close checks.
+
+## Comparison history
+
+1. First pass finding, P2: the implementation over-compressed the selected ledger into vendor, amount, and status rows. It omitted the total-due context and desktop source, received, due-date, extraction, and payment columns.
+2. Fix: added the payables summary and next-due context; review action; due-date, vendor, source, and search filters; reset behavior; and the dense desktop audit columns while retaining purpose-built tablet and mobile layouts.
+3. Post-fix evidence: the final full-view comparison shows the same information architecture and operating density as the source. No actionable P0, P1, or P2 visual difference remains. Current production data explains the remaining row-content and manual-source differences.
+
+## Follow-up polish
+
+- P3: capture a second focused comparison after the first real vendor invoice reaches the mailbox so the thumbnail, provenance, extracted evidence, arithmetic balance, and approval button can be judged against a like-for-like email-derived row.
+
+## Functional evidence
+
+- A disposable invoice image outside the repository was processed through the same OpenRouter structured-output contract used by mailbox intake. The model classified it as a vendor bill and returned the expected vendor, invoice number, due date, $270.63 total, balanced line-item arithmetic, six evidence entries, and 0.95 confidence.
+- Selecting a payable writes its UUID to the Operations URL. Elena then answered from the selected bill's prefetched context with the correct vendor, amount, due date, source type, extraction state, and arithmetic state while executing zero database queries.
+- This validates extraction and assistant context without creating a fake payable or message in production. A true end-to-end mailbox delivery remains dependent on the first real invoice reaching the configured address.
+- Live infrastructure audit: Resend reports `luxoratlaspalmas.com` verified and its enabled Luxor webhook subscribes to `email.received` at the canonical production route. Production has zero pending Resend events, zero invoice messages, zero bill intakes, and a healthy Resend email worker with no recorded error.
+- Production Vercel logs contain 12 HTTP 200 responses for the OpenRouter-backed Elena chat route over the preceding seven days. The existing deployed receiver already accepts all Luxor-domain aliases; the invoice enqueue and extraction code remains local until the requested branch is committed and pushed.
+
+final result: passed

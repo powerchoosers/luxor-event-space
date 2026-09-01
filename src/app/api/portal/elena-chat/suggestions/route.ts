@@ -121,6 +121,19 @@ function isOpenStatus(value: string | null | undefined) {
   return !['paid', 'completed', 'cancelled', 'canceled', 'signed', 'closed'].includes((value || '').toLowerCase())
 }
 
+interface VendorBillRecord {
+  id: string
+  provider: string | null
+  service: string | null
+  amount: number | string | null
+  status: string | null
+  due_date: string | null
+  source_type: string | null
+  extraction_status: string | null
+  extraction_confidence: number | string | null
+  arithmetic_status: string | null
+}
+
 async function withFallbackTimeout<T>(request: Promise<T>, fallback: T, timeoutMs = 4_500) {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   try {
@@ -165,10 +178,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const cycle = Math.max(0, Number.parseInt(searchParams.get('cycle') || '0', 10) || 0)
 
-    const [inquiries, bookings, invoices, tasks, signatures, unreadMessages] = await Promise.all([
+    const [inquiries, bookings, invoices, vendorBills, tasks, signatures, unreadMessages] = await Promise.all([
       withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,event_type,status,pipeline_stage,created_at,updated_at&order=created_at.desc&limit=24'), []),
       withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,contract_status,final_payment_due_date&order=event_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<VendorBillRecord[]>('luxor_bills?select=id,provider,service,amount,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status&status=neq.paid&order=due_date.asc,created_at.desc&limit=30'), []),
       withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []),
       withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []),
@@ -215,6 +229,33 @@ export async function GET(request: Request) {
           detail: `${formatMoney(invoice.total)} from ${name} is ${overdue ? `${Math.abs(days || 0)} day${Math.abs(days || 0) === 1 ? '' : 's'} overdue` : 'due within the next week'}.`,
           prompt: `Review ${name}'s ${formatMoney(invoice.total)} invoice and tell me the best next step to collect it.`,
           urgency: overdue ? 'urgent' : 'attention',
+        })
+      })
+
+    vendorBills
+      .slice(0, 8)
+      .forEach((bill) => {
+        const days = daysFromToday(bill.due_date)
+        const review = ['needs_review', 'failed'].includes(bill.extraction_status || '') || bill.arithmetic_status === 'mismatch'
+        const dueSoon = days !== null && days <= 7
+        if (!review && !dueSoon) return
+        const provider = bill.provider || 'A vendor'
+        const reason = bill.arithmetic_status === 'mismatch'
+          ? 'its extracted line items do not match the total'
+          : bill.extraction_status === 'failed'
+            ? 'the source attachment needs another extraction attempt'
+            : review
+              ? 'its extracted facts need owner review'
+              : days !== null && days < 0
+                ? `it is ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
+                : 'it is due within the next week'
+        candidates.push({
+          id: `vendor-bill-${bill.id}`,
+          kind: 'money',
+          label: review ? 'Vendor bill needs review' : 'Vendor bill due soon',
+          detail: `${formatMoney(bill.amount)} for ${provider} needs attention because ${reason}.`,
+          prompt: `Review the ${formatMoney(bill.amount)} vendor bill from ${provider}. Show its source, extracted evidence, arithmetic status, due date, and safest next action.`,
+          urgency: review || (days !== null && days < 0) ? 'urgent' : 'attention',
         })
       })
 

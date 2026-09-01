@@ -8,6 +8,7 @@ import { downloadLuxorMailAttachment, listLuxorMailAttachments, luxorMailMessage
 import { recordLuxorCalendarReplies } from './luxorCalendarReplyServer'
 import { broadcastLuxorEmailArrival, broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
 import { sendLuxorWebPush } from './luxorWebPushServer'
+import { enqueueLuxorInvoiceAttachments } from './luxorBillIntakeServer'
 
 export type ResendEvent = {
   type: string; created_at: string
@@ -152,6 +153,7 @@ async function receiveEmail(providerId: string) {
       filename: attachment.filename || 'attachment', contentType: attachment.content_type || 'application/octet-stream',
       contentId: attachment.content_id, bytes }))
   }
+  await enqueueLuxorInvoiceAttachments(row, archived)
   // Keep the original MIME for calendar parts that clients place inline, and
   // verify DKIM ourselves instead of trusting caller-supplied auth headers.
   if (email.raw?.download_url) {

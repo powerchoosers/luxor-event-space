@@ -274,6 +274,23 @@ Use the live CRM context supplied by the portal when it already contains the exa
    - amount (numeric)
    - status (text: 'paid', 'unpaid', 'overdue')
    - due_date (date)
+   - source_type (text: 'manual', 'email')
+   - source_sender, source_recipient, source_subject, source_filename (text)
+   - received_at (timestamptz)
+   - invoice_number (text), issue_date, billing_period_start, billing_period_end (date)
+   - currency (text), line_items (jsonb)
+   - extraction_status (text: 'pending', 'processing', 'needs_review', 'ready', 'failed', 'duplicate')
+   - extraction_confidence (numeric), extraction_summary (text), extracted_fields (jsonb), evidence (jsonb)
+   - arithmetic_status (text: 'balanced', 'mismatch', 'not_checkable', 'not_checked')
+   - review_notes (text), reviewed_at, payment_ready_at (timestamptz)
+
+9a. public.luxor_bill_intakes
+   - id, message_id, attachment_id, bill_id, duplicate_of_bill_id (uuid)
+   - filename, content_type, sender_address, recipient_address, subject (text)
+   - received_at (timestamptz)
+   - status (text: 'received', 'processing', 'needs_review', 'ready', 'duplicate', 'failed', 'ignored')
+   - attempts (integer), last_error_code, last_error_message (text)
+   - extraction_confidence (numeric), arithmetic_status (text)
 
 10. public.luxor_cleaning_logs
     - id (uuid)
@@ -917,6 +934,36 @@ export async function POST(request: Request) {
       })
     }
 
+function contextText(value: unknown, fallback = 'Not recorded', maxLength = 500) {
+  if (typeof value !== 'string') return fallback
+  const cleaned = value.trim().replace(/\s+/g, ' ').slice(0, maxLength)
+  return cleaned ? JSON.stringify(cleaned) : fallback
+}
+
+function formatVendorBillContext(bill: Record<string, unknown>, detailed = false) {
+  const base = `${contextText(bill.provider)} / ${contextText(bill.service)}: ${contextText(bill.currency, 'USD', 3)} ${Number(bill.amount || 0).toFixed(2)}, ${contextText(bill.status)}, due ${contextText(bill.due_date)}; extraction ${contextText(bill.extraction_status)}, confidence ${bill.extraction_confidence == null ? 'not recorded' : `${Math.round(Number(bill.extraction_confidence) * 100)}%`}, arithmetic ${contextText(bill.arithmetic_status)}; source ${contextText(bill.source_type)}`
+  if (!detailed) return base
+  const lineItems = Array.isArray(bill.line_items) ? bill.line_items.slice(0, 10).flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const row = item as Record<string, unknown>
+    return [`${contextText(row.description, 'Line item', 180)} (${Number(row.amount || 0).toFixed(2)})`]
+  }) : []
+  const evidence = Array.isArray(bill.evidence) ? bill.evidence.slice(0, 8).flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const row = item as Record<string, unknown>
+    const field = contextText(row.field, 'field', 80)
+    const quote = contextText(row.quote, 'No quote', 240)
+    return [`${field}: ${quote}${row.page_number ? ` (page ${Number(row.page_number)})` : ''}`]
+  }) : []
+  return `${base}
+- Invoice number: ${contextText(bill.invoice_number)}; issue date: ${contextText(bill.issue_date)}; billing period: ${contextText(bill.billing_period_start)} to ${contextText(bill.billing_period_end)}
+- Source email: from ${contextText(bill.source_sender)} to ${contextText(bill.source_recipient)}; received ${contextText(bill.received_at)}; subject ${contextText(bill.source_subject)}; file ${contextText(bill.source_filename)}
+- Extraction summary: ${contextText(bill.extraction_summary)}
+- Line items: ${lineItems.join('; ') || 'None extracted.'}
+- Source evidence: ${evidence.join('; ') || 'None recorded.'}
+- Review notes: ${contextText(bill.review_notes)}; payment ready at: ${contextText(bill.payment_ready_at)}`
+}
+
 async function buildDeepPageContext(activePath: string): Promise<string> {
   const contextParts: string[] = [
     `CURRENT DATE AT LUXOR (America/Chicago): ${todayInLuxorTimeZone()}`,
@@ -1080,19 +1127,31 @@ Use call history as evidence. Never place a call without an explicit owner actio
     }
   } else if (activePath.startsWith('/portal/operations')) {
     try {
-      const [tasks, bills, inventory, maintenance, workers] = await Promise.all([
+      const selectedBillId = (() => {
+        try {
+          const candidate = new URL(activePath, 'https://www.luxoratlaspalmas.com').searchParams.get('bill') || ''
+          return /^[0-9a-f-]{36}$/i.test(candidate) ? candidate : null
+        } catch { return null }
+      })()
+      const billFields = 'id,service,frequency,provider,amount,status,due_date,source_type,source_sender,source_recipient,source_subject,source_filename,received_at,invoice_number,issue_date,billing_period_start,billing_period_end,currency,line_items,extraction_status,extraction_confidence,extraction_summary,evidence,arithmetic_status,review_notes,payment_ready_at'
+      const [tasks, bills, selectedBills, intakes, inventory, maintenance, workers] = await Promise.all([
         supabaseRest<Array<Record<string, unknown>>>('luxor_tasks?select=title,due_date,priority,status&status=eq.pending&order=due_date.asc&limit=12'),
-        supabaseRest<Array<Record<string, unknown>>>('luxor_bills?select=service,provider,amount,status,due_date&order=due_date.asc&limit=20'),
+        supabaseRest<Array<Record<string, unknown>>>(`luxor_bills?select=${billFields}&order=due_date.asc,created_at.desc&limit=20`),
+        selectedBillId ? supabaseRest<Array<Record<string, unknown>>>(`luxor_bills?select=${billFields}&id=eq.${selectedBillId}&limit=1`) : Promise.resolve([]),
+        supabaseRest<Array<Record<string, unknown>>>('luxor_bill_intakes?select=filename,status,attempts,last_error_code,received_at&status=in.(received,processing,failed,needs_review)&order=received_at.asc&limit=12'),
         supabaseRest<Array<Record<string, unknown>>>('luxor_inventory?select=name,category,count,unit,status&order=status.desc,name.asc&limit=30'),
         supabaseRest<Array<Record<string, unknown>>>('luxor_maintenance_tasks?select=title,status,priority,due_date&order=due_date.asc&limit=20'),
         supabaseRest<Array<Record<string, unknown>>>('luxor_worker_health?select=worker_name,last_authorized_at,last_processed_at,last_status,last_error&order=worker_name.asc'),
       ])
       contextParts.push(`ACTIVE OPERATIONS SCREEN CONTEXT (PRE-FETCHED LIVE):
 - Pending tasks: ${tasks.length ? tasks.map((task) => `${task.title} (${task.priority}; due ${task.due_date || 'not set'})`).join('; ') : 'None.'}
-- Bills: ${bills.length ? bills.map((bill) => `${bill.service || bill.provider}: ${bill.status}, $${bill.amount || 0}, due ${bill.due_date || 'not set'}`).join('; ') : 'None.'}
+- Vendor payables: ${bills.length ? bills.map((bill) => formatVendorBillContext(bill)).join('; ') : 'None.'}
+- Selected payable record: ${selectedBills[0] ? `\n${formatVendorBillContext(selectedBills[0], true)}` : selectedBillId ? 'The requested bill was not found.' : 'No bill is selected in the URL.'}
+- Invoice-mailbox intake queue: ${intakes.length ? intakes.map((intake) => `${contextText(intake.filename)}: ${contextText(intake.status)}, ${Number(intake.attempts || 0)} attempt(s)${intake.last_error_code ? `, error code ${contextText(intake.last_error_code)}` : ''}, received ${contextText(intake.received_at)}`).join('; ') : 'No pending, failed, or review-required attachments.'}
 - Inventory needing attention: ${inventory.filter((item) => item.status !== 'Good').map((item) => `${item.name}: ${item.status}`).join('; ') || 'None.'}
 - Maintenance items: ${maintenance.length ? maintenance.map((item) => `${item.title}: ${item.status}`).join('; ') : 'None.'}
-- Worker health: ${workers.length ? workers.map((worker) => `${worker.worker_name}: ${worker.last_status || 'unknown'}, authorized ${worker.last_authorized_at || 'not recorded'}, processed ${worker.last_processed_at || 'not recorded'}${worker.last_error ? ', has a recorded error' : ''}`).join('; ') : 'No heartbeat rows found.'}`)
+- Worker health: ${workers.length ? workers.map((worker) => `${worker.worker_name}: ${worker.last_status || 'unknown'}, authorized ${worker.last_authorized_at || 'not recorded'}, processed ${worker.last_processed_at || 'not recorded'}${worker.last_error ? ', has a recorded error' : ''}`).join('; ') : 'No heartbeat rows found.'}
+PAYABLES RULE: Extracted values and source quotes are candidate evidence. Code-calculated arithmetic and an owner review determine payment readiness. Never claim a bill is approved, paid, or verified from model confidence alone.`)
     } catch (err) {
       console.warn('[Elena Chat] Pre-fetch operations context error:', err)
     }
@@ -1198,7 +1257,7 @@ async function buildDailyBriefContext() {
   const today = new Date().toISOString().slice(0, 10)
   const [tasks, bills, inquiries, bookings] = await Promise.all([
     supabaseRest<Array<Record<string, unknown>>>('luxor_tasks?select=title,description,due_date,priority,status&status=eq.pending&order=due_date.asc&limit=8').catch(() => []),
-    supabaseRest<Array<Record<string, unknown>>>('luxor_bills?select=service,provider,amount,status,due_date&status=in.(overdue,unpaid)&order=due_date.asc&limit=8').catch(() => []),
+    supabaseRest<Array<Record<string, unknown>>>('luxor_bills?select=service,provider,amount,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status,payment_ready_at&status=in.(overdue,unpaid)&order=due_date.asc&limit=8').catch(() => []),
     supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=full_name,event_type,status,pipeline_stage,budget,target_date,created_at&status=in.(new,contacted,tour_requested,proposal_sent)&order=created_at.desc&limit=8').catch(() => []),
     supabaseRest<Array<Record<string, unknown>>>(`luxor_bookings?select=client_name,event_type,event_date,start_time,status&event_date=gte.${today}&status=neq.cancelled&order=event_date.asc&limit=8`).catch(() => []),
   ])
@@ -1212,7 +1271,7 @@ PENDING TASKS:
 ${formatRows(tasks, ['title', 'due_date', 'priority'])}
 
 OVERDUE OR UNPAID BILLS:
-${formatRows(bills, ['service', 'provider', 'amount', 'status', 'due_date'])}
+${formatRows(bills, ['service', 'provider', 'amount', 'status', 'due_date', 'source_type', 'extraction_status', 'extraction_confidence', 'arithmetic_status', 'payment_ready_at'])}
 
 ACTIVE INQUIRIES NEEDING FOLLOW-UP:
 ${formatRows(inquiries, ['full_name', 'event_type', 'status', 'pipeline_stage', 'budget', 'target_date', 'created_at'])}
