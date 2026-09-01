@@ -11,7 +11,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react'
-import { PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent, MarketingList, MarketingTab } from '../page'
@@ -36,6 +36,8 @@ export function MarketingOverviewTab({
   onAddContactClick,
 }: MarketingOverviewTabProps) {
   const [nowTime] = React.useState(() => Date.now())
+  const [rangeDays, setRangeDays] = React.useState('7')
+  const selectedRangeDays = Number(rangeDays)
   const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
 
   const allMembers = React.useMemo(
@@ -100,8 +102,9 @@ export function MarketingOverviewTab({
   )
 
   const sentTrend = React.useMemo(() => {
-    const days = Array.from({ length: 7 }, (_, index) => {
+    const days = Array.from({ length: selectedRangeDays }, (_, index) => {
       const date = new Date(nowTime - (6 - index) * 24 * 60 * 60 * 1000)
+      date.setTime(nowTime - (selectedRangeDays - 1 - index) * 24 * 60 * 60 * 1000)
       date.setHours(0, 0, 0, 0)
       return { date, value: 0 }
     })
@@ -113,7 +116,7 @@ export function MarketingOverviewTab({
       if (day) day.value += Number(campaign.sent_count || 0)
     })
     return days
-  }, [campaigns, nowTime])
+  }, [campaigns, nowTime, selectedRangeDays])
 
   return (
     <div className="space-y-6">
@@ -124,7 +127,7 @@ export function MarketingOverviewTab({
               <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Performance overview</h3>
               <p className="mt-1 text-xs text-[color:var(--portal-muted)]">A quick read on reach and engagement across your marketing activity.</p>
             </div>
-            <span className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-bold text-[color:var(--portal-muted)]">Last 7 days</span>
+            <PortalSelect value={rangeDays} onChange={setRangeDays} options={[{ value: '7', label: 'Last 7 days' }, { value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }]} buttonClassName="min-h-10 min-w-32" />
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">
@@ -327,14 +330,18 @@ export function MarketingOverviewTab({
 }
 
 function TrendChart({ points, loading }: { points: Array<{ date: Date; value: number }>; loading: boolean }) {
+  const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null)
   const max = Math.max(...points.map((point) => point.value), 1)
-  const chartPoints = points.map((point, index) => `${(index / Math.max(points.length - 1, 1)) * 100},${92 - (point.value / max) * 68}`).join(' ')
+  const coordinates = points.map((point, index) => ({ x: (index / Math.max(points.length - 1, 1)) * 100, y: 92 - (point.value / max) * 68 }))
+  const chartPoints = coordinates.map((point) => `${point.x},${point.y}`).join(' ')
+  const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex]
+  const hoveredCoordinate = hoveredIndex === null ? null : coordinates[hoveredIndex]
   return (
     <div className="mt-5">
       <div className="relative h-36 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3">
         <div className="pointer-events-none absolute inset-x-3 top-7 border-t border-dashed border-[color:var(--portal-border)]" />
         <div className="pointer-events-none absolute inset-x-3 top-1/2 border-t border-dashed border-[color:var(--portal-border)]" />
-        {loading ? <div className="h-full w-full rounded-lg luxor-skeleton" /> : <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full"><polyline points={chartPoints} fill="none" stroke="#caa24c" strokeWidth="1.6" vectorEffect="non-scaling-stroke" /></svg>}
+        {loading ? <div className="h-full w-full rounded-lg luxor-skeleton" /> : <><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full"><polyline points={chartPoints} fill="none" stroke="#caa24c" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />{coordinates.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r={points.length > 30 ? 1.1 : 1.8} fill="#caa24c" tabIndex={0} aria-label={`${points[index].value} email sends on ${formatDate(points[index].date.toISOString())}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)} onFocus={() => setHoveredIndex(index)} onBlur={() => setHoveredIndex(null)} />)}</svg>{hoveredPoint && hoveredCoordinate ? <div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-center shadow-lg" style={{ left: `${hoveredCoordinate.x}%`, top: `${Math.max(4, hoveredCoordinate.y - 19)}%` }}><p className="font-mono text-xs font-black text-[color:var(--portal-text)]">{hoveredPoint.value.toLocaleString()}</p><p className="mt-0.5 whitespace-nowrap text-[9px] text-[color:var(--portal-muted)]">Email sends · {formatDate(hoveredPoint.date.toISOString())}</p></div> : null}</>}
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px] font-mono text-[color:var(--portal-faint)]"><span>{points[0] ? formatDate(points[0].date.toISOString()) : '—'}</span><span>Email sends</span><span>{points[points.length - 1] ? formatDate(points[points.length - 1].date.toISOString()) : '—'}</span></div>
     </div>
