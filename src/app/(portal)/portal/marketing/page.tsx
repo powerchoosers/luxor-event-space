@@ -23,6 +23,7 @@ import {
   PortalStatusBadge,
   PortalButton,
   PortalCloseButton,
+  PortalSelect,
   PortalTabTransition
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -30,14 +31,14 @@ import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import dynamic from 'next/dynamic'
 
 // Tab Component Imports (Lazy Loaded)
-const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false })
-const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false })
-const EmailCampaignsTab = dynamic(() => import('./tabs/EmailCampaignsTab').then(m => m.EmailCampaignsTab), { ssr: false })
-const TextCampaignsTab = dynamic(() => import('./tabs/TextCampaignsTab').then(m => m.TextCampaignsTab), { ssr: false })
-const EmailBuilderTab = dynamic(() => import('./tabs/EmailBuilderTab').then(m => m.EmailBuilderTab), { ssr: false })
-const ContactListsTab = dynamic(() => import('./tabs/ContactListsTab').then(m => m.ContactListsTab), { ssr: false })
-const CallCenterTab = dynamic(() => import('./tabs/CallCenterTab').then(m => m.CallCenterTab), { ssr: false })
-const MarketingCalendarTab = dynamic(() => import('./tabs/MarketingCalendarTab').then(m => m.MarketingCalendarTab), { ssr: false })
+const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false, loading: () => <MarketingOverviewSkeleton /> })
+const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
+const EmailCampaignsTab = dynamic(() => import('./tabs/EmailCampaignsTab').then(m => m.EmailCampaignsTab), { ssr: false, loading: () => <MarketingCampaignSkeleton /> })
+const TextCampaignsTab = dynamic(() => import('./tabs/TextCampaignsTab').then(m => m.TextCampaignsTab), { ssr: false, loading: () => <MarketingTextSkeleton /> })
+const EmailBuilderTab = dynamic(() => import('./tabs/EmailBuilderTab').then(m => m.EmailBuilderTab), { ssr: false, loading: () => <MarketingBuilderSkeleton /> })
+const ContactListsTab = dynamic(() => import('./tabs/ContactListsTab').then(m => m.ContactListsTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
+const CallCenterTab = dynamic(() => import('./tabs/CallCenterTab').then(m => m.CallCenterTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
+const MarketingCalendarTab = dynamic(() => import('./tabs/MarketingCalendarTab').then(m => m.MarketingCalendarTab), { ssr: false, loading: () => <MarketingCalendarSkeleton /> })
 
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
 import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
@@ -51,6 +52,34 @@ export type MarketingTab =
   | 'contact-lists'
   | 'call-center'
   | 'calendar'
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`rounded-lg luxor-skeleton ${className}`} aria-hidden="true" />
+}
+
+function MarketingOverviewSkeleton() {
+  return <div className="space-y-6" aria-label="Loading marketing overview"><div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(19rem,0.85fr)]"><div className="min-h-[21rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6"><SkeletonBlock className="h-6 w-48" /><SkeletonBlock className="mt-2 h-3 w-72 max-w-full" /><div className="mt-6 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">{[1, 2, 3, 4, 5].map((item) => <div key={item}><SkeletonBlock className="h-2.5 w-16" /><SkeletonBlock className="mt-2 h-3.5 w-12" /></div>)}</div><SkeletonBlock className="mt-5 h-36 w-full" /></div><div className="min-h-[21rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6"><SkeletonBlock className="h-6 w-40" /><div className="mt-6 space-y-5">{[1, 2].map((item) => <div key={item} className="flex gap-3"><SkeletonBlock className="h-10 w-10 shrink-0 rounded-full" /><div className="flex-1"><SkeletonBlock className="h-7 w-14" /><SkeletonBlock className="mt-2 h-3 w-28" /><SkeletonBlock className="mt-1.5 h-2.5 w-44 max-w-full" /></div></div>)}</div></div></div><div className="grid grid-cols-1 gap-6 lg:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="min-h-[18rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6"><SkeletonBlock className="h-6 w-32" /><SkeletonBlock className="mt-2 h-3 w-52 max-w-full" /><div className="mt-6 space-y-4">{[1, 2, 3, 4].map((row) => <SkeletonBlock key={row} className="h-10 w-full" />)}</div></div>)}</div><SkeletonBlock className="h-48 w-full rounded-2xl" /></div>
+}
+
+function MarketingCampaignSkeleton() {
+  return <div className="space-y-7" aria-label="Loading campaigns"><div className="grid border-y border-[color:var(--portal-border)] md:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="min-h-24 p-5"><SkeletonBlock className="h-2.5 w-24" /><SkeletonBlock className="mt-2 h-6 w-20" /><SkeletonBlock className="mt-2 h-2.5 w-32" /></div>)}</div><div className="flex items-end justify-between gap-4"><div><SkeletonBlock className="h-7 w-44" /><SkeletonBlock className="mt-2 h-3 w-64 max-w-full" /></div><SkeletonBlock className="h-10 w-64 max-w-full" /></div><div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">{[1, 2, 3, 4].map((item) => <div key={item}><SkeletonBlock className="aspect-[4/5] w-full rounded-xl" /><SkeletonBlock className="mt-3 h-4 w-36" /><SkeletonBlock className="mt-2 h-2.5 w-48 max-w-full" /></div>)}</div></div>
+}
+
+function MarketingTableSkeleton() {
+  return <div className="space-y-6" aria-label="Loading marketing records"><div className="h-28 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5"><SkeletonBlock className="h-5 w-48" /><SkeletonBlock className="mt-3 h-3 w-72 max-w-full" /></div><div className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><div className="hidden border-b border-[color:var(--portal-border)] px-5 py-4 sm:grid sm:grid-cols-4 sm:gap-4">{[1, 2, 3, 4].map((item) => <SkeletonBlock key={item} className="h-2.5 w-20" />)}</div>{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="flex min-h-16 items-center gap-3 border-b border-[color:var(--portal-border)] px-4 py-3 last:border-0"><SkeletonBlock className="h-9 w-9 shrink-0 rounded-full" /><div className="min-w-0 flex-1"><SkeletonBlock className="h-3 w-40 max-w-full" /><SkeletonBlock className="mt-2 h-2.5 w-56 max-w-full" /></div><SkeletonBlock className="h-3 w-20" /></div>)}</div></div>
+}
+
+function MarketingTextSkeleton() {
+  return <div className="space-y-7" aria-label="Loading text campaigns"><SkeletonBlock className="h-24 w-full rounded-2xl" /><div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,.85fr)]"><SkeletonBlock className="h-[32rem] w-full rounded-2xl" /><SkeletonBlock className="h-[32rem] w-full rounded-2xl" /></div></div>
+}
+
+function MarketingBuilderSkeleton() {
+  return <div className="grid min-h-[36rem] gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]" aria-label="Loading email builder"><SkeletonBlock className="h-[36rem] w-full rounded-2xl" /><SkeletonBlock className="h-[36rem] w-full rounded-2xl" /></div>
+}
+
+function MarketingCalendarSkeleton() {
+  return <div className="space-y-6" aria-label="Loading campaign calendar"><SkeletonBlock className="h-24 w-full rounded-2xl" /><div className="grid grid-cols-2 gap-4 md:grid-cols-4">{[1, 2, 3, 4].map((item) => <SkeletonBlock key={item} className="h-32 w-full rounded-2xl" />)}</div><SkeletonBlock className="h-[36rem] w-full rounded-2xl" /></div>
+}
 
 const MARKETING_TABS = [
   { id: 'overview', label: 'Marketing Overview', icon: <BarChart3 size={15} /> },
@@ -159,8 +188,8 @@ export default function MarketingPage() {
             </div>
             <div className="h-9 w-32 rounded-xl luxor-skeleton" />
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 space-y-2">
                 <div className="h-2.5 w-16 rounded luxor-skeleton" />
                 <div className="h-6 w-20 rounded luxor-skeleton" />
@@ -745,8 +774,27 @@ function MarketingPageContent() {
       ) : null}
 
       {!builderCanvasOpen ? (
-        <div className="shrink-0 overflow-x-auto portal-scrollbar">
-          <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
+        <div className="shrink-0">
+          <div className="2xl:hidden">
+            <div className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2.5 shadow-sm">
+              <div className="hidden min-w-0 flex-1 sm:block">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Marketing section</p>
+                <p className="mt-0.5 truncate text-xs text-[color:var(--portal-text)]">Move between planning, outreach, and reporting.</p>
+              </div>
+              <PortalSelect
+                value={activeTab}
+                onChange={(tab) => {
+                  if (isMarketingTab(tab)) handleTabChange(tab)
+                }}
+                options={MARKETING_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+                className="w-full sm:w-64"
+                buttonClassName="min-h-11 bg-[color:var(--portal-soft)] font-semibold"
+              />
+            </div>
+          </div>
+          <div className="hidden 2xl:block">
+            <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
+          </div>
         </div>
       ) : null}
 

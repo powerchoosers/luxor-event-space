@@ -331,3 +331,57 @@ final result: passed
 3. Post-fix comparison: full-view and focused comparisons show a clear vendor identity, compact review hierarchy, preserved ledger context, and no remaining actionable P0, P1, or P2 issue.
 
 final result: passed
+
+---
+
+# Operations Dashboard Redesign QA
+
+## Comparison target
+
+- Source visual truth: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-before-1186.png`
+- Browser-rendered implementation: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-after-1186.png`
+- Full-view comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-comparison-1186.png`
+- Focused navigation and checklist comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-focused-comparison.png`
+- iPad comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-comparison-ipad-834.png`
+- Mobile implementation: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-after-mobile-390.png`
+- Dark-mode implementation: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\operations-dashboard-after-dark-1186.png`
+
+## Normalization and state
+
+- Primary source and implementation are both 1186 x 838 pixels at an 1186 x 838 CSS viewport and density 1.
+- iPad source and implementation are both 834 x 1194 pixels at an 834 x 1194 CSS viewport and density 1.
+- Mobile implementation is 390 x 844 pixels at a 390 x 844 CSS viewport and density 1.
+- Route: `/portal/operations?tab=dashboard`, authenticated owner portal.
+- Primary implementation state contains two manually entered QA checklist items, one complete. The source contains eight fixed defaults; this content difference is the requested behavior change.
+
+## Full-view and focused evidence
+
+- The 1186 px full-view comparison shows the horizontal tab rail replaced by one bounded Operations selector, five passive metrics reduced to four actionable signals, the fixed checklist replaced by a compact user-created list, and the empty facility card replaced by next actions.
+- The focused comparison keeps the navigation, metric hierarchy, checklist input, completion state, delete actions, and attention rows readable at native scale.
+- The iPad comparison confirms the prior clipped horizontal rail is gone. The dashboard uses a two-column metric grid, full-width checklist, and stacked attention panel without horizontal overflow.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing Luxor display type and portal sans/mono hierarchy are preserved. Labels remain compact, while operational titles and values have clearer optical weight.
+- Spacing and layout: the dashboard uses a consistent 12 to 24 px rhythm, four equal action cards, one primary checklist surface, and one secondary action surface. Tablet and mobile reflow instead of scrolling sideways.
+- Colors and tokens: light and dark states use existing portal background, card, soft, border, text, muted, gold, emerald, and amber tokens.
+- Image quality and asset fidelity: no new raster imagery was needed. Existing Luxor brand assets remain untouched and all interface marks use the repository's Lucide icon system.
+- Copy and content: generic readiness defaults and session-only language are removed. The checklist now instructs Arianna to add only what applies today and accurately states browser persistence.
+- Accessibility and controls: the selector is a React listbox, the checklist input is labelled, Add is disabled for empty input, checkboxes have task-specific labels, remove controls are named, and all action cards are keyboard-focusable buttons.
+
+## Interaction and responsive evidence
+
+- Added two custom readiness items, completed one, reloaded the route, and confirmed the 50 percent completion state persisted.
+- Cleared the completed item, removed the remaining item, reloaded, and confirmed the empty state returned.
+- Opened the compact Operations selector at 834 px, navigated to Maintenance, and returned to Dashboard through the same control.
+- At 1440 px the full desktop tab navigation remains available. At 390 px the compact selector remains available and document and body widths both measured exactly 390 px.
+- A fresh in-app Browser tab rendered the completed dashboard with zero application console errors. Arianna's preferred light theme was restored after dark-mode QA.
+
+## Comparison history
+
+1. P1: the tablet navigation required sideways scrolling to reach sibling Operations views. Replaced it below `xl` with one current-view selector and preserved the full tab rail on wide desktop.
+2. P1: the checklist repeated fixed items that may not apply to the current event. Replaced all defaults with an empty, manually authored checklist that supports add, complete, reload persistence, individual removal, and clearing completed items.
+3. P2: the previous facility-task card rendered as an empty titled box when no task existed. Replaced it with explicit, data-backed next actions for payments, stock, and maintenance.
+4. Post-fix evidence shows no remaining actionable P0, P1, or P2 issue in the reviewed light, dark, desktop, iPad, mobile, empty, populated, complete, and selector-open states.
+
+final result: passed

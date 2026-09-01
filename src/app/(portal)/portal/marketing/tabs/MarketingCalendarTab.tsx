@@ -77,10 +77,10 @@ export function MarketingCalendarTab({ campaigns, loading }: MarketingCalendarTa
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <CalendarKpi icon={<CalendarClock size={15} />} label="Scheduled / Queued" value={loading ? '…' : scheduled.length.toLocaleString()} detail={scheduled.length ? 'Campaigns awaiting delivery' : 'Nothing is waiting to send'} />
-        <CalendarKpi icon={<Users size={15} />} label="Queued Recipients" value={loading ? '…' : queuedRecipients.toLocaleString()} detail="Recipient rows awaiting delivery" />
-        <CalendarKpi icon={<Send size={15} />} label="Sent Campaigns" value={loading ? '…' : sentCampaigns.toLocaleString()} detail="Completed campaign records" />
-        <CalendarKpi icon={<Mail size={15} />} label="Without Send Date" value={loading ? '…' : undatedCampaigns.toLocaleString()} detail="Drafts or records not on calendar" />
+        <CalendarKpi loading={loading} icon={<CalendarClock size={15} />} label="Scheduled / Queued" value={scheduled.length.toLocaleString()} detail={scheduled.length ? 'Campaigns awaiting delivery' : 'Nothing is waiting to send'} />
+        <CalendarKpi loading={loading} icon={<Users size={15} />} label="Queued Recipients" value={queuedRecipients.toLocaleString()} detail="Recipient rows awaiting delivery" />
+        <CalendarKpi loading={loading} icon={<Send size={15} />} label="Sent Campaigns" value={sentCampaigns.toLocaleString()} detail="Completed campaign records" />
+        <CalendarKpi loading={loading} icon={<Mail size={15} />} label="Without Send Date" value={undatedCampaigns.toLocaleString()} detail="Drafts or records not on calendar" />
       </div>
 
       {!loading && campaigns.length === 0 ? (
@@ -89,6 +89,8 @@ export function MarketingCalendarTab({ campaigns, loading }: MarketingCalendarTa
           <h3 className="mt-4 text-sm font-bold text-white">No campaign dates yet</h3>
           <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-[color:var(--portal-muted)]">Create and schedule a campaign. It will appear here after its send date is saved.</p>
         </div>
+      ) : loading ? (
+        <CalendarSkeleton />
       ) : (
         <PortalCalendar
           title={loading ? 'Loading campaign schedule…' : `${calendarItems.length} campaign send${calendarItems.length === 1 ? '' : 's'}`}
@@ -126,17 +128,21 @@ function CampaignCalendarDetails({ campaign }: { campaign: Campaign }) {
   )
 }
 
-function CalendarKpi({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
+function CalendarKpi({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading: boolean }) {
   return (
     <div className="luxor-glass-card rounded-2xl border border-zinc-900 bg-zinc-950/20 p-5">
       <div className="flex items-center justify-between text-zinc-500">
         <span className="text-[8.5px] font-black uppercase tracking-wider">{label}</span>
         <span className="text-[#caa24c]">{icon}</span>
       </div>
-      <p className="mt-3 font-mono text-xl font-bold text-white">{value}</p>
-      <p className="mt-2 text-[8.5px] leading-4 text-zinc-600">{detail}</p>
+      {loading ? <div className="mt-3 h-6 w-16 rounded luxor-skeleton" /> : <p className="mt-3 font-mono text-xl font-bold text-white">{value}</p>}
+      {loading ? <div className="mt-2 h-2.5 w-36 max-w-full rounded luxor-skeleton" /> : <p className="mt-2 text-[8.5px] leading-4 text-zinc-600">{detail}</p>}
     </div>
   )
+}
+
+function CalendarSkeleton() {
+  return <section className="luxor-glass-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><div className="flex items-center justify-between border-b border-[color:var(--portal-border)] p-5 sm:p-6"><div><div className="h-2.5 w-28 rounded luxor-skeleton" /><div className="mt-2 h-7 w-48 rounded luxor-skeleton" /></div><div className="h-10 w-44 rounded-xl luxor-skeleton" /></div><div className="grid min-h-[36rem] grid-cols-2 gap-px bg-[color:var(--portal-border)] p-px sm:grid-cols-4 lg:grid-cols-7">{Array.from({ length: 28 }, (_, index) => <div key={index} className="min-h-28 bg-[color:var(--portal-card)] p-3"><div className="h-2.5 w-12 rounded luxor-skeleton" /><div className="mt-2 h-3.5 w-6 rounded luxor-skeleton" /><div className="mt-5 space-y-2"><div className="h-2.5 w-full rounded luxor-skeleton" /><div className="h-2.5 w-3/4 rounded luxor-skeleton" /></div></div>)}</div></section>
 }
 
 function DetailMetric({ label, value }: { label: string; value: string }) {

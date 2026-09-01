@@ -869,7 +869,7 @@ function PortalPhonePanel({
                   {phoneError && <p className="mt-2 text-[10px] text-red-600 dark:text-red-400">{phoneError}</p>}
                 </div>
               </div>
-              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3d] text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50">
+              <button type="button" onClick={onEnable} disabled={phoneState === 'starting'} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3d] text-[10px] font-black uppercase tracking-wider !text-white transition-colors hover:bg-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50">
                 {phoneState === 'starting' ? <Loader2 size={14} className="animate-spin" /> : <Phone size={14} />}
                 {phoneState === 'starting' ? 'Connecting' : 'Enable Phone'}
               </button>

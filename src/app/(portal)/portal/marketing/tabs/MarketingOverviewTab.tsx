@@ -128,11 +128,11 @@ export function MarketingOverviewTab({
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">
-            <MetricBlock label="Subscribers" value={loading ? '…' : totalSubscribers.toLocaleString()} />
-            <MetricBlock label="New this week" value={loading ? '…' : newSubscribersThisWeek.toLocaleString()} />
-            <MetricBlock label="Emails sent" value={loading ? '…' : totalSent.toLocaleString()} />
-            <MetricBlock label="Open rate" value={loading ? '…' : `${overallOpenRate}%`} />
-            <MetricBlock label="New inquiries" value={loading ? '…' : newInquiriesThisWeek.toLocaleString()} />
+            <MetricBlock label="Subscribers" value={totalSubscribers.toLocaleString()} loading={loading} />
+            <MetricBlock label="New this week" value={newSubscribersThisWeek.toLocaleString()} loading={loading} />
+            <MetricBlock label="Emails sent" value={totalSent.toLocaleString()} loading={loading} />
+            <MetricBlock label="Open rate" value={`${overallOpenRate}%`} loading={loading} />
+            <MetricBlock label="New inquiries" value={newInquiriesThisWeek.toLocaleString()} loading={loading} />
           </div>
           <TrendChart points={sentTrend} loading={loading} />
         </section>
@@ -142,8 +142,8 @@ export function MarketingOverviewTab({
             <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Needs attention</h3>
             <ArrowUpRight size={16} className="text-[#caa24c]" />
           </div>
-          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour requested" onClick={() => onTabChange('call-center')} />
-          <AttentionRow value={newInquiriesThisWeek} label="New inquiries" detail="Submitted in the last 7 days" onClick={() => onTabChange('contact-lists')} />
+          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour requested" loading={loading} onClick={() => onTabChange('call-center')} />
+          <AttentionRow value={newInquiriesThisWeek} label="New inquiries" detail="Submitted in the last 7 days" loading={loading} onClick={() => onTabChange('contact-lists')} />
           <div className="mt-auto border-t border-[color:var(--portal-border)] pt-4">
             <button type="button" onClick={() => onTabChange('call-center')} className="text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Open follow-up queue →</button>
           </div>
@@ -160,7 +160,11 @@ export function MarketingOverviewTab({
             <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f] hover:text-[#caa24c]">Manage audience</button>
           </div>
 
-          {audienceRows.length ? (
+          {loading ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[1, 2, 3, 4].map((item) => <AudienceSkeleton key={item} />)}
+            </div>
+          ) : audienceRows.length ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {audienceRows.map((list) => {
                 const share = totalSubscribers ? Math.min(100, (list.memberCount / totalSubscribers) * 100) : 0
@@ -177,7 +181,7 @@ export function MarketingOverviewTab({
 
         <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
           <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4"><h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Recent subscribers</h3><button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f]">View all</button></div>
-          {recentSubscribers.length ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recentSubscribers.map((subscriber) => <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p><p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p></div><span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span></div>)}</div> : <DataEmptyState loading={loading} message="No subscriber records are available." />}
+          {loading ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4, 5].map((item) => <SubscriberSkeleton key={item} />)}</div> : recentSubscribers.length ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recentSubscribers.map((subscriber) => <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p><p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p></div><span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span></div>)}</div> : <DataEmptyState loading={false} message="No subscriber records are available." />}
         </section>
       </div>
 
@@ -190,7 +194,9 @@ export function MarketingOverviewTab({
             </div>
           </div>
 
-          {grandOpeningRsvps.length ? (
+          {loading ? (
+            <HistorySkeleton />
+          ) : grandOpeningRsvps.length ? (
             <>
               <div className="grid grid-cols-3 gap-2 border-b border-[color:var(--portal-border)] py-4 text-center font-mono">
                 <MetricBlock label="RSVPs" value={grandOpeningRsvps.length.toLocaleString()} />
@@ -224,7 +230,9 @@ export function MarketingOverviewTab({
             <button type="button" onClick={() => onTabChange('email-campaigns')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View campaigns</button>
           </div>
 
-          {topCampaign ? (
+          {loading ? (
+            <TopCampaignSkeleton />
+          ) : topCampaign ? (
             <div className="pt-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c]"><Mail size={18} /></div>
@@ -252,7 +260,9 @@ export function MarketingOverviewTab({
             <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Recent Email Activity</h3>
             <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">{activityEvents.length} tracked</span>
           </div>
-          {activityEvents.length ? (
+          {loading ? (
+            <div className="mt-2 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4, 5].map((item) => <ActivitySkeleton key={item} />)}</div>
+          ) : activityEvents.length ? (
             <div className="mt-2 divide-y divide-[color:var(--portal-border)]">
               {activityEvents.slice(0, 5).map((event) => (
                 <div key={event.id} className="flex items-start justify-between gap-3 py-2.5">
@@ -281,7 +291,9 @@ export function MarketingOverviewTab({
           </div>
           <button type="button" onClick={() => onTabChange('calendar')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open calendar</button>
         </div>
-        {scheduledCampaigns.length ? (
+        {loading ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">{[1, 2, 3, 4].map((item) => <ScheduledSkeleton key={item} />)}</div>
+        ) : scheduledCampaigns.length ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {scheduledCampaigns.slice(0, 4).map((campaign) => (
               <div key={campaign.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
@@ -296,7 +308,7 @@ export function MarketingOverviewTab({
             ))}
           </div>
         ) : (
-          <DataEmptyState loading={loading} message="No campaigns are currently scheduled or queued." />
+          <DataEmptyState loading={false} message="No campaigns are currently scheduled or queued." />
         )}
       </section>
 
@@ -329,17 +341,41 @@ function TrendChart({ points, loading }: { points: Array<{ date: Date; value: nu
   )
 }
 
-function AttentionRow({ value, label, detail, onClick }: { value: number; label: string; detail: string; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 border-b border-[color:var(--portal-border)] py-5 text-left"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#a8792f]"><Users size={16} /></span><span className="min-w-0 flex-1"><strong className="block font-mono text-2xl leading-none text-[color:var(--portal-text)]">{value.toLocaleString()}</strong><span className="mt-1 block text-xs font-bold text-[color:var(--portal-text)]">{label}</span><span className="mt-0.5 block text-[10px] text-[color:var(--portal-muted)]">{detail}</span></span><ArrowUpRight size={16} className="text-[color:var(--portal-faint)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#caa24c]" /></button>
+function AttentionRow({ value, label, detail, loading, onClick }: { value: number; label: string; detail: string; loading: boolean; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 border-b border-[color:var(--portal-border)] py-5 text-left"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#a8792f]"><Users size={16} /></span><span className="min-w-0 flex-1">{loading ? <><span className="block h-7 w-12 rounded luxor-skeleton" /><span className="mt-2 block h-3 w-28 rounded luxor-skeleton" /><span className="mt-1.5 block h-2.5 w-44 max-w-full rounded luxor-skeleton" /></> : <><strong className="block font-mono text-2xl leading-none text-[color:var(--portal-text)]">{value.toLocaleString()}</strong><span className="mt-1 block text-xs font-bold text-[color:var(--portal-text)]">{label}</span><span className="mt-0.5 block text-[10px] text-[color:var(--portal-muted)]">{detail}</span></>}</span><ArrowUpRight size={16} className="text-[color:var(--portal-faint)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#caa24c]" /></button>
 }
 
-function MetricBlock({ label, value }: { label: string; value: string }) {
+function MetricBlock({ label, value, loading = false }: { label: string; value: string; loading?: boolean }) {
   return (
     <div className="border-r border-[color:var(--portal-border)] last:border-r-0">
       <p className="text-[8px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">{label}</p>
-      <p className="mt-1.5 text-xs font-bold text-[color:var(--portal-text)]">{value}</p>
+      {loading ? <div className="mt-2 h-3.5 w-12 rounded luxor-skeleton" /> : <p className="mt-1.5 text-xs font-bold text-[color:var(--portal-text)]">{value}</p>}
     </div>
   )
+}
+
+function AudienceSkeleton() {
+  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><div className="flex items-center justify-between gap-3"><div className="h-3 w-32 rounded luxor-skeleton" /><div className="h-3 w-8 rounded luxor-skeleton" /></div><div className="mt-3 h-1.5 w-full rounded-full luxor-skeleton" /></div>
+}
+
+function SubscriberSkeleton() {
+  return <div className="flex items-center justify-between gap-3 py-3"><div className="min-w-0 flex-1"><div className="h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /></div><div className="h-2.5 w-16 rounded luxor-skeleton" /></div>
+}
+
+function HistorySkeleton() {
+  return <><div className="grid grid-cols-3 gap-2 border-b border-[color:var(--portal-border)] py-4">{['RSVPs', 'Attending', 'Guests Listed'].map((label) => <MetricBlock key={label} label={label} value="" loading />)}</div><div className="mt-2 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4].map((item) => <SubscriberSkeleton key={item} />)}</div></>
+}
+
+function TopCampaignSkeleton() {
+  return <div className="pt-4"><div className="flex items-start gap-3"><div className="h-12 w-12 shrink-0 rounded-xl luxor-skeleton" /><div className="min-w-0 flex-1"><div className="h-4 w-16 rounded luxor-skeleton" /><div className="mt-2 h-3 w-40 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /></div></div><div className="mt-4 grid grid-cols-4 gap-2 border-t border-[color:var(--portal-border)] pt-4">{[1, 2, 3, 4].map((item) => <MetricBlock key={item} label="" value="" loading />)}</div></div>
+}
+
+function ActivitySkeleton() {
+  return <div className="flex items-start justify-between gap-3 py-2.5"><div className="flex min-w-0 flex-1 items-start gap-2.5"><div className="mt-0.5 h-3.5 w-3.5 rounded luxor-skeleton" /><div className="min-w-0 flex-1"><div className="h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-44 max-w-full rounded luxor-skeleton" /></div></div><div className="h-2.5 w-14 rounded luxor-skeleton" /></div>
+}
+
+function ScheduledSkeleton() {
+  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><div className="flex items-start justify-between gap-2"><div className="h-4 w-4 rounded luxor-skeleton" /><div className="h-4 w-16 rounded-full luxor-skeleton" /></div><div className="mt-3 h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /><div className="mt-2 h-2.5 w-28 rounded luxor-skeleton" /></div>
 }
 
 function DataEmptyState({ loading, message }: { loading: boolean; message: string }) {

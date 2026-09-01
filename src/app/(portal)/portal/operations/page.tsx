@@ -20,7 +20,10 @@ import {
   Droplet,
   Trash2,
   Clock,
-  Plus
+  Plus,
+  ChevronRight,
+  Upload,
+  Loader2
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -47,6 +50,7 @@ import {
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
+import { useToast } from '@/components/portal/ToastProvider'
 
 type SubTab =
   | 'dashboard'
@@ -57,6 +61,25 @@ type SubTab =
   | 'utilities'
   | 'cleaning'
   | 'staff'
+
+type ReadinessTask = {
+  id: string
+  label: string
+  checked: boolean
+}
+
+const READINESS_STORAGE_KEY = 'luxor-operations-readiness-checklist-v1'
+
+const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode }> = [
+  { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} /> },
+  { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} /> },
+  { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} /> },
+  { id: 'inventory', label: 'Inventory Counts', icon: <Package size={15} /> },
+  { id: 'vendors', label: 'Preferred Vendors', icon: <Users size={15} /> },
+  { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} /> },
+  { id: 'cleaning', label: 'Cleaning Checklists', icon: <Sparkles size={15} /> },
+  { id: 'staff', label: 'Staff Rota', icon: <Clock size={15} /> },
+]
 
 type EditFormData = {
   id?: string
@@ -91,6 +114,7 @@ export default function OperationsPage() {
 function OperationsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { notify, dismiss } = useToast()
   const tabParam = searchParams.get('tab') as SubTab | null
   const activeTab = tabParam || 'dashboard'
 
@@ -138,6 +162,8 @@ function OperationsPageContent() {
   const [billAmount, setBillAmount] = useState('')
   const [billDueDate, setBillDueDate] = useState('')
   const [billFrequency, setBillFrequency] = useState('Monthly')
+  const [billUploadFile, setBillUploadFile] = useState<File | null>(null)
+  const [billUploadBusy, setBillUploadBusy] = useState(false)
 
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
@@ -158,20 +184,38 @@ function OperationsPageContent() {
   const [vendorCoi, setVendorCoi] = useState('true')
 
   // State for interactive features
-  const [readinessTasks, setReadinessTasks] = useState([
-    { id: '1', label: 'Utilities Active', checked: false },
-    { id: '2', label: 'Venue Cleaned', checked: false },
-    { id: '3', label: 'Bathrooms Stocked', checked: false },
-    { id: '4', label: 'Chairs Counted', checked: false },
-    { id: '5', label: 'Tables Set', checked: false },
-    { id: '6', label: 'HVAC Working', checked: false },
-    { id: '7', label: 'Exit Sign Inspection Needed', checked: false, critical: true },
-    { id: '8', label: 'Inventory Count Pending', checked: false }
-  ])
+  const [readinessTasks, setReadinessTasks] = useState<ReadinessTask[]>([])
+  const [readinessInput, setReadinessInput] = useState('')
+  const [readinessLoaded, setReadinessLoaded] = useState(false)
 
-  const loadOperationsData = async () => {
+  useEffect(() => {
     try {
-      setLoading(true)
+      const stored = window.localStorage.getItem(READINESS_STORAGE_KEY)
+      const parsed = stored ? JSON.parse(stored) : []
+      if (Array.isArray(parsed)) {
+        setReadinessTasks(parsed.filter((item): item is ReadinessTask => (
+          typeof item?.id === 'string' && typeof item?.label === 'string' && typeof item?.checked === 'boolean'
+        )))
+      }
+    } catch {
+      setReadinessTasks([])
+    } finally {
+      setReadinessLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!readinessLoaded) return
+    try {
+      window.localStorage.setItem(READINESS_STORAGE_KEY, JSON.stringify(readinessTasks))
+    } catch {
+      // The checklist remains usable for the current session when browser storage is unavailable.
+    }
+  }, [readinessLoaded, readinessTasks])
+
+  const loadOperationsData = async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true)
       setError(null)
       const res = await fetch('/api/operations')
       if (!res.ok) throw new Error('Failed to load operations metrics.')
@@ -187,7 +231,7 @@ function OperationsPageContent() {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Telemetry Alert: Operations offline.')
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -253,6 +297,25 @@ function OperationsPageContent() {
     )
   }
 
+  const handleAddReadinessTask = (event: React.FormEvent) => {
+    event.preventDefault()
+    const label = readinessInput.trim()
+    if (!label) return
+    setReadinessTasks((current) => [
+      ...current,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, label, checked: false },
+    ])
+    setReadinessInput('')
+  }
+
+  const handleRemoveReadinessTask = (id: string) => {
+    setReadinessTasks((current) => current.filter((task) => task.id !== id))
+  }
+
+  const clearCompletedReadinessTasks = () => {
+    setReadinessTasks((current) => current.filter((task) => !task.checked))
+  }
+
   const handleAddBillSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!billService || !billAmount) return
@@ -280,6 +343,57 @@ function OperationsPageContent() {
       setBillDueDate('')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save bill.')
+    }
+  }
+
+  const monitorBillIntake = async (intakeId: string, toastId: string) => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 3000))
+      try {
+        const response = await fetch('/api/operations', { cache: 'no-store' })
+        if (!response.ok) continue
+        const payload = await response.json()
+        const intake = (payload.billIntakes || []).find((item: { id?: string }) => item.id === intakeId) as { status?: string } | undefined
+        if (!intake || intake.status === 'received' || intake.status === 'processing') continue
+        await loadOperationsData(false)
+        dismiss(toastId)
+        if (intake.status === 'failed') {
+          notify({ title: 'Bill needs attention', description: 'AI intake could not finish. The upload is retained so it can be retried from the invoice queue.', variant: 'error' })
+        } else if (intake.status === 'needs_review') {
+          notify({ title: 'Bill ready for review', description: 'AI extracted the bill and flagged it for owner review before payment.', variant: 'warning' })
+        } else if (intake.status === 'duplicate') {
+          notify({ title: 'Duplicate bill detected', description: 'This upload matches a bill already in the payables ledger.', variant: 'info' })
+        } else {
+          notify({ title: 'Bill intake complete', description: 'AI extracted the bill and added it to the payables ledger.', variant: 'success' })
+        }
+        return
+      } catch {
+        // Leave the progress toast visible while the worker or a later poll recovers.
+      }
+    }
+    dismiss(toastId)
+    notify({ title: 'Bill intake is still processing', description: 'The worker is continuing in the background. Refresh the payables ledger shortly to see the result.', variant: 'info' })
+  }
+
+  const handleBillUpload = async () => {
+    if (!billUploadFile || billUploadBusy) return
+    setBillUploadBusy(true)
+    const toastId = notify({ title: 'Bill upload received', description: 'AI is extracting the vendor, amount, due date, and source evidence. You can keep working.', variant: 'info', durationMs: 0 })
+    try {
+      const form = new FormData()
+      form.set('file', billUploadFile)
+      const response = await fetch('/api/operations/bills/intake', { method: 'POST', body: form })
+      const payload = await response.json().catch(() => ({})) as { intake?: { id?: string }; error?: string }
+      if (!response.ok || !payload.intake?.id) throw new Error(payload.error || 'Bill upload could not be queued.')
+      setBillUploadFile(null)
+      setIsBillModalOpen(false)
+      await loadOperationsData(false)
+      setBillUploadBusy(false)
+      void monitorBillIntake(payload.intake.id, toastId)
+    } catch (error) {
+      dismiss(toastId)
+      notify({ title: 'Bill upload failed', description: error instanceof Error ? error.message : 'Bill upload could not be queued.', variant: 'error' })
+      setBillUploadBusy(false)
     }
   }
 
@@ -438,12 +552,15 @@ function OperationsPageContent() {
 
   // Calculate readiness score
   const completedCount = readinessTasks.filter((t) => t.checked).length
-  const readinessScore = Math.round((completedCount / readinessTasks.length) * 100)
-  const unpaidBillsTotal = bills.filter((bill) => bill.status !== 'paid').reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
+  const readinessScore = readinessTasks.length ? Math.round((completedCount / readinessTasks.length) * 100) : 0
+  const openBills = bills.filter((bill) => bill.status !== 'paid')
+  const unpaidBillsTotal = openBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
+  const pendingMaintenance = maintenanceTasks.filter((task) => task.status === 'pending')
+  const lowSupplyItems = suppliesCounts.filter((item) => item.status === 'Low')
   const sensorsOnline = utilities.length > 0
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-4 xl:gap-6">
       <PortalPageHeader
         icon={<Wrench size={18} />}
         title="Venue Operations"
@@ -458,19 +575,26 @@ function OperationsPageContent() {
         }
       />
 
-      {/* Sub-tab navigation */}
-      <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
+      {/* Compact navigation on tablets and mobile; full tab rail on wide desktops. */}
+      <div className="shrink-0 xl:hidden">
+        <div className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2.5 shadow-sm">
+          <div className="hidden min-w-0 flex-1 sm:block">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Operations view</p>
+            <p className="mt-0.5 truncate text-xs text-[color:var(--portal-text)]">Choose a workspace without scrolling through tabs.</p>
+          </div>
+          <PortalSelect
+            value={activeTab}
+            onChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+            options={operationsTabs.map((tab) => ({ value: tab.id, label: tab.label }))}
+            className="w-full sm:w-64"
+            buttonClassName="min-h-11 bg-[color:var(--portal-soft)] font-semibold"
+          />
+        </div>
+      </div>
+
+      <div className="hidden shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 xl:flex">
         <PortalAnimatedTabs
-          tabs={[
-          { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} /> },
-          { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} /> },
-          { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} /> },
-          { id: 'inventory', label: 'Inventory counts', icon: <Package size={15} /> },
-          { id: 'vendors', label: 'Preferred Vendors', icon: <Users size={15} /> },
-          { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} /> },
-          { id: 'cleaning', label: 'Cleaning checklists', icon: <Sparkles size={15} /> },
-          { id: 'staff', label: 'Staff Rota (Future)', icon: <Clock size={15} /> }
-          ]}
+          tabs={operationsTabs}
           activeTab={activeTab}
           onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
         />
@@ -479,78 +603,96 @@ function OperationsPageContent() {
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {loading ? (
         <div className="p-4 space-y-6">
-          <PortalCardSkeleton count={5} />
+          <PortalCardSkeleton count={4} />
           <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 h-64 luxor-skeleton" />
         </div>
       ) : (
         <>
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-          <div className="space-y-6">
-            {/* Top row metric cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              <StatsCard label="Readiness Score" value={`${readinessScore}%`} subtitle="Venue Status Score" tone={readinessScore > 90 ? 'green' : 'gold'} />
-              <StatsCard label="Unpaid Bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${bills.filter((bill) => bill.status !== 'paid').length} open records`} tone="gold" />
-              <StatsCard label="Maintenance" value={String(maintenanceTasks.filter(t => t.status === 'pending').length)} subtitle="Unresolved issues" tone="blue" />
-              <StatsCard label="Supply Alerts" value={String(suppliesCounts.filter(s => s.status === 'Low').length)} subtitle="Low stock items" tone="gold" />
-              <StatsCard label="Sensors Status" value={sensorsOnline ? 'Reporting' : 'No Data'} subtitle={sensorsOnline ? `${utilities.length} utility records` : 'No sensor records found'} tone={sensorsOnline ? 'green' : 'gold'} />
+        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#caa24c]">Today at Luxor</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--portal-text)]">Operations overview</h2>
             </div>
+            <p className="max-w-md text-[11px] leading-5 text-[color:var(--portal-muted)]">Current records across payments, facility work, inventory, and utilities.</p>
+          </div>
 
-            {/* Event Day Readiness Checklist */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Readiness Details */}
-              <div className="luxor-glass-card rounded-2xl p-6 lg:col-span-2 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-emerald-400" /> Venue Readiness Checklists
-                  </h3>
-                  <span className="text-[10px] font-mono text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">
-                    Score: {readinessScore}%
-                  </span>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
+            <StatsCard icon={<Wrench size={16} />} label="Maintenance" value={String(pendingMaintenance.length)} subtitle="Open facility tasks" tone={pendingMaintenance.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=maintenance')} />
+            <StatsCard icon={<Package size={16} />} label="Supply alerts" value={String(lowSupplyItems.length)} subtitle="Low-stock items" tone={lowSupplyItems.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=inventory')} />
+            <StatsCard icon={<Zap size={16} />} label="Utilities" value={sensorsOnline ? 'Reporting' : 'No data'} subtitle={sensorsOnline ? `${utilities.length} recent records` : 'Check utility setup'} tone={sensorsOnline ? 'green' : 'gold'} onClick={() => router.push('/portal/operations?tab=utilities')} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.75fr)]">
+            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={16} /></span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Readiness checklist</h3>
+                      <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Add only what applies to today&apos;s setup.</p>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Temporary checklist for this browser session. Items start unchecked and are not saved to a specific event yet.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div className="flex items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">
+                  <span>{completedCount} of {readinessTasks.length} complete</span>
+                  <span className="rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 px-2 py-1 font-mono text-[#8a652b] dark:text-[#dfbd68]">{readinessScore}%</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleAddReadinessTask} className="mt-5 flex gap-2">
+                <label className="sr-only" htmlFor="readiness-item">Add a readiness item</label>
+                <input
+                  id="readiness-item"
+                  value={readinessInput}
+                  onChange={(event) => setReadinessInput(event.target.value)}
+                  placeholder="Type a readiness item"
+                  maxLength={120}
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10"
+                />
+                <PortalButton type="submit" variant="primary" disabled={!readinessInput.trim()} className="min-h-11 shrink-0 px-4"><Plus size={14} /> Add</PortalButton>
+              </form>
+
+              {!readinessTasks.length ? (
+                <div className="mt-4 flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 text-center">
+                  <CheckCircle2 size={22} className="text-[color:var(--portal-faint)]" />
+                  <p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">No checklist yet</p>
+                  <p className="mt-1 max-w-xs text-[10px] leading-4 text-[color:var(--portal-muted)]">Type the checks that matter for this event or workday. Your list stays on this browser until you remove it.</p>
+                </div>
+              ) : (
+                <div className="mt-4 divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
                   {readinessTasks.map((task) => (
-                    <div key={task.id} className="flex items-center gap-3 bg-zinc-950/20 border border-zinc-900 rounded-lg p-3">
+                    <div key={task.id} className="group flex min-h-12 items-center gap-3 bg-[color:var(--portal-card)] px-3 py-2.5 transition-colors hover:bg-[color:var(--portal-soft)]">
                       <input
                         type="checkbox"
                         checked={task.checked}
                         onChange={() => handleToggleReadinessTask(task.id)}
-                        className="w-4 h-4 rounded text-[#caa24c] border-zinc-800 bg-transparent cursor-pointer"
+                        aria-label={`Mark ${task.label} ${task.checked ? 'incomplete' : 'complete'}`}
+                        className="h-4 w-4 shrink-0 cursor-pointer rounded border-[color:var(--portal-border)] accent-[#a8792f]"
                       />
-                      <span className={`text-xs font-semibold ${task.checked ? 'line-through text-zinc-650' : 'text-zinc-200'}`}>
-                        {task.label}
-                      </span>
-                      {!task.checked && task.critical && (
-                        <span className="ml-auto text-[8px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 py-0.5 rounded">Exit Sign</span>
-                      )}
+                      <span className={`min-w-0 flex-1 text-xs font-medium ${task.checked ? 'text-[color:var(--portal-muted)] line-through' : 'text-[color:var(--portal-text)]'}`}>{task.label}</span>
+                      <button type="button" onClick={() => handleRemoveReadinessTask(task.id)} aria-label={`Remove ${task.label}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[color:var(--portal-faint)] transition-colors hover:bg-rose-500/10 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
-              </div>
+              )}
 
-              {/* Maintenance & Inventory side alert widgets */}
-              <div className="space-y-6 lg:col-span-1">
-                {/* Today's Maintenance list */}
-                <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Critical Facility Tasks</h3>
-                  <div className="space-y-3 text-xs">
-                    {maintenanceTasks.filter(t => t.status === 'pending').slice(0, 3).map(task => (
-                      <div key={task.id} className="flex items-start gap-3 border-b border-zinc-900/60 pb-3 border-dashed last:border-0 last:pb-0">
-                        <AlertTriangle size={14} className={task.priority === 'high' ? 'text-rose-400 mt-0.5' : 'text-blue-400 mt-0.5'} />
-                        <div>
-                          <p className="font-bold text-zinc-300">{task.title}</p>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">Assigned to: Facility Operations</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {completedCount ? <div className="mt-3 flex justify-end"><button type="button" onClick={clearCompletedReadinessTasks} className="min-h-9 rounded-md px-2 text-[10px] font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">Clear completed</button></div> : null}
+            </section>
+
+            <aside className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm sm:p-6">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Needs attention</p>
+              <h3 className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">Next operational actions</h3>
+              <div className="mt-4 space-y-2">
+                <AttentionRow icon={<DollarSign size={15} />} title={`${openBills.length} bill${openBills.length === 1 ? '' : 's'} waiting`} detail={`${unpaidBillsTotal.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} open`} onClick={() => router.push('/portal/operations?tab=bills')} urgent={openBills.length > 0} />
+                <AttentionRow icon={<Package size={15} />} title={`${lowSupplyItems.length} low-stock item${lowSupplyItems.length === 1 ? '' : 's'}`} detail={lowSupplyItems.length ? 'Review inventory levels' : 'Inventory is in range'} onClick={() => router.push('/portal/operations?tab=inventory')} urgent={lowSupplyItems.length > 0} />
+                <AttentionRow icon={pendingMaintenance.length ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} title={pendingMaintenance.length ? `${pendingMaintenance.length} facility task${pendingMaintenance.length === 1 ? '' : 's'} open` : 'No open facility tasks'} detail={pendingMaintenance.length ? 'Review the maintenance queue' : 'Maintenance queue is clear'} onClick={() => router.push('/portal/operations?tab=maintenance')} urgent={pendingMaintenance.length > 0} />
               </div>
-            </div>
+            </aside>
           </div>
         </div>
       )}
@@ -895,6 +1037,25 @@ function OperationsPageContent() {
         title="Log Operational Bill"
       >
         <form onSubmit={handleAddBillSubmit} className="space-y-4">
+          <section className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.07] p-4">
+            <div className="flex items-start gap-3">
+              <Upload size={17} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#caa24c]" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[color:var(--portal-text)]">Upload the actual bill</p>
+                <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">AI will read the file in the background and add a reviewable bill to the ledger.</p>
+              </div>
+            </div>
+            <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-[#caa24c]/35 bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-semibold text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/65">
+              <span className="min-w-0 truncate">{billUploadFile ? billUploadFile.name : 'Choose PDF, JPG, or PNG · up to 20 MB'}</span>
+              <span className="shrink-0 rounded-md bg-[#caa24c]/15 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#dfbd68]">Browse</span>
+              <input type="file" accept="application/pdf,image/jpeg,image/png" className="sr-only" onChange={(event) => setBillUploadFile(event.target.files?.[0] || null)} />
+            </label>
+            <button type="button" onClick={() => void handleBillUpload()} disabled={!billUploadFile || billUploadBusy} className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3d] px-4 text-[10px] font-black uppercase tracking-wider !text-white transition-colors hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45">
+              {billUploadBusy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {billUploadBusy ? 'Queuing bill…' : 'Upload & start AI intake'}
+            </button>
+            <div className="my-4 flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-faint)]"><span className="h-px flex-1 bg-[color:var(--portal-border)]" />Or enter it manually<span className="h-px flex-1 bg-[color:var(--portal-border)]" /></div>
+          </section>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-zinc-500">Service Name</label>
             <input
@@ -1576,31 +1737,64 @@ function OperationsPageContent() {
 }
 
 function StatsCard({
+  icon,
   label,
   value,
   subtitle,
-  tone = 'blue'
+  tone = 'blue',
+  onClick,
 }: {
+  icon: React.ReactNode
   label: string
   value: string
   subtitle: string
   tone?: 'blue' | 'purple' | 'cyan' | 'gold' | 'green'
+  onClick: () => void
 }) {
   const styles = {
-    blue: 'border-blue-500/10 bg-blue-500/5 text-blue-400',
-    purple: 'border-purple-500/10 bg-purple-500/5 text-purple-400',
-    cyan: 'border-cyan-500/10 bg-cyan-500/5 text-cyan-400',
-    gold: 'border-[#caa24c]/10 bg-[#caa24c]/5 text-[#f1d27a]',
-    green: 'border-emerald-500/10 bg-emerald-500/5 text-emerald-400'
+    blue: 'border-blue-500/15 bg-blue-500/8 text-blue-600 dark:text-blue-400',
+    purple: 'border-purple-500/15 bg-purple-500/8 text-purple-600 dark:text-purple-400',
+    cyan: 'border-cyan-500/15 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400',
+    gold: 'border-[#caa24c]/20 bg-[#caa24c]/8 text-[#9a712e] dark:text-[#dfbd68]',
+    green: 'border-emerald-500/15 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400'
   }
 
   return (
-    <div className="luxor-glass-card rounded-xl p-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[110px]">
-      <div>
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</p>
-        <p className="font-mono text-xl font-bold text-white mt-1.5">{value}</p>
+    <button type="button" onClick={onClick} className="group flex min-h-28 flex-col justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${styles[tone]}`}>{icon}</span>
+        <ChevronRight size={14} className="mt-1 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
       </div>
-      <p className="text-[10px] text-zinc-500 font-medium leading-none mt-3">{subtitle}</p>
-    </div>
+      <div className="mt-4">
+        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
+        <p className="mt-1 font-mono text-lg font-bold text-[color:var(--portal-text)]">{value}</p>
+        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{subtitle}</p>
+      </div>
+    </button>
+  )
+}
+
+function AttentionRow({
+  icon,
+  title,
+  detail,
+  onClick,
+  urgent,
+}: {
+  icon: React.ReactNode
+  title: string
+  detail: string
+  onClick: () => void
+  urgent: boolean
+}) {
+  return (
+    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-left transition-colors hover:border-[#caa24c]/30 hover:bg-[#caa24c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${urgent ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)]">{title}</span>
+        <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{detail}</span>
+      </span>
+      <ChevronRight size={14} className="shrink-0 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
+    </button>
   )
 }

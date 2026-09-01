@@ -302,7 +302,7 @@ export function TextCampaignsTab() {
         ].map(([label, value]) => (
           <div key={label} className="p-4 transition-colors hover:bg-[color:var(--portal-soft)]/45">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
-            <p className="mt-2 font-mono text-xl font-bold text-[color:var(--portal-text)]">{loading ? '—' : value}</p>
+            {loading ? <div className="mt-2 h-6 w-16 rounded luxor-skeleton" /> : <p className="mt-2 font-mono text-xl font-bold text-[color:var(--portal-text)]">{value}</p>}
           </div>
         ))}
         </div>
