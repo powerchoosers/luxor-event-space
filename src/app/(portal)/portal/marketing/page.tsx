@@ -53,6 +53,10 @@ export type MarketingTab =
   | 'call-center'
   | 'calendar'
 
+function isTransientFetchError(error: unknown) {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
+}
+
 function SkeletonBlock({ className }: { className: string }) {
   return <div className={`rounded-lg luxor-skeleton ${className}`} aria-hidden="true" />
 }
@@ -271,7 +275,7 @@ function MarketingPageContent() {
         setInquiries(data)
       }
     } catch (err) {
-      console.error('Failed to load inquiries:', err)
+      if (!isTransientFetchError(err)) console.error('Failed to load inquiries:', err)
     } finally {
       if (!options.silent) setLoadingInquiries(false)
     }
@@ -290,7 +294,7 @@ function MarketingPageContent() {
         setMarketingLists(data.lists || [])
       }
     } catch (err) {
-      console.error('Failed loading marketing lists:', err)
+      if (!isTransientFetchError(err)) console.error('Failed loading marketing lists:', err)
     } finally {
       if (!options.silent) setLoadingLists(false)
     }

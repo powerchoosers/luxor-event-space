@@ -56,6 +56,9 @@ type PortalUserProfile = {
 }
 
 type PortalTheme = 'light' | 'dark'
+function isTransientFetchError(error: unknown) {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
+}
 type NextBestActionKind = 'reply' | 'tour' | 'proposal' | 'followup' | 'review'
 type NextBestActionMode = 'compose' | 'open'
 
@@ -566,7 +569,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           setInquiries(data)
         }
       } catch (err) {
-        console.error('Failed to load inquiries for search:', err)
+        if (!isTransientFetchError(err)) console.error('Failed to load inquiries for search:', err)
       }
     }
     void loadInquiries()
