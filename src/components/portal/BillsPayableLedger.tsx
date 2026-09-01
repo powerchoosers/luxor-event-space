@@ -1,16 +1,27 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleDollarSign,
-  Clock3, FileCheck2, FileText, Inbox, Mail, Plus, RefreshCw, Search, ShieldCheck, X,
+  Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, RefreshCw, Search, ShieldCheck, X,
 } from 'lucide-react'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 import type { LuxorBill, LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 
 type LedgerTab = 'all' | 'review' | 'due' | 'ready' | 'paid' | 'hold'
+
+const VENDOR_DOMAINS: Record<string, string> = {
+  'at&t business': 'business.att.com',
+  'honeybook inc.': 'honeybook.com',
+  'txu energy': 'txu.com',
+  'zoho corp': 'zoho.com',
+}
+
+const PERSONAL_EMAIL_DOMAINS = new Set(['gmail.com', 'hotmail.com', 'icloud.com', 'outlook.com', 'yahoo.com'])
 
 function money(value: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(Number(value || 0))
@@ -52,6 +63,13 @@ function sourceUrl(bill: LuxorBill) {
   return `/api/email/attachments/mail-${bill.source_message_id}?attachmentId=${encodeURIComponent(bill.source_attachment_id)}&filename=${encodeURIComponent(bill.source_filename || 'invoice')}`
 }
 
+function vendorDomain(bill: LuxorBill) {
+  const knownDomain = VENDOR_DOMAINS[bill.provider.trim().toLowerCase()]
+  if (knownDomain) return knownDomain
+  const senderDomain = bill.source_sender?.match(/@([^>\s]+)$/)?.[1]?.toLowerCase().replace(/[>,.;]+$/, '')
+  return senderDomain && !PERSONAL_EMAIL_DOMAINS.has(senderDomain) ? senderDomain : null
+}
+
 export function BillsPayableLedger({
   bills, intakes, onAddBill, onRefresh, onBillChanged,
 }: {
@@ -71,9 +89,30 @@ export function BillsPayableLedger({
   const [dueWindow, setDueWindow] = useState('all')
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const reduceMotion = useReducedMotion()
   const selected = bills.find((bill) => bill.id === selectedId) || bills[0] || null
   const failedIntakes = intakes.filter((intake) => intake.status === 'failed')
   const processingIntakes = intakes.filter((intake) => intake.status === 'received' || intake.status === 'processing')
+
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') selectBill(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    const shouldLock = window.matchMedia('(max-width: 1279px)').matches
+    const previousOverflow = document.body.style.overflow
+    if (shouldLock) document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      if (shouldLock) document.body.style.overflow = previousOverflow
+    }
+  // selectBill is intentionally omitted so this effect only follows the selected bill state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
 
   const counts = useMemo(() => Object.fromEntries((['review', 'due', 'ready', 'paid', 'hold'] as LedgerTab[])
     .map((key) => [key, bills.filter((bill) => ledgerStatus(bill) === key).length])), [bills])
@@ -125,7 +164,43 @@ export function BillsPayableLedger({
     finally { setBusy(null) }
   }
 
-  return (
+  const overlay = mounted ? createPortal(
+    <AnimatePresence>
+      {selectedId && selected ? <motion.div
+        className="pointer-events-none fixed inset-0 z-[100] xl:hidden"
+        initial="closed"
+        animate="open"
+        exit="closed"
+        variants={{ closed: { opacity: 0.999 }, open: { opacity: 1 } }}
+        transition={{ duration: reduceMotion ? 0 : 0.24 }}
+      >
+        <motion.button
+          type="button"
+          aria-label="Close bill detail"
+          className="portal-modal-layer pointer-events-auto absolute inset-0 bg-black/25 backdrop-blur-[1px]"
+          variants={{ closed: { opacity: 0 }, open: { opacity: 1 } }}
+          transition={{ duration: reduceMotion ? 0 : 0.18 }}
+          onClick={() => selectBill(null)}
+        />
+        <motion.aside
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bill-review-title"
+          className="portal-sheet pointer-events-auto absolute inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom))] overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 shadow-2xl portal-scrollbar sm:bottom-auto sm:left-auto sm:right-4 sm:top-20 sm:max-h-[calc(100dvh-6rem)] sm:w-[min(27rem,calc(100vw-2rem))] sm:p-6"
+          variants={{
+            closed: reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, y: 8, scale: 0.985 },
+            open: { opacity: 1, x: 0, y: 0, scale: 1 },
+          }}
+          transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+        >
+          <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} showClose />
+        </motion.aside>
+      </motion.div> : null}
+    </AnimatePresence>,
+    document.body,
+  ) : null
+
+  return <>
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm">
       <div className="border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -189,19 +264,20 @@ export function BillsPayableLedger({
           </div>
         </div>
 
-        <aside className={`${selectedId ? 'fixed inset-x-3 bottom-20 top-20 z-50 block shadow-2xl' : 'hidden'} min-h-0 overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 portal-scrollbar sm:inset-x-8 sm:p-5 xl:static xl:block xl:rounded-none xl:border-0 xl:shadow-none`}>
+        <aside className="hidden min-h-0 overflow-y-auto bg-[color:var(--portal-soft)] p-5 portal-scrollbar xl:block">
           {selected ? <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} /> : <div className="flex min-h-72 flex-col items-center justify-center text-center"><FileText size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">Select a bill</p><p className="mt-1 max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review the original document, extracted facts, arithmetic, and email source together.</p></div>}
         </aside>
       </div>
     </section>
-  )
+    {overlay}
+  </>
 }
 
-function BillReview({ bill, busy, message, onClose, onReview }: { bill: LuxorBill; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid') => void }) {
+function BillReview({ bill, busy, message, onClose, onReview, showClose = false }: { bill: LuxorBill; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid') => void; showClose?: boolean }) {
   const url = sourceUrl(bill)
   const badge = statusLabel(bill)
   return <div className="space-y-5">
-    <div className="flex items-start justify-between gap-3"><div><span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><h3 className="mt-3 text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div><button type="button" onClick={onClose} aria-label="Close bill detail" className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] xl:hidden"><X size={16} /></button></div>
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><div className="mt-3 flex min-w-0 items-center gap-3"><VendorMark bill={bill} /><div className="min-w-0"><h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div></div></div>{showClose ? <button type="button" onClick={onClose} aria-label="Close bill detail" className="-mr-1 rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"><X size={16} /></button> : null}</div>
     <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
       {url && bill.source_content_type?.startsWith('image/') ? <img src={url} alt={`Source invoice from ${bill.provider}`} className="h-44 w-full object-contain p-3" /> : <div className="flex h-40 flex-col items-center justify-center bg-[color:var(--portal-soft)]"><FileText size={30} className="text-[#a8792f] dark:text-[#caa24c]" /><p className="mt-3 max-w-56 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || 'Manual bill'}</p></div>}
       {url ? <a href={url} target="_blank" rel="noreferrer" className="flex min-h-10 items-center justify-center gap-1.5 border-t border-[color:var(--portal-border)] text-[10px] font-bold text-[#a8792f] hover:bg-[#caa24c]/5 dark:text-[#caa24c]">View full document <ArrowUpRight size={11} /></a> : null}
@@ -213,6 +289,16 @@ function BillReview({ bill, busy, message, onClose, onReview }: { bill: LuxorBil
     {message ? <p role="status" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] text-[color:var(--portal-text)]">{message}</p> : null}
     {bill.status !== 'paid' ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">{bill.extraction_status === 'needs_review' ? <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('approve')} className="w-full"><CheckCircle2 size={13} />{busy === 'approve' ? 'Approving…' : 'Approve & mark ready'}</PortalButton> : <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('mark_paid')} className="w-full"><CheckCircle2 size={13} />{busy === 'mark_paid' ? 'Saving…' : 'Mark paid'}</PortalButton>}<PortalButton type="button" disabled={Boolean(busy)} onClick={() => onReview('flag')} className="w-full"><Clock3 size={13} /> Keep in review</PortalButton></div> : <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"><Check size={14} /> Payment recorded</div>}
   </div>
+}
+
+function VendorMark({ bill }: { bill: LuxorBill }) {
+  const domain = vendorDomain(bill)
+  const [failed, setFailed] = useState(false)
+  const fallback = <Building2 size={18} aria-hidden="true" />
+
+  return <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] shadow-sm">
+    {domain && !failed ? <img src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`} alt={`${bill.provider} logo`} className="h-6 w-6 object-contain" onError={() => setFailed(true)} /> : fallback}
+  </span>
 }
 
 function Fact({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {

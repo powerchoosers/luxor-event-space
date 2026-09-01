@@ -28,6 +28,7 @@ The full-view comparison is sufficient because the primary differences and the s
 No unresolved P0, P1, or P2 visual issues remain. Asset content differs from the concept where the implementation intentionally uses Luxor's checked-in venue photography and live portal components.
 
 final result: passed
+
 ## Clean-room refinement
 
 - Implementation capture: `C:\Users\lewis\AppData\Local\Temp\luxor-builder-clean-room.png`
@@ -283,5 +284,50 @@ The focused comparison verifies the right-side review hierarchy at readable scal
 - This validates extraction and assistant context without creating a fake payable or message in production. A true end-to-end mailbox delivery remains dependent on the first real invoice reaching the configured address.
 - Live infrastructure audit: Resend reports `luxoratlaspalmas.com` verified and its enabled Luxor webhook subscribes to `email.received` at the canonical production route. Production has zero pending Resend events, zero invoice messages, zero bill intakes, and a healthy Resend email worker with no recorded error.
 - Production Vercel logs contain 12 HTTP 200 responses for the OpenRouter-backed Elena chat route over the preceding seven days. The existing deployed receiver already accepts all Luxor-domain aliases; the invoice enqueue and extraction code remains local until the requested branch is committed and pushed.
+
+final result: passed
+
+---
+
+# Payables Review Sheet Refinement QA
+
+## Comparison target
+
+- Source visual truth: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-before-1186.png`
+- Browser-rendered implementation: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-after-1186.png`
+- Full-view comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-comparison-1186.png`
+- Focused header comparison: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-header-comparison.png`
+- Responsive evidence: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-tablet-834.png` and `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-mobile-390.png`
+- Theme evidence: `C:\Users\lewis\.codex\visualizations\2026\09\01\01a05d6e-8e4b-7c60-9a58-05dda60fdbf7\payables-drawer-dark-1186.png`
+
+## Normalization and state
+
+- Source and implementation are both 1186 x 838 pixels at an 1186 x 838 CSS viewport and density 1.
+- Route: `/portal/operations?tab=bills&bill=7a0208c9-e6b9-414d-b869-f2a1d1cc2274`.
+- State: authenticated owner portal, AT&T Business manual bill selected, light mode for the primary comparison.
+
+## Findings
+
+- The source sheet occupied roughly 1120 px of the 1186 px viewport. The implementation is a 432 px right-side review sheet, leaving the ledger visible as working context.
+- The vendor header now uses the AT&T web mark resolved from the Costivra catalog's canonical `business.att.com` domain. The browser reported a complete 128 x 128 source image. Providers without a safe domain fall back to the existing Lucide building icon.
+- The backdrop fades and the sheet uses coordinated opacity, translation, and scale enter/exit states. Escape, the close control, and backdrop click all route through the same close behavior; reduced-motion preference removes spatial movement.
+- At 834 x 1194 the sheet remains 432 px wide and sizes to its content instead of creating a full-height empty panel.
+- At 390 x 844 the component becomes a 366 px contained bottom sheet with both actions visible and no horizontal overflow.
+- Light and dark captures preserve portal surface, border, type, status, and action tokens. The user's light preference was restored after dark-mode QA.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing portal font families, weight hierarchy, compact fact labels, and readable vendor title are preserved.
+- Spacing and layout: the oversized overlay is replaced by a restrained inspector proportion with consistent 16 px outer clearance, 24 px interior padding on tablet and desktop, and a mobile-safe inset.
+- Colors and tokens: all sheet surfaces, borders, text, semantic states, and actions use existing portal tokens; the backdrop uses a restrained neutral dim.
+- Image quality and asset fidelity: the AT&T image is a real web favicon at 128 px source resolution, not CSS art or a fabricated mark.
+- Copy and content: bill facts, source label, arithmetic explanation, and payment actions are unchanged.
+- Icons and accessibility: the close control has an accessible label, the sheet is a labelled modal dialog below `xl`, Escape closes it, body scroll is contained, and reduced motion is respected.
+
+## Comparison history
+
+1. P1: the fixed drawer used left and right viewport insets below the `xl` breakpoint, making it almost full width at 1186 px. Replaced it with a 432 px right-side sheet and a purpose-built mobile bottom sheet.
+2. P2: the first tablet pass stretched the sheet to nearly the full 1194 px height and left excessive empty space below the actions. Changed the tablet and desktop sheet to content height with a viewport max-height, then recaptured the revised state.
+3. Post-fix comparison: full-view and focused comparisons show a clear vendor identity, compact review hierarchy, preserved ledger context, and no remaining actionable P0, P1, or P2 issue.
 
 final result: passed
