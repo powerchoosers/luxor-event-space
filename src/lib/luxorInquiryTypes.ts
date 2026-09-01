@@ -401,7 +401,7 @@ export type LuxorBill = {
   amount: number
   status: LuxorBillStatus
   due_date: string | null
-  source_type: 'manual' | 'email'
+  source_type: 'manual' | 'email' | 'portal_upload'
   source_message_id: string | null
   source_attachment_id: string | null
   source_filename: string | null
@@ -447,7 +447,9 @@ export type LuxorBillIntake = {
   subject: string
   received_at: string
   status: 'received' | 'processing' | 'needs_review' | 'ready' | 'duplicate' | 'failed' | 'ignored'
+  source_type: 'email' | 'portal_upload'
   attempts: number
+  max_attempts: number
   last_error_code: string | null
   last_error_message: string | null
   extraction_model: string | null

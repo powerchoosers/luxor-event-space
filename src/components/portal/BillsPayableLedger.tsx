@@ -71,12 +71,15 @@ function vendorDomain(bill: LuxorBill) {
 }
 
 export function BillsPayableLedger({
-  bills, intakes, onAddBill, onBillChanged,
+  bills, intakes, onAddBill, onBillChanged, onEditBill,
+  onIntakeChanged,
 }: {
   bills: LuxorBill[]
   intakes: LuxorBillIntake[]
   onAddBill: () => void
   onBillChanged: (bill: LuxorBill) => void
+  onIntakeChanged: (intake: LuxorBillIntake) => void
+  onEditBill: (bill: LuxorBill) => void
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -163,6 +166,20 @@ export function BillsPayableLedger({
     finally { setBusy(null) }
   }
 
+  async function intakeAction(intake: LuxorBillIntake, action: 'retry' | 'ignore') {
+    setBusy(`${action}:${intake.id}`)
+    try {
+      const response = await fetch(`/api/operations/bills/intake/${intake.id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Bill intake action failed.')
+      onIntakeChanged(payload)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Bill intake action failed.')
+    } finally { setBusy(null) }
+  }
+
   const overlay = mounted ? createPortal(
     <AnimatePresence>
       {selectedId && selected ? <motion.div
@@ -192,7 +209,7 @@ export function BillsPayableLedger({
           }}
           transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }}
         >
-          <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} showClose />
+          <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onEdit={() => onEditBill(selected)} showClose />
         </motion.aside>
       </motion.div> : null}
     </AnimatePresence>,
@@ -220,6 +237,7 @@ export function BillsPayableLedger({
           </div>
           <Link href="/portal/emails?mailbox=invoices" className="inline-flex min-h-10 items-center gap-1.5 self-start rounded-lg px-2 text-[10px] font-bold text-[#a8792f] hover:bg-[#caa24c]/10 dark:text-[#caa24c] sm:self-auto">Open invoice inbox <ArrowUpRight size={12} /></Link>
         </div>
+        {intakes.filter((intake) => ['failed', 'ignored'].includes(intake.status)).length ? <div className="mt-3 space-y-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">Intake attention</p>{intakes.filter((intake) => ['failed', 'ignored'].includes(intake.status)).slice(0, 4).map((intake) => <div key={intake.id} className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><p className="truncate text-[10px] font-semibold text-[color:var(--portal-text)]">{intake.filename}</p><p className="text-[9px] text-[color:var(--portal-muted)]">{intake.status === 'ignored' ? 'Stopped after repeated failures' : intake.last_error_message || 'Extraction failed'}</p></div><div className="flex shrink-0 gap-2"><button type="button" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'retry')} className="text-[9px] font-bold text-[#a8792f] disabled:opacity-50">Retry</button>{intake.status !== 'ignored' ? <button type="button" disabled={Boolean(busy)} onClick={() => void intakeAction(intake, 'ignore')} className="text-[9px] font-bold text-[color:var(--portal-muted)] disabled:opacity-50">Ignore</button> : null}</div></div>)}</div> : null}
       </div>
 
       <div className="border-b border-[color:var(--portal-border)] px-4 sm:px-6">
@@ -238,7 +256,7 @@ export function BillsPayableLedger({
             <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3"><Search size={14} className="text-[color:var(--portal-muted)]" /><span className="sr-only">Search bills</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vendor, service, invoice" className="!min-w-0 flex-1 !border-0 !bg-transparent !p-0 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:!ring-0" /></label>
             <PortalSelect value={dueWindow} onChange={setDueWindow} options={[{ value: 'all', label: 'All due dates' }, { value: 'overdue', label: 'Overdue' }, { value: '7', label: 'Next 7 days' }, { value: '30', label: 'Next 30 days' }, { value: 'missing', label: 'Missing due date' }]} buttonClassName="min-h-10 w-full" />
             <PortalSelect value={vendor} onChange={setVendor} options={vendorOptions} buttonClassName="min-h-10 w-full" />
-            <PortalSelect value={source} onChange={setSource} options={[{ value: 'all', label: 'All sources' }, { value: 'email', label: 'Invoice inbox' }, { value: 'manual', label: 'Manual' }]} buttonClassName="min-h-10 w-full" />
+            <PortalSelect value={source} onChange={setSource} options={[{ value: 'all', label: 'All sources' }, { value: 'email', label: 'Invoice inbox' }, { value: 'portal_upload', label: 'Portal upload' }, { value: 'manual', label: 'Manual' }]} buttonClassName="min-h-10 w-full" />
             {(query || source !== 'all' || vendor !== 'all' || dueWindow !== 'all') ? <button type="button" onClick={() => { setQuery(''); setSource('all'); setVendor('all'); setDueWindow('all') }} className="text-left text-[10px] font-bold text-[#a8792f] dark:text-[#caa24c] xl:col-start-4 xl:text-right">Reset filters</button> : null}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar p-3 sm:p-4">
@@ -250,7 +268,7 @@ export function BillsPayableLedger({
                   const badge = statusLabel(bill)
                   return <button key={bill.id} type="button" onClick={() => selectBill(bill.id)} className={`grid w-full gap-3 border-b border-[color:var(--portal-border)] p-4 text-left last:border-b-0 hover:bg-[color:var(--portal-soft)] sm:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_1.25rem] sm:items-center lg:grid-cols-[minmax(9rem,1fr)_3.5rem_5.5rem_5.5rem_5.5rem_6.5rem_1.25rem] ${selectedId === bill.id ? 'bg-[#caa24c]/[0.07]' : 'bg-[color:var(--portal-card)]'}`}>
                     <div className="min-w-0"><div className="flex items-center gap-2"><span className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{bill.provider}</span>{bill.source_type === 'email' ? <Mail size={12} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" /> : null}</div><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.service}{bill.invoice_number ? ` · #${bill.invoice_number}` : ''}</p></div>
-                    <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.source_type === 'email' ? 'Email' : 'Manual'}</span>
+                    <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.source_type === 'email' ? 'Email' : bill.source_type === 'portal_upload' ? 'Portal upload' : 'Manual'}</span>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.received_at ? new Date(bill.received_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{dateLabel(bill.due_date)}</span>
                     <div className="lg:text-right"><p className="font-mono text-xs font-semibold text-[color:var(--portal-text)]">{money(bill.amount, bill.currency)}</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)] lg:hidden">{dateLabel(bill.due_date)}</p></div>
@@ -261,9 +279,8 @@ export function BillsPayableLedger({
             </div>)}
           </div>
         </div>
-
         <aside className="hidden min-h-0 overflow-y-auto bg-[color:var(--portal-soft)] p-5 portal-scrollbar xl:block">
-          {selected ? <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} /> : <div className="flex min-h-72 flex-col items-center justify-center text-center"><FileText size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">Select a bill</p><p className="mt-1 max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review the original document, extracted facts, arithmetic, and email source together.</p></div>}
+          {selected ? <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onEdit={() => onEditBill(selected)} /> : <div className="flex min-h-72 flex-col items-center justify-center text-center"><FileText size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">Select a bill</p><p className="mt-1 max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review the original document, extracted facts, arithmetic, and email source together.</p></div>}
         </aside>
       </div>
     </section>
@@ -271,10 +288,11 @@ export function BillsPayableLedger({
   </>
 }
 
-function BillReview({ bill, busy, message, onClose, onReview, showClose = false }: { bill: LuxorBill; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid') => void; showClose?: boolean }) {
+function BillReview({ bill, busy, message, onClose, onReview, onEdit, showClose = false }: { bill: LuxorBill; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid') => void; onEdit: () => void; showClose?: boolean }) {
   const url = sourceUrl(bill)
   const badge = statusLabel(bill)
   return <div className="space-y-5">
+    {bill.status !== 'paid' ? <PortalButton type="button" disabled={Boolean(busy)} onClick={onEdit} className="w-full">Edit extracted facts</PortalButton> : null}
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><div className="mt-3 flex min-w-0 items-center gap-3"><VendorMark bill={bill} /><div className="min-w-0"><h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div></div></div>{showClose ? <button type="button" onClick={onClose} aria-label="Close bill detail" className="-mr-1 rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"><X size={16} /></button> : null}</div>
     <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
       {url && bill.source_content_type?.startsWith('image/') ? <img src={url} alt={`Source invoice from ${bill.provider}`} className="h-44 w-full object-contain p-3" /> : <div className="flex h-40 flex-col items-center justify-center bg-[color:var(--portal-soft)]"><FileText size={30} className="text-[#a8792f] dark:text-[#caa24c]" /><p className="mt-3 max-w-56 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || 'Manual bill'}</p></div>}

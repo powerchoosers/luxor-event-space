@@ -200,6 +200,7 @@ export async function enqueueLuxorInvoiceAttachments(message: LuxorMailRow, atta
     body: JSON.stringify(candidates.map((attachment) => ({
       message_id: message.id, attachment_id: attachment.id, filename: attachment.filename,
       content_type: attachment.content_type.toLowerCase(), size_bytes: attachment.size_bytes,
+      source_type: 'email',
       sender_address: message.from_address, recipient_address: LUXOR_INVOICES_MAILBOX.address,
       subject: message.subject || '(No subject)', received_at: message.occurred_at,
     }))),
@@ -222,13 +223,29 @@ async function processIntake(intake: LuxorBillIntake) {
   }
   const { extraction, model } = await extractInvoice(attachment.bytes, intake.filename, intake.content_type)
   const arithmetic = arithmeticStatus(extraction)
+  const provider = extraction.vendor_name
+  const invoiceMatch = provider && extraction.invoice_number
+    ? await supabaseRest<LuxorBill[]>(`luxor_bills?select=*&provider=eq.${encodeURIComponent(provider)}&invoice_number=eq.${encodeURIComponent(extraction.invoice_number)}&limit=1`)
+    : []
+  const amountMatch = provider && extraction.total_amount !== null && extraction.due_date
+    ? await supabaseRest<LuxorBill[]>(`luxor_bills?select=*&provider=eq.${encodeURIComponent(provider)}&amount=eq.${encodeURIComponent(String(extraction.total_amount))}&due_date=eq.${encodeURIComponent(extraction.due_date)}&limit=1`)
+    : []
+  const semanticDuplicate = invoiceMatch[0] || amountMatch[0]
+  if (semanticDuplicate) {
+    await supabaseRest(`luxor_bill_intakes?id=eq.${intake.id}`, { method: 'PATCH', body: JSON.stringify({
+      status: 'duplicate', duplicate_of_bill_id: semanticDuplicate.id, extraction_model: model, extraction_confidence: extraction.confidence,
+      extracted_data: extraction, evidence: extraction.evidence, arithmetic_status: arithmetic, lease_until: null, updated_at: new Date().toISOString(),
+    }) })
+    await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status: 'duplicate' }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
+    return
+  }
   const review = needsReview(extraction, arithmetic)
   const status = review ? 'needs_review' : 'ready'
   const [bill] = await supabaseRest<LuxorBill[]>('luxor_bills?select=*', {
     method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
       service: extraction.service || intake.subject || 'Vendor bill', frequency: extraction.frequency || 'One-time',
       provider: extraction.vendor_name || intake.sender_address, amount: Math.max(0, extraction.total_amount || 0), status: 'unpaid', due_date: extraction.due_date,
-      source_type: 'email', source_message_id: intake.message_id, source_attachment_id: intake.attachment_id,
+      source_type: intake.source_type === 'portal_upload' ? 'portal_upload' : 'email', source_message_id: intake.message_id, source_attachment_id: intake.attachment_id,
       source_filename: intake.filename, source_content_type: intake.content_type, source_sha256: sha256,
       source_sender: intake.sender_address, source_recipient: intake.recipient_address, source_subject: intake.subject, received_at: intake.received_at,
       invoice_number: extraction.invoice_number, issue_date: extraction.issue_date,
@@ -263,11 +280,12 @@ export async function processPendingLuxorBillIntakes(limit = 1) {
       await processIntake(claimed[0])
       results.push({ id: intake.id, status: 'processed' })
     } catch (error) {
+      const terminal = intake.attempts >= intake.max_attempts
       await supabaseRest(`luxor_bill_intakes?id=eq.${intake.id}`, { method: 'PATCH', body: JSON.stringify({
-        status: 'failed', lease_until: null, next_attempt_at: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** Math.min(intake.attempts, 7))).toISOString(),
+        status: terminal ? 'ignored' : 'failed', lease_until: null, next_attempt_at: terminal ? new Date().toISOString() : new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** Math.min(intake.attempts, 7))).toISOString(),
         last_error_code: 'EXTRACTION_FAILED', last_error_message: safeError(error), updated_at: new Date().toISOString(),
       }) })
-      await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status: 'failed' }).catch((noticeError) => console.warn('Bill intake realtime notice failed:', noticeError))
+      await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status: terminal ? 'ignored' : 'failed' }).catch((noticeError) => console.warn('Bill intake realtime notice failed:', noticeError))
       results.push({ id: intake.id, status: 'failed' })
     }
   }

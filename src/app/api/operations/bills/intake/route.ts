@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
         size_bytes: file.size,
         sender_address: session.email,
         recipient_address: LUXOR_INVOICES_MAILBOX.address,
+        source_type: 'portal_upload',
         subject,
         received_at: receivedAt,
         status: 'received',

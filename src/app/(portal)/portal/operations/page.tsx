@@ -741,6 +741,8 @@ function OperationsPageContent() {
           intakes={billIntakes}
           onAddBill={() => setIsBillModalOpen(true)}
           onBillChanged={(bill) => setBills((current) => current.map((item) => item.id === bill.id ? bill : item))}
+          onIntakeChanged={(intake) => setBillIntakes((current) => current.map((item) => item.id === intake.id ? intake : item))}
+          onEditBill={(bill) => setEditingItem({ type: 'bill', data: bill })}
         />
         )}
 
