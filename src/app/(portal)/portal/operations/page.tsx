@@ -20,8 +20,11 @@ import {
   Droplet,
   Trash2,
   Clock,
-  Plus
+  Plus,
+  ArrowUpRight,
+  Mail
 } from 'lucide-react'
+import Link from 'next/link'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -575,6 +578,7 @@ function OperationsPageContent() {
       {/* BILLS & PAYMENTS TAB */}
       {activeTab === 'bills' && (
         <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
+            <InvoicesMailboxBanner />
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Facility Operational Bills</h3>
               <div className="flex items-center gap-3">
@@ -1641,6 +1645,40 @@ function OperationsPageContent() {
       )}
       </PortalTabTransition>
     </PortalPageFrame>
+  )
+}
+
+function InvoicesMailboxBanner() {
+  const [available, setAvailable] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/portal/shared-mailboxes', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : { mailboxes: [] })
+      .then((data) => {
+        if (active) setAvailable(Array.isArray(data.mailboxes) && data.mailboxes.some((mailbox: { key?: string }) => mailbox.key === 'invoices'))
+      })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
+  if (!available) return null
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#e0bd66]">
+          <Mail size={16} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-[color:var(--portal-text)]">Invoices inbox</p>
+          <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Send vendor bills to <span className="font-semibold text-[color:var(--portal-text)]">invoices@luxoratlaspalmas.com</span>. All portal admins can review them here.</p>
+        </div>
+      </div>
+      <Link href="/portal/emails?mailbox=invoices" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] px-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]">
+        Open inbox <ArrowUpRight size={14} aria-hidden="true" />
+      </Link>
+    </div>
   )
 }
 

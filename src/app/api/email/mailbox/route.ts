@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { parseLuxorMailboxPage, readLuxorMailboxPage } from '@/lib/luxorMailboxPageServer'
+import { findLuxorSharedMailboxByAddress } from '@/lib/luxorSharedMailboxes'
 
 export const runtime = 'nodejs'
 const headers = { 'Cache-Control': 'private, no-store' }
 
 /** Read-only POST keeps search terms and starred IDs out of URL/access logs. */
 export async function POST(request: NextRequest) {
-  if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401, headers })
+  const session = await getLuxorPortalSession()
+  if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401, headers })
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Same-origin request required.' }, { status: 403, headers })
   if (!request.headers.get('content-type')?.startsWith('application/json')) return NextResponse.json({ error: 'JSON required.' }, { status: 415, headers })
   const body = await request.text()
@@ -15,6 +18,13 @@ export async function POST(request: NextRequest) {
   let input
   try { input = parseLuxorMailboxPage(JSON.parse(body)) }
   catch { return NextResponse.json({ error: 'Invalid mailbox page parameters.' }, { status: 400, headers }) }
+  if (input.email) {
+    const member = await getLuxorPortalMember(session.email)
+    const sharedMailbox = findLuxorSharedMailboxByAddress(input.email)
+    if (!sharedMailbox || !member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return NextResponse.json({ error: 'This shared mailbox is restricted to portal admins.' }, { status: 403, headers })
+    }
+  }
   try { return NextResponse.json(await readLuxorMailboxPage(input), { headers }) }
   catch { return NextResponse.json({ error: 'The mailbox could not load this page. Please retry.' }, { status: 503, headers }) }
 }

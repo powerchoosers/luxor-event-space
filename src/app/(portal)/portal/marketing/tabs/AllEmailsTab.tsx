@@ -183,9 +183,11 @@ interface AllEmailsTabProps {
   inquiries?: LuxorInquiry[]
   initialMessageId?: string
   onReaderOpenChange?: (open: boolean) => void
+  mailboxEmail?: string
+  mailboxName?: string
 }
 
-export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenChange }: AllEmailsTabProps) {
+export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenChange, mailboxEmail, mailboxName }: AllEmailsTabProps) {
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
@@ -263,13 +265,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
     pageRequest.current?.abort()
     const controller = new AbortController()
     pageRequest.current = controller
-    const key = JSON.stringify([activeFolder, searchQuery.trim()])
+    const key = JSON.stringify([activeFolder, searchQuery.trim(), mailboxEmail || ''])
     if (force || pageSnapshot.current.key !== key) pageSnapshot.current = { key, value: null }
     setLoading(true)
     setError(null)
     try {
       const result = await requestMailbox({ folder: activeFolder, query: searchQuery, page: currentPage,
-        pageSize: PAGE_SIZE, snapshot: pageSnapshot.current.value, starred: [...starredIds] }, controller.signal)
+        pageSize: PAGE_SIZE, snapshot: pageSnapshot.current.value, starred: [...starredIds], email: mailboxEmail }, controller.signal)
       if (controller.signal.aborted) return
       pageSnapshot.current = { key, value: result.snapshot }
       setPageResult(result)
@@ -290,7 +292,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
-  }, [activeFolder, searchQuery, currentPage, starredIds])
+  }, [activeFolder, searchQuery, currentPage, starredIds, mailboxEmail])
 
   useEffect(() => {
     // Search is server-side across all saved mail; debounce typing and abort
@@ -741,9 +743,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
             </button>
           </div>
           <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 p-2.5 text-[10px]">
-            <p className="font-bold text-[color:var(--portal-text)] truncate">booking@luxoratlaspalmas.com</p>
+            <p className="font-bold text-[color:var(--portal-text)] truncate">{mailboxEmail || 'booking@luxoratlaspalmas.com'}</p>
             <p className="text-[color:var(--portal-muted)] font-mono text-[9px] mt-0.5">
-              {loading ? 'Loading mailbox…' : error ? 'Mailbox refresh needs attention' : 'Saved mailbox · Supabase'}
+              {loading ? 'Loading mailbox…' : error ? 'Mailbox refresh needs attention' : `${mailboxName || 'Saved mailbox'} · Supabase`}
             </p>
           </div>
         </div>
