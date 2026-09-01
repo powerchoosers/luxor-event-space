@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { LUXOR_INVOICES_MAILBOX } from '@/lib/luxorSharedMailboxes'
 import { downloadLuxorMailAttachment, type LuxorMailAttachmentRow, type LuxorMailRow } from '@/lib/luxorMailboxServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import type { LuxorBill, LuxorBillArithmeticStatus, LuxorBillEvidence, LuxorBillIntake, LuxorBillLineItem } from '@/lib/luxorInquiryTypes'
 
 const MAX_INVOICE_BYTES = 20 * 1024 * 1024
@@ -203,6 +204,7 @@ export async function enqueueLuxorInvoiceAttachments(message: LuxorMailRow, atta
       subject: message.subject || '(No subject)', received_at: message.occurred_at,
     }))),
   })
+  await broadcastLuxorPortalNotification('bill-intake-updated', { messageId: message.id, status: 'received' }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
   return candidates.length
 }
 
@@ -215,6 +217,7 @@ async function processIntake(intake: LuxorBillIntake) {
     await supabaseRest(`luxor_bill_intakes?id=eq.${intake.id}`, { method: 'PATCH', body: JSON.stringify({
       status: 'duplicate', sha256, duplicate_of_bill_id: duplicates[0].id, lease_until: null, updated_at: new Date().toISOString(),
     }) })
+    await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status: 'duplicate' }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
     return
   }
   const { extraction, model } = await extractInvoice(attachment.bytes, intake.filename, intake.content_type)
@@ -242,6 +245,7 @@ async function processIntake(intake: LuxorBillIntake) {
     extraction_confidence: extraction.confidence, extracted_data: extraction, evidence: extraction.evidence,
     arithmetic_status: arithmetic, lease_until: null, updated_at: new Date().toISOString(), last_error_code: null, last_error_message: null,
   }) })
+  await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
 }
 
 export async function processPendingLuxorBillIntakes(limit = 1) {
@@ -263,6 +267,7 @@ export async function processPendingLuxorBillIntakes(limit = 1) {
         status: 'failed', lease_until: null, next_attempt_at: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** Math.min(intake.attempts, 7))).toISOString(),
         last_error_code: 'EXTRACTION_FAILED', last_error_message: safeError(error), updated_at: new Date().toISOString(),
       }) })
+      await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status: 'failed' }).catch((noticeError) => console.warn('Bill intake realtime notice failed:', noticeError))
       results.push({ id: intake.id, status: 'failed' })
     }
   }

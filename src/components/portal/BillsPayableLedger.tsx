@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleDollarSign,
-  Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, RefreshCw, Search, ShieldCheck, X,
+  Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, Search, ShieldCheck, X,
 } from 'lucide-react'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 import type { LuxorBill, LuxorBillIntake } from '@/lib/luxorInquiryTypes'
@@ -71,12 +71,11 @@ function vendorDomain(bill: LuxorBill) {
 }
 
 export function BillsPayableLedger({
-  bills, intakes, onAddBill, onRefresh, onBillChanged,
+  bills, intakes, onAddBill, onBillChanged,
 }: {
   bills: LuxorBill[]
   intakes: LuxorBillIntake[]
   onAddBill: () => void
-  onRefresh: () => Promise<void> | void
   onBillChanged: (bill: LuxorBill) => void
 }) {
   const router = useRouter()
@@ -210,7 +209,6 @@ export function BillsPayableLedger({
             <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{money(totalDue)} due across {openBills.length} bill{openBills.length === 1 ? '' : 's'} <span className="ml-2 text-[10px] font-normal text-[color:var(--portal-muted)]">{nextDue ? `Next: ${dateLabel(nextDue.due_date)} · ${nextDue.provider}` : 'No open due dates'}</span></p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <PortalButton type="button" size="sm" onClick={() => void onRefresh()}><RefreshCw size={13} /> Refresh</PortalButton>
             {counts.review ? <PortalButton type="button" size="sm" variant="primary" onClick={() => setTab('review')}>Review {counts.review} bill{counts.review === 1 ? '' : 's'}</PortalButton> : null}
             <PortalButton type="button" size="sm" variant="primary" onClick={onAddBill}><Plus size={13} /> Add bill</PortalButton>
           </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense } from 'react'
+import React, { useState, useEffect, Suspense, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Wrench,
@@ -51,6 +51,7 @@ import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, L
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
 import { useToast } from '@/components/portal/ToastProvider'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
 type SubTab =
   | 'dashboard'
@@ -213,7 +214,7 @@ function OperationsPageContent() {
     }
   }, [readinessLoaded, readinessTasks])
 
-  const loadOperationsData = async (showLoading = true) => {
+  const loadOperationsData = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true)
       setError(null)
@@ -233,11 +234,47 @@ function OperationsPageContent() {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadOperationsData()
-  }, [])
+    void loadOperationsData()
+  }, [loadOperationsData])
+
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    if (!supabase) return
+    let refreshTimer: number | null = null
+    let active = true
+    const scheduleRefresh = () => {
+      if (refreshTimer !== null) return
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null
+        void loadOperationsData(false)
+      }, 250)
+    }
+
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    void fetch('/api/portal/realtime-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!active || typeof data?.realtimeChannel !== 'string') return
+        channel = supabase
+          .channel(data.realtimeChannel)
+          .on('broadcast', { event: 'email-arrived' }, scheduleRefresh)
+          .on('broadcast', { event: 'email-status' }, scheduleRefresh)
+          .on('broadcast', { event: 'bill-intake-updated' }, scheduleRefresh)
+          .subscribe((status) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Operations realtime channel entered ${status}.`)
+          })
+      })
+      .catch((error) => console.warn('Failed to connect operations realtime updates:', error))
+
+    return () => {
+      active = false
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+      if (channel) void supabase.removeChannel(channel)
+    }
+  }, [loadOperationsData])
 
   useEffect(() => {
     bulkSelection.clear()
@@ -372,7 +409,7 @@ function OperationsPageContent() {
       }
     }
     dismiss(toastId)
-    notify({ title: 'Bill intake is still processing', description: 'The worker is continuing in the background. Refresh the payables ledger shortly to see the result.', variant: 'info' })
+    notify({ title: 'Bill intake is still processing', description: 'The worker is continuing in the background. The payables ledger will update automatically when it finishes.', variant: 'info' })
   }
 
   const handleBillUpload = async () => {
@@ -703,7 +740,6 @@ function OperationsPageContent() {
           bills={bills}
           intakes={billIntakes}
           onAddBill={() => setIsBillModalOpen(true)}
-          onRefresh={loadOperationsData}
           onBillChanged={(bill) => setBills((current) => current.map((item) => item.id === bill.id ? bill : item))}
         />
         )}
