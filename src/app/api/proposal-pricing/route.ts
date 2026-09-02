@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import {
   getDefaultLuxorProposalPricing,
   LuxorPromotionSelectionError,
@@ -11,6 +12,7 @@ import {
   type LuxorProposalPricingConfig,
   type LuxorProposalSelection,
 } from '@/lib/luxorProposalPricing'
+import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -50,37 +52,62 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    const session = await getLuxorPortalSession()
+    if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return NextResponse.json({ error: 'Owner or administrator access is required to update pricing.' }, { status: 403 })
+    }
     const body = await request.json().catch(() => ({}))
     const record = object(body)
     const id = String(record?.id || '').trim()
+    const version = Number(record?.version)
     const config = object(record?.config)
-    if (!id || !config) return NextResponse.json({ error: 'A pricing configuration id and configuration are required.' }, { status: 400 })
+    if (!id || !Number.isSafeInteger(version) || version < 1 || !config) return NextResponse.json({ error: 'A pricing configuration id, version, and configuration are required.' }, { status: 400 })
 
-    // A dry run prevents an owner from saving a config that cannot calculate a
-    // normal package. More detailed scenario validation is returned to the UI.
-    const trial = calculateLuxorProposal({
-      packageId: 'rental_only',
-      eventDate: '2027-01-05',
-      guestCount: 50,
-      rentalPeriod: 'evening',
-      addOns: [],
-      // These two choices are deliberately proposal-specific—not defaults
-      // hidden in the price catalog. They let this configuration health check
-      // validate the rate rules without requiring a tax or payment-plan
-      // policy to be baked into every pricing record.
-      taxRate: 0,
-      paymentPlan: {
-        mode: 'deposit_and_balance',
-        booking_payment_percent: 25,
-        final_payment_due_days_before_event: 30,
-      },
-    } as LuxorProposalSelection, config as LuxorProposalPricingConfig)
-    if (Array.isArray(trial.errors) && trial.errors.length) {
-      return NextResponse.json({ error: 'Pricing configuration required — administrator review.', details: trial.errors }, { status: 400 })
+    // Validate every rental day/period plus every package and fee tier. This
+    // prevents a save that looks healthy for one quote but breaks another.
+    const paymentPlan = { mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 30 }
+    const validationSelections: LuxorProposalSelection[] = [
+      ...[
+        ['2027-01-04', 'monday_thursday'],
+        ['2027-01-08', 'friday'],
+        ['2027-01-09', 'saturday'],
+        ['2027-01-10', 'sunday'],
+      ].flatMap(([eventDate]) => ['morning', 'evening', 'full_day'].map((rentalPeriod) => ({
+        packageId: 'rental_only', eventDate, guestCount: 50, rentalPeriod, addOns: [], taxRate: 0, paymentPlan,
+      }))),
+      ...[50, 100, 175].flatMap((guestCount) => ['bronze_essentials', 'silver_premier', 'gold_all_inclusive'].map((packageId) => ({
+        packageId, eventDate: '2027-01-08', guestCount, rentalPeriod: 'full_day', addOns: [], taxRate: 0, paymentPlan,
+      }))),
+    ]
+    const structuralErrors: string[] = []
+    for (const period of ['morning', 'evening', 'full_day']) {
+      for (const boundary of ['start', 'end']) {
+        if (!/^\d{2}:\d{2}$/.test(String(catalogValue(config, 'rental_access', period, boundary) || ''))) structuralErrors.push(`Set a valid ${period.replace('_', ' ')} ${boundary} time.`)
+      }
+    }
+    for (const day of ['monday_thursday', 'friday', 'saturday', 'sunday']) {
+      for (const period of ['morning', 'evening', 'full_day']) {
+        const amount = catalogNumber(config, 'rental_rates', day, period)
+        if (amount === undefined || amount <= 0) structuralErrors.push(`Set a rental rate for ${day.replace('_', ' ')} ${period.replace('_', ' ')}.`)
+      }
+    }
+    if (catalogValue(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'pricing_type') === 'hourly') {
+      const hourlyRate = catalogNumber(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'hourly_rate')
+      const minimumHours = catalogNumber(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'minimum_hours')
+      if (hourlyRate === undefined || hourlyRate <= 0) structuralErrors.push('Set the Monday–Thursday daytime hourly rate.')
+      if (minimumHours === undefined || minimumHours <= 0) structuralErrors.push('Set the Monday–Thursday daytime minimum hours.')
+    }
+    const validationErrors = Array.from(new Set([...structuralErrors, ...validationSelections.flatMap((selection) => {
+      const calculation = calculateLuxorProposal(selection, config as LuxorProposalPricingConfig)
+      return [...calculation.calculationErrors, ...calculation.addOnQuotes.flatMap((quote) => quote.error ? [quote.error] : [])]
+    })]))
+    if (validationErrors.length) {
+      return NextResponse.json({ error: 'One or more pricing lines are missing or invalid.', details: validationErrors }, { status: 400 })
     }
     const current = await getDefaultLuxorProposalPricing()
-    if (current.id !== id) return NextResponse.json({ error: 'The active pricing configuration changed. Refresh and try again.' }, { status: 409 })
+    if (current.id !== id || current.version !== version) return NextResponse.json({ error: 'The active pricing configuration changed. Refresh and try again.' }, { status: 409 })
     return NextResponse.json(await updateDefaultLuxorProposalPricing({
       id,
       version: Number(current.version || 1) + 1,

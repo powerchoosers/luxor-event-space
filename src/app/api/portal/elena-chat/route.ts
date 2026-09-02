@@ -813,6 +813,8 @@ export async function POST(request: Request) {
         currency: config.currency,
         packages: config.packages,
         rental_rates: config.rental_rates,
+        rental_rate_rules: config.rental_rate_rules,
+        additional_time_rates: config.additional_time_rates,
         required_fees: config.required_fees,
         decor: config.decor,
         catering: config.catering,

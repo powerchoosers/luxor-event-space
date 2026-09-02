@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
+import type { PublicPricingDay } from '@/lib/luxorPricingCatalog'
 
 type AmenityIcon = ComponentType<{ 'aria-hidden'?: boolean | 'true' | 'false'; className?: string; strokeWidth?: number }>
 
@@ -50,20 +51,6 @@ type Inclusion = {
   icon: AmenityIcon
 }
 
-type RentalOption = {
-  label: string
-  time: string
-  price: string
-  note?: string
-}
-
-type PricingDay = {
-  day: string
-  icon: LucideIcon
-  options: RentalOption[]
-  additionalTime?: string
-}
-
 const inclusions: Inclusion[] = [
   { title: 'Round Tables', description: 'Round tables are included with your venue rental.', icon: RoundTableIcon },
   { title: 'Rectangle Tables', description: 'Rectangle tables are included for flexible event layouts.', icon: RectangleTableIcon },
@@ -77,46 +64,6 @@ const inclusions: Inclusion[] = [
   { title: 'Free Wi-Fi', description: 'Complimentary Wi-Fi is available throughout the venue.', icon: Wifi },
 ]
 
-const pricingDays: PricingDay[] = [
-  {
-    day: 'Monday – Thursday',
-    icon: Crown,
-    options: [
-      { label: 'Daytime', time: '9:00 AM – 3:00 PM', price: '$400 / HR', note: '3-hour minimum' },
-      { label: 'All Day', time: '9:00 AM – 11:00 PM', price: '$1,600' },
-    ],
-    additionalTime: '$200 / hour',
-  },
-  {
-    day: 'Friday',
-    icon: Star,
-    options: [
-      { label: 'Daytime', time: '9:00 AM – 3:00 PM', price: '$1,000' },
-      { label: 'Evening', time: '5:00 PM – 11:00 PM', price: '$1,700' },
-      { label: 'All Day', time: '9:00 AM – 11:00 PM', price: '$2,500' },
-    ],
-    additionalTime: '$350 / hour',
-  },
-  {
-    day: 'Saturday',
-    icon: Crown,
-    options: [
-      { label: 'Daytime', time: '9:00 AM – 3:00 PM', price: '$1,900' },
-      { label: 'Evening', time: '5:00 PM – 11:00 PM', price: '$2,100' },
-      { label: 'All Day', time: '9:00 AM – 11:00 PM', price: '$3,500' },
-    ],
-  },
-  {
-    day: 'Sunday',
-    icon: Star,
-    options: [
-      { label: 'Daytime', time: '9:00 AM – 3:00 PM', price: '$1,400' },
-      { label: 'Evening', time: '5:00 PM – 11:00 PM', price: '$1,200' },
-      { label: 'All Day', time: '9:00 AM – 11:00 PM', price: '$1,600' },
-    ],
-  },
-]
-
 function SectionHeading({ id, title, subtitle, level = 'h2' }: { id: string; title: string; subtitle: string; level?: 'h1' | 'h2' }) {
   const Heading = level
   return (
@@ -128,7 +75,7 @@ function SectionHeading({ id, title, subtitle, level = 'h2' }: { id: string; tit
   )
 }
 
-export default function PricingPageContent() {
+export default function PricingPageContent({ pricingDays, feeDisclosure }: { pricingDays: PublicPricingDay[]; feeDisclosure: string }) {
   return (
     <main className="pricing-page" aria-labelledby="included-heading">
       <section className="pricing-section pricing-inclusions" aria-labelledby="included-heading">
@@ -150,7 +97,9 @@ export default function PricingPageContent() {
         <div className="pricing-container">
           <SectionHeading id="rental-pricing-heading" title="Venue Rental Pricing" subtitle="Choose the day and time that works best for your event." />
           <div className="pricing-day-grid">
-            {pricingDays.map(({ day, icon: Icon, options, additionalTime }) => (
+            {pricingDays.map(({ day, options, additionalTime }, index) => {
+              const Icon: LucideIcon = index % 2 === 0 ? Crown : Star
+              return (
               <article className="pricing-day" key={day}>
                 <Icon aria-hidden="true" className="pricing-day-icon" strokeWidth={1.25} />
                 <h2>{day}</h2>
@@ -167,7 +116,8 @@ export default function PricingPageContent() {
                 </div>
                 {additionalTime ? <div className="pricing-additional"><p>Additional time</p><strong>{additionalTime}</strong></div> : null}
               </article>
-            ))}
+              )
+            })}
           </div>
           <div className="pricing-cta">
             <CalendarDays aria-hidden="true" className="pricing-cta-icon" strokeWidth={1.25} />
@@ -176,7 +126,7 @@ export default function PricingPageContent() {
               Check availability <ArrowRight aria-hidden="true" />
             </Link>
           </div>
-          <p className="pricing-disclaimer">All rates are subject to change. Taxes and fees may apply.</p>
+          <p className="pricing-disclaimer">{feeDisclosure}</p>
         </div>
       </section>
     </main>

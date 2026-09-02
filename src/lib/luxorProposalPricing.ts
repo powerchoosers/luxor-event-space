@@ -6,6 +6,7 @@ import type {
   LuxorProposalPriceBreakdown,
 } from './luxorInquiryTypes'
 import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
+import { catalogValue, formatCatalogTime } from './luxorPricingCatalog'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -179,9 +180,9 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
   undefined_scenario_action: 'administrator_review_required',
   guest_count: { minimum: 1, maximum: 200, tables_per_guest: 0.1, table_rounding: 'ceil' },
   rental_access: {
-    morning: { start: '08:00', end: '15:00', hours: 7 },
-    evening: { start: '17:00', end: '00:00', hours: 7 },
-    full_day: { start: '11:00', end: '23:00', hours: 12 },
+    morning: { start: '09:00', end: '15:00', hours: 6 },
+    evening: { start: '17:00', end: '23:00', hours: 6 },
+    full_day: { start: '09:00', end: '23:00', hours: 14 },
     full_decor_or_all_inclusive: {
       event_access_hours: 8,
       setup_and_breakdown_hours: 4,
@@ -190,11 +191,22 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
     },
   },
   rental_rates: {
-    monday_thursday: { morning: 1000, evening: 1200, full_day: 1600 },
-    friday: { morning: 1500, evening: 1700, full_day: 2500 },
-    saturday: { morning: 1900, evening: 2100, full_day: 3000 },
-    sunday: { morning: 1400, evening: 1600, full_day: 2200 },
+    monday_thursday: { morning: 1200, evening: 1200, full_day: 1600 },
+    friday: { morning: 1000, evening: 1700, full_day: 2500 },
+    saturday: { morning: 1900, evening: 2100, full_day: 3500 },
+    sunday: { morning: 1400, evening: 1200, full_day: 1600 },
   },
+  rental_rate_rules: {
+    monday_thursday: {
+      morning: { public: true, pricing_type: 'hourly', hourly_rate: 400, minimum_hours: 3 },
+      evening: { public: false, pricing_type: 'fixed' },
+      full_day: { public: true, pricing_type: 'fixed' },
+    },
+    friday: { morning: { public: true, pricing_type: 'fixed' }, evening: { public: true, pricing_type: 'fixed' }, full_day: { public: true, pricing_type: 'fixed' } },
+    saturday: { morning: { public: true, pricing_type: 'fixed' }, evening: { public: true, pricing_type: 'fixed' }, full_day: { public: true, pricing_type: 'fixed' } },
+    sunday: { morning: { public: true, pricing_type: 'fixed' }, evening: { public: true, pricing_type: 'fixed' }, full_day: { public: true, pricing_type: 'fixed' } },
+  },
+  additional_time_rates: { monday_thursday: 200, friday: 350 },
   required_fees: {
     cleaning: {
       retail: [{ min_guests: 1, max_guests: 75, amount: 250 }, { min_guests: 76, max_guests: 150, amount: 325 }, { min_guests: 151, max_guests: 200, amount: 400 }],
@@ -315,6 +327,7 @@ function array(value: unknown): unknown[] {
 }
 
 function numberValue(value: unknown): number | undefined {
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return undefined
   const valueAsNumber = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(valueAsNumber) ? valueAsNumber : undefined
 }
@@ -743,7 +756,7 @@ function calculatePackage(input: {
   } else {
     const accessDetail = rentalPeriod === 'full_day' && fullDecorAccess
       ? '8 hours of event access plus 4 hours for setup and breakdown'
-      : rentalPeriod === 'morning' ? '8:00 AM–3:00 PM access' : rentalPeriod === 'evening' ? '5:00 PM–12:00 AM access' : '11:00 AM–11:00 PM access'
+      : `${formatCatalogTime(catalogValue(config, 'rental_access', rentalPeriod, 'start'))}–${formatCatalogTime(catalogValue(config, 'rental_access', rentalPeriod, 'end'))} access`
     items.push(lineItem({
       id: 'venue-rental',
       category: 'Venue Services',

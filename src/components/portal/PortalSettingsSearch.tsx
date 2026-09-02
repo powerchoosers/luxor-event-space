@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from 'lucide-react'
+import { BadgeDollarSign, Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from 'lucide-react'
 
 type SettingsTab =
   | 'business'
@@ -11,6 +11,7 @@ type SettingsTab =
   | 'integrations'
   | 'hours'
   | 'promotions'
+  | 'pricing'
   | 'content'
   | 'elena'
 
@@ -41,6 +42,7 @@ const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { tab: 'integrations', section: 'Integrations', title: 'Twilio phone numbers', description: 'Search, purchase, and configure Luxor phone numbers.', keywords: 'twilio sms text calling phone number webhook voice purchase' },
   { tab: 'hours', section: 'Business Hours', title: 'Tour availability', description: 'Set the days and times available for venue tours.', keywords: 'hours schedule calendar availability open closed appointments tours times' },
   { tab: 'promotions', section: 'Promotions', title: 'Promotions', description: 'Manage active website promotions and offers.', keywords: 'discount offer campaign special banner marketing promo' },
+  { tab: 'pricing', section: 'Pricing & line items', title: 'Approved pricing catalog', description: 'Update public rental rates, proposal line items, deposits, fees, and tax.', keywords: 'price pricing rates proposal rental fee deposit tax catering decor dj bar security cleaning public website catalog' },
   { tab: 'content', section: 'Site Content', title: 'Website content', description: 'Edit saved content for Luxor public website pages.', keywords: 'site pages home events gallery pricing spaces visit copy text json' },
 ]
 
@@ -52,6 +54,7 @@ const TAB_ICONS: Record<SettingsTab, typeof Bell> = {
   integrations: Cpu,
   hours: Clock,
   promotions: Tag,
+  pricing: BadgeDollarSign,
   content: Building,
   elena: Bot,
 }

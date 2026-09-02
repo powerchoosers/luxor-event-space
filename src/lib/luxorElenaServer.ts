@@ -209,7 +209,7 @@ export async function generatePublicElenaReply(messages: PublicElenaMessage[], m
     getDefaultLuxorProposalPricing()
       .then((pricing) => {
         const value = pricing.config as unknown as Record<string, unknown>
-        return `CURRENT CONNECTED PRICING (catalog version ${pricing.version}): ${JSON.stringify({ rental_rates: value.rental_rates, packages: value.packages })}. Use these only as approved starting points and package guidance.`
+        return `CURRENT CONNECTED PRICING (catalog version ${pricing.version}): ${JSON.stringify({ rental_rates: value.rental_rates, rental_rate_rules: value.rental_rate_rules, additional_time_rates: value.additional_time_rates, rental_access: value.rental_access, packages: value.packages })}. Use these only as approved starting points and package guidance. For an hourly rule, state the hourly rate and minimum hours together; never present the minimum base amount as the hourly rate.`
       })
       .catch(() => 'CURRENT CONNECTED PRICING: unavailable. Do not quote a price.'),
     listAvailableLuxorTourSlots(24)

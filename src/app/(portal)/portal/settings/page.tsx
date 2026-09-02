@@ -32,7 +32,8 @@ import {
   ChevronDown,
   X,
   Menu,
-  LogOut
+  LogOut,
+  BadgeDollarSign
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -56,6 +57,7 @@ import { CalendarReplyReview } from '@/components/portal/CalendarReplyReview'
 import { MailProviderSettings } from '@/components/portal/MailProviderSettings'
 import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
 import { ElenaSettingsManager } from '@/components/portal/ElenaSettingsManager'
+import { ProposalPricingManager } from '@/components/portal/ProposalPricingManager'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -72,6 +74,7 @@ type Tab =
   | 'integrations'
   | 'hours'
   | 'promotions'
+  | 'pricing'
   | 'content'
   | 'elena'
 
@@ -102,6 +105,7 @@ const SETTINGS_NAVIGATION: Array<{ label: string; items: SettingsNavItem[] }> = 
   {
     label: 'Venue & growth',
     items: [
+      { id: 'pricing', label: 'Pricing & line items', description: 'Rates used across Luxor', icon: <BadgeDollarSign size={16} /> },
       { id: 'promotions', label: 'Promotions', description: 'Offers on the website', icon: <Tag size={16} /> },
     ],
   },
@@ -121,6 +125,7 @@ const SETTINGS_TAB_COPY: Record<Tab, { title: string; description: string }> = {
   notifications: { title: 'Notifications', description: 'Control how the team hears about new activity and where alerts go.' },
   integrations: { title: 'Email & connections', description: 'Manage email delivery, calendar invitations, phone services, and connected tools.' },
   promotions: { title: 'Promotions', description: 'Create and manage the offers that appear on the Luxor website.' },
+  pricing: { title: 'Pricing & line items', description: 'Manage the approved rates used by proposals, Elena, and the customer-facing pricing page.' },
   branding: { title: 'Branding', description: 'Set the portal appearance and manage the assets that represent Luxor.' },
   content: { title: 'Site content', description: 'Edit the information guests see across the public Luxor website.' },
   elena: { title: 'Elena AI', description: 'Manage Elena’s knowledge, flows, behavior, and public website preview.' },
@@ -419,6 +424,7 @@ export default function SettingsPage() {
           </> : <>
             <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
             <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
+            <button type="button" onClick={() => selectSettingsTab('pricing')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update pricing</button>
             <button type="button" onClick={() => selectSettingsTab('elena')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage Elena</button>
             <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
             <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
@@ -900,6 +906,10 @@ export default function SettingsPage() {
             <PromotionManager />
           )}
 
+          {activeTab === 'pricing' && !isAgent && (
+            <ProposalPricingManager />
+          )}
+
           {/* SITE CONTENT */}
           {activeTab === 'content' && (
             <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
@@ -907,8 +917,12 @@ export default function SettingsPage() {
               <p className="text-xs text-[color:var(--portal-muted)] leading-relaxed">
                 Update the text, data, and layout definitions that power the public-facing pages of the Luxor event space site.
               </p>
+              <button type="button" onClick={() => selectSettingsTab('pricing')} className="flex w-full items-center justify-between gap-4 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/8 p-4 text-left transition-colors hover:bg-[#caa24c]/12">
+                <span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Pricing is managed from one approved catalog</span><span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">Update customer rates, proposal line items, deposits, and fees in Pricing & line items.</span></span>
+                <ChevronRight size={17} className="shrink-0 text-[#a8792f]" />
+              </button>
               <div className="grid gap-4 lg:grid-cols-2">
-                {['home', 'events', 'gallery', 'pricing', 'spaces', 'visit'].map(pageName => (
+                {['home', 'events', 'gallery', 'spaces', 'visit'].map(pageName => (
                   <div key={pageName} className="flex flex-col gap-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="font-bold text-[color:var(--portal-text)] capitalize">{pageName} Page</p>
