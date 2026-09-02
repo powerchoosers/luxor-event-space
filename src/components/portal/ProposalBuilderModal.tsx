@@ -392,6 +392,11 @@ function normalizeLineItem(value: unknown): LuxorInvoiceLineItem | null {
     paymentBucket: ['venue', 'event', 'security_deposit'].includes(String(record.paymentBucket || record.payment_bucket))
       ? String(record.paymentBucket || record.payment_bucket) as LuxorInvoiceLineItem['paymentBucket']
       : undefined,
+    costClassification: record.costClassification === 'preferred_vendor_estimate' || record.cost_classification === 'preferred_vendor_estimate'
+      ? 'preferred_vendor_estimate'
+      : record.costClassification === 'luxor_charge' || record.cost_classification === 'luxor_charge'
+        ? 'luxor_charge'
+        : undefined,
     required: Boolean(record.required),
     detail: asString(record.detail),
     description,

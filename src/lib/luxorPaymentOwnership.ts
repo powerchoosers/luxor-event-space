@@ -12,6 +12,10 @@ function lineId(item: LuxorInvoiceLineItem) {
 }
 
 export function isLuxorCollectedLineItem(item: LuxorInvoiceLineItem) {
+  // New-model custom rows are explicitly classified before they are calculated.
+  // A confirmed Luxor custom charge must never fall into the non-collectable
+  // vendor-estimate bucket merely because it does not use a catalog service ID.
+  if (item.pricingRole === 'custom' && item.costClassification !== 'preferred_vendor_estimate') return true
   if (LUXOR_SERVICE_IDS.has(lineId(item))) return true
   const text = `${item.category || ''} ${item.description || ''}`.toLowerCase()
   return /venue\s+rental|required\s+cleaning|required\s+security|essential\s+decor/.test(text)

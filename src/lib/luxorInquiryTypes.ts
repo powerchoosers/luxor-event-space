@@ -223,6 +223,8 @@ export type LuxorInvoiceLineItem = {
   pricingRuleId?: string
   /** Used for the clear three-bucket payment summary. */
   paymentBucket?: 'venue' | 'event' | 'security_deposit'
+  /** Distinguishes a Luxor charge from a non-binding preferred-vendor estimate. */
+  costClassification?: 'luxor_charge' | 'preferred_vendor_estimate'
   /** Required lines cannot be removed by a prospect or normal staff editing. */
   required?: boolean
   /** Client-safe supporting copy for a service or package inclusion. */

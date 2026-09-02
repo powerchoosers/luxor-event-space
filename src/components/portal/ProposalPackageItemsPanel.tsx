@@ -45,6 +45,7 @@ type CustomItemDraft = {
   quantity: string
   unitPrice: string
   paymentBucket: 'venue' | 'event'
+  costClassification: 'luxor_charge' | 'preferred_vendor_estimate'
 }
 
 type ProposalServiceQuote = {
@@ -163,6 +164,7 @@ function defaultCustomDraft(item?: LuxorInvoiceLineItem): CustomItemDraft {
     quantity: String(Math.max(1, Number(item?.quantity) || 1)),
     unitPrice: item ? String(Math.max(0.01, Number(item.unitPrice) || 0)) : '',
     paymentBucket: item?.paymentBucket === 'venue' ? 'venue' : 'event',
+    costClassification: item?.costClassification === 'preferred_vendor_estimate' ? 'preferred_vendor_estimate' : 'luxor_charge',
   }
 }
 
@@ -259,6 +261,7 @@ export function ProposalPackageItemsPanel({
       total: Math.round(quantity * unitPrice * 100) / 100,
       pricingRole: 'custom',
       paymentBucket: customDraft.paymentBucket,
+      costClassification: customDraft.costClassification,
     }
     if (customDraft.id) onUpdateCustomItem?.(lineItem)
     else onAddCustomItem?.(lineItem)
@@ -437,7 +440,8 @@ export function ProposalPackageItemsPanel({
                 <label className="block space-y-1.5 sm:col-span-2"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Client-ready detail</span><input value={customDraft.detail} onChange={(event) => setCustomDraft((current) => current ? { ...current, detail: event.target.value } : current)} placeholder="Optional detail shown with the item" className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
                 <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Quantity</span><input type="number" min="1" step="1" inputMode="numeric" value={customDraft.quantity} onChange={(event) => setCustomDraft((current) => current ? { ...current, quantity: event.target.value } : current)} className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 font-mono text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>
                 <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Exact unit price</span><span className="flex min-h-10 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12"><span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">$</span><input type="number" min="0.01" step="0.01" inputMode="decimal" value={customDraft.unitPrice} onChange={(event) => setCustomDraft((current) => current ? { ...current, unitPrice: event.target.value } : current)} className="min-h-10 min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none" /></span></label>
-                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Payment bucket</span><PortalSelect value={customDraft.paymentBucket} onChange={(value) => setCustomDraft((current) => current ? { ...current, paymentBucket: value === 'venue' ? 'venue' : 'event' } : current)} options={[{ value: 'event', label: 'Event Services' }, { value: 'venue', label: 'Venue Services' }]} className="w-full" buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Pricing type</span><PortalSelect value={customDraft.costClassification} onChange={(value) => setCustomDraft((current) => current ? { ...current, costClassification: value === 'preferred_vendor_estimate' ? 'preferred_vendor_estimate' : 'luxor_charge' } : current)} options={[{ value: 'luxor_charge', label: 'Confirmed Luxor charge' }, { value: 'preferred_vendor_estimate', label: 'Vendor estimate only' }]} className="w-full" buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
+                {customDraft.costClassification === 'luxor_charge' ? <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Payment bucket</span><PortalSelect value={customDraft.paymentBucket} onChange={(value) => setCustomDraft((current) => current ? { ...current, paymentBucket: value === 'venue' ? 'venue' : 'event' } : current)} options={[{ value: 'event', label: 'Event Services' }, { value: 'venue', label: 'Venue Services' }]} className="w-full" buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal" /></label> : <p className="self-end pb-1 text-xs leading-5 text-[color:var(--portal-muted)]">Planning estimate only. It is excluded from Luxor invoices, contracts, and Stripe.</p>}
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setCustomDraft(null)} className="inline-flex min-h-9 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={saveCustomItem} disabled={!customDraft.description.trim() || !(Number(customDraft.unitPrice) > 0)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#b98a3e] px-3 text-[9px] font-black uppercase tracking-[0.1em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><FilePenLine size={13} /> {customDraft.id ? 'Update item' : 'Add item'}</button></div>
             </div>

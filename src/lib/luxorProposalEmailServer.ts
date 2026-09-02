@@ -46,6 +46,11 @@ export type LuxorProposalPricingSummary = {
   finalEventPrice: number
   refundableSecurityDeposit: number
   amountDueToBook: number | null
+  /** Non-binding preferred-vendor planning values. Never used for payment collection. */
+  vendorEstimateLines: LuxorProposalDisplayLine[]
+  estimatedVendorTotal: number
+  estimatedOverallInvestment: number | null
+  vendorPricingDisclaimer: string | null
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -246,6 +251,25 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const isEventProposal = asText(rawInvoice.invoice_kind) === 'event' || Object.keys(context).length > 0
   const refundableSecurityDeposit = asNonNegativeMoney(context.refundable_security_deposit)
     ?? (securityLineTotal > 0 ? securityLineTotal : (isEventProposal ? LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT : 0))
+  const pricingSnapshot = recordFrom(context.pricing_snapshot)
+  const preferredVendorSnapshot = recordFrom(pricingSnapshot?.preferred_vendor_estimates)
+  const rawVendorLines = Array.isArray(context.preferred_vendor_estimate_lines)
+    ? context.preferred_vendor_estimate_lines
+    : Array.isArray(preferredVendorSnapshot?.selected_lines)
+      ? preferredVendorSnapshot.selected_lines
+      : []
+  const vendorEstimateLines = rawVendorLines
+    .map(normalizedLineItem)
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .map(({ category, service, quantity, unitPrice, lineTotal, included }) => ({ category, service, quantity, unitPrice, lineTotal, included }))
+  const estimatedVendorTotal = asNonNegativeMoney(context.estimated_vendor_total)
+    ?? asNonNegativeMoney(preferredVendorSnapshot?.total)
+    ?? roundMoney(vendorEstimateLines.reduce((sum, item) => sum + Math.max(0, item.lineTotal), 0))
+  const estimatedOverallInvestment = asNonNegativeMoney(context.estimated_overall_investment)
+    ?? asNonNegativeMoney(pricingSnapshot?.estimated_overall_investment)
+    ?? (vendorEstimateLines.length ? roundMoney(finalEventPrice + estimatedVendorTotal) : null)
+  const vendorPricingDisclaimer = asText(context.vendor_pricing_disclaimer)
+    ?? asText(preferredVendorSnapshot?.disclaimer)
 
   return {
     packageName: asText(context.package_name),
@@ -260,6 +284,10 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     finalEventPrice,
     refundableSecurityDeposit,
     amountDueToBook: asNonNegativeMoney(context.amount_due_to_book),
+    vendorEstimateLines,
+    estimatedVendorTotal,
+    estimatedOverallInvestment,
+    vendorPricingDisclaimer,
   }
 }
 
@@ -313,6 +341,23 @@ function proposalFinancialSummaryHtml(summary: LuxorProposalPricingSummary, opti
   <p style="margin:13px 2px 0;color:#a99878;font-size:11px;line-height:1.65">${paymentCopy}</p>`
 }
 
+function preferredVendorEstimateHtml(summary: LuxorProposalPricingSummary) {
+  if (!summary.vendorEstimateLines.length && !summary.vendorPricingDisclaimer) return ''
+  const rows = summary.vendorEstimateLines.map((item) => `<tr>
+    <td style="padding:10px 8px 10px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;line-height:1.45"><span style="display:block;color:#a99878;font-size:8px;letter-spacing:.1em;text-transform:uppercase">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}</td>
+    <td align="right" style="padding:10px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f1d27a;font-size:11px;font-weight:700;white-space:nowrap">Starting at ${money(item.lineTotal)}</td>
+  </tr>`).join('')
+  const overall = summary.estimatedOverallInvestment === null ? '' : `<tr><td style="padding:15px 18px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase">Estimated total event investment</td><td align="right" style="padding:13px 18px;color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:21px;font-weight:700">${money(summary.estimatedOverallInvestment)}</td></tr>`
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border:1px solid rgba(202,162,76,.32);background:#120d0a;border-collapse:collapse">
+    <tr><td colspan="2" style="padding:18px 18px 7px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Preferred Vendor Collection</td></tr>
+    <tr><td colspan="2" style="padding:0 18px 10px;color:#d7c29a;font-size:11px;line-height:1.6">Selected services are planning estimates only. They are not Luxor charges and are not included in the Final Event Price.</td></tr>
+    ${rows}
+    <tr><td style="padding:11px 18px;color:#b8aa9a;font-size:11px">Estimated third-party vendor services</td><td align="right" style="padding:11px 18px;color:#f7efe3;font-size:12px;font-weight:700">${money(summary.estimatedVendorTotal)}</td></tr>
+    ${overall}
+    ${summary.vendorPricingDisclaimer ? `<tr><td colspan="2" style="padding:0 18px 18px;color:#a99878;font-size:10px;line-height:1.6">${escapeHtml(summary.vendorPricingDisclaimer)}</td></tr>` : ''}
+  </table>`
+}
+
 function offerDisclosureHtml(
   invoice: LuxorInvoice,
   summary?: LuxorProposalPricingSummary,
@@ -349,17 +394,14 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || 'Custom Luxor package'
   const proposalEventDate = summary.eventDate || input.inquiry.target_date || null
-  const proposalContext = input.invoice.proposal_context && typeof input.invoice.proposal_context === 'object' ? input.invoice.proposal_context as Record<string, unknown> : {}
-  const vendorPricingDisclaimer = typeof proposalContext.vendor_pricing_disclaimer === 'string' ? proposalContext.vendor_pricing_disclaimer : null
   const eventDetails = [
     proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
     summary.eventAccess,
-    vendorPricingDisclaimer,
   ].filter(Boolean).join(' | ')
   return {
     subject: 'Your Luxor final proposal is ready',
-    html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Your Luxor Final Proposal</title></head><body style="margin:0;padding:0;background:#050505;color:#f7efe3;font-family:Arial,'Helvetica Neue',sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#050505"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.32);border-collapse:collapse"><tr><td style="height:4px;background:#caa24c;font-size:1px;line-height:1px">&nbsp;</td></tr><tr><td align="center" style="padding:30px 40px 26px;border-bottom:1px solid rgba(202,162,76,.18)"><p style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#caa24c;font-size:31px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Luxor</p><p style="margin:7px 0 0;color:#8c754f;font-size:8px;font-weight:700;letter-spacing:.39em;text-transform:uppercase">At Las Palmas Events</p></td></tr><tr><td style="padding:42px 40px 20px;text-align:center"><p style="margin:0 0 14px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.26em;text-transform:uppercase">Final event proposal</p><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#f7efe3;font-size:36px;font-weight:600;line-height:1.13">A package made for your celebration</h1><p style="margin:18px auto 0;max-width:460px;color:#d7c29a;font-size:15px;line-height:1.75">Hi ${escapeHtml(firstName)}, your final Luxor proposal is ready to review. The price below is the finalized event price for the package shown.</p></td></tr><tr><td style="padding:10px 40px 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#120d0a;border:1px solid rgba(202,162,76,.2)"><tr><td style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Selected package</p><p style="margin:0;color:#f7efe3;font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:1.3">${escapeHtml(packageName)}</p><p style="margin:10px 0 0;color:#a99878;font-size:11px;line-height:1.55">${escapeHtml(eventDetails || input.invoice.event_type || 'Private event at Luxor Event Space')}</p></td></tr></table></td></tr><tr><td style="padding:12px 40px 0"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase">Your itemized package</p>${proposalBreakdownHtml(summary)}${proposalFinancialSummaryHtml(summary)}${offerDisclosureHtml(input.invoice, summary)}</td></tr><tr><td align="center" style="padding:28px 40px 42px"><p style="margin:0 0 18px;color:#d7c29a;font-size:12px;line-height:1.7">Review the package and select <strong>Accept proposal</strong> on your private page. We will then send your event agreement for signature.</p><a href="${escapeHtml(input.reviewUrl)}" target="_blank" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 27px;border:1px solid #f1d27a;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase">Review final proposal</a><p style="margin:19px 0 0;color:#8c754f;font-size:11px;line-height:1.65">No payment is requested from this proposal email. The secure Stripe link is sent after the agreement has been signed.</p></td></tr><tr><td align="center" style="padding:27px 40px 31px;border-top:1px solid rgba(202,162,76,.14);background:#080605"><p style="margin:0;color:#caa24c;font-family:Georgia,'Times New Roman',serif;font-size:21px;letter-spacing:.14em;text-transform:uppercase">Luxor</p><p style="margin:9px 0 0;color:#8c754f;font-size:10px;line-height:1.7">${escapeHtml(LUXOR_VENUE_ADDRESS)}<br /><a href="mailto:${escapeHtml(LUXOR_BOOKING_EMAIL)}" style="color:#caa24c;text-decoration:none">${escapeHtml(LUXOR_BOOKING_EMAIL)}</a></p></td></tr></table></td></tr></table></body></html>`,
+    html: `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Your Luxor Final Proposal</title></head><body style="margin:0;padding:0;background:#050505;color:#f7efe3;font-family:Arial,'Helvetica Neue',sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#050505"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;background:#0a0807;border:1px solid rgba(202,162,76,.32);border-collapse:collapse"><tr><td style="height:4px;background:#caa24c;font-size:1px;line-height:1px">&nbsp;</td></tr><tr><td align="center" style="padding:30px 40px 26px;border-bottom:1px solid rgba(202,162,76,.18)"><p style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#caa24c;font-size:31px;font-weight:700;letter-spacing:.18em;text-transform:uppercase">Luxor</p><p style="margin:7px 0 0;color:#8c754f;font-size:8px;font-weight:700;letter-spacing:.39em;text-transform:uppercase">At Las Palmas Events</p></td></tr><tr><td style="padding:42px 40px 20px;text-align:center"><p style="margin:0 0 14px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.26em;text-transform:uppercase">Final event proposal</p><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;color:#f7efe3;font-size:36px;font-weight:600;line-height:1.13">A package made for your celebration</h1><p style="margin:18px auto 0;max-width:460px;color:#d7c29a;font-size:15px;line-height:1.75">Hi ${escapeHtml(firstName)}, your final Luxor proposal is ready to review. The price below is the finalized event price for the package shown.</p></td></tr><tr><td style="padding:10px 40px 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#120d0a;border:1px solid rgba(202,162,76,.2)"><tr><td style="padding:18px 20px"><p style="margin:0 0 7px;color:#caa24c;font-size:9px;font-weight:800;letter-spacing:.18em;text-transform:uppercase">Selected package</p><p style="margin:0;color:#f7efe3;font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:1.3">${escapeHtml(packageName)}</p><p style="margin:10px 0 0;color:#a99878;font-size:11px;line-height:1.55">${escapeHtml(eventDetails || input.invoice.event_type || 'Private event at Luxor Event Space')}</p></td></tr></table></td></tr><tr><td style="padding:12px 40px 0"><p style="margin:0 0 13px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.22em;text-transform:uppercase">Your itemized package</p>${proposalBreakdownHtml(summary)}${proposalFinancialSummaryHtml(summary)}${preferredVendorEstimateHtml(summary)}${offerDisclosureHtml(input.invoice, summary)}</td></tr><tr><td align="center" style="padding:28px 40px 42px"><p style="margin:0 0 18px;color:#d7c29a;font-size:12px;line-height:1.7">Review the package and select <strong>Accept proposal</strong> on your private page. We will then send your event agreement for signature.</p><a href="${escapeHtml(input.reviewUrl)}" target="_blank" style="display:inline-block;background:#caa24c;color:#17120c;text-decoration:none;padding:16px 27px;border:1px solid #f1d27a;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase">Review final proposal</a><p style="margin:19px 0 0;color:#8c754f;font-size:11px;line-height:1.65">No payment is requested from this proposal email. The secure Stripe link is sent after the agreement has been signed.</p></td></tr><tr><td align="center" style="padding:27px 40px 31px;border-top:1px solid rgba(202,162,76,.14);background:#080605"><p style="margin:0;color:#caa24c;font-family:Georgia,'Times New Roman',serif;font-size:21px;letter-spacing:.14em;text-transform:uppercase">Luxor</p><p style="margin:9px 0 0;color:#8c754f;font-size:10px;line-height:1.7">${escapeHtml(LUXOR_VENUE_ADDRESS)}<br /><a href="mailto:${escapeHtml(LUXOR_BOOKING_EMAIL)}" style="color:#caa24c;text-decoration:none">${escapeHtml(LUXOR_BOOKING_EMAIL)}</a></p></td></tr></table></td></tr></table></body></html>`,
     aiGenerated: false,
   }
 }

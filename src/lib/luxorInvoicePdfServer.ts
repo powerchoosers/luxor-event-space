@@ -217,6 +217,35 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   drawSummaryRow('Sales tax', money(summary.tax))
   drawSummaryRow(isFinalProposal ? 'FINAL EVENT PRICE' : 'INVOICE TOTAL', money(isFinalProposal ? summary.finalEventPrice : invoiceTotal), { accent: true, strong: true, topBorder: true })
 
+  if (isFinalProposal && summary.vendorEstimateLines.length) {
+    ensureSpace(96 + summary.vendorEstimateLines.length * 22, true)
+    text('PREFERRED VENDOR COLLECTION', margin, y, 8, bold, gold)
+    y -= 15
+    drawLines(wrap('Planning estimates only. These services are not Luxor charges and are not included in the Final Event Price.', regular, 8.5, contentRight - margin), margin, y, 8.5, regular, muted, 11)
+    y -= 28
+    for (const item of summary.vendorEstimateLines) {
+      ensureSpace(24, true)
+      text(`${item.category}: ${item.service}`, margin + 10, y, 8.8, regular, ink)
+      rightText(`Est. ${money(item.lineTotal)}`, contentRight - 10, y, 8.8, bold, darkGold)
+      y -= 20
+    }
+    page.drawLine({ start: { x: margin + 10, y: y + 5 }, end: { x: contentRight - 10, y: y + 5 }, thickness: 0.6, color: line })
+    text('Estimated third-party vendor services', margin + 10, y - 8, 8.8, regular, muted)
+    rightText(money(summary.estimatedVendorTotal), contentRight - 10, y - 8, 9.5, bold, ink)
+    y -= 25
+    if (summary.estimatedOverallInvestment !== null) {
+      text('ESTIMATED TOTAL EVENT INVESTMENT', margin + 10, y - 8, 8, bold, gold)
+      rightText(money(summary.estimatedOverallInvestment), contentRight - 10, y - 10, 13, serifBold, darkGold)
+      y -= 27
+    }
+    if (summary.vendorPricingDisclaimer) {
+      const disclaimerLines = wrap(summary.vendorPricingDisclaimer, regular, 7.7, contentRight - margin - 20)
+      ensureSpace(disclaimerLines.length * 10 + 16, true)
+      drawLines(disclaimerLines, margin + 10, y - 4, 7.7, regular, muted, 10)
+      y -= disclaimerLines.length * 10 + 12
+    }
+  }
+
   if (isFinalProposal || summary.refundableSecurityDeposit > 0) {
     ensureSpace(116, true)
     const depositTop = y

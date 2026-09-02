@@ -420,6 +420,9 @@ function normalizeCustomItems(selection: LuxorProposalSelection) {
     const detail = trimmedString(custom?.detail)
     const requestedBucket = trimmedString(custom?.paymentBucket ?? custom?.payment_bucket)
     const paymentBucket = requestedBucket || 'event'
+    const costClassification = custom?.costClassification === 'preferred_vendor_estimate'
+      ? 'preferred_vendor_estimate'
+      : 'luxor_charge'
 
     if (!description || quantity === undefined || quantity <= 0 || unitPrice === undefined || unitPrice <= 0) {
       errors.push(`${label} needs a description, a positive quantity, and an exact positive unit price.`)
@@ -454,6 +457,7 @@ function normalizeCustomItems(selection: LuxorProposalSelection) {
       pricingRole: 'custom',
       pricingRuleId: 'owner_custom_item',
       paymentBucket,
+      costClassification,
       ...(detail ? { detail } : {}),
     })
   })
