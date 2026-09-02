@@ -30,7 +30,7 @@ export async function GET() {
 /**
  * Server-authoritative calculation endpoint for the owner proposal builder.
  * It never accepts client-supplied totals or unit prices: just the selected
- * package, event details, allowed add-ons, and a saved promotion id. It
+ * confirmed Luxor venue facts, optional preferred-vendor estimates, and a saved promotion id. It
  * resolves saved promotion terms itself rather than trusting discount values
  * from the browser.
  */
@@ -65,8 +65,8 @@ export async function PATCH(request: NextRequest) {
     const config = object(record?.config)
     if (!id || !Number.isSafeInteger(version) || version < 1 || !config) return NextResponse.json({ error: 'A pricing configuration id, version, and configuration are required.' }, { status: 400 })
 
-    // Validate every rental day/period plus every package and fee tier. This
-    // prevents a save that looks healthy for one quote but breaks another.
+    // Validate every rental day/period plus representative vendor-estimate
+    // guest counts. This prevents a save that looks healthy for one quote but breaks another.
     const paymentPlan = { mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 30 }
     const validationSelections: LuxorProposalSelection[] = [
       ...[
@@ -76,26 +76,27 @@ export async function PATCH(request: NextRequest) {
         ['2027-01-10', 'sunday'],
       ].flatMap(([eventDate]) => ['morning', 'evening', 'full_day'].map((rentalPeriod) => ({
         packageId: 'rental_only', eventDate, guestCount: 50, rentalPeriod, addOns: [], taxRate: 0, paymentPlan,
-      }))),
-      ...[50, 100, 175].flatMap((guestCount) => ['bronze_essentials', 'silver_premier', 'gold_all_inclusive'].map((packageId) => ({
-        packageId, eventDate: '2027-01-08', guestCount, rentalPeriod: 'full_day', addOns: [], taxRate: 0, paymentPlan,
+      })),
+      ...[50, 100, 175].map((guestCount) => ({
+        packageId: 'rental_only', eventDate: '2027-01-08', guestCount, rentalPeriod: 'full_day', addOns: ['essential_decor', 'buffet_catering', 'dj', 'photo_booth_signature', 'bartender_service'], taxRate: 0, paymentPlan,
       }))),
     ]
+    const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
     for (const period of ['morning', 'evening', 'full_day']) {
       for (const boundary of ['start', 'end']) {
-        if (!/^\d{2}:\d{2}$/.test(String(catalogValue(config, 'rental_access', period, boundary) || ''))) structuralErrors.push(`Set a valid ${period.replace('_', ' ')} ${boundary} time.`)
+        if (!/^\d{2}:\d{2}$/.test(String(catalogValue(luxorCosts, 'rental_access', period, boundary) || ''))) structuralErrors.push(`Set a valid ${period.replace('_', ' ')} ${boundary} time.`)
       }
     }
     for (const day of ['monday_thursday', 'friday', 'saturday', 'sunday']) {
       for (const period of ['morning', 'evening', 'full_day']) {
-        const amount = catalogNumber(config, 'rental_rates', day, period)
+        const amount = catalogNumber(luxorCosts, 'rental_rates', day, period)
         if (amount === undefined || amount <= 0) structuralErrors.push(`Set a rental rate for ${day.replace('_', ' ')} ${period.replace('_', ' ')}.`)
       }
     }
-    if (catalogValue(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'pricing_type') === 'hourly') {
-      const hourlyRate = catalogNumber(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'hourly_rate')
-      const minimumHours = catalogNumber(config, 'rental_rate_rules', 'monday_thursday', 'morning', 'minimum_hours')
+    if (catalogValue(luxorCosts, 'rental_rate_rules', 'monday_thursday', 'morning', 'pricing_type') === 'hourly') {
+      const hourlyRate = catalogNumber(luxorCosts, 'rental_rate_rules', 'monday_thursday', 'morning', 'hourly_rate')
+      const minimumHours = catalogNumber(luxorCosts, 'rental_rate_rules', 'monday_thursday', 'morning', 'minimum_hours')
       if (hourlyRate === undefined || hourlyRate <= 0) structuralErrors.push('Set the Monday–Thursday daytime hourly rate.')
       if (minimumHours === undefined || minimumHours <= 0) structuralErrors.push('Set the Monday–Thursday daytime minimum hours.')
     }

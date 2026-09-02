@@ -94,13 +94,14 @@ export function formatCurrency(value: number) {
 }
 
 export function buildPublicPricingDays(config: PricingCatalog): PublicPricingDay[] {
+  const luxorCosts = catalogRecord(config.luxor_costs) || config
   return DAY_LABELS.map(({ id, label }) => {
     const options = PERIOD_LABELS.flatMap(({ id: period, label: periodLabel }) => {
-      const rate = catalogNumber(config, 'rental_rates', id, period)
-      const rule = catalogRecord(catalogValue(config, 'rental_rate_rules', id, period))
+      const rate = catalogNumber(luxorCosts, 'rental_rates', id, period)
+      const rule = catalogRecord(catalogValue(luxorCosts, 'rental_rate_rules', id, period))
       if (rate === undefined || rule?.public === false) return []
-      const start = catalogValue(config, 'rental_access', period, 'start')
-      const end = catalogValue(config, 'rental_access', period, 'end')
+      const start = catalogValue(luxorCosts, 'rental_access', period, 'start')
+      const end = catalogValue(luxorCosts, 'rental_access', period, 'end')
       const hourlyRate = catalogNumber(rule, 'hourly_rate')
       const minimumHours = catalogNumber(rule, 'minimum_hours')
       return [{
@@ -111,7 +112,7 @@ export function buildPublicPricingDays(config: PricingCatalog): PublicPricingDay
         ...(rule?.pricing_type === 'hourly' && minimumHours !== undefined ? { note: `${minimumHours}-hour minimum` } : {}),
       } satisfies PublicRentalOption]
     })
-    const additional = catalogNumber(config, 'additional_time_rates', id)
+    const additional = catalogNumber(luxorCosts, 'additional_time_rates', id)
     return {
       id,
       day: label,
@@ -122,8 +123,9 @@ export function buildPublicPricingDays(config: PricingCatalog): PublicPricingDay
 }
 
 export function buildPublicFeeDisclosure(config: PricingCatalog) {
-  const deposit = catalogNumber(config, 'security_deposit', 'amount')
-  const taxRate = catalogNumber(config, 'taxes_and_processing_fees', 'sales_tax_rate')
+  const luxorCosts = catalogRecord(config.luxor_costs) || config
+  const deposit = catalogNumber(luxorCosts, 'security_deposit', 'amount')
+  const taxRate = catalogNumber(luxorCosts, 'taxes_and_processing_fees', 'sales_tax_rate')
   const parts = ['Required cleaning and security fees apply']
   if (deposit !== undefined) parts.push(`${formatCurrency(deposit)} refundable security deposit`)
   if (taxRate !== undefined && taxRate > 0) parts.push(`${(taxRate * 100).toFixed(2).replace(/\.00$/, '')}% sales tax`)

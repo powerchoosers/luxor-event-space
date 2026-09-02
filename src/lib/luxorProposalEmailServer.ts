@@ -349,10 +349,13 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || 'Custom Luxor package'
   const proposalEventDate = summary.eventDate || input.inquiry.target_date || null
+  const proposalContext = input.invoice.proposal_context && typeof input.invoice.proposal_context === 'object' ? input.invoice.proposal_context as Record<string, unknown> : {}
+  const vendorPricingDisclaimer = typeof proposalContext.vendor_pricing_disclaimer === 'string' ? proposalContext.vendor_pricing_disclaimer : null
   const eventDetails = [
     proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
     summary.eventAccess,
+    vendorPricingDisclaimer,
   ].filter(Boolean).join(' | ')
   return {
     subject: 'Your Luxor final proposal is ready',

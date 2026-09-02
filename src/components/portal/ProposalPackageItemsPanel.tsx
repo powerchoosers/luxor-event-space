@@ -503,7 +503,7 @@ export function ProposalPackageItemsPanel({
           )}
 
           <div className="grid gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 sm:grid-cols-2 sm:p-5">
-            <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price treatment</p><p className="mt-1 text-xs font-semibold">Retail rates, except Gold’s all-inclusive rates.</p></div>
+            <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price treatment</p><p className="mt-1 text-xs font-semibold">Confirmed Luxor charges are separate from preferred-vendor planning estimates.</p></div>
             <div className="sm:text-right"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Refundable security deposit</p><p className="mt-1 font-mono text-sm font-black text-[color:var(--portal-text)]">{formatMoney(refundableSecurityDeposit ?? 750)}</p><p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Collected separately after the agreement is signed.</p></div>
           </div>
         </section>

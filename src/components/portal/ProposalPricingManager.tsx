@@ -42,71 +42,43 @@ const PERIODS = [
 
 const MONEY_GROUPS: FieldGroup[] = [
   {
-    title: 'Required fees',
-    description: 'Cleaning and security are automatically included in proposal totals by guest count.',
+    title: 'Confirmed Luxor charges',
+    description: 'These are official Luxor charges. They appear in the final event price, agreement, payment schedule, and payment link.',
     fields: [
-      ...[0, 1, 2].flatMap((index) => [
-        { label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['required_fees', 'cleaning', 'retail', index, 'amount'] },
-        { label: `All-inclusive cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['required_fees', 'cleaning', 'all_inclusive', index, 'amount'] },
-      ]),
-      ...[0, 1].flatMap((index) => [
-        { label: `Security ${index === 0 ? '1–150' : '151–200'} guests`, path: ['required_fees', 'security', 'retail', index, 'amount'] },
-        { label: `All-inclusive security ${index === 0 ? '1–150' : '151–200'} guests`, path: ['required_fees', 'security', 'all_inclusive', index, 'amount'] },
-      ]),
+      ...[0, 1, 2].map((index) => ({ label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'cleaning', 'retail', index, 'amount'] })),
+      ...[0, 1].map((index) => ({ label: `Security ${index === 0 ? '1–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'security', 'retail', index, 'amount'] })),
+      { label: 'Refundable security deposit', path: ['luxor_costs', 'security_deposit', 'amount'] },
     ],
   },
   {
-    title: 'Decor, food, and entertainment',
-    description: 'These line items feed package totals and selectable proposal add-ons.',
+    title: 'Preferred Vendor Collection — estimated pricing',
+    description: 'Planning estimates only. They never become Luxor charges, invoices, contracts, or payment links.',
     fields: [
-      { label: 'Essential decor', path: ['decor', 'essential', 'retail'] },
-      { label: 'Essential decor · all-inclusive', path: ['decor', 'essential', 'all_inclusive'] },
-      { label: 'Full decor & planning', path: ['decor', 'full_decor_and_planning', 'retail'] },
-      { label: 'Full decor & planning · all-inclusive', path: ['decor', 'full_decor_and_planning', 'all_inclusive'] },
-      { label: 'Buffet per guest', path: ['catering', 'buffet', 'retail_per_guest'], step: '0.01' },
-      { label: 'Buffet per guest · all-inclusive', path: ['catering', 'buffet', 'all_inclusive_per_guest'], step: '0.01' },
-      { label: 'Plated meal per guest', path: ['catering', 'plated', 'retail_per_guest'], step: '0.01' },
-      { label: 'Plated meal per guest · all-inclusive', path: ['catering', 'plated', 'all_inclusive_per_guest'], step: '0.01' },
-      { label: 'DJ', path: ['dj', 'retail'] },
-      { label: 'DJ · all-inclusive', path: ['dj', 'all_inclusive'] },
-      { label: 'Signature photo booth', path: ['photo_booth', 'signature_experience', 'retail'] },
-      { label: 'Signature photo booth · all-inclusive', path: ['photo_booth', 'signature_experience', 'all_inclusive'] },
-      { label: 'Celebration photo booth', path: ['photo_booth', 'celebration_experience', 'retail'] },
-      { label: 'Celebration photo booth · all-inclusive', path: ['photo_booth', 'celebration_experience', 'all_inclusive'] },
-      { label: 'Forever photo booth', path: ['photo_booth', 'forever_experience', 'retail'] },
-      { label: 'Forever photo booth · all-inclusive', path: ['photo_booth', 'forever_experience', 'all_inclusive'] },
+      { label: 'Essential decor starting investment', path: ['preferred_vendor_estimates', 'decor', 'essential', 'starting_investment'] },
+      { label: 'Full decor & planning starting investment', path: ['preferred_vendor_estimates', 'decor', 'full_decor_and_planning', 'starting_investment'] },
+      { label: 'Buffet starting per guest', path: ['preferred_vendor_estimates', 'catering', 'buffet', 'starting_per_guest'], step: '0.01' },
+      { label: 'Plated meal starting per guest', path: ['preferred_vendor_estimates', 'catering', 'plated', 'starting_per_guest'], step: '0.01' },
+      { label: 'DJ starting investment', path: ['preferred_vendor_estimates', 'dj', 'starting_investment'] },
+      { label: 'Signature photo booth starting investment', path: ['preferred_vendor_estimates', 'photo_booth', 'signature_experience', 'starting_investment'] },
+      { label: 'Celebration photo booth starting investment', path: ['preferred_vendor_estimates', 'photo_booth', 'celebration_experience', 'starting_investment'] },
+      { label: 'Forever photo booth starting investment', path: ['preferred_vendor_estimates', 'photo_booth', 'forever_experience', 'starting_investment'] },
     ],
   },
   {
-    title: 'Bar service',
-    description: 'Staffing follows the saved guest bands. Bar packages use the higher of the per-guest total or minimum.',
+    title: 'Preferred Vendor Collection — bar estimates',
+    description: 'Estimated vendor pricing by guest count and minimums. Clients confirm final details directly with the vendor.',
     fields: [
       ...[0, 1, 2].flatMap((index) => [
-        { label: `Bartending ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['bartending', 'retail', 'staffing', index, 'amount'] },
-        { label: `Bartending ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} · all-inclusive`, path: ['bartending', 'all_inclusive', 'staffing', index, 'amount'] },
+        { label: `Bartending starting estimate ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['preferred_vendor_estimates', 'bartending', 'staffing', index, 'amount'] },
       ]),
-      { label: 'Additional hour per bartender', path: ['bartending', 'retail', 'additional_hour_per_bartender'] },
-      { label: 'Additional hour · all-inclusive', path: ['bartending', 'all_inclusive', 'additional_hour_per_bartender'] },
+      { label: 'Additional hour per bartender', path: ['preferred_vendor_estimates', 'bartending', 'additional_hour_per_bartender'] },
       ...(['signature_byob', 'premium_byob', 'non_alcoholic'] as const).flatMap((bar) => {
         const label = bar === 'signature_byob' ? 'Signature BYOB' : bar === 'premium_byob' ? 'Premium BYOB' : 'Non-alcoholic bar'
         return [
-          { label: `${label} per guest`, path: ['bartending', 'retail', 'bars', bar, 'per_guest'] },
-          { label: `${label} minimum`, path: ['bartending', 'retail', 'bars', bar, 'minimum'] },
-          { label: `${label} per guest · all-inclusive`, path: ['bartending', 'all_inclusive', 'bars', bar, 'per_guest'] },
-          { label: `${label} minimum · all-inclusive`, path: ['bartending', 'all_inclusive', 'bars', bar, 'minimum'] },
+          { label: `${label} starting per guest`, path: ['preferred_vendor_estimates', 'bartending', 'bars', bar, 'starting_per_guest'] },
+          { label: `${label} minimum`, path: ['preferred_vendor_estimates', 'bartending', 'bars', bar, 'minimum'] },
         ]
       }),
-    ],
-  },
-  {
-    title: 'Deposits, tax, and tables',
-    description: 'These values are applied by the proposal calculator and retained in each published proposal snapshot.',
-    fields: [
-      { label: 'Refundable security deposit', path: ['security_deposit', 'amount'] },
-      { label: 'Essential decor additional table', path: ['tables', 'additional_table_rates', 'essential_decor', 'retail'] },
-      { label: 'Essential table · all-inclusive', path: ['tables', 'additional_table_rates', 'essential_decor', 'all_inclusive'] },
-      { label: 'Full decor additional table', path: ['tables', 'additional_table_rates', 'full_decor_and_planning', 'retail'] },
-      { label: 'Full decor table · all-inclusive', path: ['tables', 'additional_table_rates', 'full_decor_and_planning', 'all_inclusive'] },
     ],
   },
 ]
@@ -219,23 +191,23 @@ export function ProposalPricingManager() {
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
                   {PERIODS.map((period) => (
                     <div key={period.id} className="min-w-0 space-y-2">
-                      <MoneyInput draft={draft} field={{ label: period.label, path: ['rental_rates', day.id, period.id] }} onChange={update} />
-                      <label className="flex min-h-8 items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={catalogValue(draft, 'rental_rate_rules', day.id, period.id, 'public') !== false} onChange={(event) => update(['rental_rate_rules', day.id, period.id, 'public'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Show publicly</label>
+                      <MoneyInput draft={draft} field={{ label: period.label, path: ['luxor_costs', 'rental_rates', day.id, period.id] }} onChange={update} />
+                      <label className="flex min-h-8 items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={catalogValue(draft, 'luxor_costs', 'rental_rate_rules', day.id, period.id, 'public') !== false} onChange={(event) => update(['luxor_costs', 'rental_rate_rules', day.id, period.id, 'public'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Show publicly</label>
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 grid gap-4 border-t border-[color:var(--portal-border)] pt-4 sm:grid-cols-2">
-                  <MoneyInput draft={draft} field={{ label: 'Additional hour', path: ['additional_time_rates', day.id], optional: true }} onChange={update} />
+                  <MoneyInput draft={draft} field={{ label: 'Additional hour', path: ['luxor_costs', 'additional_time_rates', day.id], optional: true }} onChange={update} />
                   {day.id === 'monday_thursday' ? <>
-                    <MoneyInput draft={draft} field={{ label: 'Daytime hourly rate', path: ['rental_rate_rules', day.id, 'morning', 'hourly_rate'] }} onChange={update} />
-                    <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum hours</span><input type="number" min="1" step="1" value={String(catalogNumber(draft, 'rental_rate_rules', day.id, 'morning', 'minimum_hours') ?? '')} onChange={(event) => update(['rental_rate_rules', day.id, 'morning', 'minimum_hours'], Number(event.target.value))} className={inputClass} /></label>
+                    <MoneyInput draft={draft} field={{ label: 'Daytime hourly rate', path: ['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'hourly_rate'] }} onChange={update} />
+                    <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum hours</span><input type="number" min="1" step="1" value={String(catalogNumber(draft, 'luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours') ?? '')} onChange={(event) => update(['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours'], Number(event.target.value))} className={inputClass} /></label>
                   </> : null}
                 </div>
               </article>
             ))}
           </div>
           <div className="mt-5 grid gap-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:grid-cols-3">
-            {PERIODS.map((period) => <div key={period.id} className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{period.label} access</p><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-faint)]">Starts<input type="time" value={String(catalogValue(draft, 'rental_access', period.id, 'start') || '')} onChange={(event) => update(['rental_access', period.id, 'start'], event.target.value)} className={`${inputClass} mt-1 px-2 text-xs`} /></label><label className="text-[9px] font-bold text-[color:var(--portal-faint)]">Ends<input type="time" value={String(catalogValue(draft, 'rental_access', period.id, 'end') || '')} onChange={(event) => update(['rental_access', period.id, 'end'], event.target.value)} className={`${inputClass} mt-1 px-2 text-xs`} /></label></div></div>)}
+            {PERIODS.map((period) => <div key={period.id} className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{period.label} access</p><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[9px] font-bold text-[color:var(--portal-faint)]">Starts<input type="time" value={String(catalogValue(draft, 'luxor_costs', 'rental_access', period.id, 'start') || '')} onChange={(event) => update(['luxor_costs', 'rental_access', period.id, 'start'], event.target.value)} className={`${inputClass} mt-1 px-2 text-xs`} /></label><label className="text-[9px] font-bold text-[color:var(--portal-faint)]">Ends<input type="time" value={String(catalogValue(draft, 'luxor_costs', 'rental_access', period.id, 'end') || '')} onChange={(event) => update(['luxor_costs', 'rental_access', period.id, 'end'], event.target.value)} className={`${inputClass} mt-1 px-2 text-xs`} /></label></div></div>)}
           </div>
         </div>
       </details>
@@ -249,7 +221,7 @@ export function ProposalPricingManager() {
 
       <details className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Sales tax</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Stored as a percentage and applied to taxable proposal line items.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
-        <div className="border-t border-[color:var(--portal-border)] p-4 sm:p-6"><label className="block max-w-xs space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Sales tax rate</span><span className="relative block"><input aria-label="Sales tax rate" type="number" min="0" max="100" step="0.01" value={String((catalogNumber(draft, 'taxes_and_processing_fees', 'sales_tax_rate') ?? 0) * 100)} onChange={(event) => update(['taxes_and_processing_fees', 'sales_tax_rate'], Number(event.target.value) / 100)} className={`${inputClass} pr-9`} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-[color:var(--portal-faint)]">%</span></span></label></div>
+        <div className="border-t border-[color:var(--portal-border)] p-4 sm:p-6"><label className="block max-w-xs space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Sales tax rate</span><span className="relative block"><input aria-label="Sales tax rate" type="number" min="0" max="100" step="0.01" value={String((catalogNumber(draft, 'luxor_costs', 'taxes_and_processing_fees', 'sales_tax_rate') ?? 0) * 100)} onChange={(event) => update(['luxor_costs', 'taxes_and_processing_fees', 'sales_tax_rate'], Number(event.target.value) / 100)} className={`${inputClass} pr-9`} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-[color:var(--portal-faint)]">%</span></span></label></div>
       </details>
     </section>
   )

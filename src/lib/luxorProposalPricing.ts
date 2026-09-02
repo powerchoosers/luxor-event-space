@@ -28,6 +28,8 @@ export type LuxorProposalCustomItem = {
   quantity?: number | string
   unitPrice?: number | string
   paymentBucket?: 'venue' | 'event'
+  /** Owner-controlled classification. Vendor estimates are never invoice lines. */
+  costClassification?: 'luxor_charge' | 'preferred_vendor_estimate'
   detail?: string
 }
 
@@ -157,6 +159,15 @@ export type LuxorProposalCalculation = {
   amount_due_to_book: number | null
   /** Exact pre-tax quotes for each catalog add-on under the selected package's rate tier. */
   addOnQuotes: LuxorProposalAddOnQuote[]
+  /** Planning-only third-party selections. These are deliberately excluded from lineItems and total. */
+  selectedVendorEstimateLines?: LuxorInvoiceLineItem[]
+  preferred_vendor_estimate_lines?: LuxorInvoiceLineItem[]
+  confirmedLuxorTotal?: number
+  confirmed_luxor_total?: number
+  estimatedVendorTotal?: number
+  estimated_vendor_total?: number
+  estimatedOverallInvestment?: number
+  estimated_overall_investment?: number
   /** Server-resolved terms for the applied saved promotion, if any. */
   promotion?: LuxorProposalPromotionSnapshot
   proposalContext: LuxorProposalContext
@@ -1109,11 +1120,149 @@ function calculateAddOnQuotes(input: {
   })
 }
 
+export const PREFERRED_VENDOR_PRICING_DISCLAIMER = 'Vendor Pricing Disclaimer: Venue rental pricing is provided directly by Luxor and represents the official venue rental cost. Pricing for third-party vendor services is provided as an estimate for planning purposes only and is not a guaranteed quote. Final pricing, availability, services, and payment arrangements must be confirmed directly with the individual vendor.'
+
+function preferredVendorCustomIds(selection: LuxorProposalSelection) {
+  const source = selection.customItems ?? selection.custom_items
+  if (!Array.isArray(source)) return new Set<string>()
+  return new Set(source.map((value, index) => {
+    const item = record(value)
+    if (item?.costClassification !== 'preferred_vendor_estimate') return ''
+    const rawId = trimmedString(item.id || item.catalogId || item.catalog_id).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
+    return rawId ? (rawId.startsWith('custom-') ? rawId : `custom-${rawId}`) : `custom-${index + 1}`
+  }).filter(Boolean))
+}
+
+function preferredQuote(config: PricingRecord, option: ServiceQuoteOption, guests: number): LuxorProposalAddOnQuote {
+  const root = readRecord(config, 'preferred_vendor_estimates') || {}
+  const unavailable = (error: string): LuxorProposalAddOnQuote => ({ id: option.id, label: option.label, category: option.category, group: option.group, kind: option.kind, rateTier: 'retail', available: false, total: null, lineItems: [], error })
+  let quantity = 1
+  let unitPrice: number | undefined
+  let detail = 'Estimated starting investment. Confirm directly with the preferred vendor.'
+  let breakdown: LuxorProposalPriceBreakdown | undefined
+  if (option.group === 'decor') {
+    unitPrice = readNumber(root, 'decor', option.kind === 'essential' ? 'essential' : 'full_decor_and_planning', 'starting_investment')
+  } else if (option.group === 'catering') {
+    quantity = guests
+    unitPrice = readNumber(root, 'catering', option.kind, 'starting_per_guest')
+    detail = `Estimated starting investment at ${guests} guests. Confirm menu, selections, and final quote directly with the vendor.`
+  } else if (option.group === 'dj') {
+    unitPrice = readNumber(root, 'dj', 'starting_investment')
+    const hours = readNumber(root, 'dj', 'hours') || 6
+    detail = `Estimated starting investment for up to ${hours} hours. Confirm availability and final quote directly with the vendor.`
+  } else if (option.group === 'photo_booth') {
+    const key = option.kind === 'signature' ? 'signature_experience' : option.kind === 'celebration' ? 'celebration_experience' : 'forever_experience'
+    unitPrice = readNumber(root, 'photo_booth', key, 'starting_investment')
+  } else if (option.kind === 'bartender') {
+    const tier = tierForGuestCount(readRecord(root, 'bartending')?.staffing, guests)
+    unitPrice = numberValue(tier?.amount)
+    detail = `Estimated staffing investment for ${guests} guests. Confirm staffing, availability, and final quote directly with the vendor.`
+  } else {
+    quantity = guests
+    const bar = readRecord(root, 'bartending', 'bars', option.kind)
+    const perGuest = numberValue(bar?.starting_per_guest)
+    const minimum = numberValue(bar?.minimum)
+    if (perGuest === undefined || minimum === undefined) return unavailable('Preferred vendor estimate configuration required — administrator review.')
+    const total = Math.max(minimum, rounded(perGuest * guests))
+    unitPrice = rounded(total / Math.max(1, guests))
+    detail = `Estimated starting investment for ${guests} guests, subject to a ${minimum.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} minimum. Confirm directly with the vendor.`
+    breakdown = { quantity, unit_price: unitPrice, subtotal: total, per_guest_rate: perGuest, minimum, applied_minimum: total === minimum }
+  }
+  if (unitPrice === undefined || unitPrice < 0) return unavailable('Preferred vendor estimate configuration required — administrator review.')
+  const total = breakdown?.subtotal ?? rounded(quantity * unitPrice)
+  const vendorLine = lineItem({ id: `preferred-vendor-${option.id}`, category: 'Preferred Vendor Services — Estimated Pricing', description: option.label, quantity, unitPrice, detail, pricingRole: 'add_on', paymentBucket: 'event', quoteBreakdown: breakdown || { quantity, unit_price: unitPrice, subtotal: total } })
+  return { id: option.id, label: option.label, category: option.category, group: option.group, kind: option.kind, rateTier: 'retail', available: true, total, lineItems: [vendorLine], quoteBreakdown: vendorLine.quoteBreakdown, state: 'available' }
+}
+
+function calculatePreferredVendorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig, options: LuxorProposalCalculationOptions): LuxorProposalCalculation {
+  const luxor = readRecord(config, 'luxor_costs') || config
+  const errors: string[] = []
+  const warnings: string[] = []
+  const eventDate = typeof selection.eventDate === 'string' ? selection.eventDate : ''
+  const guestCount = Math.floor(numberValue(selection.guestCount) || 0)
+  const rentalPeriod = normalizeRentalPeriod(selection.rentalPeriod)
+  const maxGuests = readNumber(luxor, 'guest_count', 'maximum') || 200
+  const minGuests = readNumber(luxor, 'guest_count', 'minimum') || 1
+  const requestedLegacyPackage = normalizePackageId(selection.packageId)
+  if (requestedLegacyPackage && requestedLegacyPackage !== 'rental_only') errors.push('Legacy package selections cannot be used for a new proposal. Start a new Luxor venue proposal instead.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !dateRateGroup(eventDate)) errors.push('A valid event date is required.')
+  if (!guestCount || guestCount < minGuests || guestCount > maxGuests) errors.push(`Expected guest count must be between ${minGuests} and ${maxGuests}.`)
+  if (!rentalPeriod) errors.push('Choose a morning, evening, or full-day rental period.')
+  const custom = normalizeCustomItems(selection)
+  errors.push(...custom.errors)
+  const vendorCustom = preferredVendorCustomIds(selection)
+  const confirmedCustom = custom.items.filter((item) => !vendorCustom.has(String(item.id)))
+  const vendorCustomItems = custom.items.filter((item) => vendorCustom.has(String(item.id))).map((item) => ({ ...item, category: 'Preferred Vendor Services — Estimated Pricing', detail: item.detail || 'Owner-entered estimated vendor investment. Confirm directly with the vendor.' }))
+  const confirmed: LuxorInvoiceLineItem[] = []
+  const safePeriod = rentalPeriod || 'evening'
+  const rentalGroup = dateRateGroup(eventDate)
+  const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined
+  if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
+  else confirmed.push(lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor venue rental', unitPrice: rentalAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: `Official Luxor rate for ${safePeriod.replace('_', ' ')} venue access.` }))
+  const cleaning = tierForGuestCount(readRecord(luxor, 'required_fees', 'cleaning')?.retail, guestCount)
+  const security = tierForGuestCount(readRecord(luxor, 'required_fees', 'security')?.retail, guestCount)
+  const cleaningAmount = numberValue(cleaning?.amount)
+  const securityAmount = numberValue(security?.amount)
+  if (cleaningAmount === undefined || securityAmount === undefined) errors.push(CONFIGURATION_ERROR)
+  else {
+    confirmed.push(lineItem({ id: 'required-cleaning', category: 'Luxor required charges', description: 'Required cleaning', unitPrice: cleaningAmount, required: true, pricingRole: 'required', paymentBucket: 'venue' }))
+    confirmed.push(lineItem({ id: 'required-security', category: 'Luxor required charges', description: `Required security${numberValue(security?.officers) ? ` (${numberValue(security?.officers)} officer${numberValue(security?.officers) === 1 ? '' : 's'})` : ''}`, unitPrice: securityAmount, required: true, pricingRole: 'required', paymentBucket: 'venue' }))
+  }
+  confirmed.push(lineItem({ id: 'included-tables-chairs', category: 'Included with venue rental', description: 'Tables and chairs', unitPrice: 0, included: true, pricingRole: 'included', paymentBucket: 'venue', detail: 'Included with the confirmed Luxor venue rental.' }))
+  confirmed.push(...confirmedCustom)
+  const requestedPromotionId = trimmedString(selection.promotionId ?? selection.promotion_id)
+  const promotion = promotionFromOptions(options.promotion)
+  if (requestedPromotionId && !promotion) errors.push('The selected promotion could not be verified. Refresh promotions and choose an active saved promotion.')
+  const subtotal = rounded(confirmed.reduce((sum, item) => sum + item.total, 0))
+  const discountAmount = promotion ? rounded(promotion.discount_type === 'percent' ? subtotal * promotion.value / 100 : Math.min(subtotal, promotion.value)) : 0
+  const configuredTaxRate = configTaxRate(luxor)
+  const requestedTaxRate = selectedTaxRate(selection)
+  const taxRate = requestedTaxRate === null ? 0 : requestedTaxRate ?? configuredTaxRate ?? 0
+  if (configuredTaxRate === null) errors.push(CONFIGURATION_ERROR)
+  const taxAmount = rounded(Math.max(0, subtotal - discountAmount) * taxRate)
+  if (taxAmount) confirmed.push(lineItem({ id: 'luxor-sales-tax', category: 'Luxor tax', description: 'Applicable Luxor sales tax', unitPrice: taxAmount, pricingRole: 'tax', paymentBucket: 'venue' }))
+  if (discountAmount) confirmed.push(lineItem({ id: 'luxor-promotion', category: 'Luxor adjustment', description: promotion?.name || 'Approved promotion', unitPrice: -discountAmount, pricingRole: 'discount', paymentBucket: 'venue' }))
+  const confirmedLuxorTotal = rounded(subtotal - discountAmount + taxAmount)
+  const selectedIds = selectedProposalAddOns(selection)
+  const quoteErrors: string[] = []
+  const selectedByGroup = new Map<ServiceChoiceGroup, string>()
+  for (const id of selectedIds) {
+    const option = optionForId(id)
+    if (!option) continue
+    const prior = selectedByGroup.get(option.group)
+    if (prior && prior !== id) quoteErrors.push(`Choose one ${option.group === 'photo_booth' ? 'photo booth' : option.group === 'bar' ? 'bar service' : option.group} option.`)
+    else selectedByGroup.set(option.group, id)
+  }
+  const addOnQuotes = ADD_ON_QUOTE_OPTIONS.map((option) => preferredQuote(config, option, guestCount))
+  const selectedVendorEstimateLines = addOnQuotes.filter((quote) => selectedIds.includes(quote.id)).flatMap((quote) => quote.lineItems).concat(vendorCustomItems)
+  const estimatedVendorTotal = rounded(selectedVendorEstimateLines.reduce((sum, item) => sum + item.total, 0))
+  const securityDeposit = readNumber(luxor, 'security_deposit', 'amount') || 750
+  const paymentPlan = planFromSelection(selection)
+  const calculationErrors = [...new Set([...errors, ...quoteErrors])]
+  const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
+  const finalContext: LuxorProposalContext = {
+    version: 2, package_id: 'luxor_venue_proposal', package_name: 'Luxor Venue Proposal', event_date: eventDate, expected_guest_count: guestCount, rental_period: safePeriod,
+    event_access: safePeriod.replace('_', ' '), venue_services_total: confirmedLuxorTotal, event_services_total: 0, luxor_services_total: confirmedLuxorTotal, planner_services_total: 0,
+    final_event_price: confirmedLuxorTotal, refundable_security_deposit: securityDeposit, payment_collection_scope: 'luxor_services_only', amount_due_to_book: paymentPlan?.mode === 'pay_in_full' ? confirmedLuxorTotal : paymentPlan ? rounded(confirmedLuxorTotal * paymentPlan.booking_payment_percent / 100) : null,
+    ...(paymentPlan ? { payment_plan: paymentPlan } : {}), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}),
+    confirmed_luxor_total: confirmedLuxorTotal, estimated_vendor_total: estimatedVendorTotal, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), preferred_vendor_estimate_lines: selectedVendorEstimateLines,
+    vendor_pricing_disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER,
+    pricing_selection: { packageId: 'luxor_venue_proposal', eventDate, guestCount, rentalPeriod: safePeriod, addOns: selectedIds, customItems: selection.customItems ?? selection.custom_items ?? [], ...(paymentPlan ? { paymentPlan } : {}) },
+    calculation_warnings: warnings, calculation_errors: calculationErrors, publication_errors: publicationErrors,
+  }
+  const primary = { id: 'luxor_venue_proposal' as LuxorProposalPackageId, name: 'Luxor Venue Proposal', description: 'Confirmed venue rental and required Luxor charges.', finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, refundableSecurityDeposit: securityDeposit, refundable_security_deposit: securityDeposit, amountDueToBook: finalContext.amount_due_to_book || null, amount_due_to_book: finalContext.amount_due_to_book || null, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, lineItems: confirmed, line_items: confirmed, ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), warnings, errors: calculationErrors }
+  const snapshot = { schema_version: 2, calculated_at: new Date().toISOString(), pricing_mode: 'venue_plus_preferred_vendor_estimates', pricing_config: config, confirmed_luxor: { line_items: confirmed, total: confirmedLuxorTotal, refundable_security_deposit: securityDeposit }, preferred_vendor_estimates: { selected_lines: selectedVendorEstimateLines, total: estimatedVendorTotal, disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER }, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal) }
+  return { valid: calculationErrors.length === 0, publishable: calculationErrors.length === 0 && publicationErrors.length === 0, calculationErrors, publicationErrors, requirements: { paymentPlan: !paymentPlan }, errors: [...calculationErrors, ...publicationErrors], warnings, packages: [primary], lineItems: confirmed, line_items: confirmed, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, total: confirmedLuxorTotal, finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, securityDepositAmount: securityDeposit, refundable_security_deposit: securityDeposit, totalWithSecurityDeposit: rounded(confirmedLuxorTotal + securityDeposit), amountDueToBook: primary.amountDueToBook, amount_due_to_book: primary.amountDueToBook, addOnQuotes, selectedVendorEstimateLines, preferred_vendor_estimate_lines: selectedVendorEstimateLines, confirmedLuxorTotal, confirmed_luxor_total: confirmedLuxorTotal, estimatedVendorTotal, estimated_vendor_total: estimatedVendorTotal, estimatedOverallInvestment: rounded(confirmedLuxorTotal + estimatedVendorTotal), estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), proposalContext: finalContext, context: finalContext, snapshot }
+}
+
 export function calculateLuxorProposal(
   selection: LuxorProposalSelection,
   config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
   options: LuxorProposalCalculationOptions = {},
 ): LuxorProposalCalculation {
+  if (config.pricing_mode === 'venue_plus_preferred_vendor_estimates') {
+    return calculatePreferredVendorProposal(selection, config, options)
+  }
   const selectedPackageId = normalizePackageId(selection.packageId)
   const eventDate = typeof selection.eventDate === 'string' ? selection.eventDate : ''
   const guestCount = Math.floor(numberValue(selection.guestCount) || 0)

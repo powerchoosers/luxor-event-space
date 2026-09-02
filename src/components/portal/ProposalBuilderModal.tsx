@@ -26,7 +26,7 @@ import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 type ProposalSubmitAction = 'save' | 'email' | 'in_person'
 type ProposalPresentationMode = 'email' | 'in_person'
 
-type ProposalPackageId = 'rent_only' | 'bronze' | 'silver' | 'gold'
+type ProposalPackageId = 'rent_only'
 
 export type ProposalBuilderContext = {
   [key: string]: unknown
@@ -181,31 +181,10 @@ const PACKAGE_OPTIONS: Array<{
 }> = [
   {
     id: 'rent_only',
-    name: 'Custom Package',
-    eyebrow: 'Venue access',
-    description: 'A clear venue foundation with the required event services calculated for this guest count.',
-    inclusions: ['Venue rental', 'Security', 'Cleaning', 'Tables & chairs included with rental'],
-  },
-  {
-    id: 'bronze',
-    name: 'Bronze - Essentials',
-    eyebrow: 'Essentials',
-    description: 'A polished starting point for a hosted celebration.',
-    inclusions: ['Everything in Custom Package', 'Essential Decor', 'Buffet catering', 'DJ'],
-  },
-  {
-    id: 'silver',
-    name: 'Silver - Premier',
-    eyebrow: 'Premier',
-    description: 'A fuller celebration package with the selected experience details.',
-    inclusions: ['Everything in Bronze', 'Full Decor & Planning', 'Signature Photo Booth', '8 event hours + 4 setup/breakdown hours'],
-  },
-  {
-    id: 'gold',
-    name: 'Gold - All-Inclusive',
-    eyebrow: 'All inclusive',
-    description: 'The most complete Luxor experience, calculated from the event itself.',
-    inclusions: ['Everything in Silver', 'Bartender service', '8 event hours + 4 setup/breakdown hours'],
+    name: 'Luxor Venue Proposal',
+    eyebrow: 'Confirmed Luxor cost',
+    description: 'Official Luxor venue rental, required cleaning and security, applicable tax, and included tables and chairs.',
+    inclusions: ['Venue rental', 'Required security', 'Required cleaning', 'Tables & chairs included with rental'],
   },
 ]
 
@@ -216,9 +195,6 @@ const PACKAGE_OPTIONS: Array<{
  */
 const PACKAGE_INCLUDED_SERVICE_IDS: Record<ProposalPackageId, readonly string[]> = {
   rent_only: [],
-  bronze: ['essential_decor', 'buffet_catering', 'dj'],
-  silver: ['full_decor', 'buffet_catering', 'dj', 'photo_booth_signature'],
-  gold: ['full_decor', 'buffet_catering', 'dj', 'photo_booth_signature', 'bartender_service'],
 }
 
 /**
@@ -231,24 +207,24 @@ const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
   { id: 'required_security', name: 'Security', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
   { id: 'required_cleaning', name: 'Cleaning', category: 'Required services', detail: 'Required for every event and calculated from the guest count.', locked: true, required: true },
   { id: 'tables_chairs_setup', name: 'Tables & chairs included with rental', category: 'Setup & rentals', detail: 'Included with the venue rental at no additional charge.', locked: true, required: true },
-  { id: 'essential_decor', name: 'Essential decor', category: 'Decor', detail: 'Basic decor collection for the event.', exclusiveGroup: 'decor', serviceLevel: 'basic' },
-  { id: 'full_decor', name: 'Full decor & planning', category: 'Decor', detail: 'Upgrade to the full decor collection and planning service.', exclusiveGroup: 'decor', serviceLevel: 'upgrade' },
-  { id: 'buffet_catering', name: 'Buffet catering', category: 'Catering', detail: 'Basic catering style, calculated from the expected guest count.', exclusiveGroup: 'catering', serviceLevel: 'basic' },
-  { id: 'plated_catering', name: 'Plated catering', category: 'Catering', detail: 'Upgrade catering style, calculated from the expected guest count.', exclusiveGroup: 'catering', serviceLevel: 'upgrade' },
-  { id: 'dj', name: 'DJ', category: 'Entertainment', detail: 'Professional DJ service.' },
-  { id: 'photo_booth_signature', name: 'Signature photo booth', category: 'Photo booth', detail: 'Basic photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'basic' },
-  { id: 'photo_booth_celebration', name: 'Celebration photo booth', category: 'Photo booth', detail: 'Upgrade photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
-  { id: 'photo_booth_forever', name: 'Forever photo booth', category: 'Photo booth', detail: 'Upgrade photo booth experience.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
-  { id: 'bartender_service', name: 'Bartender service', category: 'Bar', detail: 'Basic bar service tier determined by guest count.', exclusiveGroup: 'bar', serviceLevel: 'basic' },
-  { id: 'byob_signature', name: 'Signature BYOB bar', category: 'Bar', detail: 'Upgrade bar package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
-  { id: 'byob_premium', name: 'Premium BYOB bar', category: 'Bar', detail: 'Upgrade bar package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
-  { id: 'byob_non_alcoholic', name: 'Non-alcoholic bar', category: 'Bar', detail: 'Upgrade non-alcoholic package with the applicable minimum.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
+  { id: 'essential_decor', name: 'Essential decor', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'decor', serviceLevel: 'basic' },
+  { id: 'full_decor', name: 'Full decor & planning', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'decor', serviceLevel: 'upgrade' },
+  { id: 'buffet_catering', name: 'Buffet catering', category: 'Preferred Vendor Collection', detail: 'Estimated per-guest starting investment. Confirm directly with the vendor.', exclusiveGroup: 'catering', serviceLevel: 'basic' },
+  { id: 'plated_catering', name: 'Plated catering', category: 'Preferred Vendor Collection', detail: 'Estimated per-guest starting investment. Confirm directly with the vendor.', exclusiveGroup: 'catering', serviceLevel: 'upgrade' },
+  { id: 'dj', name: 'DJ', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.' },
+  { id: 'photo_booth_signature', name: 'Signature photo booth', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'photo_booth', serviceLevel: 'basic' },
+  { id: 'photo_booth_celebration', name: 'Celebration photo booth', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
+  { id: 'photo_booth_forever', name: 'Forever photo booth', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'photo_booth', serviceLevel: 'upgrade' },
+  { id: 'bartender_service', name: 'Bartender service', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'bar', serviceLevel: 'basic' },
+  { id: 'byob_signature', name: 'Signature BYOB bar', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
+  { id: 'byob_premium', name: 'Premium BYOB bar', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
+  { id: 'byob_non_alcoholic', name: 'Non-alcoholic bar', category: 'Preferred Vendor Collection', detail: 'Estimated starting investment. Confirm directly with the vendor.', exclusiveGroup: 'bar', serviceLevel: 'upgrade' },
 ]
 
 const STEPS = [
   { id: 'details', label: 'Details', icon: ClipboardList },
-  { id: 'services', label: 'Services & items', icon: PackageCheck },
-  { id: 'compare', label: 'Compare packages', icon: ReceiptText },
+  { id: 'services', label: 'Preferred vendors', icon: PackageCheck },
+  { id: 'compare', label: 'Investment', icon: ReceiptText },
   { id: 'review', label: 'Selected proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
 ] as const
@@ -376,9 +352,9 @@ function asString(value: unknown) {
 function normalizePackageId(value?: string | null) {
   const normalized = (value || '').toLowerCase().replace(/[^a-z]/g, '')
   if (normalized === 'custompackage' || normalized === 'rentonly' || normalized === 'rentalonly' || normalized === 'venue') return 'rent_only'
-  if (normalized === 'bronze' || normalized === 'essentials' || normalized === 'bronzeessentials') return 'bronze'
-  if (normalized === 'silver' || normalized === 'premier' || normalized === 'silverpremier') return 'silver'
-  if (normalized === 'gold' || normalized === 'allinclusive' || normalized === 'goldallinclusive') return 'gold'
+  if (normalized === 'luxorvenueproposal') return 'rent_only'
+  // Historic proposal snapshots retain their original package label. New work always starts as the one Luxor venue proposal.
+  if (normalized === 'bronze' || normalized === 'essentials' || normalized === 'bronzeessentials' || normalized === 'silver' || normalized === 'premier' || normalized === 'silverpremier' || normalized === 'gold' || normalized === 'allinclusive' || normalized === 'goldallinclusive') return 'rent_only'
   return value || ''
 }
 
@@ -650,7 +626,7 @@ export function ProposalBuilderModal({
   }, [isOpen])
 
   const effectiveContext = localContext
-  const selectedPackage = normalizePackageId(selectedPackageId || effectiveContext.package_id)
+  const selectedPackage = 'rent_only'
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
@@ -938,7 +914,7 @@ export function ProposalBuilderModal({
 
   const pricingRequest = useMemo(() => ({
     selection: {
-      packageId: enginePackageId(selectedPackage) || null,
+      packageId: 'rental_only',
       eventDate: eventDateValue || null,
       guestCount: guestCount || null,
       eventType: eventType || effectiveContext.event_type || null,
@@ -954,7 +930,7 @@ export function ProposalBuilderModal({
     expected_guest_count: guestCount || null,
     event_type: eventType || effectiveContext.event_type || null,
     rental_period: rentalPeriod,
-    package_id: selectedPackage || null,
+    package_id: 'luxor_venue_proposal',
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
       service_ids: selectedServiceIds,
@@ -1054,7 +1030,7 @@ export function ProposalBuilderModal({
     }
     return result
   }, [calculation])
-  const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === normalizePackageId(selectedPackage))
+  const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === 'rent_only')
   const selectedContext = calculation?.context || effectiveContext
   const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
   const refundableSecurityDeposit = selectedCalculatedPackage?.refundableSecurityDeposit ?? asNumber(selectedContext.refundable_security_deposit)
@@ -1101,7 +1077,7 @@ export function ProposalBuilderModal({
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(selectedPackage && eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
+  const canPublish = Boolean(eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
   const reviewTogether = presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
   const publishTitle = hasUnmigratedLegacyDiscount
@@ -1117,10 +1093,6 @@ export function ProposalBuilderModal({
   const advance = () => {
     if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
       setValidationMessage('Add the event date and an expected guest count from 1 to 200 before continuing.')
-      return
-    }
-    if (stepIndex === 1 && !selectedPackage) {
-      setValidationMessage('Choose a package at the top of Services & Items before comparing the final options.')
       return
     }
     setValidationMessage(null)
@@ -1145,17 +1117,15 @@ export function ProposalBuilderModal({
 
   const headerStatus = pricingStatus === 'loading'
     ? 'Updating final price'
-    : pricingStatus === 'ready' && !pricingErrors.length && !selectedPackage
-      ? 'Choose a package'
-      : pricingStatus === 'ready' && !pricingErrors.length && paymentPlanRequired
+    : pricingStatus === 'ready' && !pricingErrors.length && paymentPlanRequired
         ? 'Payment plan needed'
         : pricingStatus === 'ready' && !pricingErrors.length
           ? 'Final price verified'
           : 'Pricing needs event details'
   const continueLabel = stepIndex === 0
-    ? 'Continue to services & items'
+    ? 'Continue to preferred vendors'
     : stepIndex === 1
-      ? 'Continue to compare'
+      ? 'Continue to investment'
     : stepIndex === 2
       ? 'Continue to review'
         : 'Continue to payment plan'
@@ -1485,7 +1455,7 @@ export function ProposalBuilderModal({
                   <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Build the services and items for this event.</h3>
                   <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Choose a starting package above, then adjust the exact service list. Required services stay locked; basic choices and upgrades are priced from Luxor’s approved rules.</p>
                 </div>
-                <button type="button" onClick={() => { setStepIndex(2); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ReceiptText size={13} /> Compare packages</button>
+                <button type="button" onClick={() => { setStepIndex(2); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ReceiptText size={13} /> Review investment</button>
               </div>
 
               <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
@@ -1676,7 +1646,7 @@ export function ProposalBuilderModal({
           <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Compare packages</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Estimated event investment</p>
                 <h3 className="mt-1 font-serif text-xl font-semibold">Switch the selected package?</h3>
               </div>
               <PortalCloseButton onClick={() => setPendingPackageChange(null)} aria-label="Cancel package change" />
