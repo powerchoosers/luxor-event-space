@@ -72,6 +72,29 @@ export async function PATCH(request: NextRequest) {
   const current = await supabaseRest<LuxorPortalMember[]>(`luxor_portal_members?id=eq.${id}&select=*&limit=1`)
   if (!current[0]) return NextResponse.json({ error: 'Team member not found.' }, { status: 404 })
   if (current[0].role === 'owner') return NextResponse.json({ error: 'The owner account cannot be changed here.' }, { status: 400 })
+  if (body.action === 'repair_identity') {
+    if (current[0].auth_user_id) return NextResponse.json({ member: current[0], repaired: false })
+    const auth = createLuxorSupabaseAuthAdmin()
+    const created = await auth.auth.admin.createUser({
+      email: current[0].email,
+      email_confirm: true,
+      app_metadata: { luxor_portal_role: current[0].role },
+    })
+    if (created.error || !created.data.user) {
+      return NextResponse.json({ error: created.error?.message || 'Unable to repair the secure login identity.' }, { status: 400 })
+    }
+    try {
+      const [member] = await supabaseRest<LuxorPortalMember[]>(`luxor_portal_members?id=eq.${id}&select=*`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ auth_user_id: created.data.user.id, status: 'pending', password_set_at: null, updated_at: new Date().toISOString() }),
+      })
+      return NextResponse.json({ member, repaired: true })
+    } catch (error) {
+      await auth.auth.admin.deleteUser(created.data.user.id).catch(() => undefined)
+      throw error
+    }
+  }
   if (body.action === 'revoke_sessions') {
     const now = new Date().toISOString()
     const [member] = await supabaseRest<LuxorPortalMember[]>(`luxor_portal_members?id=eq.${id}&select=*`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ sessions_revoked_at: now, updated_at: now }) })

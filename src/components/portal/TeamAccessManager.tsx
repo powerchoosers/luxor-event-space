@@ -12,7 +12,7 @@ const GROUPS = [
   { label: 'Workspace', items: [['settings', 'Settings'], ['team_access', 'Team access'], ['email_identity', 'Email sender identity'], ['phone_assignment', 'Phone line assignment']] },
 ] as const
 
-type Member = { id: string; email: string; recovery_email: string | null; display_name: string; role_title: string; avatar_url: string | null; role: 'owner' | 'admin' | 'agent'; status: 'pending' | 'active' | 'suspended'; permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null; invited_at: string | null; password_set_at: string | null; password_reset_sent_at: string | null; sessions_revoked_at: string | null }
+type Member = { id: string; email: string; recovery_email: string | null; auth_user_id: string | null; display_name: string; role_title: string; avatar_url: string | null; role: 'owner' | 'admin' | 'agent'; status: 'pending' | 'active' | 'suspended'; permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null; invited_at: string | null; password_set_at: string | null; password_reset_sent_at: string | null; sessions_revoked_at: string | null }
 type Phone = { id: string; phone_number: string; friendly_name: string | null }
 const defaults = { admin: GROUPS.flatMap((group) => group.items.map(([id]) => id)), agent: ['leads', 'emails', 'calls', 'messages', 'calendar', 'events'] }
 
@@ -40,6 +40,14 @@ export function TeamAccessManager() {
   }
   const beginAdd = () => { setEditing(null); setAdding(true); setForm({ displayName: '', roleTitle: '', avatarUrl: '', email: '', recoveryEmail: '', role: 'agent', permissions: defaults.agent, senderEmail: 'booking@luxoratlaspalmas.com', phoneNumberId: '' }) }
   const deliverInvite = async (email: string, purpose: 'activation' | 'password_reset' = 'activation') => {
+    if (purpose === 'activation') {
+      const member = members.find((item) => item.email === email)
+      if (member && !member.auth_user_id) {
+        const repair = await fetch('/api/portal/team-members', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: member.id, action: 'repair_identity' }) })
+        const repairData = await repair.json().catch(() => ({}))
+        if (!repair.ok) throw new Error(repairData.error || 'Unable to repair the secure login identity.')
+      }
+    }
     const response = await fetch('/api/auth/portal-magic-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, purpose }) })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(data.error || 'Unable to send the sign-in link.')
