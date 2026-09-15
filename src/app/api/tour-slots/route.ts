@@ -10,8 +10,12 @@ import {
   saveLuxorTourAvailability,
   unpublishLuxorTourDays,
   updateLuxorTourSlotStatus,
+  getLuxorTourScheduleSettings,
+  saveLuxorTourScheduleSettings,
+  saveFlexibleTourSchedule,
+  syncWeeklyTourSlots,
 } from '@/lib/luxorTourSlotsServer'
-import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, type LuxorTourAvailability } from '@/lib/luxorTourSlots'
+import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_START_TIME, type LuxorTourAvailability, type LuxorTourScheduleSettings } from '@/lib/luxorTourSlots'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/
@@ -27,9 +31,12 @@ export async function GET(request: Request) {
     const manage = new URL(request.url).searchParams.get('manage') === '1'
     if (manage) {
       if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
-      const slots = await listUpcomingLuxorTourSlots()
-      const availability = await listLuxorTourAvailability()
-      return NextResponse.json({ slots, availability })
+      const [slots, availability, settings] = await Promise.all([
+        listUpcomingLuxorTourSlots(),
+        listLuxorTourAvailability(),
+        getLuxorTourScheduleSettings(),
+      ])
+      return NextResponse.json({ slots, availability, settings })
     }
     const slots = await listAvailableLuxorTourSlots()
     return NextResponse.json({ slots })
@@ -44,6 +51,13 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>
+    if (body.flexibleSchedule && Array.isArray((body.flexibleSchedule as { dates: unknown }).dates)) {
+      const dates = (body.flexibleSchedule as { dates: Array<{ date: string; times: string[] }> }).dates
+      const weeksAhead = typeof body.weeksAhead === 'number' ? body.weeksAhead : undefined
+      const slots = await saveFlexibleTourSchedule(dates, weeksAhead)
+      return NextResponse.json({ slots, savedCount: dates.length }, { status: 201 })
+    }
+
     if (Array.isArray(body.dates)) {
       const dates = body.dates.map(String)
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
@@ -55,6 +69,7 @@ export async function POST(request: Request) {
       const slots = await publishLuxorTourDays(dates)
       return NextResponse.json({ slots, publishedDays: dates.length }, { status: 201 })
     }
+
     const slotDate = String(body.slotDate || '')
     const startTime = String(body.startTime || '')
     const endTime = body.endTime ? String(body.endTime) : null
@@ -98,10 +113,32 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>
-    if (Array.isArray(body.availability)) {
-      const availability = await saveLuxorTourAvailability(body.availability as never[])
-      return NextResponse.json({ availability })
+    let settings: LuxorTourScheduleSettings | undefined
+
+    if (body.settings && typeof body.settings === 'object') {
+      settings = await saveLuxorTourScheduleSettings(body.settings as Partial<LuxorTourScheduleSettings>)
     }
+
+    if (Array.isArray(body.availability)) {
+      const availability = await saveLuxorTourAvailability(body.availability as LuxorTourAvailability[])
+      const slots = await listUpcomingLuxorTourSlots()
+      return NextResponse.json({ availability, slots, settings })
+    }
+
+    if (body.flexibleSchedule && Array.isArray((body.flexibleSchedule as { dates: unknown }).dates)) {
+      const dates = (body.flexibleSchedule as { dates: Array<{ date: string; times: string[] }> }).dates
+      const weeksAhead = settings?.weeks_ahead || (typeof body.weeksAhead === 'number' ? body.weeksAhead : undefined)
+      const slots = await saveFlexibleTourSchedule(dates, weeksAhead)
+      return NextResponse.json({ slots, settings, savedCount: dates.length })
+    }
+
+    if (body.action === 'syncWeekly') {
+      const currentAvailability = await listLuxorTourAvailability()
+      const currentSettings = settings || await getLuxorTourScheduleSettings()
+      const slots = await syncWeeklyTourSlots(currentAvailability, currentSettings.weeks_ahead)
+      return NextResponse.json({ slots, settings: currentSettings, availability: currentAvailability })
+    }
+
     if (Array.isArray(body.dates) && body.action === 'unpublish') {
       const dates = body.dates.map(String)
       if (!dates.length || dates.length > 62 || dates.some((date) => !DATE_PATTERN.test(date) || !isLuxorTourDay(date))) {
@@ -110,13 +147,23 @@ export async function PATCH(request: Request) {
       const slots = await unpublishLuxorTourDays(dates)
       return NextResponse.json({ slots, unpublishedDays: dates.length })
     }
-    const id = String(body.id || '')
-    const status = String(body.status || '')
-    if (!ID_PATTERN.test(id) || !['available', 'unavailable'].includes(status)) {
-      return NextResponse.json({ error: 'Invalid tour-time update.' }, { status: 400 })
+
+    if (body.id) {
+      const id = String(body.id || '')
+      const status = String(body.status || '')
+      if (!ID_PATTERN.test(id) || !['available', 'unavailable'].includes(status)) {
+        return NextResponse.json({ error: 'Invalid tour-time update.' }, { status: 400 })
+      }
+      const slot = await updateLuxorTourSlotStatus(id, status as 'available' | 'unavailable')
+      return NextResponse.json({ slot })
     }
-    const slot = await updateLuxorTourSlotStatus(id, status as 'available' | 'unavailable')
-    return NextResponse.json({ slot })
+
+    if (settings) {
+      const slots = await listUpcomingLuxorTourSlots()
+      return NextResponse.json({ settings, slots })
+    }
+
+    return NextResponse.json({ error: 'No valid update payload provided.' }, { status: 400 })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to update this tour time.' }, { status: 400 })
   }

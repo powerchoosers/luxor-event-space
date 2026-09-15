@@ -1,12 +1,35 @@
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from './luxorTimeOptions'
 
 export type LuxorTourSlotStatus = 'available' | 'held' | 'booked' | 'unavailable'
+export type LuxorTourScheduleMode = 'weekly' | 'flexible'
+
+export type LuxorTourScheduleSettings = {
+  id: string
+  mode: LuxorTourScheduleMode
+  weeks_ahead: number
+  reminder_enabled: boolean
+  reminder_day: number
+  reminder_time: string
+  updated_at?: string
+}
+
+export const WEEKS_AHEAD_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 12] as const
+
+export const DEFAULT_TOUR_SCHEDULE_SETTINGS: LuxorTourScheduleSettings = {
+  id: 'default',
+  mode: 'weekly',
+  weeks_ahead: 6,
+  reminder_enabled: false,
+  reminder_day: 1, // Monday
+  reminder_time: '09:00',
+}
 
 export type LuxorTourAvailability = {
   weekday: number
   is_open: boolean
   start_time: string
   end_time: string
+  times?: string[]
   updated_at?: string
 }
 
@@ -59,7 +82,31 @@ export function weekdayForTourDate(date: string) {
   return new Date(`${date}T12:00:00Z`).getUTCDay()
 }
 
-export function tourTimesForAvailability(availability: Pick<LuxorTourAvailability, 'start_time' | 'end_time'>) {
+export function normalizeTourTime(time: string): string {
+  const clean = time.trim()
+  if (/^\d{1,2}:\d{2}:\d{2}$/.test(clean)) {
+    const [h, m, s] = clean.split(':')
+    return `${h.padStart(2, '0')}:${m}:${s}`
+  }
+  if (/^\d{1,2}:\d{2}$/.test(clean)) {
+    const [h, m] = clean.split(':')
+    return `${h.padStart(2, '0')}:${m}:00`
+  }
+  return clean
+}
+
+export function tourTimesForAvailability(availability: Pick<LuxorTourAvailability, 'start_time' | 'end_time'> & { times?: string[] }) {
+  if (Array.isArray(availability.times) && availability.times.length > 0) {
+    const sorted = [...new Set(availability.times.map(normalizeTourTime))].sort((a, b) =>
+      luxorTourTimeDisplayOrder(a) - luxorTourTimeDisplayOrder(b),
+    )
+    return sorted.map((startTime) => {
+      const short = startTime.slice(0, 5)
+      const endTime = `${addMinutesToClockTime(short, 30)}:00`
+      return { startTime, endTime }
+    })
+  }
+
   const start = availability.start_time.slice(0, 5)
   const end = availability.end_time.slice(0, 5)
   const startMinutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3))
@@ -72,21 +119,24 @@ export function tourTimesForAvailability(availability: Pick<LuxorTourAvailabilit
   })
 }
 
-// The picker is deliberately presented as a business day (8 AM through 1 AM),
-// but a date plus 12–1 AM is still an earlier clock time. Use this value when
-// deciding whether a whole calendar day can safely be opened to the public.
 export const LUXOR_TOUR_EARLIEST_START_TIME = LUXOR_TOUR_TIMES.reduce(
-  (earliest, slot) => slot.startTime < earliest ? slot.startTime : earliest,
+  (earliest, slot) => (slot.startTime < earliest ? slot.startTime : earliest),
   '23:59:59',
 )
 
+export function getWeeksAheadCutoffDate(weeksAhead: number, fromDate = new Date()): string {
+  const target = new Date(fromDate)
+  target.setDate(target.getDate() + weeksAhead * 7)
+  return target.toISOString().slice(0, 10)
+}
+
 export function luxorTourTimeDisplayOrder(time: string) {
   const [hours = '0', minutes = '0'] = time.split(':')
-  const totalMinutes = (Number(hours) * 60) + Number(minutes)
+  const totalMinutes = Number(hours) * 60 + Number(minutes)
   if (!Number.isFinite(totalMinutes)) return Number.MAX_SAFE_INTEGER
 
   // Keep after-midnight times at the end of the displayed business day.
-  return totalMinutes < (8 * 60) ? totalMinutes + (24 * 60) : totalMinutes
+  return totalMinutes < 8 * 60 ? totalMinutes + 24 * 60 : totalMinutes
 }
 
 export function isLuxorTourDay(date: string) {
