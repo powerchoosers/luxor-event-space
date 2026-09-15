@@ -1078,6 +1078,30 @@ body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabin
 .venue-film-error a { text-decoration: underline; }
 @media (max-width: 639px) { .venue-film-caption span { display: none; } .venue-film-controls { padding: 6px 8px 6px 14px; } }
 
+/* Keep hero typography and scrims independent of the site's light-theme remaps. */
+.venue-film--hero { position: relative; width: 100%; border-radius: 0; }
+.venue-film--hero video { aspect-ratio: 4 / 5; object-fit: cover; object-position: center; }
+.venue-film-heading { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 28px 28px 96px; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,.8), rgba(0,0,0,.22) 48%, transparent 75%); }
+.venue-film-heading h1 { margin: 0; max-width: 13ch; font-family: var(--font-cormorant), Georgia, serif; font-size: clamp(2.6rem, 7vw, 5.5rem); font-weight: 400; line-height: .98; letter-spacing: -.025em; color: #fffaf3; text-wrap: balance; text-shadow: 0 2px 12px rgba(0,0,0,.25); }
+.venue-film--hero .venue-film-controls { position: absolute; inset: auto 0 0; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); color: #fffaf3; }
+.venue-film--hero .venue-film-buttons button { background: rgba(0,0,0,.2); }
+.venue-film--hero .venue-film-buttons button:hover { background: rgba(0,0,0,.55); }
+.venue-film--hero .venue-film-error { position: absolute; inset: 0 0 auto; background: #141210; }
+.venue-film[data-fullscreen] .venue-film-heading,
+.venue-film[data-fullscreen] .venue-film-controls { visibility: hidden; }
+.venue-film video:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; background: #000; }
+.venue-film video::-webkit-media-controls { color-scheme: dark; }
+@media (min-width: 640px) {
+  .venue-film--hero video { aspect-ratio: 16 / 9; min-height: 460px; }
+  .venue-film-heading { padding: 40px 40px 106px; }
+  .venue-film-heading h1 { max-width: 15ch; }
+  .venue-film--hero .venue-film-controls { padding: 18px 40px; }
+}
+@media (min-width: 1024px) {
+  .venue-film--hero video { height: min(72svh, 760px); aspect-ratio: auto; }
+  .venue-film-heading { padding-left: max(48px, calc((100vw - 1280px) / 2)); }
+}
+
 /* Public site light theme. Keep this scoped so the owner portal can retain its
    independent theme tokens and dark-mode behavior. */
 body[data-luxor-site] {

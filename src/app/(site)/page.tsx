@@ -154,15 +154,13 @@ export default function Home() {
   return (
     <main id="top" className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
       <section id="hero" className="venue-film-hero relative isolate overflow-hidden pt-28">
-        <div className="relative z-10 mx-auto grid max-w-[1500px] items-center gap-9 px-5 pb-12 pt-10 sm:px-8 lg:grid-cols-[0.7fr_1.3fr] lg:gap-12 lg:px-12 lg:py-24">
-          <div className="min-w-0 text-center lg:text-left">
-            <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
-              A beautiful setting for your next chapter.
-            </h1>
-            <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
+        <VenueFilm autoPlay headline="A beautiful setting for your next chapter." />
+        <div className="mx-auto max-w-3xl px-5 py-8 text-center sm:px-8 sm:py-10">
+          <div className="min-w-0">
+            <p className="mx-auto max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg">
               Weddings, quinceañeras, and private celebrations at Luxor at Las Palmas in San Antonio.
             </p>
-            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
               <PrimaryButton href="/tour#tour-availability">Check tour times</PrimaryButton>
               <a
                 href="#events"
@@ -171,19 +169,17 @@ export default function Home() {
                 See event types
               </a>
             </div>
-            <div className="mx-auto mt-6 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#665a4e] lg:mx-0 lg:justify-start">
+            <div className="mx-auto mt-6 flex max-w-md items-start justify-center gap-3 text-sm leading-6 text-[#665a4e]">
               <MapPin className="mt-1 h-4 w-4 shrink-0 text-[#9b6f24]" />
               <span>Private venue tours at 803 Castroville Rd #402, San Antonio, TX 78237.</span>
             </div>
             <a
               href="#events"
-              className="mx-auto mt-6 hidden items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#827567] transition-colors hover:text-[#805b1f] xl:inline-flex lg:mx-0"
+              className="mx-auto mt-6 hidden items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#827567] transition-colors hover:text-[#805b1f] xl:inline-flex"
             >
               Scroll to explore <ArrowDown className="h-3.5 w-3.5 animate-bounce text-[#9b6f24]" />
             </a>
           </div>
-
-          <div className="order-first min-w-0 lg:order-last"><VenueFilm autoPlay /></div>
         </div>
       </section>
 
