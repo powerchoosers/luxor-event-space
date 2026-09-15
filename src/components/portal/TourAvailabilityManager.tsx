@@ -95,11 +95,11 @@ export function TourAvailabilityManager({
   // Flexible Schedule State
   const [flexibleDates, setFlexibleDates] = useState<Array<{ date: string; times: string[] }>>([])
   const [newFlexibleDate, setNewFlexibleDate] = useState('')
+  const [selectedGridTimes, setSelectedGridTimes] = useState<string[]>([])
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 
   // Temporary selected time pickers
   const [weeklyTimeSelect, setWeeklyTimeSelect] = useState<Record<number, string>>({})
-  const [flexibleTimeSelect, setFlexibleTimeSelect] = useState<Record<string, string>>({})
 
   // Preview form state
   const [previewSelectedDate, setPreviewSelectedDate] = useState('')
@@ -244,38 +244,78 @@ export function TourAvailabilityManager({
   }
 
   // Flexible Schedule Helpers
-  function addFlexibleDate() {
-    if (!newFlexibleDate) return
-    if (flexibleDates.some((d) => d.date === newFlexibleDate)) {
-      notify({ title: 'That date is already in your flexible schedule.', variant: 'error' })
+  function handleSelectFlexibleDate(dateStr: string) {
+    setNewFlexibleDate(dateStr)
+    const existing = flexibleDates.find((d) => d.date === dateStr)
+    if (existing) {
+      setSelectedGridTimes(existing.times)
+    } else {
+      setSelectedGridTimes([])
+    }
+  }
+
+  function toggleGridTime(timeStr: string) {
+    const formatted = normalizeTourTime(timeStr)
+    setSelectedGridTimes((current) => {
+      if (current.includes(formatted)) {
+        return current.filter((t) => t !== formatted)
+      }
+      return [...current, formatted].sort(
+        (a, b) => luxorTourTimeDisplayOrder(a) - luxorTourTimeDisplayOrder(b),
+      )
+    })
+  }
+
+  function selectAllGridTimes() {
+    const allTimes = LUXOR_TOUR_TIME_OPTIONS.map((opt) => normalizeTourTime(opt.value)).sort(
+      (a, b) => luxorTourTimeDisplayOrder(a) - luxorTourTimeDisplayOrder(b),
+    )
+    setSelectedGridTimes(allTimes)
+  }
+
+  function clearAllGridTimes() {
+    setSelectedGridTimes([])
+  }
+
+  function addSelectedTimesToDate() {
+    if (!newFlexibleDate) {
+      notify({ title: 'Please choose a date first.', variant: 'error' })
       return
     }
-    const defaultTimes = ['16:00:00', '17:00:00', '18:00:00']
-    const next = [...flexibleDates, { date: newFlexibleDate, times: defaultTimes }].sort((a, b) =>
-      a.date.localeCompare(b.date),
+    if (selectedGridTimes.length === 0) {
+      notify({ title: 'Please select at least one tour time.', variant: 'error' })
+      return
+    }
+
+    const sortedTimes = [...selectedGridTimes].sort(
+      (a, b) => luxorTourTimeDisplayOrder(a) - luxorTourTimeDisplayOrder(b),
     )
-    setFlexibleDates(next)
-    setNewFlexibleDate('')
+
+    setFlexibleDates((current) => {
+      const exists = current.some((d) => d.date === newFlexibleDate)
+      if (exists) {
+        return current.map((d) => (d.date === newFlexibleDate ? { ...d, times: sortedTimes } : d))
+      }
+      return [...current, { date: newFlexibleDate, times: sortedTimes }].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      )
+    })
+
+    notify({
+      title: `Saved ${sortedTimes.length} tour time${sortedTimes.length === 1 ? '' : 's'} for ${formatTourSlotDate(newFlexibleDate)}.`,
+      variant: 'success',
+    })
+  }
+
+  function editFlexibleDate(dateStr: string) {
+    handleSelectFlexibleDate(dateStr)
   }
 
   function removeFlexibleDate(dateStr: string) {
     setFlexibleDates((current) => current.filter((d) => d.date !== dateStr))
-  }
-
-  function addTimeToFlexibleDate(dateStr: string, timeStr: string) {
-    if (!timeStr) return
-    const formatted = normalizeTourTime(timeStr)
-    setFlexibleDates((current) =>
-      current.map((item) => {
-        if (item.date !== dateStr) return item
-        if (item.times.includes(formatted)) return item
-        const nextTimes = [...item.times, formatted].sort(
-          (a, b) => luxorTourTimeDisplayOrder(a) - luxorTourTimeDisplayOrder(b),
-        )
-        return { ...item, times: nextTimes }
-      }),
-    )
-    setFlexibleTimeSelect((prev) => ({ ...prev, [dateStr]: '' }))
+    if (newFlexibleDate === dateStr) {
+      setSelectedGridTimes([])
+    }
   }
 
   function removeTimeFromFlexibleDate(dateStr: string, timeStr: string) {
@@ -285,6 +325,9 @@ export function TourAvailabilityManager({
         return { ...item, times: item.times.filter((t) => t !== timeStr) }
       }),
     )
+    if (newFlexibleDate === dateStr) {
+      setSelectedGridTimes((current) => current.filter((t) => t !== timeStr))
+    }
   }
 
   // Calendar mini grid for flexible view
@@ -628,55 +671,153 @@ export function TourAvailabilityManager({
             </p>
           </div>
 
-          {/* Add Date Toolbar */}
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-            <div className="w-60">
-              <PortalDatePicker
-                value={newFlexibleDate}
-                onChange={setNewFlexibleDate}
-                minDate={todayStr}
-                placeholder="Choose date to add..."
-                className="w-full"
-              />
+          {/* Date & Multi-Time Selection Section */}
+          <div className="space-y-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
+                1. Choose Date
+              </label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                <div className="w-full sm:w-72">
+                  <PortalDatePicker
+                    value={newFlexibleDate}
+                    onChange={handleSelectFlexibleDate}
+                    minDate={todayStr}
+                    placeholder="Choose date..."
+                    className="w-full"
+                  />
+                </div>
+                {newFlexibleDate && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/15 px-3 py-1.5 text-xs font-bold text-[color:var(--portal-text)]">
+                    <CalendarDays size={13} className="text-[#caa24c]" />
+                    {formatTourSlotDate(newFlexibleDate)}
+                  </span>
+                )}
+              </div>
             </div>
-            <PortalButton
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={!newFlexibleDate}
-              onClick={addFlexibleDate}
-              className="flex items-center gap-1.5"
-            >
-              <Plus size={14} /> Add date
-            </PortalButton>
+
+            {/* Time Grid (Prompt Req 1, 2, 3 & 4) */}
+            <div className="space-y-3 pt-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-[color:var(--portal-border)] pt-4">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
+                    2. Select Tour Times {newFlexibleDate ? `for ${formatTourSlotDate(newFlexibleDate)}` : ''}
+                  </h4>
+                  <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">
+                    8:00 AM – 7:30 PM (30-minute intervals). Click times to toggle them.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllGridTimes}
+                    className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:text-[#caa24c] transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearAllGridTimes}
+                    disabled={selectedGridTimes.length === 0}
+                    className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] disabled:opacity-40 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              {/* 24-Slot Multi-Select Grid (8:00 AM to 7:30 PM) */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {LUXOR_TOUR_TIME_OPTIONS.map((opt) => {
+                  const normalized = normalizeTourTime(opt.value)
+                  const isSelected = selectedGridTimes.includes(normalized)
+
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleGridTime(normalized)}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all ${
+                        isSelected
+                          ? 'border-[#caa24c] bg-[#caa24c]/20 text-[#f1d27a] shadow-sm ring-1 ring-[#caa24c]/50 font-bold'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-card)]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {isSelected ? (
+                          <Check size={13} className="text-[#caa24c]" />
+                        ) : (
+                          <Clock3 size={13} className="text-[color:var(--portal-muted)]" />
+                        )}
+                        {opt.label}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Add Selected Times Action Bar (Prompt Req 3) */}
+              <div className="flex flex-col gap-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs text-[color:var(--portal-muted)]">
+                  <strong className="text-[color:var(--portal-text)]">{selectedGridTimes.length}</strong> of {LUXOR_TOUR_TIME_OPTIONS.length} times selected
+                </span>
+
+                <PortalButton
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={!newFlexibleDate || selectedGridTimes.length === 0}
+                  onClick={addSelectedTimesToDate}
+                  className="font-bold flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Selected Times {selectedGridTimes.length > 0 ? `(${selectedGridTimes.length})` : ''}
+                </PortalButton>
+              </div>
+            </div>
           </div>
 
-          {/* Selected Flexible Dates List */}
+          {/* Configured Flexible Dates List (Prompt Req 5) */}
           <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
+                Configured Tour Dates ({flexibleDates.length})
+              </h4>
+            </div>
+
             {flexibleDates.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-8 text-center">
                 <Calendar size={28} className="mx-auto text-[color:var(--portal-muted)] opacity-50" />
-                <p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No flexible dates added yet</p>
+                <p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No flexible dates configured yet</p>
                 <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">
-                  Pick a date above and click &ldquo;Add date&rdquo; to configure custom tour times.
+                  Choose a date and select your desired tour times above, then click &ldquo;Add Selected Times&rdquo;.
                 </p>
               </div>
             ) : (
               flexibleDates.map((item) => {
-                const availableTimeOptions = LUXOR_TOUR_TIME_OPTIONS.filter(
-                  (opt) => !item.times.includes(normalizeTourTime(opt.value)),
-                )
+                const isActiveInEditor = newFlexibleDate === item.date
 
                 return (
                   <div
                     key={item.date}
-                    className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"
+                    className={`rounded-xl border p-4 transition-all ${
+                      isActiveInEditor
+                        ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.06] ring-1 ring-[#caa24c]/30'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'
+                    }`}
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <span className="block text-sm font-bold text-[color:var(--portal-text)]">
-                          {formatTourSlotDate(item.date)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="block text-sm font-bold text-[color:var(--portal-text)]">
+                            {formatTourSlotDate(item.date)}
+                          </span>
+                          {isActiveInEditor && (
+                            <span className="rounded bg-[#caa24c]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#f1d27a]">
+                              Editing in grid
+                            </span>
+                          )}
+                        </div>
                         <span className="block text-[10px] text-[color:var(--portal-muted)]">
                           {item.times.length} tour time{item.times.length === 1 ? '' : 's'} configured
                         </span>
@@ -702,24 +843,21 @@ export function TourAvailabilityManager({
                           </span>
                         ))}
 
-                        {/* Inline Add Time Dropdown */}
-                        <div className="w-32">
-                          <PortalSelect
-                            value={flexibleTimeSelect[item.date] || ''}
-                            onChange={(val) => addTimeToFlexibleDate(item.date, val)}
-                            options={availableTimeOptions}
-                            placeholder="+ Add time"
-                            className="w-full"
-                            buttonClassName="!min-h-8 !py-1 text-xs !bg-[color:var(--portal-card)]"
-                          />
-                        </div>
+                        {/* Edit Times Button */}
+                        <button
+                          type="button"
+                          onClick={() => editFlexibleDate(item.date)}
+                          className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/40 hover:text-[#caa24c] transition-colors"
+                        >
+                          Edit times
+                        </button>
 
                         {/* Remove Date Button */}
                         <button
                           type="button"
                           onClick={() => removeFlexibleDate(item.date)}
                           aria-label={`Remove date ${formatTourSlotDate(item.date)}`}
-                          className="rounded-lg p-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -769,13 +907,19 @@ export function TourAvailabilityManager({
                 const val = isoDate(date)
                 const published = publishedByDate.get(val)
                 const isFlexibleConfigured = flexibleDates.some((f) => f.date === val)
+                const isSelectedInEditor = newFlexibleDate === val
+
                 return (
-                  <div
+                  <button
                     key={val}
-                    className={`relative flex min-h-10 flex-col items-center justify-center rounded-lg border text-xs ${
-                      isFlexibleConfigured
-                        ? 'border-[#caa24c] bg-[#caa24c]/15 font-bold text-[color:var(--portal-text)]'
-                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                    type="button"
+                    onClick={() => handleSelectFlexibleDate(val)}
+                    className={`relative flex min-h-10 flex-col items-center justify-center rounded-lg border text-xs transition-all ${
+                      isSelectedInEditor
+                        ? 'border-[#caa24c] bg-[#caa24c]/25 font-bold text-[color:var(--portal-text)] ring-2 ring-[#caa24c]'
+                        : isFlexibleConfigured
+                          ? 'border-[#caa24c] bg-[#caa24c]/15 font-bold text-[color:var(--portal-text)] hover:bg-[#caa24c]/20'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     <span>{date.getDate()}</span>
@@ -784,7 +928,7 @@ export function TourAvailabilityManager({
                     ) : published?.booked ? (
                       <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
                     ) : null}
-                  </div>
+                  </button>
                 )
               })}
             </div>

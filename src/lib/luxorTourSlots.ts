@@ -71,8 +71,8 @@ export const LUXOR_TOUR_TIMES = LUXOR_TIME_DROPDOWN_OPTIONS.map(({ value }) => (
   endTime: `${addMinutesToClockTime(value, 30)}:00`,
 }))
 
-export const LUXOR_TOUR_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const minutes = index * 30
+export const LUXOR_TOUR_TIME_OPTIONS = Array.from({ length: 24 }, (_, index) => {
+  const minutes = 8 * 60 + index * 30 // 8:00 AM (08:00) to 7:30 PM (19:30)
   const hours = Math.floor(minutes / 60)
   const clock = `${String(hours).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   return { value: clock, label: formatTourSlotTime(`${clock}:00`) }
