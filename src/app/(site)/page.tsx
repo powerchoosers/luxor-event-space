@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
 import { LuxorInquiryForm } from '@/components/LuxorInquiryForm'
 import { PublicFaqList } from '@/components/PublicFaqList'
+import { VenueFilm } from '@/components/VenueFilm'
 
 type EventCard = {
   title: string
@@ -152,14 +153,14 @@ function EventCardView({ event }: { event: EventCard }) {
 export default function Home() {
   return (
     <main id="top" className="overflow-x-hidden bg-[#050505] text-[#f7efe3]">
-      <section id="hero" className="relative isolate min-h-[92svh] overflow-hidden pt-28 sm:min-h-screen">
-        <div className="relative z-10 mx-auto grid min-h-[calc(92svh-7rem)] max-w-7xl items-center gap-12 px-5 pb-14 pt-10 sm:min-h-[calc(100vh-7rem)] sm:px-6 lg:grid-cols-[0.86fr_1.14fr] lg:gap-16 lg:px-8 lg:pt-14">
+      <section id="hero" className="venue-film-hero relative isolate overflow-hidden pt-28">
+        <div className="relative z-10 mx-auto grid max-w-[1500px] items-center gap-9 px-5 pb-12 pt-10 sm:px-8 lg:grid-cols-[0.7fr_1.3fr] lg:gap-12 lg:px-12 lg:py-24">
           <div className="min-w-0 text-center lg:text-left">
             <h1 className="mx-auto max-w-xl text-wrap font-serif text-5xl leading-[0.92] text-[#241d17] sm:text-6xl lg:mx-0 lg:text-7xl">
-              San Antonio celebrations with a room that already feels special.
+              A beautiful setting for your next chapter.
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#665a4e] sm:text-lg lg:mx-0">
-              Weddings, quinceañeras, showers, and private events in an elegant gold-accented venue made for photos, dinner, and dancing.
+              Weddings, quinceañeras, and private celebrations at Luxor at Las Palmas in San Antonio.
             </p>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
               <PrimaryButton href="/tour#tour-availability">Check tour times</PrimaryButton>
@@ -182,17 +183,7 @@ export default function Home() {
             </a>
           </div>
 
-          <div className="relative min-h-[30rem] overflow-hidden rounded-md border border-[#9b6f24]/25 bg-[#eee6da] shadow-[0_32px_80px_-48px_rgba(61,43,23,0.42)] sm:min-h-[38rem] lg:min-h-[calc(100vh-11rem)]">
-            <Image
-              src="/images/dining-hall/main-hall-wedding-wide.png"
-              alt="Luxor main hall prepared for a wedding reception"
-              fill
-              priority
-              sizes="(min-width: 1024px) 58vw, 100vw"
-              className="object-cover object-center"
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/25 to-transparent" />
-          </div>
+          <div className="order-first min-w-0 lg:order-last"><VenueFilm autoPlay /></div>
         </div>
       </section>
 

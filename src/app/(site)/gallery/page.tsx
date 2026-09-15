@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { AnimatePresence, animate, motion, type PanInfo, useMotionValue } from 'framer-motion'
 import { ArrowRight, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { VenueFilm } from '@/components/VenueFilm'
 
 type GalleryCategory = 'All' | 'Room' | 'Lounge' | 'Weddings' | 'Celebrations' | 'Corporate'
 
@@ -318,16 +319,10 @@ export default function GalleryPage() {
           <div className="max-w-2xl">
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
             <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">See the room before you visit.</h1>
-            <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Browse real event moments and room setups, then walk through the scale, lighting, and guest flow in person.</p>
+            <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Watch our venue film, captured inside Luxor. Then explore the collection and visit to picture your celebration here.</p>
             <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <div className="grid grid-cols-5 gap-3 sm:gap-4">
-            <div className="relative col-span-3 aspect-[3/4] overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/dining-hall/main-hall-wedding-wide.png" alt="Wedding reception setup in the Luxor main hall" fill priority sizes="(min-width:1024px) 35vw,60vw" className="object-cover" /></div>
-            <div className="col-span-2 grid gap-3 pt-8 sm:gap-4 sm:pt-12">
-              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/dining-hall/main-hall-side-dance-candid.png" alt="Guests dancing at Luxor" fill priority sizes="(min-width:1024px) 22vw,40vw" className="object-cover" /></div>
-              <div className="relative aspect-square overflow-hidden rounded-md border border-[#caa24c]/24"><Image src="/images/luxor-lounge/luxor-lounge-quinceanera.png" alt="Quinceañera portrait moment in the Luxor lounge" fill sizes="(min-width:1024px) 22vw,40vw" className="object-cover" /></div>
-            </div>
-          </div>
+          <VenueFilm />
         </div>
       </section>
 
