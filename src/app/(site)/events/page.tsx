@@ -151,10 +151,10 @@ export default function EventsPage() {
             <div className="luxor-panel grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center lg:p-10">
               <div className="max-w-3xl">
                 <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Next step</p>
-                <h2 className="mt-4 font-serif text-4xl leading-[0.95] text-white sm:text-5xl">
+                <h2 className="mt-4 font-serif text-4xl leading-[0.95] !text-[#f8f3ed] sm:text-5xl">
                   Bring the event idea. We will pressure-test the room around it.
                 </h2>
-                <p className="mt-5 text-base leading-7 text-white/72">
+                <p className="mt-5 text-base leading-7 !text-[#d7c29a]">
                   A tour is where you check the practical details: guest count, table shape, entrance, photos, DJ placement, package fit, and the exact feeling you want guests to have.
                 </p>
               </div>
