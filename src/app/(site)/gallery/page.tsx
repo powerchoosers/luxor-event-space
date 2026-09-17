@@ -322,7 +322,7 @@ export default function GalleryPage() {
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Watch our venue film, captured inside Luxor. Then explore the collection and visit to picture your celebration here.</p>
             <Link href="/tour#tour-availability" data-conversion="tour_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Check tour times <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <VenueFilm />
+          <VenueFilm autoPlay />
         </div>
       </section>
 
