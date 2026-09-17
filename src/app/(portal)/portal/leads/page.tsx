@@ -28,6 +28,7 @@ import {
   LayoutGrid,
   List,
   Languages,
+  Star,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -757,7 +758,7 @@ export default function LeadsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-white/90 leading-tight mb-0.5 group-hover:translate-x-0.5 transition-transform">
-                            {lead.full_name}
+                            <span className="inline-flex items-center gap-1.5">{lead.full_name}{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</span>
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
@@ -1399,6 +1400,10 @@ function formatSourceLabel(lead: LuxorInquiry) {
   return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
 }
 
+function isMarketingLead(lead: LuxorInquiry) {
+  return lead.marketing_opt_in || lead.source === 'newsletter' || lead.metadata?.marketing_lead === true
+}
+
 function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   // Older records can retain their former pipeline step after being marked
   // closed lost. Treat the lead status as authoritative here so they never
@@ -1865,7 +1870,7 @@ function MobileLeadCard({
             className="shrink-0"
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
+            <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold text-[color:var(--portal-text)]"><span className="truncate">{lead.full_name}</span>{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 shrink-0 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</p>
             <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">
               {lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact details')}
             </p>

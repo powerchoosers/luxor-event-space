@@ -443,6 +443,11 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
   })
 }
 
+export function buildNewsletterConfirmationEmailHtml(inquiry: LuxorInquiry) {
+  const firstName = inquiry.full_name === 'Newsletter subscriber' ? '' : inquiry.full_name.split(' ')[0]
+  return renderLuxorSystemEmail({ previewText: 'You are on the Luxor Event Space newsletter list.', eyebrow: 'Welcome to Luxor', title: 'You’re on the list', greeting: firstName ? `Hi ${escapeHtml(firstName)},` : undefined, bodyHtml: '<p style="margin:0">Thank you for joining Luxor’s newsletter. We’ll share occasional open-house invitations, venue news, and practical ideas for planning a celebration that feels like yours.</p>', actions: [{ label: 'Explore Luxor', url: absoluteUrl('/') }, { label: 'Plan a private tour', url: absoluteUrl('/tour'), tone: 'secondary' }], note: 'You can unsubscribe from any marketing email at any time.', theme: 'brand' })
+}
+
 export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')

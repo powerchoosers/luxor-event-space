@@ -44,11 +44,15 @@ export async function recordLuxorPublicEvent(input: LuxorPublicEventInput) {
   return created ?? null
 }
 
-export async function countRecentInquiryAttempts(ipHash: string, minutes = 10) {
+export async function countRecentPublicAttempts(ipHash: string, eventName: string, minutes = 10) {
   if (!ipHash) return 0
   const since = new Date(Date.now() - minutes * 60_000).toISOString()
   const rows = await supabaseRest<Array<{ id: string }>>(
-    `luxor_public_events?select=id&event_name=eq.inquiry_attempt&ip_hash=eq.${encodeURIComponent(ipHash)}&created_at=gte.${encodeURIComponent(since)}&limit=20`,
+    `luxor_public_events?select=id&event_name=eq.${encodeURIComponent(eventName)}&ip_hash=eq.${encodeURIComponent(ipHash)}&created_at=gte.${encodeURIComponent(since)}&limit=20`,
   )
   return rows.length
+}
+
+export function countRecentInquiryAttempts(ipHash: string, minutes = 10) {
+  return countRecentPublicAttempts(ipHash, 'inquiry_attempt', minutes)
 }

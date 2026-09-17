@@ -205,19 +205,20 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     }
   } else if (created?.email && !autoScheduleTour) {
     try {
-      const { buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
-      const emailHtml = buildStandardInquiryEmailHtml(created)
+      const { buildNewsletterConfirmationEmailHtml, buildStandardInquiryEmailHtml, listQueuedLuxorEmailJobsByIds, processLuxorEmailJobs } = await import('./luxorEmailJobsServer')
+      const newsletterSignup = created.flow === 'newsletter_signup'
+      const emailHtml = newsletterSignup ? buildNewsletterConfirmationEmailHtml(created) : buildStandardInquiryEmailHtml(created)
 
       const job = await createLuxorEmailJob({
         inquiryId: created.id,
         jobType: 'marketing_campaign',
         recipientEmail: created.email,
-        subject: 'We have received your Luxor inquiry',
+        subject: newsletterSignup ? 'You’re on the Luxor list' : 'We have received your Luxor inquiry',
         body: emailHtml,
         // This is a receipt for a newly submitted inquiry, not a promotional
         // campaign. A marketing opt-out must not hide that requested receipt;
         // hard-bounce/complaint blocks still remain enforced by the worker.
-        metadata: { ignore_suppressions: true, source: 'inquiry_acknowledgment' },
+        metadata: { ignore_suppressions: true, source: newsletterSignup ? 'newsletter_confirmation' : 'inquiry_acknowledgment' },
       })
 
       // Send standard confirmation immediately

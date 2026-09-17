@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { CalendarDays, Mail, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { NewsletterSignup } from '@/components/NewsletterSignup'
 
 const navLinks = [
   { label: 'Events', labelEs: 'Eventos', href: '/events' },
@@ -34,6 +35,13 @@ export const Footer = () => {
         <Link href={spanish ? '/es' : '/'} className="mx-auto block w-full max-w-[460px]">
           <LuxorAxisLockup dividerClassName="text-[#8e6829]" />
         </Link>
+
+        <section className="mx-auto mt-14 max-w-2xl border border-[#caa24c]/22 bg-[#17110e] px-5 py-8 text-center shadow-[0_22px_50px_-36px_rgba(0,0,0,0.9)] sm:mt-16 sm:px-8 sm:py-10" aria-labelledby="newsletter-title">
+          <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{spanish ? 'Mantente cerca' : 'Stay close'}</p>
+          <h2 id="newsletter-title" className="mt-3 font-serif text-3xl !text-[#f8f3ed] sm:text-4xl">{spanish ? 'Novedades de Luxor, para cuando estés lista.' : 'Luxor news, for when you’re ready.'}</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 !text-[#d7c29a]/70">{spanish ? 'Recibe invitaciones, aperturas y consejos para planear una celebración inolvidable.' : 'Get open-house invitations, venue news, and thoughtful planning ideas.'}</p>
+          <NewsletterSignup spanish={spanish} />
+        </section>
 
         <div className="mt-14 grid grid-cols-1 gap-12 text-center lg:grid-cols-12 lg:text-left">
           {/* Quick Links */}
