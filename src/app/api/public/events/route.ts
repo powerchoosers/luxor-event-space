@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
 
 const ALLOWED_EVENTS = new Set([
+  'website_visit',
   'page_view',
+  'tour_page_view',
   'tour_cta_click',
+  'tour_booked',
   'call_cta_click',
   'package_cta_click',
   'gallery_open',

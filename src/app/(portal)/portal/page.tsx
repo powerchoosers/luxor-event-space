@@ -30,6 +30,8 @@ import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCar
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
+import { PortalMarketingSalesSection } from "@/components/portal/PortalMarketingSalesSection";
+import { fetchMarketingAndSalesMetrics, getDateRangeFromPreset } from "@/lib/luxorAnalyticsServer";
 
 function formatActivityTime(date: Date, now: Date): string {
   if (isNaN(date.getTime())) return 'Recently';
@@ -79,8 +81,11 @@ export default async function PortalOverview() {
   let bills: LuxorBill[] = [];
   let loadError: string | null = null;
 
+  let marketingSalesMetrics: Awaited<ReturnType<typeof fetchMarketingAndSalesMetrics>> | null = null;
+  const initialRange = getDateRangeFromPreset('30d');
+
   try {
-    [leads, recentNotes, bookings, payments, expenses, tasks, bills] = await Promise.all([
+    const [fetchedLeads, fetchedNotes, fetchedBookings, fetchedPayments, fetchedExpenses, fetchedTasks, fetchedBills, fetchedAnalytics] = await Promise.all([
       listLuxorInquiries(100),
       listRecentNotes(5),
       listLuxorBookingsWithPayments(25).catch(() => []),
@@ -88,7 +93,16 @@ export default async function PortalOverview() {
       listAllExpenses().catch(() => []),
       listAllTasks().catch(() => []),
       listAllBills().catch(() => []),
+      fetchMarketingAndSalesMetrics(initialRange).catch(() => null),
     ]);
+    leads = fetchedLeads;
+    recentNotes = fetchedNotes;
+    bookings = fetchedBookings;
+    payments = fetchedPayments;
+    expenses = fetchedExpenses;
+    tasks = fetchedTasks;
+    bills = fetchedBills;
+    marketingSalesMetrics = fetchedAnalytics;
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
   }
@@ -488,6 +502,30 @@ export default async function PortalOverview() {
           Telemetry Warning: {loadError} (Data Loaded Successfully)
         </div>
       )}
+
+      {/* 1. MARKETING & SALES COMMAND CENTER */}
+      {marketingSalesMetrics && (
+        <PortalMarketingSalesSection
+          initialMetrics={marketingSalesMetrics}
+          initialPreset="30d"
+          initialRangeLabel={initialRange.label}
+          initialComparisonLabel={initialRange.comparisonLabel}
+        />
+      )}
+
+      {/* 2. VENUE OPERATIONS & FINANCIAL HEALTH */}
+      <div className="pt-6 border-t border-[color:var(--portal-border)]">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg sm:text-xl font-serif font-bold text-[color:var(--portal-text)] tracking-tight">
+              Venue Operations & Cash Flow
+            </h2>
+            <p className="text-xs text-[color:var(--portal-muted)]">
+              Daily bookings pace, active tasks, and upcoming commitments.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* TOP ROW: 4 Metric Cards */}
       <PortalStaggerGroup className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">

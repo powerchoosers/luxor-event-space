@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import type { ReactNode } from 'react'
 import '../globals.css'
@@ -87,6 +88,20 @@ export default function RootLayout({
     >
       <body data-luxor-site className="min-h-full bg-[#f7f3ec] pb-16 text-[#241d17] sm:pb-0">
         <SmoothScroll />
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-M9ZVP2NBLY"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-M9ZVP2NBLY', {
+              page_path: window.location.pathname,
+            });
+          `}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}

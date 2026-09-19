@@ -83,6 +83,16 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       return
     }
     setSubmitting(true)
+    try {
+      const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
+      trackLuxorPublicEvent('tour_cta_click', {
+        label: customMode ? 'Request Tour Submit' : 'Book a Tour Submit',
+        form_flow: customMode ? 'custom_tour_request' : 'tour_booking',
+      })
+    } catch {
+      // Non-blocking
+    }
+
     const preferredTourDate = selectedSlot?.date || targetDate
     const preferredTourTime = selectedSlot?.time || (customTourTime ? formatTourSlotTime(`${customTourTime}:00`) : tourWindow)
     const payload: LuxorInquiryInput = {
@@ -106,6 +116,15 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       const result = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(result.error || (spanish ? 'No se pudo enviar la solicitud del recorrido.' : 'The tour request could not be submitted.'))
       setSubmitted(true)
+      try {
+        const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
+        trackLuxorPublicEvent('tour_booked', {
+          label: 'Tour Request Confirmed',
+          preferred_tour_date: preferredTourDate,
+        })
+      } catch {
+        // Non-blocking
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : (spanish ? 'No se pudo enviar la solicitud del recorrido.' : 'The tour request could not be submitted.'))
     } finally {
@@ -116,7 +135,6 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   if (submitted) {
     return <div className="rounded-2xl border border-[#b98a3d]/35 bg-white p-6 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:p-9"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#b98a3d] text-white"><Check size={22} /></div><h2 className="mt-6 font-serif text-4xl">{customMode ? (spanish ? 'Recibimos tu solicitud.' : 'Tour request received.') : (spanish ? 'Tu recorrido está confirmado.' : 'Your tour is confirmed.')}</h2><p className="mt-3 text-sm leading-6 text-[#665a4e]">{customMode ? (spanish ? 'Revisaremos el horario y nos comunicaremos contigo para confirmar la visita.' : 'We’ll review that time and contact you to confirm the visit.') : (spanish ? 'Tu recorrido está reservado. Enviamos la invitación del calendario y los detalles a tu correo.' : 'Your tour is booked. We sent a calendar invitation and the details to your email.')}</p></div>
   }
-
   return (
     <form id="tour-booking" onSubmit={submit} className="scroll-mt-28 rounded-2xl border border-[#b98a3d]/30 bg-white p-5 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:scroll-mt-32 sm:p-8">
       <div className="border-b border-[#b98a3d]/20 pb-5"><p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#8d672b]">{spanish ? 'Solicita un recorrido' : 'Schedule a tour'}</p><h2 className="mt-2 font-serif text-3xl text-[#241d17]">{spanish ? 'Cuéntanos cuándo te gustaría venir.' : 'Tell us when you would like to come.'}</h2></div>
