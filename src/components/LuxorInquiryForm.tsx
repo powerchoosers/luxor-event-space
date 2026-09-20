@@ -74,8 +74,32 @@ export function LuxorInquiryForm({
   const startedAt = useRef(Date.now())
   const trackedStart = useRef(false)
   const formBodyRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const isInitialRender = useRef(true)
   const [formBodyHeight, setFormBodyHeight] = useState<number | null>(null)
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots()
+
+  const scrollToFormTop = () => {
+    if (typeof window === 'undefined') return
+    requestAnimationFrame(() => {
+      const el = formRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      window.scrollTo({
+        top: Math.max(0, scrollTop + rect.top - 96),
+        behavior: 'smooth',
+      })
+    })
+  }
+
+  useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false
+      return
+    }
+    scrollToFormTop()
+  }, [step, submitted])
 
   useLayoutEffect(() => {
     const body = formBodyRef.current
@@ -235,6 +259,7 @@ export function LuxorInquiryForm({
 
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       onFocusCapture={markStarted}
       className={`rounded-lg border border-[#caa24c]/24 bg-[#080706] shadow-[0_34px_90px_-58px_rgba(0,0,0,0.95)] ${compact ? 'p-5' : 'p-5 sm:p-8'}`}

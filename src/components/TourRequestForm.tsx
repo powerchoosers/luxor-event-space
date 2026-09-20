@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Check, ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, Clock, MapPin } from 'lucide-react'
@@ -149,6 +149,31 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   // Submission State
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInitialStep = useRef(true)
+
+  const scrollToFormTop = () => {
+    if (typeof window === 'undefined') return
+    requestAnimationFrame(() => {
+      const el = containerRef.current || document.getElementById('tour-booking')
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      window.scrollTo({
+        top: Math.max(0, scrollTop + rect.top - 96),
+        behavior: 'smooth',
+      })
+    })
+  }
+
+  useEffect(() => {
+    if (isInitialStep.current) {
+      isInitialStep.current = false
+      return
+    }
+    scrollToFormTop()
+  }, [step])
 
   // Date computations
   const availableDates = useMemo(() => new Set(slots.map((slot) => slot.date)), [slots])
@@ -320,6 +345,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
 
   return (
     <div
+      ref={containerRef}
       id="tour-booking"
       className="scroll-mt-28 rounded-2xl border border-[#b98a3d]/30 bg-white p-5 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:scroll-mt-32 sm:p-8"
     >
