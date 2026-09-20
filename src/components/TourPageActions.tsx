@@ -5,8 +5,8 @@ import { MapPin, MessageSquare, Phone } from 'lucide-react'
 
 type Locale = 'en' | 'es'
 
-const googleMapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=803+Castroville+Rd+%23402%2C+San+Antonio%2C+TX+78237'
-const appleMapsUrl = 'http://maps.apple.com/?address=803%20Castroville%20Rd%20%23402%2C%20San%20Antonio%2C%20TX%2078237'
+const googleMapsUrl = 'https://maps.app.goo.gl/qQyX6MP98A9FNwvr6?g_st=ic'
+const appleMapsUrl = 'https://maps.apple/p/SYUX3ViRAh0KJ2'
 
 function formatPhone(value: string) {
   const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')
