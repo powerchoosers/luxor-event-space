@@ -65,17 +65,17 @@ export function TourPageContent({ locale }: { locale: Locale }) {
                 {text.languageLead} · <Link href={text.languageHref} className="font-semibold text-[#8d672b] underline underline-offset-4">{text.languageLink}</Link>
               </div>
             </div>
-            <div>
+            <div className="lg:col-start-2 lg:row-start-1">
               <TourRequestForm locale={locale} />
-              <div className="mt-6 overflow-hidden rounded-2xl border border-[#b98a3d]/25 bg-white shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)]">
-                <iframe title={text.mapTitle} src="https://www.google.com/maps?q=803+Castroville+Rd+%23402,+San+Antonio,+TX+78237&output=embed" className="h-64 w-full border-0" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-[#665a4e]">
-                  <span>{text.mapLead}</span>
-                  <span className="flex gap-3">
-                    <a href={googleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">Google Maps</a>
-                    <a href={appleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">Apple Maps</a>
-                  </span>
-                </div>
+            </div>
+            <div className="mt-6 overflow-hidden rounded-2xl border border-[#b98a3d]/25 bg-white shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] lg:col-start-1 lg:row-start-2">
+              <iframe title={text.mapTitle} src="https://www.google.com/maps?q=803+Castroville+Rd+%23402,+San+Antonio,+TX+78237&output=embed" className="h-64 w-full border-0" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-[#665a4e]">
+                <span>{text.mapLead}</span>
+                <span className="flex gap-3">
+                  <a href={googleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">Google Maps</a>
+                  <a href={appleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">Apple Maps</a>
+                </span>
               </div>
             </div>
           </div>
