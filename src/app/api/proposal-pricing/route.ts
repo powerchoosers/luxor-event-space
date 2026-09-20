@@ -43,7 +43,12 @@ export async function POST(request: NextRequest) {
     const pricing = await getDefaultLuxorProposalPricing()
     const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion })
-    return NextResponse.json({ pricing_config_version: pricing.version, calculation })
+    const luxorCosts = object(pricing.config.luxor_costs) || pricing.config
+    return NextResponse.json({
+      pricing_config_version: pricing.version,
+      rental_access: object(luxorCosts.rental_access) || {},
+      calculation,
+    })
   } catch (error) {
     if (error instanceof LuxorPromotionSelectionError) return NextResponse.json({ error: error.message }, { status: 409 })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Pricing configuration required — administrator review.' }, { status: 500 })

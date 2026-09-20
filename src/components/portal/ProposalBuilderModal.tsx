@@ -98,6 +98,7 @@ type CalculatedPackage = {
 }
 
 export type ProposalPricingCalculation = {
+  rental_access?: Record<string, unknown>
   context?: Partial<LuxorProposalContext>
   packages?: CalculatedPackage[]
   lineItems?: LuxorInvoiceLineItem[]
@@ -310,8 +311,25 @@ function ProposalPaymentScheduleSkeleton() {
   )
 }
 
-export function getRentalPeriodBounds(rentalPeriod?: string | null): { startMinutes: number; endMinutes: number; label: string; startTime: string; endTime: string } {
+export function getRentalPeriodBounds(rentalPeriod?: string | null, rentalAccess?: Record<string, unknown> | null): { startMinutes: number; endMinutes: number; label: string; startTime: string; endTime: string } {
   const period = String(rentalPeriod || 'evening').toLowerCase().replace(/[^a-z]/g, '')
+  const periodId = period === 'morning' ? 'morning' : period === 'fullday' ? 'full_day' : 'evening'
+  const configured = asRecord(rentalAccess?.[periodId])
+  const configuredStart = typeof configured?.start === 'string' ? configured.start : ''
+  const configuredEnd = typeof configured?.end === 'string' ? configured.end : ''
+  const configuredStartMinutes = parseTimeToDayMinutes(configuredStart)
+  const configuredEndMinutes = parseTimeToDayMinutes(configuredEnd)
+  if (configuredStartMinutes !== null && configuredEndMinutes !== null) {
+    const endMinutes = configuredEndMinutes < configuredStartMinutes ? configuredEndMinutes + (24 * 60) : configuredEndMinutes
+    const periodLabel = periodId === 'morning' ? 'Morning' : periodId === 'full_day' ? 'Full Day' : 'Evening'
+    return {
+      startMinutes: configuredStartMinutes,
+      endMinutes,
+      label: `${periodLabel} (${formatCatalogTime(configuredStart)}–${formatCatalogTime(configuredEnd)})`,
+      startTime: configuredStart,
+      endTime: endMinutes >= 24 * 60 ? '24:00' : configuredEnd,
+    }
+  }
   if (period === 'morning') {
     return { startMinutes: 8 * 60, endMinutes: 15 * 60, label: 'Morning (8:00 AM–3:00 PM)', startTime: '08:00', endTime: '15:00' }
   }
@@ -336,16 +354,17 @@ export function parseTimeToDayMinutes(timeStr?: string | null, isEvening = false
 export function validateEventTimes(
   guestArrivalTime?: string | null,
   eventEndTime?: string | null,
-  rentalPeriod?: string | null
+  rentalPeriod?: string | null,
+  rentalAccess?: Record<string, unknown> | null
 ): { valid: boolean; error?: string } {
   if (!guestArrivalTime && !eventEndTime) {
     return { valid: true }
   }
-  const bounds = getRentalPeriodBounds(rentalPeriod)
-  const isEvening = bounds.startTime === '17:00'
+  const bounds = getRentalPeriodBounds(rentalPeriod, rentalAccess)
+  const isOvernightWindow = bounds.startMinutes >= 17 * 60
 
   if (guestArrivalTime) {
-    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, false)
+    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, isOvernightWindow)
     if (arrivalMinutes === null) {
       return { valid: false, error: 'Guest arrival time is invalid.' }
     }
@@ -358,7 +377,7 @@ export function validateEventTimes(
   }
 
   if (eventEndTime) {
-    const endMinutes = parseTimeToDayMinutes(eventEndTime, isEvening)
+    const endMinutes = parseTimeToDayMinutes(eventEndTime, isOvernightWindow)
     if (endMinutes === null) {
       return { valid: false, error: 'Event end time is invalid.' }
     }
@@ -371,8 +390,8 @@ export function validateEventTimes(
   }
 
   if (guestArrivalTime && eventEndTime) {
-    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, false)
-    const endMinutes = parseTimeToDayMinutes(eventEndTime, isEvening)
+    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, isOvernightWindow)
+    const endMinutes = parseTimeToDayMinutes(eventEndTime, isOvernightWindow)
     if (arrivalMinutes !== null && endMinutes !== null && arrivalMinutes >= endMinutes) {
       return {
         valid: false,
@@ -518,6 +537,7 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
 
   return {
     ...record,
+    rental_access: asRecord(root.rental_access) || asRecord(record.rental_access) || undefined,
     context: context as Partial<LuxorProposalContext> | undefined,
     packages,
     lineItems: arrayFromUnknown(record.line_items || record.lineItems || record.items).map(normalizeLineItem).filter((item): item is LuxorInvoiceLineItem => Boolean(item)),
@@ -718,14 +738,15 @@ export function ProposalBuilderModal({
   const rentalPeriod = effectiveContext.rental_period || 'evening'
   const guestArrivalTime = asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || ''
   const eventEndTime = asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || ''
+  const rentalAccess = asRecord(calculation?.rental_access)
   const timeValidation = useMemo(
-    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
-    [guestArrivalTime, eventEndTime, rentalPeriod]
+    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod, rentalAccess),
+    [guestArrivalTime, eventEndTime, rentalPeriod, rentalAccess]
   )
 
   const handleRentalPeriodChange = (newPeriod: string) => {
     updateProposalContext({ rental_period: newPeriod as ProposalBuilderContext['rental_period'] })
-    const check = validateEventTimes(guestArrivalTime, eventEndTime, newPeriod)
+    const check = validateEventTimes(guestArrivalTime, eventEndTime, newPeriod, rentalAccess)
     if (!check.valid) {
       setValidationMessage(check.error || 'The current event times are outside the newly selected rental access period.')
     } else {
@@ -736,7 +757,7 @@ export function ProposalBuilderModal({
   const handleTimeChange = (field: 'guest_arrival_time' | 'event_end_time', value: string) => {
     const nextArrival = field === 'guest_arrival_time' ? value : guestArrivalTime
     const nextEnd = field === 'event_end_time' ? value : eventEndTime
-    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod)
+    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod, rentalAccess)
     if (!check.valid) {
       setValidationMessage(check.error || null)
     } else {

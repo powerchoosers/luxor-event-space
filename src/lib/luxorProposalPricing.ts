@@ -6,7 +6,7 @@ import type {
   LuxorProposalPriceBreakdown,
 } from './luxorInquiryTypes'
 import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
-import { catalogValue, formatCatalogTime } from './luxorPricingCatalog'
+import { formatCatalogTime } from './luxorPricingCatalog'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -392,6 +392,44 @@ function normalizeRentalPeriod(value: unknown): LuxorRentalPeriod | null {
   return null
 }
 
+function eventAccessLabel(luxor: PricingRecord, rentalPeriod: LuxorRentalPeriod, fullDecorAccess = false) {
+  if (fullDecorAccess) return '8 hours of event access plus 4 hours for setup and breakdown'
+  const access = readRecord(luxor, 'rental_access', rentalPeriod)
+  const start = formatCatalogTime(access?.start)
+  const end = formatCatalogTime(access?.end)
+  return start && end ? `${start}–${end} access` : rentalPeriod.replace('_', ' ')
+}
+
+function clockMinutes(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+function eventTimingErrors(selection: LuxorProposalSelection, luxor: PricingRecord, rentalPeriod: LuxorRentalPeriod) {
+  const arrival = trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime)
+  const eventEnd = trimmedString(selection.event_end_time ?? selection.eventEndTime)
+  if (!arrival && !eventEnd) return []
+  const access = readRecord(luxor, 'rental_access', rentalPeriod)
+  const start = clockMinutes(String(access?.start || ''))
+  const configuredEnd = clockMinutes(String(access?.end || ''))
+  if (start === null || configuredEnd === null) return [CONFIGURATION_ERROR]
+  const end = configuredEnd < start ? configuredEnd + 24 * 60 : configuredEnd
+  const arrivalMinutesRaw = arrival ? clockMinutes(arrival) : null
+  const eventEndMinutesRaw = eventEnd ? clockMinutes(eventEnd) : null
+  const arrivalMinutes = arrivalMinutesRaw !== null && arrivalMinutesRaw < start ? arrivalMinutesRaw + 24 * 60 : arrivalMinutesRaw
+  const eventEndMinutes = eventEndMinutesRaw !== null && eventEndMinutesRaw < start ? eventEndMinutesRaw + 24 * 60 : eventEndMinutesRaw
+  if (arrival && arrivalMinutes === null) return ['Guest arrival time is invalid.']
+  if (eventEnd && eventEndMinutesRaw === null) return ['Event end time is invalid.']
+  if (arrivalMinutes !== null && (arrivalMinutes < start || arrivalMinutes > end)) return [`Guest arrival time must fall within the ${eventAccessLabel(luxor, rentalPeriod)} access window.`]
+  if (eventEndMinutes !== null && (eventEndMinutes < start || eventEndMinutes > end)) return [`Event end time must fall within the ${eventAccessLabel(luxor, rentalPeriod)} access window.`]
+  if (arrivalMinutes !== null && eventEndMinutes !== null && arrivalMinutes >= eventEndMinutes) return ['Guest arrival time must be before event end time.']
+  return []
+}
+
 function normalizeAddOn(value: unknown) {
   const normalized = String(value || '').toLowerCase().replace(/[^a-z]/g, '')
   if (normalized === 'dj') return 'dj'
@@ -771,15 +809,14 @@ function calculatePackage(input: {
   if (fullDecorAccess && requestedRentalPeriod !== 'full_day') {
     warnings.push('Full Decor and Gold proposals use full-day venue access: 8 event hours plus 4 hours for setup and breakdown.')
   }
+  errors.push(...eventTimingErrors(selection, config, rentalPeriod))
 
   const rentalGroup = dateRateGroup(eventDate)
   const rentalAmount = rentalGroup ? readNumber(config, 'rental_rates', rentalGroup, rentalPeriod) : undefined
   if (rentalAmount === undefined) {
     errors.push(CONFIGURATION_ERROR)
   } else {
-    const accessDetail = rentalPeriod === 'full_day' && fullDecorAccess
-      ? '8 hours of event access plus 4 hours for setup and breakdown'
-      : `${formatCatalogTime(catalogValue(config, 'rental_access', rentalPeriod, 'start'))}–${formatCatalogTime(catalogValue(config, 'rental_access', rentalPeriod, 'end'))} access`
+    const accessDetail = eventAccessLabel(config, rentalPeriod, fullDecorAccess)
     items.push(lineItem({
       id: 'venue-rental',
       category: 'Venue Services',
@@ -827,10 +864,6 @@ function calculatePackage(input: {
       unit_price: rounded(billableHours * securityHourlyRate),
       subtotal: securityAmount,
     }
-  } else if (securityTier && numberValue(securityTier.amount) !== undefined) {
-    securityAmount = numberValue(securityTier.amount)
-    securityDetail = officers ? `${officers} officer${officers === 1 ? '' : 's'} required for this guest count` : undefined
-    quoteBreakdown = { quantity: 1, unit_price: securityAmount!, subtotal: securityAmount! }
   } else {
     const defaultRate = 40
     const accessHours = rentalPeriod === 'full_day' ? 14 : 6
@@ -1247,6 +1280,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const vendorCustomItems = custom.items.filter((item) => vendorCustom.has(String(item.id))).map((item) => ({ ...item, category: 'Preferred Vendor Services — Estimated Pricing', detail: item.detail || 'Owner-entered estimated vendor investment. Confirm directly with the vendor.' }))
   const confirmed: LuxorInvoiceLineItem[] = []
   const safePeriod = rentalPeriod || 'evening'
+  errors.push(...eventTimingErrors(selection, luxor, safePeriod))
   const rentalGroup = dateRateGroup(eventDate)
   const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined
   if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
@@ -1276,9 +1310,6 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     effectiveSecurityRate = securityHourlyRate
     securityAmount = rounded(officers * billableHours * securityHourlyRate)
     securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${securityHourlyRate}/hour | Total: $${securityAmount}`
-  } else if (security && numberValue(security.amount) !== undefined) {
-    securityAmount = numberValue(security.amount)
-    securityDetail = officers ? `${officers} officer${officers === 1 ? '' : 's'} required` : undefined
   } else {
     const defaultRate = 40
     const accessHours = safePeriod === 'full_day' ? 14 : 6
@@ -1329,7 +1360,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
   const finalContext: LuxorProposalContext = {
     version: 2, package_id: 'luxor_venue_proposal', package_name: 'Luxor Venue Proposal', event_date: eventDate, expected_guest_count: guestCount, rental_period: safePeriod,
-    event_access: safePeriod.replace('_', ' '),
+    event_access: eventAccessLabel(luxor, safePeriod),
     guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
     guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
     event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
