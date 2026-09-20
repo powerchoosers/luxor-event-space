@@ -4,6 +4,7 @@ import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 import { getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
 import { formatLuxorDate } from './luxorDateFormatting'
+import { formatCatalogTime } from './luxorPricingCatalog'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const pageWidth = 612
@@ -166,13 +167,15 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   const rightBottom = drawDetailColumn(rightDetails, 348, 210)
   y = Math.min(leftBottom, rightBottom) - 11
 
-  if (isFinalProposal && (summary.expectedGuestCount !== null || summary.eventAccess)) {
+  if (isFinalProposal && (summary.expectedGuestCount !== null || summary.eventAccess || summary.guestArrivalTime || summary.eventEndTime)) {
     ensureSpace(48)
     page.drawRectangle({ x: margin, y: y - 40, width: contentRight - margin, height: 40, color: rgb(0.94, 0.91, 0.84) })
     const guestText = summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`
-    const eventAccess = summary.eventAccess || null
+    const arrivalText = summary.guestArrivalTime ? `Guest Arrival: ${formatCatalogTime(summary.guestArrivalTime)}` : null
+    const endText = summary.eventEndTime ? `Event End: ${formatCatalogTime(summary.eventEndTime)}` : null
+    const eventAccess = summary.eventAccess ? `Venue Access: ${summary.eventAccess}` : null
     text('EVENT DETAILS', margin + 12, y - 13, 7, bold, paleMuted)
-    text([guestText, eventAccess].filter(Boolean).join(' | '), margin + 12, y - 28, 10, regular, ink)
+    text([guestText, arrivalText, endText, eventAccess].filter(Boolean).join(' | '), margin + 12, y - 28, 9.5, regular, ink)
     y -= 58
   }
 
@@ -188,7 +191,8 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
 
   for (const item of summary.lines) {
     const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, 450)
-    const serviceLines = wrap(item.service, regular, 9.2, 450)
+    const itemTitle = item.detail && !item.service.includes('|') ? `${item.service} (${item.detail})` : item.service
+    const serviceLines = wrap(itemTitle, regular, 9.2, 450)
     const rowHeight = categoryLines.length * 10 + serviceLines.length * 12 + 15
     if (y - rowHeight < 76) {
       startNewPage(true)

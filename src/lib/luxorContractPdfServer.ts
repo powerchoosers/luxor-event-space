@@ -42,6 +42,8 @@ type ContractProposalSummary = {
   finalEventPrice: number
   promotion: ContractPromotion | null
   paymentCollectionScope: 'luxor_services_only' | 'legacy_full_event' | null
+  guestArrivalTime?: string | null
+  eventEndTime?: string | null
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -103,10 +105,12 @@ function promotionFromContext(context: UnknownRecord, metadata: UnknownRecord, d
  * avoids live pricing records and keeps the signed agreement aligned with the
  * exact proposal the client accepted.
  */
-function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSummary {
+export function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSummary {
   const metadata = recordFrom(booking.metadata) || {}
   const context = recordFrom(metadata.final_proposal_context)
     ?? recordFrom(metadata.finalProposalContext)
+    ?? recordFrom(metadata.proposal_context)
+    ?? recordFrom(metadata.proposalContext)
     ?? {}
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
     ?? recordFrom(context.pricingSnapshot)
@@ -115,7 +119,11 @@ function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSumma
     ? pricingSnapshot.line_items
     : Array.isArray(metadata.proposalLineItems)
       ? metadata.proposalLineItems
-      : []
+      : Array.isArray(metadata.line_items)
+        ? metadata.line_items
+        : Array.isArray(context.line_items)
+          ? context.line_items
+          : []
   const lines = rawLines.flatMap((value): ContractProposalLine[] => {
     const line = recordFrom(value)
     if (!line) return []
@@ -128,8 +136,12 @@ function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSumma
     const hiddenLine = pricingRole === 'discount' || pricingRole === 'tax' || paymentBucket === 'security_deposit'
       || /refundable\s+security\s+deposit|(^|\s)(sales\s+)?tax($|\s)|discount|credit|promotion/.test(searchable)
     if (hiddenLine) return []
+    const detail = textValue(line.detail)
+    const itemDescription = detail && !description.includes('|')
+      ? `${description} (${detail})`
+      : description
     const rawQuantity = moneyValue(line.quantity)
-    return [{ category, description, quantity: rawQuantity === null || rawQuantity < 1 ? 1 : rawQuantity }]
+    return [{ category, description: itemDescription, quantity: rawQuantity === null || rawQuantity < 1 ? 1 : rawQuantity }]
   })
   const discount = moneyValue(pricingSnapshot.discount_amount ?? pricingSnapshot.discountAmount ?? context.discount_amount ?? context.discountAmount) ?? 0
   const subtotal = moneyValue(pricingSnapshot.subtotal ?? pricingSnapshot.original_subtotal ?? context.original_subtotal ?? context.subtotal)
@@ -143,6 +155,8 @@ function proposalSummaryForBooking(booking: LuxorBooking): ContractProposalSumma
     finalEventPrice,
     promotion: promotionFromContext(context, metadata, discount),
     paymentCollectionScope: context.payment_collection_scope === 'luxor_services_only' ? 'luxor_services_only' : context.payment_collection_scope === 'legacy_full_event' ? 'legacy_full_event' : null,
+    guestArrivalTime: textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time),
+    eventEndTime: textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time),
   }
 }
 
@@ -392,13 +406,25 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.y -= 10
   w.fieldPair('Phone', booking.phone || 'Not provided', 'Additional named party', names.additionalNames.join(', ') || 'None')
   w.y -= 18
+  const metadata = recordFrom(booking.metadata) || {}
+  const context = recordFrom(metadata.final_proposal_context)
+    ?? recordFrom(metadata.finalProposalContext)
+    ?? recordFrom(metadata.proposal_context)
+    ?? recordFrom(metadata.proposalContext)
+    ?? {}
+  const guestArrivalTime = textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time)
+  const eventEndTime = textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time)
+  const venueAccess = textValue(context.event_access) || (booking.start_time && booking.end_time ? `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}` : 'To be confirmed')
+
   w.heading('2. Event information')
   w.fieldPair('Agreement date', displayDate(agreementDate), 'Event date', displayDate(booking.event_date))
-  w.fieldPair('Event type', booking.event_type || 'Private event', 'Email', booking.email || 'Not provided')
+  w.fieldPair('Event type', booking.event_type || 'Private celebration', 'Expected guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`)
   w.y -= 10
-  w.fieldPair('Event time', `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}`, 'Expected guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`)
+  w.fieldPair('Guest arrival time', guestArrivalTime ? displayTime(guestArrivalTime) : 'To be confirmed', 'Event end time', eventEndTime ? displayTime(eventEndTime) : 'To be confirmed')
   w.y -= 10
-  w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Event purpose', booking.event_type || 'Private celebration')
+  w.fieldPair('Venue access / Rental period', venueAccess, 'Venue', 'Luxor at Las Palmas Events')
+  w.y -= 10
+  w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Email', booking.email || 'Not provided')
   w.y -= 14
   w.paragraph('The Event may be conducted only for the purpose shown above. Any material change in event type, purpose, attendance, or public admission requires Luxor\'s prior written approval and may require updated pricing, insurance, security, permits, or a revised agreement.')
   w.paragraph('The approved rental period covers all client and vendor access. Guest arrival, entertainment, service, cleanup, and removal must remain within the start and end times shown above unless Luxor approves a written change.')

@@ -281,6 +281,14 @@ export type LuxorProposalContext = {
   expected_guest_count?: number
   rental_period?: 'morning' | 'evening' | 'full_day'
   event_access?: string
+  guest_arrival_time?: string
+  guestArrivalTime?: string
+  event_end_time?: string
+  eventEndTime?: string
+  security_rate?: number
+  security_hours?: number
+  security_guards?: number
+  security_total?: number
   venue_services_total?: number
   event_services_total?: number
   /** Internal collection split for new proposals; the client still sees final_event_price. */

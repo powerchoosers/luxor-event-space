@@ -79,6 +79,12 @@ export type LuxorProposalSelection = {
   adminOverride?: boolean | null
   bartenderAdditionalHours?: number | string | null
   bartenderStaffCount?: number | string | null
+  guestArrivalTime?: string | null
+  guest_arrival_time?: string | null
+  eventEndTime?: string | null
+  event_end_time?: string | null
+  securityHours?: number | string | null
+  security_hours?: number | string | null
   customItems?: LuxorProposalCustomItem[] | null
   custom_items?: LuxorProposalCustomItem[] | null
   [key: string]: unknown
@@ -224,6 +230,8 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
       all_inclusive: [{ min_guests: 1, max_guests: 75, amount: 200 }, { min_guests: 76, max_guests: 150, amount: 260 }, { min_guests: 151, max_guests: 200, amount: 320 }],
     },
     security: {
+      hourly_rate: 40,
+      minimum_hours: 4,
       retail: [{ min_guests: 1, max_guests: 150, officers: 1, amount: 250 }, { min_guests: 151, max_guests: 200, officers: 2, amount: 450 }],
       all_inclusive: [{ min_guests: 1, max_guests: 150, officers: 1, amount: 200 }, { min_guests: 151, max_guests: 200, officers: 2, amount: 400 }],
     },
@@ -793,15 +801,55 @@ function calculatePackage(input: {
     pricingRuleId: `required_fees.cleaning.${rateTier}`, paymentBucket: 'venue', quoteBreakdown: { quantity: 1, unit_price: cleaningAmount, subtotal: cleaningAmount },
   }))
 
-  const securityTier = tierForGuestCount(readRecord(config, 'required_fees', 'security')?.[rateTier], guestCount)
-  const securityAmount = securityTier ? numberValue(securityTier.amount) : undefined
+  const securityConfig = readRecord(config, 'required_fees', 'security') || readRecord(config, 'security')
+  const securityTier = tierForGuestCount(securityConfig?.[rateTier], guestCount)
+  const officers = numberValue(securityTier?.officers) || (guestCount > 150 ? 2 : 1)
+  const securityHourlyRate = numberValue(securityConfig?.hourly_rate)
+  const securityMinHours = numberValue(securityConfig?.minimum_hours) ?? 4
+
+  let securityAmount: number | undefined
+  let securityDetail: string | undefined
+  let quoteBreakdown: LuxorProposalPriceBreakdown | undefined
+
+  if (securityHourlyRate !== undefined && securityHourlyRate > 0) {
+    const customHours = numberValue(selection.securityHours ?? selection.security_hours)
+    const configuredAccessHours = numberValue(readRecord(config, 'rental_access', rentalPeriod)?.hours)
+    const accessHours = customHours && customHours > 0
+      ? customHours
+      : configuredAccessHours && configuredAccessHours > 0
+        ? configuredAccessHours
+        : (rentalPeriod === 'full_day' ? 14 : 6)
+    const billableHours = Math.max(securityMinHours, accessHours)
+    securityAmount = rounded(officers * billableHours * securityHourlyRate)
+    securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${securityHourlyRate}/hour | Total: $${securityAmount}`
+    quoteBreakdown = {
+      quantity: officers,
+      unit_price: rounded(billableHours * securityHourlyRate),
+      subtotal: securityAmount,
+    }
+  } else if (securityTier && numberValue(securityTier.amount) !== undefined) {
+    securityAmount = numberValue(securityTier.amount)
+    securityDetail = officers ? `${officers} officer${officers === 1 ? '' : 's'} required for this guest count` : undefined
+    quoteBreakdown = { quantity: 1, unit_price: securityAmount!, subtotal: securityAmount! }
+  } else {
+    const defaultRate = 40
+    const accessHours = rentalPeriod === 'full_day' ? 14 : 6
+    const billableHours = Math.max(securityMinHours, accessHours)
+    securityAmount = rounded(officers * billableHours * defaultRate)
+    securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${defaultRate}/hour | Total: $${securityAmount}`
+    quoteBreakdown = {
+      quantity: officers,
+      unit_price: rounded(billableHours * defaultRate),
+      subtotal: securityAmount,
+    }
+  }
+
   if (securityAmount === undefined) errors.push(CONFIGURATION_ERROR)
   else {
-    const officers = numberValue(securityTier?.officers)
     items.push(lineItem({
       id: 'required-security', category: 'Venue Services', description: 'Required security', unitPrice: securityAmount, required: true,
-      detail: officers ? `${officers} officer${officers === 1 ? '' : 's'} required for this guest count` : undefined,
-      pricingRuleId: `required_fees.security.${rateTier}`, paymentBucket: 'venue', quoteBreakdown: { quantity: 1, unit_price: securityAmount, subtotal: securityAmount },
+      detail: securityDetail,
+      pricingRuleId: `required_fees.security.${rateTier}`, paymentBucket: 'venue', quoteBreakdown,
     }))
   }
 
@@ -1204,13 +1252,48 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
   else confirmed.push(lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor venue rental', unitPrice: rentalAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: `Official Luxor rate for ${safePeriod.replace('_', ' ')} venue access.` }))
   const cleaning = tierForGuestCount(readRecord(luxor, 'required_fees', 'cleaning')?.retail, guestCount)
-  const security = tierForGuestCount(readRecord(luxor, 'required_fees', 'security')?.retail, guestCount)
+  const securityConfig = readRecord(luxor, 'required_fees', 'security') || readRecord(luxor, 'security') || readRecord(config, 'security')
+  const security = tierForGuestCount(securityConfig?.retail, guestCount)
+  const officers = numberValue(security?.officers) || (guestCount > 150 ? 2 : 1)
+  const securityHourlyRate = numberValue(securityConfig?.hourly_rate)
+  const securityMinHours = numberValue(securityConfig?.minimum_hours) ?? 4
+
+  let securityAmount: number | undefined
+  let securityDetail: string | undefined
+  let securityBillableHours: number | undefined
+  let effectiveSecurityRate: number | undefined
+
+  if (securityHourlyRate !== undefined && securityHourlyRate > 0) {
+    const customHours = numberValue(selection.securityHours ?? selection.security_hours)
+    const configuredAccessHours = numberValue(readRecord(luxor, 'rental_access', safePeriod)?.hours)
+    const accessHours = customHours && customHours > 0
+      ? customHours
+      : configuredAccessHours && configuredAccessHours > 0
+        ? configuredAccessHours
+        : (safePeriod === 'full_day' ? 14 : 6)
+    const billableHours = Math.max(securityMinHours, accessHours)
+    securityBillableHours = billableHours
+    effectiveSecurityRate = securityHourlyRate
+    securityAmount = rounded(officers * billableHours * securityHourlyRate)
+    securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${securityHourlyRate}/hour | Total: $${securityAmount}`
+  } else if (security && numberValue(security.amount) !== undefined) {
+    securityAmount = numberValue(security.amount)
+    securityDetail = officers ? `${officers} officer${officers === 1 ? '' : 's'} required` : undefined
+  } else {
+    const defaultRate = 40
+    const accessHours = safePeriod === 'full_day' ? 14 : 6
+    const billableHours = Math.max(securityMinHours, accessHours)
+    securityBillableHours = billableHours
+    effectiveSecurityRate = defaultRate
+    securityAmount = rounded(officers * billableHours * defaultRate)
+    securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${defaultRate}/hour | Total: $${securityAmount}`
+  }
+
   const cleaningAmount = numberValue(cleaning?.amount)
-  const securityAmount = numberValue(security?.amount)
   if (cleaningAmount === undefined || securityAmount === undefined) errors.push(CONFIGURATION_ERROR)
   else {
     confirmed.push(lineItem({ id: 'required-cleaning', category: 'Luxor required charges', description: 'Required cleaning', unitPrice: cleaningAmount, required: true, pricingRole: 'required', paymentBucket: 'venue' }))
-    confirmed.push(lineItem({ id: 'required-security', category: 'Luxor required charges', description: `Required security${numberValue(security?.officers) ? ` (${numberValue(security?.officers)} officer${numberValue(security?.officers) === 1 ? '' : 's'})` : ''}`, unitPrice: securityAmount, required: true, pricingRole: 'required', paymentBucket: 'venue' }))
+    confirmed.push(lineItem({ id: 'required-security', category: 'Luxor required charges', description: 'Required security', unitPrice: securityAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: securityDetail }))
   }
   confirmed.push(lineItem({ id: 'included-tables-chairs', category: 'Included with venue rental', description: 'Tables and chairs', unitPrice: 0, included: true, pricingRole: 'included', paymentBucket: 'venue', detail: 'Included with the confirmed Luxor venue rental.' }))
   confirmed.push(...confirmedCustom)
@@ -1246,12 +1329,35 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
   const finalContext: LuxorProposalContext = {
     version: 2, package_id: 'luxor_venue_proposal', package_name: 'Luxor Venue Proposal', event_date: eventDate, expected_guest_count: guestCount, rental_period: safePeriod,
-    event_access: safePeriod.replace('_', ' '), venue_services_total: confirmedLuxorTotal, event_services_total: 0, luxor_services_total: confirmedLuxorTotal, planner_services_total: 0,
+    event_access: safePeriod.replace('_', ' '),
+    guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
+    guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
+    event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
+    eventEndTime: trimmedString(selection.eventEndTime ?? selection.event_end_time) || undefined,
+    security_rate: effectiveSecurityRate,
+    security_guards: officers,
+    security_hours: securityBillableHours,
+    security_total: securityAmount,
+    venue_services_total: confirmedLuxorTotal, event_services_total: 0, luxor_services_total: confirmedLuxorTotal, planner_services_total: 0,
     final_event_price: confirmedLuxorTotal, refundable_security_deposit: securityDeposit, payment_collection_scope: 'luxor_services_only', amount_due_to_book: paymentPlan?.mode === 'pay_in_full' ? confirmedLuxorTotal : paymentPlan ? rounded(confirmedLuxorTotal * paymentPlan.booking_payment_percent / 100) : null,
     ...(paymentPlan ? { payment_plan: paymentPlan } : {}), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}),
     confirmed_luxor_total: confirmedLuxorTotal, estimated_vendor_total: estimatedVendorTotal, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), preferred_vendor_estimate_lines: selectedVendorEstimateLines,
     vendor_pricing_disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER,
-    pricing_selection: { packageId: 'luxor_venue_proposal', eventDate, guestCount, rentalPeriod: safePeriod, addOns: selectedIds, customItems: selection.customItems ?? selection.custom_items ?? [], ...(paymentPlan ? { paymentPlan } : {}) },
+    pricing_selection: {
+      packageId: 'luxor_venue_proposal',
+      eventDate,
+      guestCount,
+      rentalPeriod: safePeriod,
+      guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
+      guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
+      eventEndTime: trimmedString(selection.eventEndTime ?? selection.event_end_time) || undefined,
+      event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
+      securityHours: numberValue(selection.securityHours ?? selection.security_hours) || undefined,
+      security_hours: numberValue(selection.security_hours ?? selection.securityHours) || undefined,
+      addOns: selectedIds,
+      customItems: selection.customItems ?? selection.custom_items ?? [],
+      ...(paymentPlan ? { paymentPlan } : {}),
+    },
     calculation_warnings: warnings, calculation_errors: calculationErrors, publication_errors: publicationErrors,
   }
   const primary = { id: 'luxor_venue_proposal' as LuxorProposalPackageId, name: 'Luxor Venue Proposal', description: 'Confirmed venue rental and required Luxor charges.', finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, refundableSecurityDeposit: securityDeposit, refundable_security_deposit: securityDeposit, amountDueToBook: finalContext.amount_due_to_book || null, amount_due_to_book: finalContext.amount_due_to_book || null, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, lineItems: confirmed, line_items: confirmed, ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), warnings, errors: calculationErrors }
@@ -1356,6 +1462,21 @@ export function calculateLuxorProposal(
   const luxorServicesTotal = rounded(selected.lineItems
     .filter((item) => item.paymentBucket !== 'security_deposit' && item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && !item.isChecklistItem && isLuxorCollectedLineItem(item))
     .reduce((sum, item) => sum + item.total, 0))
+  const secConfig = readRecord(config, 'required_fees', 'security') || readRecord(config, 'security')
+  const secHourlyRate = numberValue(secConfig?.hourly_rate) ?? 40
+  const secMinHours = numberValue(secConfig?.minimum_hours) ?? 4
+  const secCustomHours = numberValue(selection.securityHours ?? selection.security_hours)
+  const secConfiguredAccessHours = numberValue(readRecord(config, 'rental_access', safePeriod)?.hours)
+  const secAccessHours = secCustomHours && secCustomHours > 0
+    ? secCustomHours
+    : secConfiguredAccessHours && secConfiguredAccessHours > 0
+      ? secConfiguredAccessHours
+      : (safePeriod === 'full_day' ? 14 : 6)
+  const secBillableHours = Math.max(secMinHours, secAccessHours)
+  const secOfficers = guestCount > 150 ? 2 : 1
+  const secLine = selected.lineItems.find((item) => item.id === 'required-security')
+  const secTotal = secLine?.total ?? rounded(secOfficers * secBillableHours * secHourlyRate)
+
   const finalContext: LuxorProposalContext = {
     version: 1,
     pricing_config_version: numberValue(config.version),
@@ -1383,6 +1504,14 @@ export function calculateLuxorProposal(
     final_event_price: selected.finalEventPrice,
     tax_rate: selected.taxRate,
     refundable_security_deposit: securityDeposit || 750,
+    guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
+    guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
+    event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
+    eventEndTime: trimmedString(selection.eventEndTime ?? selection.event_end_time) || undefined,
+    security_rate: secHourlyRate,
+    security_guards: secOfficers,
+    security_hours: secBillableHours,
+    security_total: secTotal,
     payment_collection_scope: 'luxor_services_only',
     payment_policy_acknowledged: selection.paymentPolicyAcknowledged === true || selection.payment_policy_acknowledged === true,
     amount_due_to_book: selected.amountDueToBook,
@@ -1392,6 +1521,12 @@ export function calculateLuxorProposal(
       eventDate,
       guestCount,
       rentalPeriod: safePeriod,
+      guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
+      guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
+      eventEndTime: trimmedString(selection.eventEndTime ?? selection.event_end_time) || undefined,
+      event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
+      securityHours: numberValue(selection.securityHours ?? selection.security_hours) || undefined,
+      security_hours: numberValue(selection.security_hours ?? selection.securityHours) || undefined,
       addOns: array(selection.addOns ?? selection.add_ons).filter((item): item is string => typeof item === 'string'),
       removedServiceIds: array(selection.removedServiceIds ?? selection.removed_service_ids).filter((item): item is string => typeof item === 'string'),
       ...(resolvedPromotion ? { promotion_id: resolvedPromotion.id } : {}),

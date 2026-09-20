@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   ClipboardList,
   Eye,
   FileText,
@@ -22,6 +23,7 @@ import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
+import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 
 type ProposalSubmitAction = 'save' | 'email' | 'in_person'
 type ProposalPresentationMode = 'email' | 'in_person'
@@ -39,6 +41,10 @@ export type ProposalBuilderContext = {
   expected_guest_count?: number
   rental_period?: 'morning' | 'evening' | 'full_day'
   event_access?: string
+  guest_arrival_time?: string
+  guestArrivalTime?: string
+  event_end_time?: string
+  eventEndTime?: string
   venue_services_total?: number
   event_services_total?: number
   final_event_price?: number
@@ -227,6 +233,7 @@ const STEPS = [
   { id: 'compare', label: 'Investment', icon: ReceiptText },
   { id: 'review', label: 'Selected proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
+  { id: 'contract', label: 'Agreement', icon: ShieldCheck },
 ] as const
 
 const formatMoney = (value: number | null | undefined) => new Intl.NumberFormat('en-US', {
@@ -301,6 +308,80 @@ function ProposalPaymentScheduleSkeleton() {
       <p role="status" aria-live="polite" className="sr-only">Recalculating the payment schedule.</p>
     </section>
   )
+}
+
+export function getRentalPeriodBounds(rentalPeriod?: string | null): { startMinutes: number; endMinutes: number; label: string; startTime: string; endTime: string } {
+  const period = String(rentalPeriod || 'evening').toLowerCase().replace(/[^a-z]/g, '')
+  if (period === 'morning') {
+    return { startMinutes: 8 * 60, endMinutes: 15 * 60, label: 'Morning (8:00 AM–3:00 PM)', startTime: '08:00', endTime: '15:00' }
+  }
+  if (period === 'fullday') {
+    return { startMinutes: 11 * 60, endMinutes: 23 * 60, label: 'Full Day (11:00 AM–11:00 PM)', startTime: '11:00', endTime: '23:00' }
+  }
+  return { startMinutes: 17 * 60, endMinutes: 24 * 60, label: 'Evening (5:00 PM–12:00 AM)', startTime: '17:00', endTime: '24:00' }
+}
+
+export function parseTimeToDayMinutes(timeStr?: string | null, isEvening = false): number | null {
+  if (!timeStr) return null
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+  const h = Number(match[1])
+  const m = Number(match[2])
+  if (h === 0 && m === 0 && isEvening) {
+    return 24 * 60
+  }
+  return h * 60 + m
+}
+
+export function validateEventTimes(
+  guestArrivalTime?: string | null,
+  eventEndTime?: string | null,
+  rentalPeriod?: string | null
+): { valid: boolean; error?: string } {
+  if (!guestArrivalTime && !eventEndTime) {
+    return { valid: true }
+  }
+  const bounds = getRentalPeriodBounds(rentalPeriod)
+  const isEvening = bounds.startTime === '17:00'
+
+  if (guestArrivalTime) {
+    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, false)
+    if (arrivalMinutes === null) {
+      return { valid: false, error: 'Guest arrival time is invalid.' }
+    }
+    if (arrivalMinutes < bounds.startMinutes || arrivalMinutes > bounds.endMinutes) {
+      return {
+        valid: false,
+        error: `Guest arrival time must fall within the ${bounds.label} access window.`,
+      }
+    }
+  }
+
+  if (eventEndTime) {
+    const endMinutes = parseTimeToDayMinutes(eventEndTime, isEvening)
+    if (endMinutes === null) {
+      return { valid: false, error: 'Event end time is invalid.' }
+    }
+    if (endMinutes < bounds.startMinutes || endMinutes > bounds.endMinutes) {
+      return {
+        valid: false,
+        error: `Event end time must fall within the ${bounds.label} access window.`,
+      }
+    }
+  }
+
+  if (guestArrivalTime && eventEndTime) {
+    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, false)
+    const endMinutes = parseTimeToDayMinutes(eventEndTime, isEvening)
+    if (arrivalMinutes !== null && endMinutes !== null && arrivalMinutes >= endMinutes) {
+      return {
+        valid: false,
+        error: 'Guest arrival time must be before event end time.',
+      }
+    }
+  }
+
+  return { valid: true }
 }
 
 function formatEventDate(value?: string | null) {
@@ -635,6 +716,37 @@ export function ProposalBuilderModal({
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
+  const guestArrivalTime = asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || ''
+  const eventEndTime = asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || ''
+  const timeValidation = useMemo(
+    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
+    [guestArrivalTime, eventEndTime, rentalPeriod]
+  )
+
+  const handleRentalPeriodChange = (newPeriod: string) => {
+    updateProposalContext({ rental_period: newPeriod as ProposalBuilderContext['rental_period'] })
+    const check = validateEventTimes(guestArrivalTime, eventEndTime, newPeriod)
+    if (!check.valid) {
+      setValidationMessage(check.error || 'The current event times are outside the newly selected rental access period.')
+    } else {
+      setValidationMessage(null)
+    }
+  }
+
+  const handleTimeChange = (field: 'guest_arrival_time' | 'event_end_time', value: string) => {
+    const nextArrival = field === 'guest_arrival_time' ? value : guestArrivalTime
+    const nextEnd = field === 'event_end_time' ? value : eventEndTime
+    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod)
+    if (!check.valid) {
+      setValidationMessage(check.error || null)
+    } else {
+      setValidationMessage(null)
+    }
+    updateProposalContext({
+      [field]: value || undefined,
+      [field === 'guest_arrival_time' ? 'guestArrivalTime' : 'eventEndTime']: value || undefined,
+    })
+  }
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
   const removedServiceIds = useMemo(() => removedServiceIdsFrom(effectiveContext), [effectiveContext])
   const customItems = useMemo(() => (
@@ -924,6 +1036,10 @@ export function ProposalBuilderModal({
       guestCount: guestCount || null,
       eventType: eventType || effectiveContext.event_type || null,
       rentalPeriod,
+      guestArrivalTime: guestArrivalTime || null,
+      guest_arrival_time: guestArrivalTime || null,
+      eventEndTime: eventEndTime || null,
+      event_end_time: eventEndTime || null,
       addOns: selectedServiceIds,
       removedServiceIds,
       customItems: customItemSelection(customItems),
@@ -935,6 +1051,8 @@ export function ProposalBuilderModal({
     expected_guest_count: guestCount || null,
     event_type: eventType || effectiveContext.event_type || null,
     rental_period: rentalPeriod,
+    guest_arrival_time: guestArrivalTime || null,
+    event_end_time: eventEndTime || null,
     package_id: 'luxor_venue_proposal',
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
@@ -952,7 +1070,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventType, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1096,9 +1214,15 @@ export function ProposalBuilderModal({
         : undefined
 
   const advance = () => {
-    if (stepIndex === 0 && (!eventDateValue || guestCount < 1 || guestCount > 200)) {
-      setValidationMessage('Add the event date and an expected guest count from 1 to 200 before continuing.')
-      return
+    if (stepIndex === 0) {
+      if (!eventDateValue || guestCount < 1 || guestCount > 200) {
+        setValidationMessage('Add the event date and an expected guest count from 1 to 200 before continuing.')
+        return
+      }
+      if (!timeValidation.valid) {
+        setValidationMessage(timeValidation.error || 'Please correct the event times before continuing.')
+        return
+      }
     }
     setValidationMessage(null)
     setStepDirection(1)
@@ -1133,7 +1257,11 @@ export function ProposalBuilderModal({
       ? 'Continue to investment'
     : stepIndex === 2
       ? 'Continue to review'
-        : 'Continue to payment plan'
+    : stepIndex === 3
+      ? 'Continue to payment plan'
+    : stepIndex === 4
+      ? 'Continue to agreement'
+      : 'Finish'
 
   return (
     <PortalModal isOpen={isOpen} onClose={onClose} ariaLabel="Final proposal builder" maxWidth="max-w-[1340px]">
@@ -1254,7 +1382,7 @@ export function ProposalBuilderModal({
                       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Rental period</span>
                       <PortalSelect
                         value={rentalPeriod}
-                        onChange={(value) => updateProposalContext({ rental_period: value as ProposalBuilderContext['rental_period'] })}
+                        onChange={handleRentalPeriodChange}
                         options={[
                           { value: 'morning', label: 'Morning · 8 AM–3 PM' },
                           { value: 'evening', label: 'Evening · 5 PM–12 AM' },
@@ -1270,6 +1398,48 @@ export function ProposalBuilderModal({
                         {eventType || effectiveContext.event_type || 'Event booking'}
                       </div>
                     </div>
+                  </div>
+                  <div className="border-t border-[color:var(--portal-border)] pt-3 space-y-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest arrival time</span>
+                        <PortalSelect
+                          value={guestArrivalTime}
+                          onChange={(value) => handleTimeChange('guest_arrival_time', value)}
+                          options={[
+                            { value: '', label: 'Select arrival time' },
+                            ...LUXOR_TIME_DROPDOWN_OPTIONS,
+                          ]}
+                          className="w-full"
+                          buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
+                          placeholder="Select arrival time"
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event end time</span>
+                        <PortalSelect
+                          value={eventEndTime}
+                          onChange={(value) => handleTimeChange('event_end_time', value)}
+                          options={[
+                            { value: '', label: 'Select end time' },
+                            ...LUXOR_TIME_DROPDOWN_OPTIONS,
+                          ]}
+                          className="w-full"
+                          buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
+                          placeholder="Select end time"
+                        />
+                      </label>
+                    </div>
+                    {!timeValidation.valid ? (
+                      <p role="alert" className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                        <AlertCircle size={14} className="shrink-0" />
+                        {timeValidation.error}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                        The rental period covers all paid venue access; guest arrival and event end must fit within this window.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1531,12 +1701,14 @@ export function ProposalBuilderModal({
                       <span className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">{selectedCalculatedPackage?.name || PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(selectedPackage))?.name}</span>
                     </div>
 
-                    <div className="mt-5 grid gap-2 border-y border-[color:var(--portal-border)] py-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="mt-5 grid gap-2 border-y border-[color:var(--portal-border)] py-4 sm:grid-cols-2 lg:grid-cols-3">
                       {[
                         ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
-                        ['Access', formatEventAccess(eventAccess, rentalPeriod)],
+                        ['Venue access', formatEventAccess(eventAccess, rentalPeriod)],
+                        ['Guest arrival', guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'],
+                        ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'],
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
                     </div>
 
@@ -1577,7 +1749,7 @@ export function ProposalBuilderModal({
           {stepIndex === 4 ? (
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="max-w-3xl">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 5</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 6</p>
               </div>
 
               {isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule
@@ -1630,6 +1802,181 @@ export function ProposalBuilderModal({
               ) : null}
             </section>
           ) : null}
+          {stepIndex === 5 ? (
+            <section aria-busy={isCalculating} className="mx-auto max-w-5xl space-y-6">
+              <div className="max-w-3xl">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 6 of 6</p>
+                <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Client Contract Agreement</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">
+                  The agreement automatically incorporates all locked proposal facts, contractual event timing, financial terms, and legal clauses. Review before publishing or initiating client signing.
+                </p>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+                <div className="border-b border-[#caa24c]/20 bg-[#1a140d] px-5 py-6 text-center text-white sm:px-8">
+                  <p className="font-serif text-2xl tracking-[0.2em] text-[#f1d27a]">LUXOR AT LAS PALMAS EVENTS</p>
+                  <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/65">Event Booking Agreement &middot; 803 Castroville Rd #402, San Antonio, TX 78237</p>
+                </div>
+
+                <div className="space-y-6 p-5 sm:p-7">
+                  {/* Client Information */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">1. Client Information</h4>
+                    <div className="mt-3 grid gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Client / Contract Holder</p>
+                        <p className="mt-1 text-sm font-bold">{clientName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Email</p>
+                        <p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{clientEmail || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Name</p>
+                        <p className="mt-1 text-sm font-semibold">Luxor at Las Palmas Events</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Event Information */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">2. Event Information</h4>
+                    <div className="mt-3 grid gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event Date</p>
+                        <p className="mt-1 text-sm font-bold">{formatEventDate(eventDateValue)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest Count</p>
+                        <p className="mt-1 text-sm font-bold">{guestCount} guests (maximum 200)</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event Type</p>
+                        <p className="mt-1 text-sm font-bold">{eventType || effectiveContext.event_type || 'Private celebration'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest Arrival Time</p>
+                        <p className="mt-1 text-sm font-bold text-[#8c6529] dark:text-[#f1d27a]">{guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event End Time</p>
+                        <p className="mt-1 text-sm font-bold text-[#8c6529] dark:text-[#f1d27a]">{eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Access / Rental Period</p>
+                        <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Information */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">3. Financial Terms &amp; Itemization</h4>
+                    <div className="mt-3 divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                      {items.map((item, idx) => (
+                        <div key={`contract-item-${item.catalogId || item.description}-${idx}`} className="flex items-center justify-between gap-4 p-3.5 text-sm">
+                          <div>
+                            <p className="font-semibold">{item.description}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>
+                            {item.detail ? <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">{item.detail}</p> : null}
+                          </div>
+                          <span className="font-mono font-bold">{formatMoney(item.total)}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between gap-4 p-3.5 text-sm font-semibold bg-[color:var(--portal-card)]">
+                        <span className="text-[color:var(--portal-muted)]">Subtotal</span>
+                        <span className="font-mono">{formatMoney(proposalSubtotal)}</span>
+                      </div>
+                      {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? (
+                        <div className="flex items-center justify-between gap-4 p-3.5 text-sm font-semibold bg-[color:var(--portal-card)] text-emerald-700 dark:text-emerald-300">
+                          <span>{selectedPromotion?.name || 'Promotion'}</span>
+                          <span className="font-mono">−{formatMoney(proposalDiscountAmount)}</span>
+                        </div>
+                      ) : null}
+                      {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? (
+                        <div className="flex items-center justify-between gap-4 p-3.5 text-sm font-semibold bg-[color:var(--portal-card)]">
+                          <span className="text-[color:var(--portal-muted)]">Sales Tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span>
+                          <span className="font-mono">{formatMoney(proposalTaxAmount)}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center justify-between gap-4 p-4 text-base font-black bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]">
+                        <span>Final Event Price (Total)</span>
+                        <span className="font-mono text-xl">{formatMoney(finalEventPrice)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Schedule & Deposit */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-2">
+                      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Refundable Security Deposit</p>
+                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(refundableSecurityDeposit)}</p>
+                      <p className="text-xs text-[color:var(--portal-muted)]">Held throughout event period; refunded post-event per contract inspection terms.</p>
+                    </div>
+                    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-2">
+                      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial Booking Payment Due</p>
+                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(paymentPlanDraft?.booking_payment_amount || (finalEventPrice ? finalEventPrice * 0.25 : 0))}</p>
+                      <p className="text-xs text-[color:var(--portal-muted)]">Due upon electronic signature to secure date reservation.</p>
+                    </div>
+                  </div>
+
+                  {/* Legal Terms & Policies Accordion */}
+                  <details className="group rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] overflow-hidden">
+                    <summary className="flex cursor-pointer list-none items-center justify-between p-4 text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)] hover:bg-[#caa24c]/10">
+                      <span>View Incorporated Luxor Venue Policies &amp; Legal Clauses</span>
+                      <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="border-t border-[color:var(--portal-border)] p-4 space-y-4 text-xs leading-5 text-[color:var(--portal-muted)] max-h-96 overflow-y-auto portal-scrollbar">
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Venue Access, Setup &amp; Breakdown</h5>
+                        <p className="mt-1">All setup, event time, guest presence, cleanup, and breakdown must fit strictly within the contracted rental period shown above. Remaining past the contracted period incurs overtime at $150.00 per 30-minute increment.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Guest Arrival &amp; Event End Time</h5>
+                        <p className="mt-1">Guests are permitted on the Premises only from the contracted Guest Arrival Time until the Event End Time. The client is responsible for timely guest departure.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Private BYOB Alcohol Policy</h5>
+                        <p className="mt-1">Luxor at Las Palmas Events is a private BYOB venue. No alcohol may be sold or furnished for compensation. Alcohol must be served exclusively by a qualified TABC-certified bartender.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Occupancy &amp; Event Rules</h5>
+                        <p className="mt-1">Maximum occupancy is 200 persons total (including all guests, vendors, and staff). Smoking, vaping, illegal substances, weapons, open flames, glitter, and unapproved confetti are strictly prohibited.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Security Deposit &amp; Deductions</h5>
+                        <p className="mt-1">Luxor may document venue condition before, during, and after the event. Deductions may be made for excessive cleaning, damages, missing property, overtime, or policy violations.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Cancellation &amp; Payments</h5>
+                        <p className="mt-1">All payments toward the Event Price are non-refundable. Rescheduling requests must be in writing and are subject to venue approval, date availability, and a $250.00 administrative fee.</p>
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-[color:var(--portal-text)]">Liability, Insurance &amp; Force Majeure</h5>
+                        <p className="mt-1">The client must provide proof of event liability insurance with at least $1,000,000 per occurrence 14 days prior to the event. Unforeseen force majeure events are governed under the full agreement terms.</p>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Delivery Mode Choice */}
+                  <section aria-labelledby="agreement-presentation-title" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+                    <p id="agreement-presentation-title" className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Delivery &amp; Signing Method</p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Choose how the client will execute the agreement.</p>
+                    <div role="radiogroup" aria-label="How the client will sign" className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <button type="button" role="radio" aria-checked={presentationMode === 'email'} onClick={() => setPresentationMode('email')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'email' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                        <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Mail size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Send for later</span>
+                        <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Email the final proposal &amp; agreement link so the client can review and sign on their own time.</span>
+                      </button>
+                      <button type="button" role="radio" aria-checked={presentationMode === 'in_person'} onClick={() => setPresentationMode('in_person')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'in_person' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                        <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Users size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Review together</span>
+                        <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Open a clean iPad handoff for immediate on-site review, electronic signature, and payment selection.</span>
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           </motion.div>
           </AnimatePresence>
         </div>

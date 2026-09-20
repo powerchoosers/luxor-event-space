@@ -2,6 +2,7 @@ import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorNote } from './luxo
 import { LUXOR_BOOKING_EMAIL, LUXOR_VENUE_ADDRESS, LUXOR_WEBSITE } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 import { formatLuxorDate } from './luxorDateFormatting'
+import { formatCatalogTime } from './luxorPricingCatalog'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -15,6 +16,7 @@ export type LuxorProposalDisplayLine = {
   unitPrice: number
   lineTotal: number
   included: boolean
+  detail?: string
 }
 
 /**
@@ -38,6 +40,8 @@ export type LuxorProposalPricingSummary = {
   eventDate: string | null
   expectedGuestCount: number | null
   eventAccess: string | null
+  guestArrivalTime?: string | null
+  eventEndTime?: string | null
   lines: LuxorProposalDisplayLine[]
   subtotal: number
   approvedDiscount: number
@@ -184,6 +188,7 @@ function normalizedLineItem(value: unknown) {
   const providedLineTotal = asMoney(value.total)
   const unitPrice = providedUnitPrice ?? (providedLineTotal !== null && quantity > 0 ? roundMoney(providedLineTotal / quantity) : 0)
   const lineTotal = providedLineTotal ?? roundMoney(quantity * unitPrice)
+  const detail = asText(value.detail)
   const pricingRole = asText(value.pricingRole)?.toLowerCase() ?? ''
   const paymentBucket = asText(value.paymentBucket)?.toLowerCase() ?? ''
   const searchable = `${category} ${service}`.toLowerCase()
@@ -200,6 +205,7 @@ function normalizedLineItem(value: unknown) {
     unitPrice,
     lineTotal,
     included: value.included === true || pricingRole === 'included' || (lineTotal === 0 && unitPrice === 0),
+    detail: detail || undefined,
     isSecurityDeposit,
     isTax,
     isDiscount,
@@ -276,7 +282,9 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     eventDate: asText(context.event_date),
     expectedGuestCount: asMoney(context.expected_guest_count),
     eventAccess: asText(context.event_access),
-    lines: serviceItems.map(({ category, service, quantity, unitPrice, lineTotal, included }) => ({ category, service, quantity, unitPrice, lineTotal, included })),
+    guestArrivalTime: asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
+    eventEndTime: asText(context.event_end_time) ?? asText(context.eventEndTime),
+    lines: serviceItems.map(({ category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ category, service, quantity, unitPrice, lineTotal, included, detail })),
     subtotal,
     approvedDiscount,
     promotion,
@@ -397,7 +405,9 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const eventDetails = [
     proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
-    summary.eventAccess,
+    summary.guestArrivalTime ? `Guest arrival: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
+    summary.eventEndTime ? `Event end: ${formatCatalogTime(summary.eventEndTime)}` : null,
+    summary.eventAccess ? `Venue access: ${summary.eventAccess}` : null,
   ].filter(Boolean).join(' | ')
   return {
     subject: 'Your Luxor final proposal is ready',

@@ -12,6 +12,7 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
+import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
 export const dynamic = 'force-dynamic'
@@ -56,6 +57,16 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const refundableSecurityDeposit = Number(context.refundable_security_deposit ?? booking?.security_deposit_amount ?? LUXOR_DEFAULT_SECURITY_DEPOSIT)
   const eventDate = dateLabel(context.event_date)
   const expectedGuestCount = Number(context.expected_guest_count || 0)
+  const guestArrivalTime = typeof context.guest_arrival_time === 'string'
+    ? context.guest_arrival_time
+    : typeof context.guestArrivalTime === 'string'
+      ? context.guestArrivalTime
+      : null
+  const eventEndTime = typeof context.event_end_time === 'string'
+    ? context.event_end_time
+    : typeof context.eventEndTime === 'string'
+      ? context.eventEndTime
+      : null
   const packageItems = pricingSummary.lines
   const promotion = pricingSummary.promotion
   const promotionRate = promotion?.discountType === 'percent' && promotion.value !== null
@@ -150,10 +161,12 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           <section className="mt-8 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Event</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Event Details</p>
               <p className="mt-2 text-sm font-bold text-white">{typeof context.event_type === 'string' ? context.event_type : invoice.event_type || 'Private event'}</p>
-              {eventDate ? <p className="mt-1 text-xs text-zinc-400">{eventDate}</p> : null}
-              {pricingSummary.eventAccess ? <p className="mt-1 text-xs text-zinc-500">Venue access: {pricingSummary.eventAccess}</p> : null}
+              {eventDate ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event Date:</span> {eventDate}</p> : null}
+              {guestArrivalTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Guest Arrival:</span> {formatCatalogTime(guestArrivalTime)}</p> : null}
+              {eventEndTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event End:</span> {formatCatalogTime(eventEndTime)}</p> : null}
+              {pricingSummary.eventAccess ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Venue Access:</span> {pricingSummary.eventAccess}</p> : null}
               {expectedGuestCount > 0 ? <p className="mt-1 text-xs text-zinc-500">Expected guest count: {expectedGuestCount}</p> : null}
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -169,7 +182,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
             <div className="flex items-center gap-3 border-b border-white/10 pb-4"><FileText size={17} className="text-[#caa24c]" /><h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">Your package</h2></div>
-            {packageItems.length ? <ul className="mt-4 grid gap-3 sm:grid-cols-2">{packageItems.map((item, index) => <li key={`${item.service}-${index}`} className="flex gap-2.5 text-sm leading-5 text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">{item.category}</span>{item.service}{item.quantity > 1 ? <span className="ml-1.5 text-xs text-zinc-500">× {item.quantity}</span> : null}</span></li>)}</ul> : <p className="mt-4 text-sm leading-6 text-zinc-400">Your finalized package details are available in the attached proposal.</p>}
+            {packageItems.length ? <ul className="mt-4 grid gap-3 sm:grid-cols-2">{packageItems.map((item, index) => <li key={`${item.service}-${index}`} className="flex gap-2.5 text-sm leading-5 text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">{item.category}</span>{item.service}{item.quantity > 1 ? <span className="ml-1.5 text-xs text-zinc-500">× {item.quantity}</span> : null}{item.detail ? <span className="block text-[11px] text-zinc-400 mt-0.5">{item.detail}</span> : null}</span></li>)}</ul> : <p className="mt-4 text-sm leading-6 text-zinc-400">Your finalized package details are available in the attached proposal.</p>}
           </section>
 
           <section className="mt-5 overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.05]">

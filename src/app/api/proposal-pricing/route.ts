@@ -100,6 +100,14 @@ export async function PATCH(request: NextRequest) {
       if (hourlyRate === undefined || hourlyRate <= 0) structuralErrors.push('Set the Monday–Thursday daytime hourly rate.')
       if (minimumHours === undefined || minimumHours <= 0) structuralErrors.push('Set the Monday–Thursday daytime minimum hours.')
     }
+    const securityHourlyRate = catalogNumber(luxorCosts, 'required_fees', 'security', 'hourly_rate')
+    const securityMinHours = catalogNumber(luxorCosts, 'required_fees', 'security', 'minimum_hours')
+    if (securityHourlyRate !== undefined && (securityHourlyRate <= 0 || !Number.isFinite(securityHourlyRate))) {
+      structuralErrors.push('Set a valid security hourly rate.')
+    }
+    if (securityMinHours !== undefined && (securityMinHours <= 0 || !Number.isFinite(securityMinHours))) {
+      structuralErrors.push('Set valid security minimum hours.')
+    }
     const validationErrors = Array.from(new Set([...structuralErrors, ...validationSelections.flatMap((selection) => {
       const calculation = calculateLuxorProposal(selection, config as LuxorProposalPricingConfig)
       return [...calculation.calculationErrors, ...calculation.addOnQuotes.flatMap((quote) => quote.error ? [quote.error] : [])]

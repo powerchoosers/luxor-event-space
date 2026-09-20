@@ -19,6 +19,7 @@ type FieldDefinition = {
   suffix?: string
   step?: string
   optional?: boolean
+  hideDollar?: boolean
 }
 
 type FieldGroup = {
@@ -46,7 +47,8 @@ const MONEY_GROUPS: FieldGroup[] = [
     description: 'These are official Luxor charges. They appear in the final event price, agreement, payment schedule, and payment link.',
     fields: [
       ...[0, 1, 2].map((index) => ({ label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'cleaning', 'retail', index, 'amount'] })),
-      ...[0, 1].map((index) => ({ label: `Security ${index === 0 ? '1–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'security', 'retail', index, 'amount'] })),
+      { label: 'Security rate', path: ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], suffix: '/ guard / hour', step: '1' },
+      { label: 'Security minimum', path: ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], suffix: 'hours', step: '1', hideDollar: true },
       { label: 'Refundable security deposit', path: ['luxor_costs', 'security_deposit', 'amount'] },
     ],
   },
@@ -91,8 +93,8 @@ function MoneyInput({ draft, field, onChange }: { draft: PricingCatalog; field: 
     <label className="block min-w-0 space-y-1.5">
       <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{field.label}</span>
       <span className="relative block">
-        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-[color:var(--portal-faint)]">$</span>
-        <input aria-label={field.label} type="number" min="0" step={field.step || '1'} value={value === undefined || value === null ? '' : String(value)} onChange={(event) => onChange(field.path, event.target.value === '' ? null : Number(event.target.value))} className={`${inputClass} pl-7 ${field.suffix ? 'pr-14' : ''}`} />
+        {!field.hideDollar ? <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-[color:var(--portal-faint)]">$</span> : null}
+        <input aria-label={field.label} type="number" min="0" step={field.step || '1'} value={value === undefined || value === null ? '' : String(value)} onChange={(event) => onChange(field.path, event.target.value === '' ? null : Number(event.target.value))} className={`${inputClass} ${field.hideDollar ? 'pl-3' : 'pl-7'} ${field.suffix ? 'pr-28' : ''}`} />
         {field.suffix ? <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[10px] font-bold text-[color:var(--portal-faint)]">{field.suffix}</span> : null}
       </span>
     </label>
@@ -114,8 +116,15 @@ export function ProposalPricingManager() {
       const response = await fetch('/api/proposal-pricing', { cache: 'no-store' })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Could not load the pricing catalog.')
-      setRecord(payload)
-      setDraft(structuredClone(payload.config))
+      const loadedConfig = structuredClone(payload.config)
+      if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'hourly_rate') === undefined) {
+        setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 40)
+      }
+      if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'minimum_hours') === undefined) {
+        setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], 4)
+      }
+      setRecord({ ...payload, config: loadedConfig })
+      setDraft(loadedConfig)
       setState('ready')
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load the pricing catalog.')
