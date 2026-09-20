@@ -331,12 +331,12 @@ export function getRentalPeriodBounds(rentalPeriod?: string | null, rentalAccess
     }
   }
   if (period === 'morning') {
-    return { startMinutes: 8 * 60, endMinutes: 15 * 60, label: 'Morning (8:00 AM–3:00 PM)', startTime: '08:00', endTime: '15:00' }
+    return { startMinutes: 9 * 60, endMinutes: 15 * 60, label: 'Morning (9:00 AM–3:00 PM)', startTime: '09:00', endTime: '15:00' }
   }
   if (period === 'fullday') {
-    return { startMinutes: 11 * 60, endMinutes: 23 * 60, label: 'Full Day (11:00 AM–11:00 PM)', startTime: '11:00', endTime: '23:00' }
+    return { startMinutes: 9 * 60, endMinutes: 23 * 60, label: 'Full Day (9:00 AM–11:00 PM)', startTime: '09:00', endTime: '23:00' }
   }
-  return { startMinutes: 17 * 60, endMinutes: 24 * 60, label: 'Evening (5:00 PM–12:00 AM)', startTime: '17:00', endTime: '24:00' }
+  return { startMinutes: 17 * 60, endMinutes: 23 * 60, label: 'Evening (5:00 PM–11:00 PM)', startTime: '17:00', endTime: '23:00' }
 }
 
 export function parseTimeToDayMinutes(timeStr?: string | null, isEvening = false): number | null {
@@ -411,12 +411,16 @@ function formatEventDate(value?: string | null) {
   return parsed.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-function formatEventAccess(value?: string | null, rentalPeriod?: string | null) {
+function formatEventAccess(value?: string | null, rentalPeriod?: string | null, rentalAccess?: Record<string, unknown> | null) {
   const raw = String(value || rentalPeriod || '').trim()
   const normalized = raw.toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized === 'morning') return 'Morning · 8 AM–3 PM'
-  if (normalized === 'evening') return 'Evening · 5 PM–12 AM'
-  if (normalized === 'fullday') return 'Full day · 11 AM–11 PM'
+  if (normalized === 'morning' || normalized === 'evening' || normalized === 'fullday') {
+    const period = normalized === 'fullday' ? 'full_day' : normalized
+    const bounds = getRentalPeriodBounds(period, rentalAccess)
+    const label = period === 'morning' ? 'Morning' : period === 'full_day' ? 'Full day' : 'Evening'
+    const displayEnd = bounds.endTime === '24:00' ? '00:00' : bounds.endTime
+    return `${label} · ${formatCatalogTime(bounds.startTime)}–${formatCatalogTime(displayEnd)}`
+  }
   return raw || 'Not set'
 }
 
@@ -1404,11 +1408,10 @@ export function ProposalBuilderModal({
                       <PortalSelect
                         value={rentalPeriod}
                         onChange={handleRentalPeriodChange}
-                        options={[
-                          { value: 'morning', label: 'Morning · 8 AM–3 PM' },
-                          { value: 'evening', label: 'Evening · 5 PM–12 AM' },
-                          { value: 'full_day', label: 'Full day · 11 AM–11 PM' },
-                        ]}
+                        options={['morning', 'evening', 'full_day'].map((period) => ({
+                          value: period,
+                          label: formatEventAccess(period, period, rentalAccess),
+                        }))}
                         className="w-full"
                         buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
                       />
@@ -1727,7 +1730,7 @@ export function ProposalBuilderModal({
                         ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
-                        ['Venue access', formatEventAccess(eventAccess, rentalPeriod)],
+                        ['Venue access', formatEventAccess(eventAccess, rentalPeriod, rentalAccess)],
                         ['Guest arrival', guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'],
                         ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'],
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
@@ -1885,7 +1888,7 @@ export function ProposalBuilderModal({
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Access / Rental Period</p>
-                        <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod)}</p>
+                        <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod, rentalAccess)}</p>
                       </div>
                     </div>
                   </div>
