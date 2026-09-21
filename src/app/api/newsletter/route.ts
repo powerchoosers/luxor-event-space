@@ -11,12 +11,33 @@ export async function POST(request: NextRequest) {
     if (body.website) return NextResponse.json({ subscribed: true }, { status: 201 })
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
     const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : ''
+    const phone = typeof body.phone === 'string' ? body.phone.trim() : ''
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 })
     if (fullName.length > 120) return NextResponse.json({ error: 'Please shorten your name to 120 characters or fewer.' }, { status: 400 })
+    if (phone && phone.replace(/\D/g, '').length < 10) return NextResponse.json({ error: 'Please enter a complete phone number.' }, { status: 400 })
     if (body.formStartedAt && Date.now() - body.formStartedAt < 800) return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 })
     const ipHash = hashPublicRequestIp(getPublicRequestIp(request.headers))
     if (await countRecentPublicAttempts(ipHash, 'newsletter_signup_attempt') >= 6) return NextResponse.json({ error: 'Too many requests were submitted. Please wait ten minutes and try again.' }, { status: 429 })
-    const input: LuxorInquiryInput = { fullName: fullName || 'Newsletter subscriber', email, source: 'newsletter', flow: 'newsletter_signup', marketingOptIn: true, formStartedAt: body.formStartedAt, sessionId: body.sessionId, attribution: body.attribution, pagePath: body.pagePath, referrer: body.referrer, metadata: { marketing_lead: true, marketing_source: 'newsletter', submitted_form: 'Newsletter Signup', newsletter_name: fullName || null } }
+    const input: LuxorInquiryInput = {
+      fullName: fullName || 'Newsletter subscriber',
+      email,
+      phone: phone || undefined,
+      source: 'newsletter',
+      flow: 'newsletter_signup',
+      marketingOptIn: true,
+      formStartedAt: body.formStartedAt,
+      sessionId: body.sessionId,
+      attribution: body.attribution,
+      pagePath: body.pagePath,
+      referrer: body.referrer,
+      metadata: {
+        marketing_lead: true,
+        marketing_source: 'newsletter',
+        submitted_form: 'Newsletter Signup',
+        newsletter_name: fullName || null,
+        ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
+      },
+    }
     await recordLuxorPublicEvent({ eventName: 'newsletter_signup_attempt', sessionId: input.sessionId, pagePath: input.pagePath, source: input.source, ipHash, metadata: { flow: input.flow } }).catch(() => undefined)
     const duplicate = await findRecentDuplicateLuxorInquiry(input)
     if (duplicate) return NextResponse.json({ subscribed: true, alreadySubscribed: true, inquiry: duplicate })

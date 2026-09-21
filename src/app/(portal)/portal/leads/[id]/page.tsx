@@ -804,6 +804,7 @@ export default function LeadDetailPage({
     return {
       chatMessages: (lead.metadata?.chatMessages as { role: string; content: string }[]) || [],
       isGrandOpeningLead: isGrandOpeningRsvp(lead),
+      isNewsletter: isNewsletterLead(lead),
       latestInvoice: derivedSortedInvoices[0] ?? null,
       noteEntries: derivedNoteEntries,
       emailEntries: derivedEmailEntries,
@@ -2960,6 +2961,7 @@ export default function LeadDetailPage({
   const {
     chatMessages,
     isGrandOpeningLead,
+    isNewsletter,
     latestInvoice,
     noteEntries,
     emailEntries,
@@ -3120,7 +3122,7 @@ export default function LeadDetailPage({
   }> = [
     {
       label: 'Event Type',
-      value: activeEventForDisplay?.event_type || lead.event_type || 'Quinceañera',
+      value: activeEventForDisplay?.event_type || lead.event_type || (isNewsletter ? '' : 'Not specified'),
       editValue: activeEventForDisplay?.event_type || lead.event_type || '',
       copyValue: activeEventForDisplay?.event_type || lead.event_type || '',
       field: 'event_type',
@@ -3129,7 +3131,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Guest Count',
-      value: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} guests` : 'Unspecified',
+      value: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} guests` : (isNewsletter ? '' : 'Unspecified'),
       editValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
       copyValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
       field: 'guest_count',
@@ -3139,7 +3141,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Target Date',
-      value: (activeEventForDisplay?.target_date || lead.target_date) ? formatDisplayDate(activeEventForDisplay?.target_date || lead.target_date || '') : 'TBD',
+      value: (activeEventForDisplay?.target_date || lead.target_date) ? formatDisplayDate(activeEventForDisplay?.target_date || lead.target_date || '') : (isNewsletter ? '' : 'TBD'),
       editValue: activeEventForDisplay?.target_date || lead.target_date || '',
       copyValue: activeEventForDisplay?.target_date || lead.target_date || '',
       field: 'target_date',
@@ -3644,15 +3646,25 @@ export default function LeadDetailPage({
               />
               <div
                 className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
-                title={`${displayEventType} event`}
-                aria-label={`${displayEventType} event`}
+                title={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
+                aria-label={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
               >
-                <EventTypeIcon eventType={displayEventType} />
+                {isNewsletter ? <Mail size={13} /> : <EventTypeIcon eventType={displayEventType} />}
               </div>
             </div>
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+                {lead.phone ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                    <Phone size={11} className="text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
+                  </span>
+                ) : null}
+                {lead.email ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                    <Mail size={11} className="text-[#caa24c]" /> {lead.email}
+                  </span>
+                ) : null}
                 {requestedTourLanguage ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
                     <Languages size={12} /> {requestedTourLanguage}-speaking
@@ -3706,60 +3718,68 @@ export default function LeadDetailPage({
                   </div>
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
-                {leadEvents.length ? (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowEventPicker((current) => !current)}
-                      aria-expanded={showEventPicker}
-                      aria-haspopup="listbox"
-                      className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                    >
-                      <EventTypeIcon eventType={displayEventType} />
-                      <span className="truncate">{displayEventType}</span>
-                      <ChevronDown size={11} className="shrink-0 text-[#caa24c]" />
-                    </button>
-                    <AnimatePresence>
-                      {showEventPicker ? (
-                        <motion.div
-                          initial={{ opacity: 0, y: -5, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                          role="listbox"
-                          className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(340px,calc(100vw-3rem))] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
-                        >
-                          <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
-                          {leadEvents.map((event) => (
-                            <button
-                              key={event.id}
-                              type="button"
-                              role="option"
-                              aria-selected={event.id === selectedLeadEvent?.id}
-                              onClick={() => selectLeadEvent(event.id)}
-                              className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
-                            >
-                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[11px] font-bold text-[color:var(--portal-text)]">{event.event_type || 'Event'}</span>
-                                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">
-                                  {event.target_date ? formatDisplayDate(event.target_date) : 'Date TBD'} · {event.guest_count ? `${event.guest_count} guests` : 'Guest count open'} · {(event.pipeline_stage || 'inquiry').replaceAll('_', ' ')}
+              {isNewsletter ? (
+                <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Newsletter
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
+                  {leadEvents.length ? (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowEventPicker((current) => !current)}
+                        aria-expanded={showEventPicker}
+                        aria-haspopup="listbox"
+                        className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                      >
+                        <EventTypeIcon eventType={displayEventType} />
+                        <span className="truncate">{displayEventType}</span>
+                        <ChevronDown size={11} className="shrink-0 text-[#caa24c]" />
+                      </button>
+                      <AnimatePresence>
+                        {showEventPicker ? (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                            role="listbox"
+                            className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(340px,calc(100vw-3rem))] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                          >
+                            <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
+                            {leadEvents.map((event) => (
+                              <button
+                                key={event.id}
+                                type="button"
+                                role="option"
+                                aria-selected={event.id === selectedLeadEvent?.id}
+                                onClick={() => selectLeadEvent(event.id)}
+                                className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
+                              >
+                                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[11px] font-bold text-[color:var(--portal-text)]">{event.event_type || 'Event'}</span>
+                                  <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">
+                                    {event.target_date ? formatDisplayDate(event.target_date) : 'Date TBD'} · {event.guest_count ? `${event.guest_count} guests` : 'Guest count open'} · {(event.pipeline_stage || 'inquiry').replaceAll('_', ' ')}
+                                  </span>
                                 </span>
-                              </span>
-                              {event.id === selectedLeadEvent?.id ? <Check size={13} className="mt-1 shrink-0 text-[#caa24c]" /> : null}
-                            </button>
-                          ))}
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>
-                  </div>
-                ) : <span>{displayEventType}</span>}
-                <span className="text-zinc-700 font-normal select-none">•</span>
-                <span>{displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD'}</span>
-                <span className="text-zinc-700 font-normal select-none">•</span>
-                <span>{displayGuestCount ? `${displayGuestCount} Guests` : 'Guest count open'}</span>
-              </div>
+                                {event.id === selectedLeadEvent?.id ? <Check size={13} className="mt-1 shrink-0 text-[#caa24c]" /> : null}
+                              </button>
+                            ))}
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
+                  ) : <span>{displayEventType}</span>}
+                  <span className="text-zinc-700 font-normal select-none">•</span>
+                  <span>{displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD'}</span>
+                  <span className="text-zinc-700 font-normal select-none">•</span>
+                  <span>{displayGuestCount ? `${displayGuestCount} Guests` : 'Guest count open'}</span>
+                </div>
+              )}
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
               </p>
@@ -3861,14 +3881,21 @@ export default function LeadDetailPage({
         </div>
 
         <section aria-label="Lead essentials" className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
-          {[
+          {(isNewsletter ? [
+            { label: 'Current stage', value: (selectedStageOverride || activeStage).replaceAll('_', ' ') },
+            { label: 'Contact', value: lead.full_name },
+            { label: 'Email', value: lead.email || 'None' },
+            { label: 'Phone', value: lead.phone ? formatPhoneDisplay(lead.phone) : 'None' },
+            { label: 'Language', value: requestedTourLanguage ? `${requestedTourLanguage}` : 'English' },
+            { label: 'Source', value: formatSourceLabel(lead) },
+          ] : [
             { label: 'Current stage', value: (selectedStageOverride || activeStage).replaceAll('_', ' ') },
             { label: 'Event', value: displayEventType },
             { label: 'Event date', value: displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD' },
             { label: 'Tour', value: lead.preferred_tour_date ? `${formatDisplayDate(lead.preferred_tour_date)}${lead.preferred_tour_time ? ` · ${formatTimeString(lead.preferred_tour_time)}` : ''}` : 'Not scheduled' },
             { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
             { label: 'Budget', value: lead.budget || 'Not captured' },
-          ].map((item) => (
+          ]).map((item) => (
             <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-4 py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
               <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{item.label}</p>
               <p className="mt-1 truncate text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
@@ -3990,6 +4017,95 @@ export default function LeadDetailPage({
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
+              if (currentStage === 'newsletter') {
+                return (
+                  <>
+                    {/* Next Move */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs">
+                            <Mail size={18} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400">Newsletter Subscriber</p>
+                            <h2 className="mt-1 text-sm font-bold leading-snug text-[color:var(--portal-text)]">Active on Newsletter List</h2>
+                            <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--portal-muted)]">
+                              This contact signed up for Luxor updates and open house invitations. No event or tour inquiry has been submitted yet.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left sm:flex sm:border-y-0 sm:border-l sm:py-0 sm:pl-4 xl:shrink-0">
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Source</p>
+                            <p className="mt-1 truncate text-[10px] font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
+                          </div>
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Subscribed</p>
+                            <p className="mt-1 text-[10px] font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</p>
+                          </div>
+                          <div className="min-w-0 sm:min-w-[86px]">
+                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Marketing</p>
+                            <p className="mt-1 text-[10px] font-bold text-emerald-500">Subscribed</p>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 xl:justify-end">
+                          <button
+                            type="button"
+                            onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
+                            disabled={!lead.email}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Mail size={13} /> Send Email
+                          </button>
+                          <button
+                            type="button"
+                            onClick={openTourScheduleModal}
+                            disabled={!lead.email}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Calendar size={13} /> Schedule Tour
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Subscriber Details Card */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)] mb-2">Subscriber Information</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Full Name</p>
+                          <p className="mt-1 font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Address</p>
+                          <p className="mt-1 font-mono font-bold text-[color:var(--portal-text)]">{lead.email || 'None'}</p>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Phone Number</p>
+                          <p className="mt-1 font-mono font-bold text-[color:var(--portal-text)]">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Language Preference</p>
+                          <p className="mt-1 font-bold text-[color:var(--portal-text)]">{requestedTourLanguage || 'English'}</p>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Signup Date</p>
+                          <p className="mt-1 font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</p>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
+                          <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Pipeline Stage</p>
+                          <p className="mt-1 font-bold text-emerald-500">Newsletter</p>
+                        </div>
+                      </div>
+                    </section>
+                  </>
+                )
+              }
+
               if (currentStage === 'inquiry') {
                 return (
                   <>
@@ -5975,7 +6091,7 @@ export default function LeadDetailPage({
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
-              if (currentStage === 'inquiry') {
+              if (currentStage === 'newsletter' || currentStage === 'inquiry') {
                 return (
                   <>
                     <ClientSummaryCard
@@ -6046,7 +6162,8 @@ export default function LeadDetailPage({
                     {renderMarketingEngagementCard()}
 
                     {/* Event Summary */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    {!isNewsletter && currentStage !== 'newsletter' && (
+                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Summary</p>
                         {!isEditingSummary ? (
@@ -6162,7 +6279,8 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                       )}
-                    </section>
+                      </section>
+                    )}
                   </>
                 )
               }
@@ -8043,6 +8161,7 @@ function ClientSummaryCard({
   onViewDetails: () => void
   onAvatarUpdate?: (newUrl: string) => void
 }) {
+  const isNewsletter = isNewsletterLead(lead)
   const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
   const guestCountOptions = Array.from(new Set([
     ...(currentGuestCount ? [currentGuestCount] : []),
@@ -8064,10 +8183,12 @@ function ClientSummaryCard({
   }> = [
     { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
     { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
-    { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address', placeholder: 'San Antonio, TX' },
-    { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count', inputType: 'select', options: guestCountOptions },
-    { label: 'Planning Budget', icon: <DollarSign size={14} />, value: lead.budget || 'Budget not provided', editValue: lead.budget || '', copyValue: lead.budget || '', field: 'budget', inputType: 'select', options: LEAD_BUDGET_OPTIONS },
-    { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'select', options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
+    ...(isNewsletter ? [] : [
+      { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address' as EditableLeadField, placeholder: 'San Antonio, TX' },
+      { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: guestCountOptions },
+      { label: 'Planning Budget', icon: <DollarSign size={14} />, value: lead.budget || 'Budget not provided', editValue: lead.budget || '', copyValue: lead.budget || '', field: 'budget' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: LEAD_BUDGET_OPTIONS },
+      { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
+    ]),
   ]
 
   return (
@@ -8217,8 +8338,11 @@ function LeadLifecycleRail({
       : ''
 
   const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice).map((step) => {
+    if (step.id === 'newsletter') {
+      return { ...step, label: 'Newsletter', subtext: formattedInquiryDate }
+    }
     if (step.id === 'inquiry') {
-      return { ...step, label: 'Inquiry', subtext: formattedInquiryDate }
+      return { ...step, label: 'Inquiry', subtext: lead.pipeline_stage === 'newsletter' ? '' : formattedInquiryDate }
     }
     if (step.id === 'tour') {
       const tourWasImplicitlyCompleted = step.isCompleted && lead.tour_attendance_status !== 'attended' && !formattedTourDate
@@ -8290,6 +8414,7 @@ function LeadLifecycleRail({
 
   const getStageIcon = (stageId: string) => {
     const icons = {
+      newsletter: Mail,
       inquiry: MessageSquare,
       tour: Calendar,
       proposal: FileText,
@@ -9049,13 +9174,24 @@ function isGrandOpeningRsvp(lead: LuxorInquiry) {
   return lead.campaign_key === 'grand_opening_2026_07_25' || lead.flow === 'grand_opening_rsvp' || lead.source === 'grand_opening_rsvp'
 }
 
+function isNewsletterLead(lead: LuxorInquiry) {
+  return (
+    lead.pipeline_stage === 'newsletter' ||
+    lead.source === 'newsletter' ||
+    lead.flow === 'newsletter_signup' ||
+    lead.metadata?.submitted_form === 'Newsletter Signup' ||
+    lead.metadata?.marketing_source === 'newsletter'
+  )
+}
+
 type LeadLifecycleStepState = {
-  id: 'inquiry' | 'tour' | 'proposal' | 'contract' | 'deposit' | 'planning' | 'final_payment' | 'event' | 'closing' | 'complete'
+  id: 'newsletter' | 'inquiry' | 'tour' | 'proposal' | 'contract' | 'deposit' | 'planning' | 'final_payment' | 'event' | 'closing' | 'complete'
   isCompleted: boolean
   isActive: boolean
 }
 
 function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null, currentProposal: LuxorInvoice | null = null): LeadLifecycleStepState[] {
+  const isNewsletter = isNewsletterLead(lead) || lead.pipeline_stage === 'newsletter'
   const hasProposalOrContractWorkflow = Boolean(
     hasPublishedFinalProposal(currentProposal) ||
     currentProposal?.proposal_accepted_at ||
@@ -9077,15 +9213,25 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const eventCompleted = Boolean(bookingMetadata.event_completed_at) || leadCompleted
   const closeoutCompleted = Boolean(bookingMetadata.closeout_completed_at) || leadCompleted
 
-  return [
+  const steps: LeadLifecycleStepState[] = []
+
+  if (isNewsletter) {
+    steps.push({
+      id: 'newsletter',
+      isCompleted: lead.pipeline_stage !== 'newsletter',
+      isActive: lead.pipeline_stage === 'newsletter',
+    })
+  }
+
+  steps.push(
     {
       id: 'inquiry',
-      isCompleted: lead.status !== 'new',
-      isActive: lead.status === 'new',
+      isCompleted: isNewsletter ? (lead.pipeline_stage !== 'newsletter' && lead.status !== 'new') : lead.status !== 'new',
+      isActive: isNewsletter ? false : lead.status === 'new',
     },
     {
       id: 'tour',
-      isCompleted: hasTourBeenCompleted || hasTourStepBeenReached && lead.tour_attendance_status === 'attended',
+      isCompleted: hasTourBeenCompleted || (hasTourStepBeenReached && lead.tour_attendance_status === 'attended'),
       isActive: !hasTourBeenCompleted && (lead.status === 'contacted' || lead.status === 'tour_requested' || lead.status === 'tour_confirmed'),
     },
     {
@@ -9128,7 +9274,9 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
       isCompleted: leadCompleted,
       isActive: closeoutCompleted && !leadCompleted,
     },
-  ]
+  )
+
+  return steps
 }
 
 function normalizeTimelineDate(value: string | null) {
@@ -9169,7 +9317,9 @@ function cleanEmailPreview(value: string | null | undefined) {
 }
 
 function formatSourceLabel(lead: LuxorInquiry) {
-  return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
+  if (isGrandOpeningRsvp(lead)) return 'Grand Opening RSVP'
+  if (isNewsletterLead(lead)) return 'Newsletter'
+  return lead.source.replaceAll('_', ' ')
 }
 
 function formatDisplayDate(value: string | null | undefined): string {

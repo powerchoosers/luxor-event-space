@@ -8,9 +8,27 @@ import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorP
 export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
   const startedAt = useRef(Date.now())
+
+  function handlePhoneChange(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 10)
+    if (!digits) {
+      setPhone('')
+      return
+    }
+    if (digits.length <= 3) {
+      setPhone(`(${digits}`)
+      return
+    }
+    if (digits.length <= 6) {
+      setPhone(`(${digits.slice(0, 3)}) ${digits.slice(3)}`)
+      return
+    }
+    setPhone(`(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`)
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -19,30 +37,129 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
     setMessage('')
     try {
       const response = await fetch('/api/newsletter', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, fullName: name, website: new FormData(event.currentTarget).get('website'), formStartedAt: startedAt.current, sessionId: getLuxorPublicSessionId(), attribution: getLuxorPublicAttribution(), pagePath: window.location.pathname, referrer: document.referrer }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          fullName: name,
+          phone: phone.trim() || undefined,
+          website: new FormData(event.currentTarget).get('website'),
+          formStartedAt: startedAt.current,
+          sessionId: getLuxorPublicSessionId(),
+          attribution: getLuxorPublicAttribution(),
+          pagePath: window.location.pathname,
+          referrer: document.referrer,
+          metadata: {
+            language: spanish ? 'Spanish' : 'English',
+            tourLanguagePreference: spanish ? 'es' : 'en',
+          },
+        }),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string; alreadySubscribed?: boolean }
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; alreadySubscribed?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Unable to join the newsletter right now.')
       setStatus('success')
-      setMessage(payload.alreadySubscribed
-        ? (spanish ? 'Ya estás en la lista. Nos alegra tenerte aquí.' : 'You are already on the list. We are glad you are here.')
-        : (spanish ? 'Listo. Revisa tu correo para la confirmación de Luxor.' : 'You’re in. Check your inbox for a Luxor confirmation.'))
+      setMessage(
+        payload.alreadySubscribed
+          ? spanish
+            ? 'Ya estás en la lista. Nos alegra tenerte aquí.'
+            : 'You are already on the list. We are glad you are here.'
+          : spanish
+            ? 'Listo. Revisa tu correo para la confirmación de Luxor.'
+            : 'You’re in. Check your inbox for a Luxor confirmation.',
+      )
     } catch (error) {
       setStatus('error')
       setMessage(error instanceof Error ? error.message : 'Unable to join the newsletter right now.')
     }
   }
 
-  if (status === 'success') return <div className="flex min-h-[164px] flex-col items-center justify-center text-center sm:items-start sm:text-left" role="status" aria-live="polite"><CheckCircle2 className="h-6 w-6 text-[#9b6f24]" aria-hidden="true" /><p className="mt-3 text-base font-semibold !text-[#241d17]">{message}</p></div>
+  if (status === 'success') {
+    return (
+      <div className="flex min-h-[164px] flex-col items-center justify-center text-center sm:items-start sm:text-left" role="status" aria-live="polite">
+        <CheckCircle2 className="h-6 w-6 text-[#9b6f24]" aria-hidden="true" />
+        <p className="mt-3 text-base font-semibold !text-[#241d17]">{message}</p>
+      </div>
+    )
+  }
 
-  return <form onSubmit={submit} className="mt-6" noValidate>
-    <label className="sr-only" htmlFor="newsletter-name">{spanish ? 'Nombre' : 'First name'}</label>
-    <input id="newsletter-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} autoComplete="given-name" placeholder={spanish ? 'Tu nombre (opcional)' : 'Your first name (optional)'} className="w-full !border-b !border-[#9b6f24]/28 bg-transparent px-0 py-3 text-sm !text-[#241d17] outline-none placeholder:!text-[#827567] focus:!border-[#9b6f24] focus-visible:!outline-none focus-visible:!outline-offset-0" />
-    <label className="sr-only" htmlFor="newsletter-email">{spanish ? 'Correo electrónico' : 'Email address'}</label>
-    <div className="mt-2 flex !border-b !border-[#9b6f24]/28 focus-within:!border-[#9b6f24]"><input id="newsletter-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder={spanish ? 'Tu correo electrónico' : 'Your email address'} className="min-w-0 flex-1 bg-transparent px-0 py-3 text-sm !text-[#241d17] outline-none placeholder:!text-[#827567] focus-visible:!outline-none focus-visible:!outline-offset-0" /><button type="submit" disabled={status === 'submitting'} className="ml-3 inline-flex min-h-11 items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] !text-[#805b1f] transition hover:!text-[#241d17] disabled:cursor-wait disabled:opacity-60">{status === 'submitting' ? (spanish ? 'Uniendo…' : 'Joining…') : (spanish ? 'Únete' : 'Join')}<ArrowRight className="h-4 w-4" aria-hidden="true" /></button></div>
-    <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
-    {status === 'error' ? <p role="alert" className="mt-3 text-xs leading-5 text-rose-200">{message}</p> : null}
-    <p className="mt-4 text-xs leading-5 !text-[#665a4e]">{spanish ? <>Recibe invitaciones y novedades ocasionales de Luxor. Puedes darte de baja en cualquier momento. Consulta nuestra <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">política de privacidad</Link>.</> : <>Occasional Luxor invitations and news. Unsubscribe anytime. Read our <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">privacy policy</Link>.</>}</p>
-  </form>
+  return (
+    <form onSubmit={submit} className="mt-6 text-left" noValidate>
+      <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+        <div>
+          <label className="sr-only" htmlFor="newsletter-name">
+            {spanish ? 'Nombre' : 'First name'}
+          </label>
+          <input
+            id="newsletter-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={120}
+            autoComplete="given-name"
+            placeholder={spanish ? 'Tu nombre (opcional)' : 'Your name (optional)'}
+            className="w-full !border-b !border-[#9b6f24]/28 bg-transparent px-0 py-3 text-sm !text-[#241d17] outline-none placeholder:!text-[#827567] focus:!border-[#9b6f24] focus-visible:!outline-none focus-visible:!outline-offset-0"
+          />
+        </div>
+        <div>
+          <label className="sr-only" htmlFor="newsletter-phone">
+            {spanish ? 'Teléfono' : 'Phone number'}
+          </label>
+          <input
+            id="newsletter-phone"
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(event) => handlePhoneChange(event.target.value)}
+            maxLength={20}
+            autoComplete="tel"
+            placeholder={spanish ? 'Tu teléfono (opcional)' : 'Phone number (optional)'}
+            className="w-full !border-b !border-[#9b6f24]/28 bg-transparent px-0 py-3 text-sm !text-[#241d17] outline-none placeholder:!text-[#827567] focus:!border-[#9b6f24] focus-visible:!outline-none focus-visible:!outline-offset-0"
+          />
+        </div>
+      </div>
+      <label className="sr-only" htmlFor="newsletter-email">
+        {spanish ? 'Correo electrónico' : 'Email address'}
+      </label>
+      <div className="mt-2 flex !border-b !border-[#9b6f24]/28 focus-within:!border-[#9b6f24]">
+        <input
+          id="newsletter-email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+          autoComplete="email"
+          placeholder={spanish ? 'Tu correo electrónico' : 'Your email address'}
+          className="min-w-0 flex-1 bg-transparent px-0 py-3 text-sm !text-[#241d17] outline-none placeholder:!text-[#827567] focus-visible:!outline-none focus-visible:!outline-offset-0"
+        />
+        <button
+          type="submit"
+          disabled={status === 'submitting'}
+          className="ml-3 inline-flex min-h-11 items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] !text-[#805b1f] transition hover:!text-[#241d17] disabled:cursor-wait disabled:opacity-60"
+        >
+          {status === 'submitting' ? (spanish ? 'Uniendo…' : 'Joining…') : spanish ? 'Únete' : 'Join'}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+      {status === 'error' ? <p role="alert" className="mt-3 text-xs leading-5 text-rose-700">{message}</p> : null}
+      <p className="mt-4 text-xs leading-5 !text-[#665a4e]">
+        {spanish ? (
+          <>
+            Recibe invitaciones y novedades ocasionales de Luxor. Puedes darte de baja en cualquier momento. Consulta nuestra{' '}
+            <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">
+              política de privacidad
+            </Link>
+            .
+          </>
+        ) : (
+          <>
+            Occasional Luxor invitations and news. Unsubscribe anytime. Read our{' '}
+            <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">
+              privacy policy
+            </Link>
+            .
+          </>
+        )}
+      </p>
+    </form>
+  )
 }

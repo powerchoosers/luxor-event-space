@@ -25,6 +25,7 @@ export const LUXOR_GUEST_CAPACITY_MESSAGE_ES = 'Luxor admite hasta 200 personas.
 export type LuxorEventType = (typeof LUXOR_EVENT_TYPES)[number]
 
 export type LuxorPipelineStage =
+  | 'newsletter'
   | 'inquiry'
   | 'tour'
   | 'proposal'

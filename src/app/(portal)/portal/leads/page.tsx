@@ -77,6 +77,7 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
 ]
 
 const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
+  { id: 'newsletter', label: 'Newsletter', short: 'Newsletter', tone: 'emerald', status: 'new' },
   { id: 'inquiry', label: 'Inquiry', short: 'Inquiry', tone: 'blue', status: 'new' },
   { id: 'tour', label: 'Tour', short: 'Tour', tone: 'purple', status: 'tour_requested' },
   { id: 'proposal', label: 'Proposal', short: 'Proposal', tone: 'indigo', status: 'proposal_sent' },
@@ -89,6 +90,7 @@ const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; 
 ]
 
 const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
+  { value: 'newsletter', label: 'Newsletter' },
   { value: 'inquiry', label: 'Inquiry' },
   { value: 'tour', label: 'Tour' },
   { value: 'proposal', label: 'Proposal' },
@@ -760,10 +762,22 @@ export default function LeadsPage() {
                           <p className="text-sm font-semibold text-white/90 leading-tight mb-0.5 group-hover:translate-x-0.5 transition-transform">
                             <span className="inline-flex items-center gap-1.5">{lead.full_name}{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</span>
                           </p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
-                              {lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : `ID: ${lead.id.slice(0, 8)}`)}
-                            </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {lead.email ? (
+                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                                {lead.email}
+                              </p>
+                            ) : null}
+                            {lead.phone ? (
+                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                                {lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}
+                              </p>
+                            ) : null}
+                            {!lead.email && !lead.phone ? (
+                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                                ID: {lead.id.slice(0, 8)}
+                              </p>
+                            ) : null}
                             {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
                           </div>
                         </div>
@@ -778,14 +792,18 @@ export default function LeadsPage() {
                       />
                     </td>
                     <td className="px-6 py-3 font-mono text-xs text-zinc-355">
-                      <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
-                      <div className="text-zinc-550 text-[10px] mt-0.5">
-                        {isGrandOpeningRsvp(lead)
-                          ? `${lead.attendee_count || lead.guest_count || 1} attending`
-                          : lead.guest_count
-                            ? `${lead.guest_count} guests`
-                            : 'Guest count needed'}
-                      </div>
+                      {getPipelineStage(lead) === 'newsletter' ? null : (
+                        <>
+                          <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
+                          <div className="text-zinc-550 text-[10px] mt-0.5">
+                            {isGrandOpeningRsvp(lead)
+                              ? `${lead.attendee_count || lead.guest_count || 1} attending`
+                              : lead.guest_count
+                                ? `${lead.guest_count} guests`
+                                : 'Guest count needed'}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {getRequestedTourLanguage(lead) === 'Spanish' ? (
@@ -799,9 +817,11 @@ export default function LeadsPage() {
                     <td className="px-6 py-3">
                       <div className="flex items-start flex-col">
                         <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
-                        <span className="text-[9px] text-[#caa24c] font-bold uppercase tracking-tighter mt-0.5">
-                          {lead.target_date || 'Date requested'}
-                        </span>
+                        {getPipelineStage(lead) !== 'newsletter' && lead.target_date ? (
+                          <span className="text-[9px] text-[#caa24c] font-bold uppercase tracking-tighter mt-0.5">
+                            {lead.target_date}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-6 py-3">
@@ -1397,7 +1417,9 @@ function isGrandOpeningRsvp(lead: LuxorInquiry) {
 }
 
 function formatSourceLabel(lead: LuxorInquiry) {
-  return isGrandOpeningRsvp(lead) ? 'Grand Opening RSVP' : lead.source.replaceAll('_', ' ')
+  if (isGrandOpeningRsvp(lead)) return 'Grand Opening RSVP'
+  if (lead.source === 'newsletter' || lead.flow === 'newsletter_signup' || lead.pipeline_stage === 'newsletter') return 'Newsletter'
+  return lead.source.replaceAll('_', ' ')
 }
 
 function isMarketingLead(lead: LuxorInquiry) {
@@ -1409,6 +1431,8 @@ function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   // closed lost. Treat the lead status as authoritative here so they never
   // disappear from the Closed Lost tab, filter, or board column.
   if (lead.status === 'closed_lost' || lead.pipeline_stage === 'closed_lost') return 'closed_lost'
+  if (lead.pipeline_stage === 'newsletter') return 'newsletter'
+  if (lead.source === 'newsletter' || lead.flow === 'newsletter_signup' || lead.metadata?.submitted_form === 'Newsletter Signup') return 'newsletter'
   if (lead.pipeline_stage) return lead.pipeline_stage
   if (lead.status === 'tour_requested' || lead.status === 'tour_confirmed') return 'tour'
   if (lead.status === 'proposal_sent') return 'proposal'
@@ -1871,33 +1895,41 @@ function MobileLeadCard({
           />
           <div className="min-w-0 flex-1">
             <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold text-[color:var(--portal-text)]"><span className="truncate">{lead.full_name}</span>{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 shrink-0 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</p>
-            <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">
-              {lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact details')}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[color:var(--portal-muted)]">
+              {lead.email ? <span className="truncate">{lead.email}</span> : null}
+              {lead.phone ? <span className="truncate">{lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}</span> : null}
+              {!lead.email && !lead.phone ? <span>No contact details</span> : null}
+            </div>
           </div>
         </Link>
         <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-3 text-xs">
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p>
-          <p className="mt-1 truncate font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p>
-          <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p>
-        </div>
+        {getPipelineStage(lead) !== 'newsletter' ? (
+          <>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p>
+              <p className="mt-1 truncate font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p>
+              <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p>
+            </div>
+          </>
+        ) : null}
         {showPipelineStage ? (
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Pipeline</p>
             <p className="mt-1 truncate font-semibold text-[#a8792f] dark:text-[#f1d27a]">{stageLabel}</p>
           </div>
         ) : null}
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p>
-          <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p>
-        </div>
+        {getPipelineStage(lead) !== 'newsletter' ? (
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p>
+            <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p>
+          </div>
+        ) : null}
         <div className="min-w-0">
           <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Language</p>
           {getRequestedTourLanguage(lead) === 'Spanish' ? (

@@ -63,6 +63,24 @@ export function LuxorInquiryForm({
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+
+  function handlePhoneChange(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 10)
+    if (!digits) {
+      setPhone('')
+      return
+    }
+    if (digits.length <= 3) {
+      setPhone(`(${digits}`)
+      return
+    }
+    if (digits.length <= 6) {
+      setPhone(`(${digits.slice(0, 3)}) ${digits.slice(3)}`)
+      return
+    }
+    setPhone(`(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`)
+  }
+
   const [smsOptIn, setSmsOptIn] = useState(false)
   const [smsMarketingOptIn, setSmsMarketingOptIn] = useState(false)
   const [marketingOptIn, setMarketingOptIn] = useState(false)
@@ -353,7 +371,7 @@ export function LuxorInquiryForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextField value={fullName} onChange={setFullName} name="fullName" label="Full name" placeholder="Your full name" required autoComplete="name" />
                 <TextField value={email} onChange={setEmail} name="email" label="Email" placeholder="you@example.com" type="email" inputMode="email" autoComplete="email" icon={<Mail className="h-4 w-4" />} />
-                <TextField value={phone} onChange={setPhone} name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" inputMode="tel" autoComplete="tel" icon={<Phone className="h-4 w-4" />} />
+                <TextField value={phone} onChange={handlePhoneChange} name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" inputMode="tel" autoComplete="tel" icon={<Phone className="h-4 w-4" />} />
                 <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4 text-sm leading-6 text-[#d7c29a]/70">
                   Add an email, phone number, or both. We only need one way to respond.
                 </div>

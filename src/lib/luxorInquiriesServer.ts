@@ -136,8 +136,13 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     applyTourSlotToInquiry(row, reservedTourSlot)
   }
 
+  const isNewsletter =
+    row.flow === 'newsletter_signup' ||
+    row.source === 'newsletter' ||
+    row.metadata?.marketing_source === 'newsletter' ||
+    row.metadata?.submitted_form === 'Newsletter Signup'
   const status = row.preferred_tour_date || row.preferred_tour_time ? 'tour_requested' : 'new'
-  const pipelineStage: LuxorPipelineStage = status === 'tour_requested' ? 'tour' : 'inquiry'
+  const pipelineStage: LuxorPipelineStage = isNewsletter ? 'newsletter' : status === 'tour_requested' ? 'tour' : 'inquiry'
   const insertPayload = {
     ...row,
     internal_notification_requested: true,

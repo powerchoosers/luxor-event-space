@@ -108,6 +108,7 @@ export function ElenaLeadUpdateCard({
               className="w-full"
               buttonClassName="!h-8 !rounded-lg !px-2.5 !py-1.5 !text-left !text-xs"
               options={[
+                { value: 'newsletter', label: '0. Newsletter' },
                 { value: 'inquiry', label: '1. Inquiry' },
                 { value: 'tour', label: '2. Tour Requested / Attended' },
                 { value: 'proposal_sent', label: '3. Proposal Sent' },

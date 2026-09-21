@@ -10,7 +10,7 @@ import {
 import type { LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 
 const statuses = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent', 'booked', 'closed_lost'])
-const pipelineStages = new Set<LuxorPipelineStage>(['inquiry', 'tour', 'proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing', 'closed_lost'])
+const pipelineStages = new Set<LuxorPipelineStage>(['newsletter', 'inquiry', 'tour', 'proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing', 'closed_lost'])
 
 function normalizeGuestCount(value: unknown) {
   if (value === null || value === undefined || value === '') return null
