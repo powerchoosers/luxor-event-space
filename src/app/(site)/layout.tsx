@@ -89,7 +89,7 @@ export default function RootLayout({
       <body data-luxor-site className="min-h-full bg-[#f7f3ec] pb-16 text-[#241d17] sm:pb-0">
         <SmoothScroll />
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-M9ZVP2NBLY"
+          src="https://www.googletagmanager.com/gtag/js?id=G-SX1KJRR2JJ"
           strategy="afterInteractive"
         />
         <Script id="google-analytics" strategy="afterInteractive">
@@ -97,7 +97,7 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-M9ZVP2NBLY', {
+            gtag('config', 'G-SX1KJRR2JJ', {
               page_path: window.location.pathname,
             });
           `}
