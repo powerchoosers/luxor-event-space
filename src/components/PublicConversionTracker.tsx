@@ -28,7 +28,7 @@ export function PublicConversionTracker() {
       trackLuxorPublicEvent('page_view')
 
       if (pathname === '/tour' || pathname === '/es/tour' || pathname.startsWith('/tour') || pathname.startsWith('/visit')) {
-        trackLuxorPublicEvent('tour_page_view')
+        trackLuxorPublicEvent('visit_page_view')
       }
     }
   }, [pathname])
@@ -51,14 +51,14 @@ export function PublicConversionTracker() {
         return
       }
 
-      // Check if this is a Tour CTA click (e.g. links to /tour or buttons saying "Book a Tour" / "Schedule a Tour")
-      const isTourCta =
-        (href && (href.includes('/tour') || href.includes('/visit') || href.includes('#tour-booking'))) ||
-        /book a tour|schedule a tour|reservar recorrido|agendar recorrido/i.test(text)
+      // Legacy /tour links are retained only as redirects. Public analytics use the current visit vocabulary.
+      const isVisitCta =
+        (href && (href.includes('/tour') || href.includes('/visit') || href.includes('#visit-booking'))) ||
+        /book a tour|schedule a tour|reservar recorrido|agendar recorrido|schedule a visit|schedule your visit|agendar visita|agendar una visita/i.test(text)
 
-      if (isTourCta && !target.closest('form#tour-booking')) {
-        trackLuxorPublicEvent('tour_cta_click', {
-          label: text || 'Tour Link',
+      if (isVisitCta && !target.closest('form#visit-booking')) {
+        trackLuxorPublicEvent('visit_cta_click', {
+          label: text || 'Visit Link',
           href: href || null,
         })
       }

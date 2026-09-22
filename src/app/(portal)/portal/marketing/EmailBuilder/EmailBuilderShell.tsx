@@ -10,7 +10,7 @@ import { BlockInspector } from './BlockInspector'
 import { EmailStylePanel } from './EmailStylePanel'
 import { EmailPreview } from './EmailPreview'
 import { BadgeCheck, CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2, X } from 'lucide-react'
-import { PortalModal } from '@/components/portal/PortalUI'
+import { PortalModal, PortalCloseButton } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence, motion } from 'framer-motion'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
@@ -116,16 +116,14 @@ function TemplatePicker({
 
   return (
     <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Template Library</p>
-            <h3 className="text-sm font-bold text-white/90 mt-0.5">Choose a Starting Template</h3>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all text-xs font-bold uppercase tracking-widest">
-            Cancel
-          </button>
+      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Template Library</p>
+          <h3 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)]">Choose a Starting Template</h3>
         </div>
-        <div className="portal-scrollbar max-h-[70vh] overflow-y-auto p-6">
+        <PortalCloseButton onClick={onClose} aria-label="Close template library" />
+      </div>
+      <div className="portal-scrollbar max-h-[70vh] overflow-y-auto bg-[color:var(--portal-bg)] p-6">
           <div className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">Saved Templates</h4>
@@ -268,45 +266,48 @@ function SaveTemplateModal({
 
   return (
     <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-lg">
-        <div className="border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Save Template</p>
-          <h3 className="mt-0.5 text-sm font-bold text-white/90">Name this reusable email</h3>
+      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Save Template</p>
+          <h3 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)]">Name this reusable email</h3>
         </div>
-        <div className="space-y-4 p-6">
-          <div className="space-y-1.5">
-            <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Template Name</label>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
-              placeholder="Example: Tour no-show reactivation"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Description</label>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="h-24 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
-              placeholder="When should you use this template?"
-            />
-          </div>
-          {message ? <p className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-300">{message}</p> : null}
-          <div className="flex items-center justify-end gap-3">
-            <button onClick={onClose} className="rounded-lg border border-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-white">
-              Cancel
-            </button>
-            <button
-              onClick={saveTemplate}
-              disabled={saving || !name.trim() || !blocks.length}
-              className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white transition-all hover:bg-[#d4b060] disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Template
-            </button>
-          </div>
+        <PortalCloseButton onClick={onClose} aria-label="Close save template modal" />
+      </div>
+      <div className="space-y-4 bg-[color:var(--portal-bg)] p-6">
+        <div className="space-y-1.5">
+          <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Template Name</label>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-sm text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
+            placeholder="Example: Tour no-show reactivation"
+          />
         </div>
-      </PortalModal>
+        <div className="space-y-1.5">
+          <label className="block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Description</label>
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            className="h-24 w-full resize-none rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-sm text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20"
+            placeholder="When should you use this template?"
+          />
+        </div>
+        {message ? <p className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-500 dark:text-rose-300">{message}</p> : null}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <button onClick={onClose} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-2 text-xs font-bold uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+            Cancel
+          </button>
+          <button
+            onClick={saveTemplate}
+            disabled={saving || !name.trim() || !blocks.length}
+            className="flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white transition-all hover:bg-[#d4b060] disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Save Template
+          </button>
+        </div>
+      </div>
+    </PortalModal>
   )
 }
 
@@ -336,6 +337,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
   const [audienceLabel, setAudienceLabel] = useState('Manual list')
   const [recipientEmails, setRecipientEmails] = useState<string[]>([])
   const [showPreview, setShowPreview] = useState(false)
+  const [previewInitialTab, setPreviewInitialTab] = useState<'preview' | 'html' | 'send'>('preview')
   const [showTemplates, setShowTemplates] = useState(false)
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
   const [savedTemplates, setSavedTemplates] = useState<BuilderTemplate[]>([])
@@ -598,9 +600,9 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         </div>
         <button type="button" onClick={() => setShowTemplates(true)} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Templates</button>
         <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Save size={13} /> Save</button>
-        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Eye size={13} /> Preview</button>
-        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
-        <button type="button" onClick={() => setShowPreview(true)} disabled={!blocks.length} title="Review the email, audience, and delivery details before sending" aria-label="Review email before sending" className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review &amp; prepare</button>
+        <button type="button" onClick={() => { setPreviewInitialTab('preview'); setShowPreview(true) }} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Eye size={13} /> Preview</button>
+        <button type="button" onClick={() => { setPreviewInitialTab('send'); setShowPreview(true) }} disabled={!blocks.length} className="flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[9px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><Send size={13} /> Send test</button>
+        <button type="button" onClick={() => { setPreviewInitialTab('send'); setShowPreview(true) }} disabled={!blocks.length} title="Review the email, audience, and delivery details before sending" aria-label="Review email before sending" className="flex items-center gap-1.5 rounded-lg bg-[#b88732] px-4 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#a8792f] disabled:opacity-40"><BadgeCheck size={13} /> Review &amp; prepare</button>
         {onClose ? (
           <button type="button" onClick={onClose} aria-label="Close builder" title="Close builder" className="grid size-9 place-items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:border-[#b88732]/50 hover:bg-[#b88732]/10 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b88732]/40">
             <X size={16} />
@@ -705,6 +707,7 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         theme={theme}
         initialAudienceLabel={audienceLabel}
         initialSelectedEmails={recipientEmails}
+        initialTab={previewInitialTab}
         onAudienceLabelChange={setAudienceLabel}
         onSelectedEmailsChange={setRecipientEmails}
         onBlocksChange={setBlocks}

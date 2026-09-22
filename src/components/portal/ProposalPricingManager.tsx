@@ -175,8 +175,7 @@ export function ProposalPricingManager() {
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-[#9a6d26] dark:text-[#e0bd67]"><Check size={15} /><span className="text-[10px] font-black uppercase tracking-[0.16em]">One approved catalog</span></div>
             <h3 className="mt-2 text-lg font-bold text-[color:var(--portal-text)]">Pricing that updates everywhere</h3>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Saving here updates new proposal calculations, Elena’s pricing context, and the customer-facing rental rates page. Proposals already published keep their original pricing snapshot.</p>
-            <a href="/pricing" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#9a6d26] hover:text-[#caa24c] dark:text-[#e0bd67]">Preview customer pricing <ExternalLink size={12} /></a>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Saving here updates new proposal calculations, Elena’s pricing context, and venue brochure package figures. Proposals already published keep their original pricing snapshot.</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <PortalButton type="button" variant="ghost" onClick={() => { setDraft(structuredClone(record.config)); setError(null) }} disabled={!dirty || saving}>Discard</PortalButton>

@@ -17,6 +17,7 @@ interface EmailPreviewProps {
   theme?: LuxorEmailTheme
   initialAudienceLabel?: string
   initialSelectedEmails?: string[]
+  initialTab?: 'preview' | 'html' | 'send'
   onAudienceLabelChange?: (value: string) => void
   onSelectedEmailsChange?: (emails: string[]) => void
   onBlocksChange?: (blocks: EmailBlock[]) => void
@@ -40,8 +41,8 @@ type MarketingList = {
   members: { email: string; full_name: string | null }[]
 }
 
-export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], onAudienceLabelChange, onSelectedEmailsChange, onBlocksChange, onClose }: EmailPreviewProps) {
-  const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>('preview')
+export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, initialAudienceLabel = 'Manual list', initialSelectedEmails = [], initialTab = 'preview', onAudienceLabelChange, onSelectedEmailsChange, onBlocksChange, onClose }: EmailPreviewProps) {
+  const [activeTab, setActiveTab] = useState<'preview' | 'html' | 'send'>(initialTab)
   const [selectedEmails, setSelectedEmails] = useState<string[]>(initialSelectedEmails)
   const [typedInput, setTypedInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -81,13 +82,18 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
   const [iframeLoading, setIframeLoading] = useState(true)
 
   useEffect(() => {
-    if (isOpen && !wasOpenRef.current) {
-      setAudienceLabel(initialAudienceLabel)
-      setSelectedMarketingListId(null)
-      setSelectedEmails(initialSelectedEmails)
+    if (isOpen) {
+      if (!wasOpenRef.current) {
+        setAudienceLabel(initialAudienceLabel)
+        setSelectedMarketingListId(null)
+        setSelectedEmails(initialSelectedEmails)
+      }
+      if (initialTab) {
+        setActiveTab(initialTab)
+      }
     }
     wasOpenRef.current = isOpen
-  }, [initialAudienceLabel, initialSelectedEmails, isOpen])
+  }, [initialAudienceLabel, initialSelectedEmails, initialTab, isOpen])
 
   const updateIframeHeight = () => {
     if (iframeRef.current?.contentWindow?.document?.body) {
@@ -260,17 +266,21 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
   }
 
   // Handle typing input keys (Enter / Comma to add custom email tag)
+  const commitTypedInput = () => {
+    const val = typedInput.trim()
+    if (val) {
+      switchToManualAudience()
+      if (val.includes('@') && !selectedEmails.includes(val)) {
+        setSelectedEmails(prev => [...prev, val])
+      }
+      setTypedInput('')
+    }
+  }
+
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()
-      const val = typedInput.trim()
-      if (val) {
-        switchToManualAudience()
-        if (val.includes('@') && !selectedEmails.includes(val)) {
-          setSelectedEmails(prev => [...prev, val])
-        }
-      }
-      setTypedInput('')
+      commitTypedInput()
     }
   }
 
@@ -300,7 +310,13 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
   }
 
   async function handleSend() {
-    const emails = selectedEmails
+    const emails = [...selectedEmails]
+    const pending = typedInput.trim()
+    if (pending && pending.includes('@') && !emails.includes(pending)) {
+      emails.push(pending)
+      setSelectedEmails(emails)
+      setTypedInput('')
+    }
 
     if (audienceLabel === '__create_new__') {
       setSendMessage('Create the new marketing list before sending this campaign.')
@@ -565,14 +581,25 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
 
                       {/* Type & Add Input with suggestions */}
                       <div className="relative">
-                        <input
-                          type="text"
-                          value={typedInput}
-                          onChange={(e) => setTypedInput(e.target.value)}
-                          onKeyDown={handleInputKeyDown}
-                          placeholder="Type email address or contact name and press Enter..."
-                          className="w-full rounded-md border border-zinc-800 bg-zinc-990 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-650 focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={typedInput}
+                            onChange={(e) => setTypedInput(e.target.value)}
+                            onKeyDown={handleInputKeyDown}
+                            onBlur={commitTypedInput}
+                            placeholder="Type email address or contact name and press Enter..."
+                            className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-sm text-[color:var(--portal-text)] placeholder-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/20 transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={commitTypedInput}
+                            disabled={!typedInput.trim()}
+                            className="shrink-0 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2 text-xs font-bold uppercase tracking-wider text-[color:var(--portal-text)] hover:bg-[#caa24c]/10 hover:border-[#caa24c]/40 transition-colors disabled:opacity-40"
+                          >
+                            Add
+                          </button>
+                        </div>
                         
                         {/* Suggestions Dropdown */}
                         {typedInput.trim().length > 0 && filteredSuggestions.length > 0 && (

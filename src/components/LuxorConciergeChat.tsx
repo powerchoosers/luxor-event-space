@@ -67,7 +67,7 @@ const quickStarts = ['Wedding', 'Quinceañera', 'Baby shower', 'Corporate', 'Oth
 
 const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|open[-\s]?air|interior|exterior|patio|courtyard|garden|terrace|yard|backyard|porch|deck|rooftop|balcony)\b/i
 const indoorOnlyReply =
-  'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you reserve a private tour.'
+  'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you schedule a visit.'
 const capacityReply =
   'Luxor can accommodate up to 200 people. If you are planning for 200 or fewer, I can help you think through the layout and next step.'
 const overCapacityPattern = /\b(\d[\d,]*)\s*(?:guests?|people|attendees?|attendance)\b/i
@@ -89,18 +89,18 @@ function fallbackResponse(input: string) {
   }
 
   if (text.includes('price') || text.includes('cost') || text.includes('package')) {
-    return 'Packages depend on your date, guest count, and event type. You can compare the current package options on the pricing page, or I can help you request a private tour so the team can talk through the best fit.'
+    return 'Packages depend on your date, guest count, and event type. The venue brochure is a helpful place to start, and I can help you schedule a visit when you are ready to talk through the best fit.'
   }
 
   if (text.includes('wedding')) {
-    return 'For a wedding, I would focus the tour on ceremony placement, dinner layout, photo spots, and the dance floor. Do you already have a month or guest count in mind?'
+    return 'For a wedding, I would focus the visit on ceremony placement, dinner layout, photo spots, and the dance floor. Do you already have a month or guest count in mind?'
   }
 
   if (text.includes('quince')) {
-    return 'For a quinceañera, we should look at the entrance, court seating, family photo areas, cake moment, and dance floor. I can help you pick a tour time.'
+    return 'For a quinceañera, we should look at the entrance, court seating, family photo areas, cake moment, and dance floor. I can help you choose a visit time.'
   }
 
-  return 'That sounds like a great fit. What are you celebrating? When you are ready, I can help you reserve a private tour.'
+  return 'That sounds like a great fit. What are you celebrating? When you are ready, I can help you schedule a visit.'
 }
 
 function shouldShowBookingCard(input: string) {
@@ -161,14 +161,14 @@ function getVisitorGreeting() {
   const medium = attribution.utmMedium?.toLowerCase() ?? ''
 
   if (source.includes('instagram')) {
-    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
+    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Schedule a visit or tell me what you’re planning.'
   }
 
   if (attribution.gclid || attribution.fbclid || /paid|cpc|ppc|display|social/.test(medium)) {
-    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
+    return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Schedule a visit or tell me what you’re planning.'
   }
 
-  return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.'
+  return 'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Schedule a visit or tell me what you’re planning.'
 }
 
 export function LuxorConciergeChat() {
@@ -211,7 +211,7 @@ export function LuxorConciergeChat() {
       id: createId(),
       role: 'assistant',
       content:
-        'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Check tour times or tell me what you’re planning.',
+        'Hi, I’m Elena. Luxor is a fully indoor venue, so your event is never weather-dependent. Schedule a visit or tell me what you’re planning.',
     },
   ])
 
@@ -536,10 +536,10 @@ export function LuxorConciergeChat() {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Tour request</p>
-            <h3 className="mt-1 font-serif text-2xl leading-none text-[#f7efe3]">Reserve a private tour</h3>
+            <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#caa24c]">Visit request</p>
+            <h3 className="mt-1 font-serif text-2xl leading-none text-[#f7efe3]">Schedule a Visit</h3>
             <p className="mt-2 text-xs leading-5 text-[#d7c29a]/70">
-              {hasTourTime ? 'Almost there — add your name and phone to reserve your time.' : 'Choose a time first. You only need your name and phone to reserve it.'}
+              {hasTourTime ? 'Almost there — add your name and phone to request your time.' : 'Choose a time first. You only need your name and phone to request it.'}
             </p>
           </div>
           {submitted ? (
@@ -747,7 +747,7 @@ export function LuxorConciergeChat() {
                     }}
                     className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#050505] transition hover:bg-[#f1d27a]"
                   >
-                    Book a tour
+                    Schedule a visit
                   </button>
                   <button
                     type="button"
@@ -760,10 +760,10 @@ export function LuxorConciergeChat() {
                     Tell Elena what you’re planning
                   </button>
                   <Link
-                    href="/pricing"
+                    href="/#brochure-form"
                     className="mt-2 block text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#d7c29a]/65 transition hover:text-[#f1d27a]"
                   >
-                    View packages
+                    Get venue brochure
                   </Link>
                 </div>
               ) : null}
@@ -877,7 +877,7 @@ export function LuxorConciergeChat() {
               <span className="block font-serif text-lg leading-none text-[#f7efe3]">{spanish ? 'Pregúntale a Elena' : 'Ask Elena'}</span>
               <span className="mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#caa24c]">
                 <MessageCircle className="h-3 w-3" />
-                {spanish ? 'Reservar recorrido' : 'Book a tour'}
+                {spanish ? 'Agendar una visita' : 'Schedule a visit'}
               </span>
             </span>
             <ChevronLeft className="hidden h-4 w-4 text-[#caa24c] transition sm:block" />

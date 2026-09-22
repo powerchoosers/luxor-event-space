@@ -7,14 +7,12 @@ import { usePathname } from 'next/navigation'
 import { CalendarDays, Mail, MapPin } from 'lucide-react'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
-import { NewsletterSignup } from '@/components/NewsletterSignup'
 
 const navLinks = [
   { label: 'Events', labelEs: 'Eventos', href: '/events' },
-  { label: 'Spaces', labelEs: 'Espacios', href: '/spaces' },
   { label: 'Gallery', labelEs: 'Galería', href: '/gallery' },
-  { label: 'Packages & Rates', labelEs: 'Paquetes y tarifas', href: '/pricing' },
-  { label: 'Visit', labelEs: 'Visita', href: '/tour' },
+  { label: 'Visit', labelEs: 'Visita', href: '/visit' },
+  { label: 'Contact', labelEs: 'Contacto', href: '/contact' },
 ]
 
 const socialLinks = [
@@ -35,13 +33,6 @@ export const Footer = () => {
         <Link href={spanish ? '/es' : '/'} className="mx-auto block w-full max-w-[460px]">
           <LuxorAxisLockup dividerClassName="text-[#8e6829]" />
         </Link>
-
-        <section className="mx-auto mt-14 max-w-2xl rounded-2xl border border-[#9b6f24]/24 bg-[#fffdfa] px-5 py-8 text-center shadow-[0_22px_50px_-36px_rgba(48,33,14,0.16)] sm:mt-16 sm:px-8 sm:py-10" aria-labelledby="newsletter-title">
-          <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">{spanish ? 'Mantente cerca' : 'Stay close'}</p>
-          <h2 id="newsletter-title" className="mt-3 font-serif text-3xl !text-[#241d17] sm:text-4xl">{spanish ? 'Novedades de Luxor, para cuando estés lista.' : 'Luxor news, for when you’re ready.'}</h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 !text-[#665a4e]">{spanish ? 'Recibe invitaciones, aperturas y consejos para planear una celebración inolvidable.' : 'Get open-house invitations, venue news, and thoughtful planning ideas.'}</p>
-          <NewsletterSignup spanish={spanish} />
-        </section>
 
         <div className="mt-14 grid grid-cols-1 gap-12 text-center lg:grid-cols-12 lg:text-left">
           {/* Quick Links */}
@@ -81,7 +72,7 @@ export const Footer = () => {
                 <span>booking@luxoratlaspalmas.com</span>
               </a>
               <PublicPhoneLink loadingLabel={spanish ? 'Cargando teléfono…' : 'Loading phone…'} className="flex items-center justify-center gap-3 transition-colors hover:text-[#f8f3ed] lg:justify-start" />
-              <p>{spanish ? 'Recorridos privados con cita previa.' : 'Private venue tours by appointment.'}</p>
+              <p>{spanish ? 'Visitas privadas con cita previa.' : 'Private venue visits by appointment.'}</p>
             </div>
           </div>
 
@@ -90,13 +81,13 @@ export const Footer = () => {
             <h3 className="font-mono text-[10px] uppercase tracking-[0.45em] text-[#caa24c]">{spanish ? 'Contáctanos' : 'Get in Touch'}</h3>
             <div className="mt-6 flex flex-col gap-4">
               <Link 
-                href={`${spanish ? '/es/tour' : '/tour'}#tour-booking`}
-                data-conversion="tour_cta_click"
+                href={`${spanish ? '/es/visit' : '/visit'}#visit-booking`}
+                data-conversion="visit_cta_click"
                 data-conversion-label="Footer"
                 className="mt-4 inline-flex items-center justify-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
               >
                 <CalendarDays className="h-4 w-4" />
-                {spanish ? 'Reserva tu recorrido' : 'Book Your Tour'}
+                {spanish ? 'Agendar una visita' : 'Schedule a Visit'}
               </Link>
               <div className="flex items-center justify-center gap-3 lg:justify-start" aria-label={spanish ? 'Redes sociales de Luxor' : 'Luxor social media'}>
                 {socialLinks.map((social) => (

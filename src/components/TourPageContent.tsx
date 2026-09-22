@@ -8,22 +8,22 @@ type Locale = 'en' | 'es'
 
 const copy = {
   en: {
-    eyebrow: 'Private venue tours',
+    eyebrow: 'Schedule a Visit',
     heading: 'See the room. Picture your day.',
     intro: 'Choose an available time and tell us what you are planning. We will confirm the visit and help you understand the space, packages, and next steps.',
-    pill: '30-minute private tours · By appointment',
+    pill: '30-minute visits · By appointment',
     languageLabel: 'Español',
-    languageHref: '/es/tour',
+    languageHref: '/es/visit',
     mapTitle: 'Luxor at Las Palmas Events location map',
     mapLead: 'Find us at 803 Castroville Rd #402',
   },
   es: {
-    eyebrow: 'Recorridos privados del lugar',
+    eyebrow: 'Visitas privadas del lugar',
     heading: 'Conoce el espacio. Imagina tu día.',
     intro: 'Elige una hora disponible y cuéntanos qué estás planeando. Confirmaremos tu visita y te ayudaremos a conocer el espacio, los paquetes y los próximos pasos.',
-    pill: 'Recorridos privados de 30 minutos · Con cita previa',
+    pill: 'Visitas privadas de 30 minutos · Con cita previa',
     languageLabel: 'English',
-    languageHref: '/tour',
+    languageHref: '/visit',
     mapTitle: 'Mapa de Luxor at Las Palmas Events',
     mapLead: 'Visítanos en 803 Castroville Rd #402',
   },

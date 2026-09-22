@@ -118,11 +118,11 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
 export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: string) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   return renderLuxorSystemEmail({
-    previewText: 'We received your private tour request and are reviewing the details.',
+    previewText: 'We received your Schedule a Visit request and are reviewing the details.',
     eyebrow: 'Tour request received',
     title: 'Thanks for your request',
     greeting: `Hi ${escapeHtml(firstName)},`,
-    bodyHtml: '<p style="margin:0">Thank you for requesting a private tour of Luxor Event Space. Our team is reviewing your preferred date and time and will send an official confirmation with calendar details once it is accepted.</p>',
+    bodyHtml: '<p style="margin:0">Thank you for scheduling a visit to Luxor Event Space. Our team is reviewing your preferred date and time and will send an official confirmation with calendar details once it is accepted.</p>',
     details: [
       { label: 'Requested date', value: escapeHtml(inquiry.preferred_tour_date || 'Pending') },
       { label: 'Requested time', value: escapeHtml(inquiry.preferred_tour_time || 'Pending') },
@@ -131,9 +131,33 @@ export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: 
     ],
     actions: [
       { label: 'Explore our spaces', url: absoluteUrl('/spaces') },
-      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+      { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' },
     ],
     note: `Reference: ${escapeHtml(token.slice(0, 8).toUpperCase())}. Reply to this email if you need to adjust your request.`,
+    theme: 'brand',
+  })
+}
+
+export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry) {
+  const firstName = inquiry.full_name ? inquiry.full_name.split(' ')[0] : ''
+  const brochureUrl = absoluteUrl('/api/brochure/download')
+  const visitUrl = absoluteUrl('/visit')
+
+  return renderLuxorSystemEmail({
+    previewText: 'Your free Luxor at Las Palmas venue brochure is ready.',
+    eyebrow: 'Venue Brochure',
+    title: 'Your Luxor Venue Brochure',
+    greeting: firstName ? `Hi ${escapeHtml(firstName)},` : 'Hello,',
+    bodyHtml: `
+      <p style="margin:0 0 16px;">Thank you for your interest in Luxor at Las Palmas Events! We are delighted to share our official venue brochure with you.</p>
+      <p style="margin:0 0 16px;">Inside, you’ll find floor plans, included amenities, spaces, and planning details for weddings, quinceañeras, and private celebrations.</p>
+      <p style="margin:0;">Whenever you are ready to walk the room in person and talk through your date, we invite you to schedule a visit.</p>
+    `,
+    actions: [
+      { label: 'Download Venue Brochure', url: brochureUrl },
+      { label: 'Schedule a Visit', url: visitUrl, tone: 'secondary' },
+    ],
+    note: 'If you have questions or would like to check a specific date, you can also reach us directly at (210) 906-8803 or reply to this email.',
     theme: 'brand',
   })
 }
@@ -141,7 +165,7 @@ export function buildTourRequestReceivedEmailHtml(inquiry: LuxorInquiry, token: 
 export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, token: string) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
-  const pricingUrl = absoluteUrl('/pricing')
+  const pricingUrl = absoluteUrl('/visit')
   const spacesUrl = absoluteUrl('/spaces')
 
   const dateLine = inquiry.preferred_tour_date || 'Requested date pending'
@@ -194,7 +218,7 @@ export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, t
               <p class="luxor-gold" style="margin:0 0 14px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">Tour Request Received</p>
               <h1 class="luxor-title" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:600;line-height:1.1;color:#f7efe3;">Thanks For Your Request</h1>
               <p class="luxor-muted" style="margin:0 auto;max-width:460px;font-size:15px;line-height:1.8;color:rgba(215,194,154,0.82);">
-                Hi ${escapeHtml(firstName)}, thank you for requesting a private tour of Luxor Event Space. We have received your request and our team is currently reviewing your preferred date and time.
+                Hi ${escapeHtml(firstName)}, thank you for scheduling a visit to Luxor Event Space. We have received your request and our team is currently reviewing your preferred date and time.
               </p>
             </td>
           </tr>
@@ -298,8 +322,7 @@ export function buildGrandOpeningRsvpEmailHtml(inquiry: LuxorInquiry) {
       { label: 'Interest', value: escapeHtml(interestLine) },
     ],
     actions: [
-      { label: 'Schedule a tour', url: absoluteUrl('/tour') },
-      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+      { label: 'Schedule a visit', url: absoluteUrl('/visit') },
     ],
     note: 'This confirmation was sent because you reserved a spot for the Luxor Grand Opening Showcase.',
     theme: 'brand',
@@ -311,8 +334,8 @@ export function buildGrandOpeningRsvpEmailHtmlLegacy(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const interestLine = inquiry.package_interest || inquiry.event_type || 'Future event planning'
   const websiteUrl = absoluteUrl('/')
-  const tourUrl = absoluteUrl('/tour')
-  const pricingUrl = absoluteUrl('/pricing')
+  const tourUrl = absoluteUrl('/visit')
+  const pricingUrl = absoluteUrl('/visit')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -395,8 +418,7 @@ export function buildGrandOpeningRsvpEmailHtmlLegacy(inquiry: LuxorInquiry) {
           </tr>
           <tr>
             <td align="center" style="padding:14px 48px 34px;">
-              <a href="${tourUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Schedule A Tour</a>
-              <a href="${pricingUrl}" target="_blank" style="display:inline-block;background-color:#0f0c09;color:#f7efe3;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(202,162,76,0.28);margin:0 6px 12px;">View Pricing</a>
+              <a href="${tourUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Schedule A Visit</a>
             </td>
           </tr>
           <tr>
@@ -404,7 +426,7 @@ export function buildGrandOpeningRsvpEmailHtmlLegacy(inquiry: LuxorInquiry) {
               <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
               <p class="luxor-muted" style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
                 803 Castroville Rd #402, San Antonio, TX 78237<br />
-                Private venue tours by appointment.<br />
+                Private venue visits by appointment.<br />
                 <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
                 <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
               </p>
@@ -435,8 +457,7 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
       { label: 'Guest count', value: escapeHtml(inquiry.guest_count ? String(inquiry.guest_count) : 'Open') },
     ],
     actions: [
-      { label: 'Schedule a private tour', url: absoluteUrl('/tour') },
-      { label: 'View pricing', url: absoluteUrl('/pricing'), tone: 'secondary' },
+      { label: 'Schedule a visit', url: absoluteUrl('/visit') },
     ],
     note: 'A coordinator will connect with you shortly. Reply to this email at any time if there is another detail we should know.',
     theme: 'light',
@@ -445,14 +466,14 @@ export function buildStandardInquiryEmailHtml(inquiry: LuxorInquiry) {
 
 export function buildNewsletterConfirmationEmailHtml(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name === 'Newsletter subscriber' ? '' : inquiry.full_name.split(' ')[0]
-  return renderLuxorSystemEmail({ previewText: 'You are on the Luxor Event Space newsletter list.', eyebrow: 'Welcome to Luxor', title: 'You’re on the list', greeting: firstName ? `Hi ${escapeHtml(firstName)},` : undefined, bodyHtml: '<p style="margin:0">Thank you for joining Luxor’s newsletter. We’ll share occasional open-house invitations, venue news, and practical ideas for planning a celebration that feels like yours.</p>', actions: [{ label: 'Explore Luxor', url: absoluteUrl('/') }, { label: 'Plan a private tour', url: absoluteUrl('/tour'), tone: 'secondary' }], note: 'You can unsubscribe from any marketing email at any time.', theme: 'brand' })
+  return renderLuxorSystemEmail({ previewText: 'You are on the Luxor Event Space newsletter list.', eyebrow: 'Welcome to Luxor', title: 'You’re on the list', greeting: firstName ? `Hi ${escapeHtml(firstName)},` : undefined, bodyHtml: '<p style="margin:0">Thank you for joining Luxor’s newsletter. We’ll share occasional open-house invitations, venue news, and practical ideas for planning a celebration that feels like yours.</p>', actions: [{ label: 'Explore Luxor', url: absoluteUrl('/') }, { label: 'Schedule a visit', url: absoluteUrl('/visit'), tone: 'secondary' }], note: 'You can unsubscribe from any marketing email at any time.', theme: 'brand' })
 }
 
 export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
-  const tourUrl = absoluteUrl('/tour')
-  const pricingUrl = absoluteUrl('/pricing')
+  const tourUrl = absoluteUrl('/visit')
+  const pricingUrl = absoluteUrl('/visit')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -529,14 +550,13 @@ export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
                 Our team is currently reviewing your event notes to prepare custom package options. We will get in touch via email or phone within 24 business hours.
               </p>
               <p class="luxor-muted" style="margin:0;font-size:14px;line-height:1.8;color:rgba(215,194,154,0.82);">
-                If you would like to schedule a private tour of the space in the meantime, please use the link below.
+                If you would like to schedule a visit in the meantime, please use the link below.
               </p>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding:14px 48px 34px;">
-              <a href="${tourUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Schedule A Tour</a>
-              <a href="${pricingUrl}" target="_blank" style="display:inline-block;background-color:#0f0c09;color:#f7efe3;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(202,162,76,0.28);margin:0 6px 12px;">View Pricing</a>
+              <a href="${tourUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);margin:0 6px 12px;">Schedule A Visit</a>
             </td>
           </tr>
           <tr>
@@ -544,7 +564,7 @@ export function buildStandardInquiryEmailHtmlLegacy(inquiry: LuxorInquiry) {
               <p class="luxor-gold" style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;">Luxor</p>
               <p class="luxor-muted" style="margin:0 0 16px;font-size:11px;line-height:1.9;color:rgba(215,194,154,0.56);">
                 803 Castroville Rd #402, San Antonio, TX 78237<br />
-                Private venue tours by appointment.<br />
+                Private venue visits by appointment.<br />
                 <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.7);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
                 <a href="${websiteUrl}" style="color:rgba(202,162,76,0.7);text-decoration:none;">luxoratlaspalmas.com</a>
               </p>

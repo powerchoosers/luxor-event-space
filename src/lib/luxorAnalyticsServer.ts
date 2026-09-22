@@ -27,6 +27,25 @@ export type MarketingSalesMetrics = {
   bookings: number
   revenue: number
 
+  // Brochure Lead Generation Tracking
+  brochureFormViews: number | null
+  brochureSubmissions: number
+  brochureConversionRate: number | null
+  brochureSubmissionsDeltaPercent: number | null
+
+  // Schedule a Visit Tracking
+  visitPageViews: number | null
+  visitSubmissions: number
+  visitConversionRate: number | null
+  visitSubmissionsDeltaPercent: number | null
+
+  // Brochure Leads vs Schedule a Visit Leads Comparison
+  leadFunnelComparison: {
+    brochureLeads: number
+    visitLeads: number
+    ratio: number | null
+  }
+
   // Deltas vs previous period
   toursBookedDeltaPercent: number | null
   websiteVisitorsDeltaPercent: number | null
@@ -331,7 +350,73 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const currentRevenue = currentBookings.reduce((sum, b) => sum + Number(b.contract_total || b.paid_total || 0), 0)
   const prevRevenue = prevBookings.reduce((sum, b) => sum + Number(b.contract_total || b.paid_total || 0), 0)
 
-  // 4. Deltas
+  // 4. Brochure Lead Generation Tracking
+  const brochureFormViewsCount = currentEvents.filter(
+    (e) => e.event_name === 'brochure_form_view' || (e.event_name === 'page_view' && (e.page_path === '/' || e.page_path === ''))
+  ).length
+  const brochureFormViews = hasConnectedAnalytics ? brochureFormViewsCount : null
+
+  const isBrochureInquiry = (inq: (typeof inquiries)[0]) =>
+    inq.flow === 'brochure_lead' || inq.source === 'homepage_brochure' || inq.metadata?.flow === 'brochure_lead'
+
+  const currentBrochureInquiries = currentInquiries.filter(isBrochureInquiry)
+  const prevBrochureInquiries = prevInquiries.filter(isBrochureInquiry)
+  const brochureSubmissions = Math.max(
+    currentBrochureInquiries.length,
+    currentEvents.filter((e) => e.event_name === 'brochure_submitted').length,
+  )
+  const prevBrochureSubmissions = Math.max(
+    prevBrochureInquiries.length,
+    prevEvents.filter((e) => e.event_name === 'brochure_submitted').length,
+  )
+
+  const brochureConversionRate = brochureFormViews && brochureFormViews > 0
+    ? Math.round((brochureSubmissions / brochureFormViews) * 1000) / 10
+    : websiteVisitors && websiteVisitors > 0
+      ? Math.round((brochureSubmissions / websiteVisitors) * 1000) / 10
+      : null
+
+  const brochureSubmissionsDeltaPercent = calculateDeltaPercent(brochureSubmissions, prevBrochureSubmissions)
+
+  // Schedule a Visit Tracking
+  const visitPageViewsCount = currentEvents.filter(
+    (e) =>
+      e.event_name === 'visit_page_view' ||
+      e.event_name === 'tour_page_view' ||
+      (e.event_name === 'page_view' && (e.page_path?.includes('/visit') || e.page_path?.includes('/tour'))),
+  ).length
+  const visitPageViews = hasConnectedAnalytics ? visitPageViewsCount : null
+
+  const isVisitInquiry = (inq: (typeof inquiries)[0]) =>
+    Boolean(inq.preferred_tour_date || inq.flow === 'visit_booking' || inq.flow === 'tour_booking' || inq.status === 'tour_requested' || inq.status === 'tour_confirmed' || inq.status === 'booked')
+
+  const currentVisitInquiries = currentInquiries.filter(isVisitInquiry)
+  const prevVisitInquiries = prevInquiries.filter(isVisitInquiry)
+  const visitSubmissions = Math.max(
+    currentVisitInquiries.length,
+    currentEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
+  )
+  const prevVisitSubmissions = Math.max(
+    prevVisitInquiries.length,
+    prevEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
+  )
+
+  const visitConversionRate = visitPageViews && visitPageViews > 0
+    ? Math.round((visitSubmissions / visitPageViews) * 1000) / 10
+    : websiteVisitors && websiteVisitors > 0
+      ? Math.round((visitSubmissions / websiteVisitors) * 1000) / 10
+      : null
+
+  const visitSubmissionsDeltaPercent = calculateDeltaPercent(visitSubmissions, prevVisitSubmissions)
+
+  // Comparison: Brochure Leads vs Schedule a Visit Leads
+  const leadFunnelComparison = {
+    brochureLeads: brochureSubmissions,
+    visitLeads: visitSubmissions,
+    ratio: visitSubmissions > 0 ? Math.round((brochureSubmissions / visitSubmissions) * 10) / 10 : null,
+  }
+
+  // 5. Deltas
   const toursBookedDeltaPercent = calculateDeltaPercent(toursBooked, prevToursBooked)
   const websiteVisitorsDeltaPercent = hasConnectedAnalytics ? calculateDeltaPercent(websiteVisitors || 0, prevWebsiteVisitors) : null
   const tourPageVisitsDeltaPercent = hasConnectedAnalytics ? calculateDeltaPercent(tourPageVisits || 0, prevTourPageVisits) : null
@@ -366,7 +451,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       stage: 'Tour Clicks',
       count: tourClicks,
       conversionRateFromPrevious: calcRate(tourClicks, tourPageVisits),
-      description: 'Intent to schedule a tour CTA',
+      description: 'Intent to schedule a visit CTA',
     },
     {
       stage: 'Tours Booked',
@@ -457,12 +542,11 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
 
   // 7. Website Performance
   const TRACKED_PAGES = [
-    { pageName: 'Book a Tour / Visit', path: '/tour', isPriority: true },
-    { pageName: 'Pricing / Rates', path: '/pricing', isPriority: true },
-    { pageName: 'Homepage', path: '/', isPriority: false },
+    { pageName: 'Schedule a Visit', path: '/visit', isPriority: true },
+    { pageName: 'Homepage & Brochure Form', path: '/', isPriority: true },
+    { pageName: 'Events', path: '/events', isPriority: false },
     { pageName: 'Gallery', path: '/gallery', isPriority: false },
-    { pageName: 'Spaces', path: '/spaces', isPriority: false },
-    { pageName: 'Contact / Inquiry', path: '/events', isPriority: false },
+    { pageName: 'Contact', path: '/contact', isPriority: false },
   ]
 
   const websitePerformance = TRACKED_PAGES.map((page) => {
@@ -510,7 +594,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
         type: 'warning',
         stageTransition: 'Website → Tour Page',
         message: 'Visitors are not progressing to the tour page.',
-        recommendation: 'Evaluate homepage hero CTAs and navigation visibility for "Book a Tour" to guide visitors directly into scheduling.',
+        recommendation: 'Evaluate homepage hero CTAs and navigation visibility for “Schedule a Visit” to guide visitors directly into scheduling.',
       })
     }
   }
@@ -573,7 +657,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       type: 'healthy',
       stageTransition: 'Full Funnel Flow',
       message: 'Conversion indicators are steady across active stages.',
-      recommendation: 'Continue monitoring inbound traffic quality and weekly tour booking consistency.',
+      recommendation: 'Continue monitoring inbound traffic quality and weekly visit booking consistency.',
     })
   }
 
@@ -587,6 +671,21 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     proposalsSent,
     bookings: bookingsCount,
     revenue: currentRevenue,
+
+    // Brochure Lead Generation Tracking
+    brochureFormViews,
+    brochureSubmissions,
+    brochureConversionRate,
+    brochureSubmissionsDeltaPercent,
+
+    // Schedule a Visit Tracking
+    visitPageViews,
+    visitSubmissions,
+    visitConversionRate,
+    visitSubmissionsDeltaPercent,
+
+    // Brochure Leads vs Schedule a Visit Leads Comparison
+    leadFunnelComparison,
 
     toursBookedDeltaPercent,
     websiteVisitorsDeltaPercent,

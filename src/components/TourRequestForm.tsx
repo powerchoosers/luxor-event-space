@@ -85,9 +85,9 @@ function createCalendarLinks(dateStr: string, timeStr: string) {
     return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
   }
 
-  const title = encodeURIComponent('Private Tour at Luxor at Las Palmas Events')
+  const title = encodeURIComponent('Visit at Luxor at Las Palmas Events')
   const details = encodeURIComponent(
-    'Private venue tour at Luxor at Las Palmas Events.\n803 Castroville Rd #402, San Antonio, TX 78237.\nPhone: (210) 906-8803',
+    'Private venue visit at Luxor at Las Palmas Events.\n803 Castroville Rd #402, San Antonio, TX 78237.\nPhone: (210) 906-8803',
   )
   const location = encodeURIComponent('Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237')
   const dates = `${toIsoCompact(start)}/${toIsoCompact(end)}`
@@ -97,15 +97,15 @@ function createCalendarLinks(dateStr: string, timeStr: string) {
   const icsLines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Luxor at Las Palmas//Tour Booking//EN',
+    'PRODID:-//Luxor at Las Palmas//Visit Booking//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `DTSTAMP:${toIsoCompact(new Date())}`,
     `DTSTART:${toIsoCompact(start)}`,
     `DTEND:${toIsoCompact(end)}`,
-    'SUMMARY:Private Tour at Luxor at Las Palmas Events',
-    'DESCRIPTION:Private venue tour at Luxor at Las Palmas Events.\\n803 Castroville Rd #402, San Antonio, TX 78237.',
+    'SUMMARY:Visit at Luxor at Las Palmas Events',
+    'DESCRIPTION:Private venue visit at Luxor at Las Palmas Events.\\n803 Castroville Rd #402, San Antonio, TX 78237.',
     'LOCATION:Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237',
     'STATUS:CONFIRMED',
     'END:VEVENT',
@@ -156,7 +156,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const scrollToFormTop = () => {
     if (typeof window === 'undefined') return
     requestAnimationFrame(() => {
-      const el = containerRef.current || document.getElementById('tour-booking')
+      const el = containerRef.current || document.getElementById('visit-booking')
       if (!el) return
       const rect = el.getBoundingClientRect()
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop
@@ -224,7 +224,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     setError(null)
     if (!customMode) {
       if (!slotId || !targetDate) {
-        setError(spanish ? 'Por favor selecciona un horario disponible para continuar.' : 'Please select an available tour time to continue.')
+        setError(spanish ? 'Por favor selecciona un horario disponible para continuar.' : 'Please select an available visit time to continue.')
         return
       }
     } else {
@@ -265,9 +265,9 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     setSubmitting(true)
     try {
       const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
-      trackLuxorPublicEvent('tour_cta_click', {
-        label: customMode ? 'Request Tour Submit' : 'Book a Tour Submit',
-        form_flow: customMode ? 'custom_tour_request' : 'tour_booking',
+      trackLuxorPublicEvent('visit_cta_click', {
+        label: customMode ? 'Request Visit Submit' : 'Schedule a Visit Submit',
+        form_flow: customMode ? 'custom_visit_request' : 'visit_booking',
       })
     } catch {
       // Non-blocking
@@ -287,10 +287,10 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       preferredTourDate,
       preferredTourTime,
       message: message.trim(),
-      source: 'tour_page',
-      flow: customMode ? 'custom_tour_request' : 'tour_booking',
+      source: 'visit_page',
+      flow: customMode ? 'custom_visit_request' : 'visit_booking',
       marketingOptIn,
-      pagePath: typeof window === 'undefined' ? '/tour' : window.location.pathname,
+      pagePath: typeof window === 'undefined' ? '/visit' : window.location.pathname,
       metadata: {
         selectedTourSlotId: slotId || null,
         preferredTourWindow: null,
@@ -311,22 +311,22 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       })
       const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) {
-        throw new Error(result.error || (spanish ? 'No se pudo enviar la solicitud del recorrido.' : 'The tour request could not be submitted.'))
+        throw new Error(result.error || (spanish ? 'No se pudo enviar la solicitud de visita.' : 'The visit request could not be submitted.'))
       }
 
       setStep(4)
 
       try {
         const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
-        trackLuxorPublicEvent('tour_booked', {
-          label: 'Tour Request Confirmed',
+        trackLuxorPublicEvent('visit_booked', {
+          label: 'Visit Request Confirmed',
           preferred_tour_date: preferredTourDate,
         })
       } catch {
         // Non-blocking
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : spanish ? 'No se pudo enviar la solicitud del recorrido.' : 'The tour request could not be submitted.')
+      setError(submitError instanceof Error ? submitError.message : spanish ? 'No se pudo enviar la solicitud de visita.' : 'The visit request could not be submitted.')
     } finally {
       setSubmitting(false)
     }
@@ -346,7 +346,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   return (
     <div
       ref={containerRef}
-      id="tour-booking"
+      id="visit-booking"
       className="scroll-mt-28 rounded-2xl border border-[#b98a3d]/30 bg-white p-5 shadow-[0_25px_80px_-44px_rgba(56,38,20,0.45)] sm:scroll-mt-32 sm:p-8"
     >
       {/* 4-Step Progress Indicator */}
@@ -413,11 +413,11 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             </h2>
             <p className="mt-1.5 text-sm text-[#665a4e] sm:text-base">
               {spanish
-                ? 'Elige el horario de recorrido que mejor se adapte a tu visita.'
-                : 'Choose a tour time that works best for your visit.'}
+                ? 'Elige el horario de visita que mejor se adapte a tu agenda.'
+                : 'Choose a visit time that works best for you.'}
             </p>
             <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#b98a3d]/25 bg-[#faf6ef] px-3.5 py-1 text-xs font-medium text-[#8d672b]">
-              <span>{spanish ? 'Recorridos de cortesía • Con cita previa' : 'Complimentary venue tours • By appointment'}</span>
+              <span>{spanish ? 'Visitas de cortesía • Con cita previa' : 'Complimentary visits • By appointment'}</span>
             </div>
           </div>
 
@@ -428,7 +428,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                 <div className="flex flex-col items-center justify-center py-12 text-[#8d672b]">
                   <Loader2 size={28} className="animate-spin text-[#b98a3d]" />
                   <p className="mt-3 text-xs uppercase tracking-widest font-mono">
-                    {spanish ? 'Cargando disponibilidad...' : 'Loading tour availability...'}
+                    {spanish ? 'Cargando disponibilidad...' : 'Loading visit availability...'}
                   </p>
                 </div>
               ) : slotsError ? (
@@ -439,7 +439,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                 <div>
                   <div className="flex items-center justify-between pb-2">
                     <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-[#8d672b]">
-                      {spanish ? 'Próximos recorridos disponibles' : 'Next Available Tours'}
+                      {spanish ? 'Próximas visitas disponibles' : 'Next Available Visits'}
                     </span>
                   </div>
 
@@ -538,8 +538,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                       />
                       <span className="mt-2 block text-[11px] text-[#827567]">
                         {spanish
-                          ? 'Los puntos verdes indican fechas con recorridos disponibles.'
-                          : 'Green dots show available tour dates.'}
+                          ? 'Los puntos verdes indican fechas con visitas disponibles.'
+                          : 'Green dots show available visit dates.'}
                       </span>
 
                       {targetDate && selectedDateSlots.length > 0 && (
@@ -584,7 +584,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             <div className="mt-6 rounded-xl border border-[#b98a3d]/25 bg-[#faf6ef] p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#241d17]">
-                  {spanish ? 'Solicita un horario personalizado' : 'Request a custom tour time'}
+                  {spanish ? 'Solicita un horario de visita personalizado' : 'Request a custom visit time'}
                 </p>
                 <button
                   type="button"
@@ -604,7 +604,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               </p>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Field label={spanish ? 'Fecha preferida' : 'Preferred tour date'}>
+                <Field label={spanish ? 'Fecha de visita preferida' : 'Preferred visit date'}>
                   <PortalDatePicker
                     theme="light"
                     value={targetDate}
@@ -662,10 +662,10 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                 type="checkbox"
                 checked={tourLanguage === 'es'}
                 onChange={(e) => setTourLanguage(e.target.checked ? 'es' : 'en')}
-                className="h-4 w-4 rounded border-2 border-[#b98a3d] accent-[#b98a3d]"
+                className="luxor-public-checkbox h-4 w-4 rounded border-2 border-[#b98a3d]"
               />
               <span>
-                {spanish ? '¿Prefieres tu recorrido en español?' : 'Need a Spanish-speaking tour?'}
+                {spanish ? '¿Prefieres tu visita en español?' : 'Need a Spanish-speaking visit?'}
               </span>
             </label>
           </div>
@@ -729,8 +729,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             </h2>
             <p className="mt-1.5 text-sm text-[#665a4e] sm:text-base">
               {spanish
-                ? 'Enviaremos tu confirmación y recordatorios de tu recorrido aquí.'
-                : 'We’ll send your confirmation and tour reminders here.'}
+                ? 'Enviaremos tu confirmación y recordatorios de tu visita aquí.'
+                : 'We’ll send your confirmation and visit reminders here.'}
             </p>
 
             {/* Selected appointment pill */}
@@ -820,8 +820,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             </h2>
             <p className="mt-1.5 text-sm text-[#665a4e] sm:text-base">
               {spanish
-                ? 'Esto nos ayuda a prepararnos para tu recorrido y aprovechar al máximo tu tiempo.'
-                : 'This helps us prepare for your tour and make the most of your time.'}
+                ? 'Esto nos ayuda a prepararnos para tu visita y aprovechar al máximo tu tiempo.'
+                : 'This helps us prepare for your visit and make the most of your time.'}
             </p>
           </div>
 
@@ -903,7 +903,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               type="checkbox"
               checked={marketingOptIn}
               onChange={(e) => setMarketingOptIn(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#b98a3d] accent-[#b98a3d]"
+              className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#b98a3d]"
             />
             <span>
               {spanish
@@ -938,11 +938,11 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                   : 'Booking...'
                 : customMode
                   ? spanish
-                    ? 'Solicitar recorrido'
-                    : 'Request Tour'
+                    ? 'Solicitar visita'
+                    : 'Request Visit'
                   : spanish
-                    ? 'Reservar mi recorrido'
-                    : 'Book My Tour'}
+                    ? 'Agendar mi visita'
+                    : 'Schedule My Visit'}
             </button>
           </div>
         </motion.div>
@@ -968,8 +968,8 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
           <p className="mt-2 text-sm text-[#665a4e]">
             {customMode
               ? spanish
-                ? 'Recibimos tu solicitud de recorrido. Nuestro equipo revisará el horario y se comunicará contigo de inmediato.'
-                : 'We received your tour request. Our team will review the time and follow up with you promptly.'
+                ? 'Recibimos tu solicitud de visita. Nuestro equipo revisará el horario y se comunicará contigo de inmediato.'
+                : 'We received your visit request. Our team will review the time and follow up with you promptly.'
               : spanish
                 ? 'Esperamos mostrarte Luxor at Las Palmas en persona.'
                 : 'We look forward to showing you Luxor at Las Palmas.'}
@@ -990,7 +990,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                 <div>
                   <p className="font-semibold">{chosenTime}</p>
                   <p className="text-xs text-[#827567]">
-                    {spanish ? '(Recorrido de 30 a 45 minutos)' : '(30–45 minute tour)'}
+                    {spanish ? '(Visita de 30 a 45 minutos)' : '(30–45 minute visit)'}
                   </p>
                 </div>
               </div>
@@ -1044,7 +1044,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
 
             <a
               href={calendarLinks.icsDataUri}
-              download="luxor-tour.ics"
+              download="luxor-visit.ics"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8c4a4] bg-white px-4 text-xs font-bold text-[#241d17] shadow-sm transition hover:border-[#b98a3d] hover:bg-[#faf6ef]"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">

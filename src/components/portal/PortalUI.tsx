@@ -658,6 +658,8 @@ export function PortalCloseButton({
   )
 }
 
+const ModalDepthContext = React.createContext(0)
+
 export function PortalModal({
   isOpen,
   onClose,
@@ -666,6 +668,7 @@ export function PortalModal({
   ariaLabel,
   children,
   maxWidth = 'max-w-lg',
+  zIndex,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -674,7 +677,10 @@ export function PortalModal({
   ariaLabel?: string
   children: React.ReactNode
   maxWidth?: string
+  zIndex?: number
 }) {
+  const depth = React.useContext(ModalDepthContext)
+  const computedZIndex = zIndex ?? (200 + depth * 10)
   const [mounted, setMounted] = React.useState(false)
   const dialogRef = React.useRef<HTMLDivElement>(null)
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null)
@@ -763,7 +769,8 @@ export function PortalModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ zIndex: computedZIndex }}
+          className="fixed inset-0 flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -786,20 +793,22 @@ export function PortalModal({
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
           >
-            {title ? (
-              <>
-                <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
-                  <div className="min-w-0">
-                    <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
-                    {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+            <ModalDepthContext.Provider value={depth + 1}>
+              {title ? (
+                <>
+                  <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+                    <div className="min-w-0">
+                      <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
+                      {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+                    </div>
+                    <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
                   </div>
-                  <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
-                </div>
-                <div className="overflow-y-auto p-5 portal-scrollbar sm:p-6">{children}</div>
-              </>
-            ) : (
-              children
-            )}
+                  <div className="overflow-y-auto p-5 portal-scrollbar sm:p-6">{children}</div>
+                </>
+              ) : (
+                children
+              )}
+            </ModalDepthContext.Provider>
           </motion.div>
         </motion.div>
       )}

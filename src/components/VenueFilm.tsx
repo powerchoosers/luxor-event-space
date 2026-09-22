@@ -5,7 +5,7 @@ import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 type NativeFullscreenVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
 
-export function VenueFilm({ autoPlay = false, headline }: { autoPlay?: boolean; headline?: string }) {
+export function VenueFilm({ autoPlay = false, headline, hero = false, children }: { autoPlay?: boolean; headline?: string; hero?: boolean; children?: React.ReactNode }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(true)
@@ -88,7 +88,7 @@ export function VenueFilm({ autoPlay = false, headline }: { autoPlay?: boolean; 
   }
 
   return (
-    <div className={`venue-film${headline ? ' venue-film--hero' : ''}`} data-fullscreen={fullscreen || undefined}>
+    <div className={`venue-film${headline || hero ? ' venue-film--hero' : ''}`} data-fullscreen={fullscreen || undefined}>
       <video
         ref={videoRef}
         poster="/videos/luxor-venue-poster.jpg"
@@ -107,6 +107,7 @@ export function VenueFilm({ autoPlay = false, headline }: { autoPlay?: boolean; 
         <source src="/videos/luxor-venue.mp4" type="video/mp4" />
       </video>
       {headline ? <div className="venue-film-heading"><h1>{headline}</h1></div> : null}
+      {children}
       {autoPlay ? <div className="venue-film-controls">
         <span className="venue-film-caption">Inside Luxor <span> /  The venue film</span></span>
         <div className="venue-film-buttons">

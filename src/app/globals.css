@@ -1066,7 +1066,7 @@ body:not([data-portal-theme]) :where(a, button, input, textarea, summary, [tabin
   outline-offset: 3px;
 }
 
-.venue-film { min-width: 0; overflow: hidden; border-radius: 6px; background: #141210; color: #f7efe3; }
+.venue-film { position: relative; min-width: 0; overflow: hidden; border-radius: 6px; background: #141210; color: #f7efe3; }
 .venue-film video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; }
 .venue-film-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; }
 .venue-film-caption { font-size: 12px; letter-spacing: .06em; }
@@ -1181,6 +1181,35 @@ body[data-luxor-site] #hero > img {
   opacity: 0.36;
 }
 
+/* The public home video stays edge-to-edge, with a quiet mobile brochure control. */
+body[data-luxor-site] #hero .venue-film {
+  border-radius: 0;
+}
+
+body[data-luxor-site] #hero .hero-brochure-cta {
+  border-color: rgba(255, 255, 255, 0.42) !important;
+  background: rgba(5, 5, 5, 0.62) !important;
+  color: #fffaf3 !important;
+  box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body[data-luxor-site] #hero .hero-brochure-cta:hover {
+  border-color: rgba(241, 210, 122, 0.84) !important;
+  background: rgba(5, 5, 5, 0.76) !important;
+  color: #fffaf3 !important;
+}
+
+body[data-luxor-site] #hero .hero-brochure-cta svg {
+  color: #caa24c !important;
+}
+
+/* Photo titles sit over darkened imagery and must remain readable on the public light theme. */
+body[data-luxor-site] main .gallery-photo-title {
+  color: #fff !important;
+}
+
 body[data-luxor-site] main input,
 body[data-luxor-site] main textarea,
 body[data-luxor-site] main select {
@@ -1192,6 +1221,20 @@ body[data-luxor-site] main select {
 body[data-luxor-site] main input::placeholder,
 body[data-luxor-site] main textarea::placeholder {
   color: #827567 !important;
+}
+
+/* Keep checkboxes visible when the public-site input reset is active. */
+body[data-luxor-site] main input[type='checkbox'].luxor-public-checkbox {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  border: 2px solid #9b6f24 !important;
+  background-color: #fffdfa !important;
+  box-shadow: inset 0 0 0 1px rgba(155, 111, 36, 0.12);
+}
+
+body[data-luxor-site] main input[type='checkbox'].luxor-public-checkbox:checked {
+  background-color: #caa24c !important;
+  border-color: #caa24c !important;
 }
 
 body[data-luxor-site] footer {

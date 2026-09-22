@@ -87,7 +87,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {canUsePortal ? createPortal(<div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-5 sm:top-5">
+      {canUsePortal ? createPortal(<div className="pointer-events-none fixed right-4 top-4 z-[300] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-5 sm:top-5">
         <AnimatePresence mode="popLayout" initial={false}>
           {toasts.map((toast) => {
             const style = variantStyles[toast.variant || 'info']

@@ -15,7 +15,7 @@ export default function SpanishHomePage() {
         <h1 className="mx-auto mt-6 max-w-4xl font-serif text-5xl leading-[0.98] text-[#f7efe3] sm:text-7xl">Un espacio para celebrar lo que importa.</h1>
         <p className="mx-auto mt-7 max-w-2xl text-base leading-8 text-[#d7c29a]/80">Conoce nuestro espacio en San Antonio para bodas, quinceañeras y celebraciones privadas. Estamos aquí para ayudarte a imaginar tu día.</p>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
-          <Link href="/es/tour" className="rounded-md bg-[#caa24c] px-6 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#100d08]">Solicitar un recorrido</Link>
+          <Link href="/es/visit" className="rounded-md bg-[#caa24c] px-6 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#100d08]">Agendar una visita</Link>
           <Link href="/" className="rounded-md border border-[#caa24c]/35 px-6 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#f1d27a]">English</Link>
         </div>
       </section>

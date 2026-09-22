@@ -231,7 +231,34 @@ export async function POST(request: NextRequest) {
     }
 
     if (inquiry) {
-      // Internal email alerts were atomically queued by the inquiry insert.
+      if (inquiry.email && (inquiry.flow === 'brochure_lead' || inquiry.source === 'homepage_brochure')) {
+        try {
+          const { buildBrochureDeliveryEmailHtml, createLuxorEmailJob, processLuxorEmailJobs } = await import('@/lib/luxorEmailJobsServer')
+          const bodyHtml = buildBrochureDeliveryEmailHtml(inquiry)
+          const job = await createLuxorEmailJob({
+            inquiryId: inquiry.id,
+            jobType: 'booking_package',
+            recipientEmail: inquiry.email,
+            subject: 'Your Luxor at Las Palmas Venue Brochure',
+            body: bodyHtml,
+            scheduledFor: new Date().toISOString(),
+            metadata: {
+              automated: true,
+              flow_stage: 'brochure_delivery',
+              lead_source: inquiry.source,
+            },
+          })
+          if (job) {
+            void processLuxorEmailJobs([job]).catch((err) => {
+              console.error('Failed delivering brochure email job immediately:', err)
+            })
+          }
+        } catch (brochureErr) {
+          console.error('Failed queueing brochure email delivery:', brochureErr)
+        }
+      }
+
+      // Record generic inquiry submission
       recordLuxorPublicEvent({
         eventName: 'inquiry_submitted',
         sessionId: payload.sessionId,
@@ -250,11 +277,72 @@ export async function POST(request: NextRequest) {
         console.error('Inquiry created but conversion event failed:', eventError)
       })
 
+      // Record specialized primary conversions
+      if (inquiry.flow === 'brochure_lead' || inquiry.source === 'homepage_brochure') {
+        recordLuxorPublicEvent({
+          eventName: 'brochure_submitted',
+          sessionId: payload.sessionId,
+          pagePath: payload.pagePath,
+          source: payload.source,
+          inquiryId: inquiry.id,
+          ipHash,
+          metadata: {
+            eventType: inquiry.event_type,
+            targetDate: inquiry.target_date,
+            email: inquiry.email,
+            phone: inquiry.phone,
+            marketingOptIn: inquiry.marketing_opt_in,
+          },
+        }).catch(() => {})
+      } else if (inquiry.flow === 'visit_booking' || inquiry.flow === 'tour_booking' || Boolean(inquiry.preferred_tour_date)) {
+        recordLuxorPublicEvent({
+          eventName: 'visit_booked',
+          sessionId: payload.sessionId,
+          pagePath: payload.pagePath,
+          source: payload.source,
+          inquiryId: inquiry.id,
+          ipHash,
+          metadata: {
+            eventType: inquiry.event_type,
+            preferredTourDate: inquiry.preferred_tour_date,
+            preferredTourTime: inquiry.preferred_tour_time,
+            email: inquiry.email,
+            phone: inquiry.phone,
+          },
+        }).catch(() => {})
+      } else if (inquiry.flow === 'contact_form') {
+        recordLuxorPublicEvent({
+          eventName: 'contact_submitted',
+          sessionId: payload.sessionId,
+          pagePath: payload.pagePath,
+          source: payload.source,
+          inquiryId: inquiry.id,
+          ipHash,
+          metadata: {
+            eventType: inquiry.event_type,
+            email: inquiry.email,
+            phone: inquiry.phone,
+          },
+        }).catch(() => {})
+      }
+
+      const pushTitle = inquiry.flow === 'brochure_lead'
+        ? 'Brochure lead captured'
+        : tourScheduled
+          ? 'Visit scheduled'
+          : inquiry.flow === 'contact_form'
+            ? 'New contact message'
+            : 'New booking inquiry'
+
+      const pushBody = inquiry.flow === 'brochure_lead'
+        ? `${inquiry.full_name} requested the venue brochure for a ${inquiry.event_type || 'celebration'}.`
+        : tourScheduled
+          ? `${inquiry.full_name} received a calendar invite for their requested visit.`
+          : `${inquiry.full_name} submitted an inquiry for review.`
+
       await sendLuxorWebPush('booking', {
-        title: tourScheduled ? 'Tour scheduled' : 'New booking inquiry',
-        body: tourScheduled
-          ? `${inquiry.full_name} received a calendar invite for their requested tour.`
-          : 'A new inquiry is ready to review in the owner portal.',
+        title: pushTitle,
+        body: pushBody,
         url: `/portal/leads/${inquiry.id}`,
         tag: `luxor-inquiry-${inquiry.id}`,
       }).catch((pushError) => {

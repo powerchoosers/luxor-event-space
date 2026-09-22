@@ -134,6 +134,71 @@ export function PortalMarketingSalesSection({
         </div>
       </div>
 
+      {/* LEAD GENERATION COMPARISON: Brochure Leads → Schedule a Visit Leads */}
+      <div className="rounded-2xl border border-[#caa24c]/30 bg-gradient-to-r from-[#caa24c]/10 via-[color:var(--portal-card)] to-[#caa24c]/5 p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#caa24c] text-[11px] font-bold text-black">
+                ★
+              </span>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">
+                Lead Generation Comparison
+              </p>
+            </div>
+            <h3 className="mt-1 text-lg font-bold text-[color:var(--portal-text)]">
+              Brochure Leads vs. Schedule a Visit Leads
+            </h3>
+            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+              Capturing top-of-funnel leads via the free venue brochure while nurturing them toward scheduling a visit.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* Brochure Leads */}
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase text-[#caa24c] font-bold">Venue Brochure</span>
+                {renderDelta(metrics.brochureSubmissionsDeltaPercent ?? null)}
+              </div>
+              <p className="mt-1 text-xl font-extrabold text-[color:var(--portal-text)]">
+                {metrics.brochureSubmissions ?? 0}
+              </p>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-[color:var(--portal-muted)]">
+                <span>{metrics.brochureFormViews ? `${metrics.brochureFormViews} views` : '—'}</span>
+                <span className="font-semibold text-[#caa24c]">{metrics.brochureConversionRate ? `${metrics.brochureConversionRate}% cvr` : '—'}</span>
+              </div>
+            </div>
+
+            {/* Visit Leads */}
+            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase text-[#caa24c] font-bold">Schedule a Visit</span>
+                {renderDelta(metrics.visitSubmissionsDeltaPercent ?? metrics.toursBookedDeltaPercent ?? null)}
+              </div>
+              <p className="mt-1 text-xl font-extrabold text-[color:var(--portal-text)]">
+                {metrics.visitSubmissions ?? metrics.toursBooked ?? 0}
+              </p>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-[color:var(--portal-muted)]">
+                <span>{metrics.visitPageViews ? `${metrics.visitPageViews} views` : `${metrics.tourPageVisits || '—'} views`}</span>
+                <span className="font-semibold text-[#caa24c]">{metrics.visitConversionRate ? `${metrics.visitConversionRate}% cvr` : '—'}</span>
+              </div>
+            </div>
+
+            {/* Comparison Ratio */}
+            <div className="col-span-2 sm:col-span-1 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 p-3 flex flex-col justify-between">
+              <span className="text-[9px] font-mono uppercase text-[#caa24c] font-bold">Funnel Multiplier</span>
+              <p className="mt-1 text-lg font-black text-[#caa24c]">
+                {metrics.leadFunnelComparison?.brochureLeads && metrics.leadFunnelComparison?.visitLeads
+                  ? `${(metrics.leadFunnelComparison.brochureLeads / Math.max(1, metrics.leadFunnelComparison.visitLeads)).toFixed(1)}x`
+                  : 'N/A'}
+              </p>
+              <p className="text-[10px] text-[color:var(--portal-muted)] truncate">Brochure to visit ratio</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 1. MARKETING & SALES KPI CARDS */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-8">
         {/* Card 1: Website Visitors */}
@@ -168,14 +233,14 @@ export function PortalMarketingSalesSection({
               <span className="text-[9px] font-mono uppercase text-[color:var(--portal-faint)]">Traffic</span>
             </div>
             <p className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-              Tour Page Visits
+              Visit Page Visits
             </p>
             <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight">
-              {renderValueOrFallback(metrics.tourPageVisits)}
+              {renderValueOrFallback(metrics.visitPageViews ?? metrics.tourPageVisits)}
             </p>
           </div>
           <div className="mt-3 pt-2 border-t border-[color:var(--portal-border)]/40 flex items-center justify-between text-[10px]">
-            {renderDelta(metrics.tourPageVisitsDeltaPercent)}
+            {renderDelta(metrics.visitSubmissionsDeltaPercent ?? metrics.tourPageVisitsDeltaPercent)}
             <span className="text-[10px] text-[color:var(--portal-muted)]">{comparisonLabel}</span>
           </div>
         </div>
@@ -190,13 +255,13 @@ export function PortalMarketingSalesSection({
               <div className="relative group/tip cursor-help">
                 <Info size={14} className="text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors" />
                 <div className="absolute right-0 top-6 z-50 hidden w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[11px] font-normal leading-relaxed text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl group-hover/tip:block">
-                  <p className="font-bold text-[#caa24c] mb-1">Tour Clicks (Intent)</p>
-                  People who clicked the tour scheduling CTA. This does not mean they successfully scheduled a tour.
+                  <p className="font-bold text-[#caa24c] mb-1">Visit Clicks (Intent)</p>
+                  People who clicked the visit scheduling CTA. This does not mean they successfully scheduled a visit.
                 </div>
               </div>
             </div>
             <p className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">
-              Tour Clicks
+              Visit Clicks
             </p>
             <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight">
               {renderValueOrFallback(metrics.tourClicks)}
@@ -208,7 +273,7 @@ export function PortalMarketingSalesSection({
           </div>
         </div>
 
-        {/* Card 4: ⭐ TOURS BOOKED (Primary Prominent Metric) */}
+        {/* Card 4: ⭐ VISITS SCHEDULED (Primary Prominent Metric) */}
         <div className="luxor-glass-card relative flex flex-col justify-between rounded-2xl p-4 sm:p-5 border-2 border-[#caa24c]/40 bg-gradient-to-b from-[#caa24c]/[0.08] to-transparent shadow-xl group">
           <div className="absolute -right-2 -top-2">
             <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c] text-[9px] text-[#050505] font-bold">
@@ -223,20 +288,20 @@ export function PortalMarketingSalesSection({
               <div className="relative group/tip cursor-help">
                 <Info size={14} className="text-[#caa24c] hover:text-[#dfbd68] transition-colors" />
                 <div className="absolute right-0 top-6 z-50 hidden w-60 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-3 text-[11px] font-normal leading-relaxed text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl group-hover/tip:block">
-                  <p className="font-bold text-[#caa24c] mb-1">Tours Booked (Scheduled)</p>
-                  People who successfully completed the scheduling process and created a tour appointment.
+                  <p className="font-bold text-[#caa24c] mb-1">Visits Scheduled (Appointments)</p>
+                  People who successfully completed the scheduling process and created a visit appointment.
                 </div>
               </div>
             </div>
             <p className="mt-3 text-[10px] font-black uppercase tracking-[0.2em] text-[#caa24c]">
-              Tours Booked
+              Visits Scheduled
             </p>
             <p className="mt-1 text-3xl sm:text-4xl font-black text-[color:var(--portal-text)] tracking-tight">
-              {metrics.toursBooked}
+              {metrics.visitSubmissions ?? metrics.toursBooked}
             </p>
           </div>
           <div className="mt-3 pt-2 border-t border-[#caa24c]/30 flex items-center justify-between text-[11px]">
-            {renderDelta(metrics.toursBookedDeltaPercent)}
+            {renderDelta(metrics.visitSubmissionsDeltaPercent ?? metrics.toursBookedDeltaPercent)}
             <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">{comparisonLabel}</span>
           </div>
         </div>
