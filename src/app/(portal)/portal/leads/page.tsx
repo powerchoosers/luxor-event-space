@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import {
@@ -1476,12 +1476,13 @@ function formatTourDate(value: string) {
 
 function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: boolean }) {
   const router = useRouter()
-  const newInquiries = leads.filter(l => l.status === 'new').length
-  const toursScheduled = leads.filter((lead) => lead.status === 'tour_requested' && lead.tour_attendance_status !== 'cancelled').length
-  const toursCompleted = leads.filter((lead) => (lead.status === 'tour_confirmed' || lead.tour_attendance_status === 'attended') && lead.tour_attendance_status !== 'cancelled').length
-  const proposalsSent = leads.filter(l => l.status === 'proposal_sent').length
-  const depositsReceived = leads.filter(l => l.status === 'booked').length
-  const totalLeads = leads.length
+  const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead))
+  const newInquiries = businessLeads.filter(l => l.status === 'new').length
+  const toursScheduled = businessLeads.filter((lead) => lead.status === 'tour_requested' && lead.tour_attendance_status !== 'cancelled').length
+  const toursCompleted = businessLeads.filter((lead) => (lead.status === 'tour_confirmed' || lead.tour_attendance_status === 'attended') && lead.tour_attendance_status !== 'cancelled').length
+  const proposalsSent = businessLeads.filter(l => l.status === 'proposal_sent').length
+  const depositsReceived = businessLeads.filter(l => l.status === 'booked').length
+  const totalLeads = businessLeads.length
   const conversionRate = totalLeads > 0 ? ((depositsReceived / totalLeads) * 100).toFixed(1) : '0.0'
 
   // Upcoming tours
@@ -1497,10 +1498,10 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
   const recentLeads = [...leads].slice(0, 5)
 
   // Funnel calculations
-  const total = leads.length || 1
-  const tourStageCount = leads.filter(l => ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(l.status)).length
-  const proposalStageCount = leads.filter(l => ['proposal_sent', 'booked'].includes(l.status)).length
-  const bookedStageCount = leads.filter(l => l.status === 'booked').length
+  const total = businessLeads.length || 1
+  const tourStageCount = businessLeads.filter(l => ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(l.status)).length
+  const proposalStageCount = businessLeads.filter(l => ['proposal_sent', 'booked'].includes(l.status)).length
+  const bookedStageCount = businessLeads.filter(l => l.status === 'booked').length
 
   const tourPct = ((tourStageCount / total) * 100).toFixed(0)
   const proposalPct = ((proposalStageCount / total) * 100).toFixed(0)

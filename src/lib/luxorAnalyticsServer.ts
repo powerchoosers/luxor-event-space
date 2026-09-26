@@ -3,6 +3,7 @@ import 'server-only'
 import { supabaseRest } from './supabaseRestServer'
 import { listLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
+import { isLuxorTestInquiry } from './luxorInquiryTypes'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
 
@@ -296,14 +297,17 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevStartTimeMs = range.previousStart.getTime()
   const prevEndTimeMs = range.previousEnd.getTime()
 
+  const businessInquiries = inquiries.filter((inq) => !isLuxorTestInquiry(inq))
+  const testInquiryIds = new Set(inquiries.filter(isLuxorTestInquiry).map((inq) => inq.id))
+
   // Current period inquiries
-  const currentInquiries = inquiries.filter((inq) => {
+  const currentInquiries = businessInquiries.filter((inq) => {
     const t = new Date(inq.created_at).getTime()
     return t >= startTimeMs && t <= endTimeMs
   })
 
   // Previous period inquiries
-  const prevInquiries = inquiries.filter((inq) => {
+  const prevInquiries = businessInquiries.filter((inq) => {
     const t = new Date(inq.created_at).getTime()
     return t >= prevStartTimeMs && t <= prevEndTimeMs
   })
@@ -331,6 +335,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
 
   // 3. Bookings & Revenue
   const currentBookings = bookingsWithPayments.filter((b) => {
+    if (b.inquiry_id && testInquiryIds.has(b.inquiry_id)) return false
     const bookedAt = b.booked_at || b.created_at
     if (!bookedAt) return false
     const t = new Date(bookedAt).getTime()
@@ -338,6 +343,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   })
 
   const prevBookings = bookingsWithPayments.filter((b) => {
+    if (b.inquiry_id && testInquiryIds.has(b.inquiry_id)) return false
     const bookedAt = b.booked_at || b.created_at
     if (!bookedAt) return false
     const t = new Date(bookedAt).getTime()

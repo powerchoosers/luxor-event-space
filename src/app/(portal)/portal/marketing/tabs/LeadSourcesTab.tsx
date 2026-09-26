@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react'
 import { ArrowUpRight, MapPin, TrendingUp, Users } from 'lucide-react'
 import { PortalStickyTable, PortalStickyThead, PortalTableCard } from '@/components/portal/PortalUI'
-import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
 interface LeadSourcesTabProps {
   inquiries: LuxorInquiry[]
@@ -24,7 +24,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
   const sourceRows = useMemo<SourceRow[]>(() => {
     const grouped = new Map<string, SourceRow>()
 
-    inquiries.forEach((inquiry) => {
+    inquiries.filter((inquiry) => !isLuxorTestInquiry(inquiry)).forEach((inquiry) => {
       const source = inquiry.source?.trim() || 'Source not recorded'
       const current = grouped.get(source) || {
         source,
@@ -47,13 +47,14 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
   }, [inquiries])
 
   const totals = useMemo(() => {
-    const tours = inquiries.filter(isInTourPipeline).length
-    const bookings = inquiries.filter((inquiry) => inquiry.status === 'booked').length
+    const businessInquiries = inquiries.filter((inquiry) => !isLuxorTestInquiry(inquiry))
+    const tours = businessInquiries.filter(isInTourPipeline).length
+    const bookings = businessInquiries.filter((inquiry) => inquiry.status === 'booked').length
     return {
-      leads: inquiries.length,
+      leads: businessInquiries.length,
       tours,
       bookings,
-      conversionRate: inquiries.length ? Math.round((bookings / inquiries.length) * 1000) / 10 : 0,
+      conversionRate: businessInquiries.length ? Math.round((bookings / businessInquiries.length) * 1000) / 10 : 0,
       sourceCount: sourceRows.length,
     }
   }, [inquiries, sourceRows.length])

@@ -25,7 +25,7 @@ import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
-import { LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
+import { isLuxorTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
 import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
@@ -107,6 +107,13 @@ export default async function PortalOverview() {
     loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
   }
 
+  const testInquiryIds = new Set(leads.filter(isLuxorTestInquiry).map((lead) => lead.id));
+  const businessBookings = bookings.filter((booking) => !booking.inquiry_id || !testInquiryIds.has(booking.inquiry_id));
+  const testBookingIds = new Set(bookings.filter((booking) => booking.inquiry_id && testInquiryIds.has(booking.inquiry_id)).map((booking) => booking.id));
+  const businessPayments = payments.filter((payment) =>
+    (!payment.inquiry_id || !testInquiryIds.has(payment.inquiry_id)) && (!payment.booking_id || !testBookingIds.has(payment.booking_id)));
+  const businessExpenses = expenses.filter((expense) => !expense.booking_id || !testBookingIds.has(expense.booking_id));
+
   // --- Calculations for Top 4 Cards ---
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -116,7 +123,7 @@ export default async function PortalOverview() {
   const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
 
   // Card 1: Bookings count for the current calendar month
-  const activeBookingsThisMonth = bookings.filter(b => {
+  const activeBookingsThisMonth = businessBookings.filter(b => {
     if (!b.event_date) return false;
     const eventDate = new Date(b.event_date + 'T00:00:00');
     return eventDate >= startOfMonth && eventDate <= endOfMonth && b.status !== 'cancelled';
@@ -127,7 +134,7 @@ export default async function PortalOverview() {
 
   // Card 2: Cash Flow (This Month)
   // Cash Inflow: sum of paid payments this month
-  const paidPaymentsThisMonth = payments.filter(p => {
+  const paidPaymentsThisMonth = businessPayments.filter(p => {
     if (p.status !== 'paid' || !p.paid_at) return false;
     const paidAt = new Date(p.paid_at!);
     return paidAt >= startOfMonth && paidAt <= endOfMonth;
@@ -135,7 +142,7 @@ export default async function PortalOverview() {
   const totalInflow = paidPaymentsThisMonth.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   // Cash Outflow: sum of paid expenses this month
-  const paidExpensesThisMonth = expenses.filter(e => {
+  const paidExpensesThisMonth = businessExpenses.filter(e => {
     if (e.status !== 'paid' || !e.incurred_on) return false;
     const incurredOn = new Date(e.incurred_on! + 'T00:00:00');
     return incurredOn >= startOfMonth && incurredOn <= endOfMonth;
@@ -239,7 +246,8 @@ export default async function PortalOverview() {
   }
 
   // Card 4: Needs Attention
-  const newLeadsCount = leads.filter(l => l.status === 'new' || l.status === 'tour_requested').length;
+  const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead));
+  const newLeadsCount = businessLeads.filter(l => l.status === 'new' || l.status === 'tour_requested').length;
   const todayDateStr = now.toISOString().split('T')[0];
   const overdueTasksCount = tasks.filter(t => t.status === 'pending' && t.due_date && t.due_date <= todayDateStr).length;
   const needsAttentionCount = newLeadsCount + overdueTasksCount;
@@ -248,7 +256,7 @@ export default async function PortalOverview() {
   const priorities: { title: string; meta: string; isOverdue?: boolean }[] = [];
 
   // 1. Tours today
-  const toursToday = leads.filter(l => l.preferred_tour_date === todayDateStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
+  const toursToday = businessLeads.filter(l => l.preferred_tour_date === todayDateStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
   if (toursToday.length > 0) {
     const times = toursToday.map(t => t.preferred_tour_time).filter(Boolean) as string[];
     const timeRange = times.length > 0 ? `${times.sort()[0]} - ${times.sort()[times.length - 1]}` : 'Scheduled';
@@ -298,8 +306,8 @@ export default async function PortalOverview() {
     const isToday = i === 0;
 
     // Filter items for this day
-    const dayTours = leads.filter(l => l.preferred_tour_date === dayStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
-    const dayEvents = bookings.filter(b => b.event_date === dayStr && b.status !== 'cancelled');
+    const dayTours = businessLeads.filter(l => l.preferred_tour_date === dayStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
+    const dayEvents = businessBookings.filter(b => b.event_date === dayStr && b.status !== 'cancelled');
     const dayPayments = bills.filter(b => b.due_date === dayStr && b.status !== 'paid');
     const dayTasks = tasks.filter(t => t.due_date === dayStr && t.status === 'pending');
 
@@ -420,12 +428,12 @@ export default async function PortalOverview() {
   });
 
   // 3. Payments
-  payments.forEach((p) => {
+  businessPayments.forEach((p) => {
     const paidDate = p.paid_at || p.created_at;
     if (!paidDate) return;
     const rawDate = new Date(paidDate);
     const matchedLead = p.inquiry_id ? leads.find((l) => l.id === p.inquiry_id) : null;
-    const matchedBooking = p.booking_id ? bookings.find((b) => b.id === p.booking_id) : null;
+    const matchedBooking = p.booking_id ? businessBookings.find((b) => b.id === p.booking_id) : null;
     const clientName = matchedLead?.full_name || matchedBooking?.client_name;
 
     const title = clientName
@@ -443,7 +451,7 @@ export default async function PortalOverview() {
   });
 
   // 4. Bookings
-  bookings.forEach((b) => {
+  businessBookings.forEach((b) => {
     const bookingDate = b.created_at || b.event_date;
     if (!bookingDate) return;
     const rawDate = new Date(bookingDate);

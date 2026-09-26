@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
-import type { LuxorBooking, LuxorBookingExpense, LuxorInquiry, LuxorInvoice } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice } from '@/lib/luxorInquiryTypes'
 
 type ReportData = {
   inquiries: LuxorInquiry[]
@@ -46,7 +46,7 @@ export default function ReportsPage() {
   const downloadCsv = () => {
     const rows = [
       ['Metric', 'Value'],
-      ['Total leads', String(data.inquiries.length)],
+      ['Total leads', String(metrics.totalLeads)],
       ['Confirmed bookings', String(metrics.confirmedBookings.length)],
       ['Lead-to-booking conversion', `${metrics.conversionRate.toFixed(1)}%`],
       ['Paid invoice revenue', String(metrics.paidRevenue)],
@@ -76,7 +76,7 @@ export default function ReportsPage() {
       <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatsPanel label="Average Booking Value" value={currency(metrics.averageBookingValue)} detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`} loading={loading} />
-          <StatsPanel label="Lead-to-Booking Rate" value={`${metrics.conversionRate.toFixed(1)}%`} detail={`${metrics.bookedLeadIds.size} booked leads from ${data.inquiries.length} total`} loading={loading} />
+          <StatsPanel label="Lead-to-Booking Rate" value={`${metrics.conversionRate.toFixed(1)}%`} detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`} loading={loading} />
           <StatsPanel label="Average Days to Book" value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`} detail="From inquiry creation to booking" loading={loading} />
           <StatsPanel label="Net Recorded Income" value={currency(metrics.netIncome)} detail={`${currency(metrics.paidRevenue)} paid less ${currency(metrics.recordedExpenses)} expenses`} loading={loading} />
         </div>
@@ -103,16 +103,23 @@ export default function ReportsPage() {
 }
 
 function buildMetrics(data: ReportData) {
-  const confirmedBookings = data.bookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
-  const paidInvoices = data.invoices.filter((invoice) => invoice.status === 'paid')
-  const outstandingInvoices = data.invoices.filter((invoice) => invoice.status === 'sent' || invoice.status === 'overdue')
+  const testInquiryIds = new Set(data.inquiries.filter(isLuxorTestInquiry).map((inquiry) => inquiry.id))
+  const testBookingIds = new Set(data.bookings.filter((booking) => booking.inquiry_id && testInquiryIds.has(booking.inquiry_id)).map((booking) => booking.id))
+  const businessInquiries = data.inquiries.filter((inquiry) => !isLuxorTestInquiry(inquiry))
+  const businessBookings = data.bookings.filter((booking) => !booking.inquiry_id || !testInquiryIds.has(booking.inquiry_id))
+  const businessInvoices = data.invoices.filter((invoice) =>
+    (!invoice.inquiry_id || !testInquiryIds.has(invoice.inquiry_id)) && (!invoice.booking_id || !testBookingIds.has(invoice.booking_id)))
+  const businessExpenses = data.expenses.filter((expense) => !expense.booking_id || !testBookingIds.has(expense.booking_id))
+  const confirmedBookings = businessBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
+  const paidInvoices = businessInvoices.filter((invoice) => invoice.status === 'paid')
+  const outstandingInvoices = businessInvoices.filter((invoice) => invoice.status === 'sent' || invoice.status === 'overdue')
   const paidRevenue = paidInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0)
   const outstandingRevenue = outstandingInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0)
-  const recordedExpenses = data.expenses.filter((expense) => expense.status !== 'cancelled').reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+  const recordedExpenses = businessExpenses.filter((expense) => expense.status !== 'cancelled').reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
   const bookedLeadIds = new Set(confirmedBookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id)))
-  const conversionRate = data.inquiries.length ? (bookedLeadIds.size / data.inquiries.length) * 100 : 0
+  const conversionRate = businessInquiries.length ? (bookedLeadIds.size / businessInquiries.length) * 100 : 0
   const averageBookingValue = confirmedBookings.length ? confirmedBookings.reduce((sum, booking) => sum + Number(booking.contract_total || 0), 0) / confirmedBookings.length : 0
-  const inquiryCreatedAt = new Map(data.inquiries.map((inquiry) => [inquiry.id, new Date(inquiry.created_at).getTime()]))
+  const inquiryCreatedAt = new Map(businessInquiries.map((inquiry) => [inquiry.id, new Date(inquiry.created_at).getTime()]))
   const bookingDurations = confirmedBookings.flatMap((booking) => {
     const start = booking.inquiry_id ? inquiryCreatedAt.get(booking.inquiry_id) : undefined
     const end = new Date(booking.booked_at || booking.created_at).getTime()
@@ -126,7 +133,7 @@ function buildMetrics(data: ReportData) {
   const eventTypes = [...eventTypeCounts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
   const currentMonth = monthKey(new Date().toISOString())
   const currentMonthEventDays = new Set(confirmedBookings.map((booking) => booking.event_date).filter((date): date is string => typeof date === 'string' && monthKey(date) === currentMonth)).size
-  return { confirmedBookings, paidInvoices, outstandingInvoices, paidRevenue, outstandingRevenue, recordedExpenses, netIncome: paidRevenue - recordedExpenses, bookedLeadIds, conversionRate, averageBookingValue, averageDaysToBook, months, maxMonthlyRevenue, eventTypes, currentMonthEventDays }
+  return { confirmedBookings, paidInvoices, outstandingInvoices, paidRevenue, outstandingRevenue, recordedExpenses, netIncome: paidRevenue - recordedExpenses, bookedLeadIds, conversionRate, averageBookingValue, averageDaysToBook, months, maxMonthlyRevenue, eventTypes, currentMonthEventDays, totalLeads: businessInquiries.length }
 }
 
 function lastSixMonths() { const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }); return Array.from({ length: 6 }, (_, index) => { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - index)); return { key: monthKey(date.toISOString()), label: formatter.format(date) } }) }

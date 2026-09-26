@@ -114,6 +114,11 @@ export type LuxorInquiry = {
   tour_response_token?: string | null
 }
 
+/** Test inquiries remain visible in the CRM for end-to-end checks, but never count as business KPI records. */
+export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'metadata'> | null | undefined): boolean {
+  return inquiry?.metadata?.is_test_record === true
+}
+
 export type LuxorLeadEvent = {
   id: string
   created_at: string
