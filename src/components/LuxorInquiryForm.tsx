@@ -248,6 +248,8 @@ export function LuxorInquiryForm({
       attribution: getLuxorPublicAttribution(),
       metadata: {
         selectedTourSlotId: preferredTourSlotId || null,
+        autoScheduleTour: Boolean(preferredTourSlotId),
+        tourBookingType: preferredTourSlotId ? 'confirmed_slot' : 'pending_custom_request',
         preferredTourWindow: preferredTourWindow || null,
         contactPreference: cleanPhone && smsOptIn ? 'text_or_email' : cleanEmail ? 'email' : 'phone',
       },
@@ -302,10 +304,10 @@ export function LuxorInquiryForm({
           {submitted ? (
             <motion.div key="submitted" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={FORM_TRANSITION} className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.06] p-6" role="status">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c] text-[#050505]"><Check className="h-6 w-6" /></div>
-              <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour request is received.' : 'We received your event details.'}</h3>
+              <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{reservedTour ? 'Your tour is confirmed.' : 'We received your event details.'}</h3>
               <p className="mt-3 text-sm leading-6 text-[#d7c29a]/78">
                 {reservedTour
-                  ? 'Thanks for your request! We have received your requested date and time. Our team will send an official confirmation email once accepted, or contact you if we need to adjust timing.'
+                  ? 'Your time is booked. The calendar confirmation is on the way, and reminders are scheduled.'
                   : 'A Luxor coordinator will review your request and contact you within one business day with availability and next steps.'}
               </p>
             </motion.div>
@@ -370,10 +372,10 @@ export function LuxorInquiryForm({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <TextField value={fullName} onChange={setFullName} name="fullName" label="Full name" placeholder="Your full name" required autoComplete="name" />
-                <TextField value={email} onChange={setEmail} name="email" label="Email" placeholder="you@example.com" type="email" inputMode="email" autoComplete="email" icon={<Mail className="h-4 w-4" />} />
+                <TextField value={email} onChange={setEmail} name="email" label={reservedTour ? 'Email (required for booking)' : 'Email'} placeholder="you@example.com" type="email" inputMode="email" autoComplete="email" required={reservedTour} icon={<Mail className="h-4 w-4" />} />
                 <TextField value={phone} onChange={handlePhoneChange} name="phone" label="Phone" placeholder="(210) 000-0000" type="tel" inputMode="tel" autoComplete="tel" icon={<Phone className="h-4 w-4" />} />
                 <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4 text-sm leading-6 text-[#d7c29a]/70">
-                  Add an email, phone number, or both. We only need one way to respond.
+                  {reservedTour ? 'Your email is required for the calendar invitation and tour reminders.' : 'Add an email, phone number, or both. We only need one way to respond.'}
                 </div>
               </div>
 

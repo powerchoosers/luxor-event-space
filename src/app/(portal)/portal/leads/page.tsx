@@ -70,7 +70,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
-  { value: 'tour_requested', label: 'Tour Requested' },
+  { value: 'tour_requested', label: 'Tour Time Needed' },
   { value: 'tour_confirmed', label: 'Tour Confirmed' },
   { value: 'proposal_sent', label: 'Proposal Sent' },
   { value: 'booked', label: 'Booked' },
@@ -1478,7 +1478,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
   const router = useRouter()
   const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead))
   const newInquiries = businessLeads.filter(l => l.status === 'new').length
-  const toursScheduled = businessLeads.filter((lead) => lead.status === 'tour_requested' && lead.tour_attendance_status !== 'cancelled').length
+  const toursScheduled = businessLeads.filter((lead) => ['tour_requested', 'tour_confirmed'].includes(lead.status) && lead.tour_attendance_status !== 'cancelled').length
   const toursCompleted = businessLeads.filter((lead) => (lead.status === 'tour_confirmed' || lead.tour_attendance_status === 'attended') && lead.tour_attendance_status !== 'cancelled').length
   const proposalsSent = businessLeads.filter(l => l.status === 'proposal_sent').length
   const depositsReceived = businessLeads.filter(l => l.status === 'booked').length

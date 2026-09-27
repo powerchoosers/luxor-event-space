@@ -146,7 +146,7 @@ export function MarketingOverviewTab({
             <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Needs attention</h3>
             <ArrowUpRight size={16} className="text-[#caa24c]" />
           </div>
-          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour requested" loading={loading} onClick={() => onTabChange('call-center')} />
+          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour time needed" loading={loading} onClick={() => onTabChange('call-center')} />
           <AttentionRow value={newInquiriesThisWeek} label="New inquiries" detail="Submitted in the last 7 days" loading={loading} onClick={() => onTabChange('contact-lists')} />
           <div className="mt-auto border-t border-[color:var(--portal-border)] pt-4">
             <button type="button" onClick={() => onTabChange('call-center')} className="text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Open follow-up queue →</button>

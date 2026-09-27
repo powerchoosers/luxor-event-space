@@ -1008,9 +1008,9 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
           </div>
 
           <p className="mt-5 text-xs text-[#665a4e]">
-            {spanish ? 'Se ha enviado una confirmación a ' : 'A confirmation has been sent to '}
+            {spanish ? 'La confirmación del calendario y los recordatorios llegarán a ' : 'Calendar confirmation and reminders are on the way to '}
             <strong className="text-[#241d17]">{email}</strong>
-            {phone ? <span> {spanish ? 'y por mensaje a ' : 'and via text to '}<strong className="text-[#241d17]">{phone}</strong></span> : null}.
+            .
           </p>
 
           {/* Calendar Add Buttons */}

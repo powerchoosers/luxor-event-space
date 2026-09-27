@@ -73,7 +73,7 @@ function isoDate(date: Date) {
 
 export function TourAvailabilityManager({
   title = 'Tour availability',
-  description = 'Choose when guests can request a private venue tour.',
+  description = 'Choose when clients can book a private venue tour.',
   onUpdated,
 }: {
   title?: string

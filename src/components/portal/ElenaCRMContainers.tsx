@@ -110,7 +110,7 @@ export function ElenaLeadUpdateCard({
               options={[
                 { value: 'newsletter', label: '0. Newsletter' },
                 { value: 'inquiry', label: '1. Inquiry' },
-                { value: 'tour', label: '2. Tour Requested / Attended' },
+                { value: 'tour', label: '2. Tour Scheduled / Attended' },
                 { value: 'proposal_sent', label: '3. Proposal Sent' },
                 { value: 'book_reserve', label: '4. Book & Reserve' },
                 { value: 'planning_begins', label: '5. Planning Begins' },
@@ -134,7 +134,7 @@ export function ElenaLeadUpdateCard({
               options={[
                 { value: 'new', label: 'New' },
                 { value: 'contacted', label: 'Contacted' },
-                { value: 'tour_requested', label: 'Tour Requested' },
+                { value: 'tour_requested', label: 'Tour Time Needed' },
                 { value: 'tour_confirmed', label: 'Tour Confirmed' },
                 { value: 'proposal_sent', label: 'Proposal Sent' },
                 { value: 'booked', label: 'Booked' },

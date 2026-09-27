@@ -121,7 +121,7 @@ function tourDisplayStatus(lead: LuxorInquiry) {
   if (lead.tour_attendance_status === 'cancelled') return 'Cancelled'
   if (lead.tour_attendance_status === 'attended') return 'Completed'
   if (lead.tour_attendance_status === 'no_show') return 'No show'
-  if (lead.status === 'tour_confirmed') return 'Confirmed'
+  if (lead.status === 'tour_confirmed' || (lead.metadata?.autoScheduleTour === true && Boolean(lead.preferred_tour_date))) return 'Confirmed'
   if (lead.preferred_tour_date || lead.preferred_tour_time || lead.status === 'tour_requested') return 'Requested'
   return 'Not scheduled'
 }
@@ -3161,7 +3161,7 @@ export default function LeadDetailPage({
     },
     {
       label: 'Preferred Tour Date',
-      value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour requested',
+      value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour scheduled',
       editValue: lead.preferred_tour_date || '',
       copyValue: lead.preferred_tour_date || '',
       field: 'preferred_tour_date',
@@ -4459,7 +4459,7 @@ export default function LeadDetailPage({
               if (currentStage === 'tour') {
                 return (
                   <>
-                    {/* Next Move */}
+                    {/* Confirmed booking state / tour scheduling action */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
@@ -4467,23 +4467,30 @@ export default function LeadDetailPage({
                             <Calendar size={18} />
                           </span>
                           <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">
+                              {tourDisplayStatus(lead) === 'Confirmed' ? 'Tour Confirmed' : tourDisplayStatus(lead) === 'Requested' ? 'Tour Time Needed' : 'Tour'}
+                            </p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {tourDisplayStatus(lead) === 'Confirmed' ? 'Conduct the venue tour' : tourDisplayStatus(lead) === 'Requested' ? 'Accept the tour request' : 'Schedule a venue tour'}
+                              {tourDisplayStatus(lead) === 'Confirmed'
+                                ? `${lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Date unavailable'}${lead.preferred_tour_time ? ` • ${lead.preferred_tour_time}` : ''}`
+                                : tourDisplayStatus(lead) === 'Requested' ? 'Choose an available time' : 'Schedule a venue tour'}
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {tourDisplayStatus(lead) === 'Confirmed' ? 'Show the space, answer questions, and capture what happens next.' : 'Choose a date and time so the client receives the correct confirmation and reminders.'}
+                              {tourDisplayStatus(lead) === 'Confirmed'
+                                ? 'This tour was booked by the client and automatically confirmed. Confirmation and reminders are scheduled.'
+                                : tourDisplayStatus(lead) === 'Requested' ? 'Choose a time and send the client a confirmed calendar invitation.' : 'Choose an available time to confirm the tour and schedule reminders.'}
                             </p>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={openTourScheduleModal}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer"
-                          >
-                            <Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Accept Tour Request' : tourDisplayStatus(lead) === 'Confirmed' ? 'Reschedule' : 'Schedule Tour'}
-                          </button>
+                          {tourDisplayStatus(lead) === 'Confirmed' ? (
+                            <>
+                              <button type="button" onClick={() => document.getElementById('lead-tour-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">View Tour Details</button>
+                              <button type="button" onClick={openTourScheduleModal} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> Reschedule Tour</button>
+                            </>
+                          ) : (
+                            <button type="button" onClick={openTourScheduleModal} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Set Tour Time' : 'Schedule Tour'}</button>
+                          )}
                         </div>
                       </div>
                     </section>
@@ -4491,7 +4498,7 @@ export default function LeadDetailPage({
                     {/* Row 1: Tour Details & Tour Attendance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Tour Details */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                      <section id="lead-tour-details" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Details</p>

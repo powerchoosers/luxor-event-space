@@ -369,8 +369,11 @@ export default async function PortalOverview() {
     let icon = UserPlus;
     const href = `/portal/leads/${l.id}`;
 
-    if (l.status === 'tour_requested' || l.preferred_tour_date) {
-      title = `${l.full_name} requested a tour`;
+    if (l.status === 'tour_confirmed') {
+      title = `Tour confirmed for ${l.full_name}`;
+      icon = CheckCircle2;
+    } else if (l.status === 'tour_requested') {
+      title = `Tour time needed for ${l.full_name}`;
       icon = User;
     } else if (l.status === 'proposal_sent') {
       title = `Proposal sent to ${l.full_name}`;

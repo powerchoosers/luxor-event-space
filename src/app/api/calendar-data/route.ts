@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
-import { listLuxorTourRequests } from '@/lib/luxorInquiriesServer'
+import { listLuxorConfirmedTours } from '@/lib/luxorInquiriesServer'
 import { listAllTasks } from '@/lib/luxorTasksServer'
 import { listUpcomingLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     const [tours, slots, bookings, tasks] = await Promise.all([
-      listLuxorTourRequests(150),
+      listLuxorConfirmedTours(150),
       listUpcomingLuxorTourSlots(1000),
       listLuxorBookingsWithPayments(150).catch(() => []),
       listAllTasks().catch(() => []),

@@ -11,6 +11,9 @@ import { buildAiTourConfirmationEmail, buildTourReminderEmail, type TourEmailCon
 import { assertEmailHasNoUnresolvedPlaceholders, createPublicToken, getTourResponseLinks, listLuxorEmailJobsForInquiry, processLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { releaseLuxorTourSlot } from '@/lib/luxorTourSlotsServer'
+import { cancelQueuedTourTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -169,13 +172,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 })
     }
 
-    const autoScheduleTour = payload.metadata?.autoScheduleTour === true
+    const selectedTourSlotId = typeof payload.metadata?.selectedTourSlotId === 'string'
+      ? payload.metadata.selectedTourSlotId
+      : null
+    const autoScheduleTour = Boolean(selectedTourSlotId)
+    if (payload.metadata?.autoScheduleTour === true && !selectedTourSlotId) {
+      return NextResponse.json({ error: 'Choose an available time before booking your visit.' }, { status: 400 })
+    }
     if (autoScheduleTour) {
       const email = payload.email?.trim()
       const date = payload.preferredTourDate?.trim()
       const time = payload.preferredTourTime?.trim()
-      if (!email || !date || !time) {
-        return NextResponse.json({ error: 'An email address, tour date, and specific tour time are required to schedule your visit.' }, { status: 400 })
+      if (!selectedTourSlotId || !email || !date || !time) {
+        return NextResponse.json({ error: 'Choose an available time and provide an email address to book your visit.' }, { status: 400 })
       }
       try {
         if (zonedTourDateTimeToUtc(date, time).getTime() <= Date.now()) {
@@ -204,9 +213,6 @@ export async function POST(request: NextRequest) {
       console.warn('Public inquiry protection event could not be recorded:', protectionError)
     }
 
-    const selectedTourSlotId = typeof payload.metadata?.selectedTourSlotId === 'string'
-      ? payload.metadata.selectedTourSlotId
-      : null
     if (!selectedTourSlotId) {
       const duplicate = await findRecentDuplicateLuxorInquiry(payload)
       if (duplicate) {
@@ -217,9 +223,32 @@ export async function POST(request: NextRequest) {
     let inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined)
     let tourScheduled = false
     if (autoScheduleTour && inquiry) {
-      const savedTour = await scheduleTourFromPublicRequest(inquiry)
-      inquiry = savedTour.inquiry
-      tourScheduled = true
+      try {
+        const savedTour = await scheduleTourFromPublicRequest(inquiry)
+        inquiry = savedTour.inquiry
+        tourScheduled = true
+      } catch (scheduleError) {
+        const cleanup = await Promise.allSettled([
+          releaseLuxorTourSlot(selectedTourSlotId!),
+          cancelQueuedTourTextJobs(inquiry.id),
+          updateLuxorInquiry(inquiry.id, {
+            status: 'new',
+            pipeline_stage: 'inquiry',
+            tour_attendance_status: null,
+            preferred_tour_date: null,
+            preferred_tour_time: null,
+            tour_confirmed_at: null,
+            metadata: { ...inquiry.metadata, autoScheduleTour: false, tourBookingType: 'booking_failed', selectedTourSlotId: null },
+          }),
+          supabaseRest(`luxor_lead_events?inquiry_id=eq.${encodeURIComponent(inquiry.id)}&status=eq.tour_confirmed&pipeline_stage=eq.tour`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'new', pipeline_stage: 'inquiry', updated_at: new Date().toISOString() }),
+          }),
+        ])
+        const cleanupErrors = cleanup.filter((result) => result.status === 'rejected')
+        if (cleanupErrors.length) console.error('Tour booking failed and some reservation cleanup steps need repair:', cleanupErrors)
+        throw scheduleError
+      }
     }
 
     if (inquiry?.email && inquiry.marketing_opt_in) {

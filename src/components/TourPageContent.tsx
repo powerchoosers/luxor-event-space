@@ -10,7 +10,7 @@ const copy = {
   en: {
     eyebrow: 'Schedule a Visit',
     heading: 'See the room. Picture your day.',
-    intro: 'Choose an available time and tell us what you are planning. We will confirm the visit and help you understand the space, packages, and next steps.',
+    intro: 'Choose an available time to book your visit. We’ll confirm it right away and send your calendar invitation and reminders.',
     pill: '30-minute visits · By appointment',
     languageLabel: 'Español',
     languageHref: '/es/visit',
@@ -20,7 +20,7 @@ const copy = {
   es: {
     eyebrow: 'Visitas privadas del lugar',
     heading: 'Conoce el espacio. Imagina tu día.',
-    intro: 'Elige una hora disponible y cuéntanos qué estás planeando. Confirmaremos tu visita y te ayudaremos a conocer el espacio, los paquetes y los próximos pasos.',
+    intro: 'Elige una hora disponible para reservar tu visita. La confirmaremos al instante y te enviaremos la invitación y los recordatorios.',
     pill: 'Visitas privadas de 30 minutos · Con cita previa',
     languageLabel: 'English',
     languageHref: '/visit',

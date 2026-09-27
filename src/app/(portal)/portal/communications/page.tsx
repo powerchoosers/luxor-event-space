@@ -17,7 +17,7 @@ import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, Por
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
-  { value: 'tour_requested', label: 'Tour Requested' },
+  { value: 'tour_requested', label: 'Tour Time Needed' },
   { value: 'tour_confirmed', label: 'Tour Confirmed' },
   { value: 'proposal_sent', label: 'Proposal Sent' },
   { value: 'booked', label: 'Booked' },

@@ -151,7 +151,7 @@ export default function CalendarPage() {
 
   const tourItems = useMemo<PortalCalendarItem[]>(() => {
     const tourCards = data.tours
-      .filter((tour) => tour.preferred_tour_date)
+      .filter((tour) => tour.preferred_tour_date && tour.tour_attendance_status !== 'cancelled')
       .map((tour) => ({
         id: `tour-${tour.id}`,
         date: tour.preferred_tour_date!,
@@ -171,7 +171,7 @@ export default function CalendarPage() {
       } satisfies PortalCalendarItem))
 
     // Published availability is represented by the day status, not as a placeholder
-    // calendar item. Only actual tour requests belong in the calendar contents.
+    // calendar item. Only booked tours with a saved date belong in the calendar.
     return tourCards
   }, [busyId, data.slots, data.tours])
 

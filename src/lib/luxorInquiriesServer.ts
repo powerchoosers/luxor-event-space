@@ -141,14 +141,22 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     row.source === 'newsletter' ||
     row.metadata?.marketing_source === 'newsletter' ||
     row.metadata?.submitted_form === 'Newsletter Signup'
-  const status = row.preferred_tour_date || row.preferred_tour_time ? 'tour_requested' : 'new'
-  const pipelineStage: LuxorPipelineStage = isNewsletter ? 'newsletter' : status === 'tour_requested' ? 'tour' : 'inquiry'
+  const hasReservedTourSlot = Boolean(reservedTourSlot)
+  const status = row.preferred_tour_date || row.preferred_tour_time
+    ? hasReservedTourSlot ? 'tour_confirmed' : 'tour_requested'
+    : 'new'
+  const pipelineStage: LuxorPipelineStage = isNewsletter && !hasReservedTourSlot
+    ? 'newsletter'
+    : status === 'tour_requested' || status === 'tour_confirmed' ? 'tour' : 'inquiry'
   const insertPayload = {
     ...row,
+    metadata: reservedTourSlot
+      ? { ...row.metadata, autoScheduleTour: true, tourBookingType: 'confirmed_slot' }
+      : row.metadata,
     internal_notification_requested: true,
     status,
     pipeline_stage: pipelineStage,
-    tour_attendance_status: status === 'tour_requested' ? 'pending' : null,
+    tour_attendance_status: status === 'tour_requested' || status === 'tour_confirmed' ? 'pending' : null,
   }
   let created: LuxorInquiry | undefined
   try {
@@ -300,9 +308,9 @@ export async function getLuxorInquiryByTourToken(token: string) {
   return inquiry ?? null
 }
 
-export async function listLuxorTourRequests(limit = 1000) {
+export async function listLuxorConfirmedTours(limit = 1000) {
   return supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,
+    `luxor_inquiries?select=*&status=eq.tour_confirmed&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
 

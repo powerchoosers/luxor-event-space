@@ -542,7 +542,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       return { title: `Reply to ${name}`, detail: `${candidate.event_type || 'Event'} inquiry · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'reply' as const, mode: candidate.email ? 'compose' as NextBestActionMode : 'open' as NextBestActionMode, inquiry: candidate }
     }
     if (candidate.status === 'tour_requested') {
-      return { title: `Schedule ${name}'s tour`, detail: `Tour request · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'tour' as const, mode: 'open' as NextBestActionMode, inquiry: candidate }
+      return { title: `Set ${name}'s tour time`, detail: `Tour time needed · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'tour' as const, mode: 'open' as NextBestActionMode, inquiry: candidate }
     }
     if (candidate.status === 'proposal_sent') {
       return { title: `Follow up on ${name}'s proposal`, detail: `Proposal sent · ${waiting}`, href: `/portal/leads/${candidate.id}`, kind: 'proposal' as const, mode: candidate.email ? 'compose' as NextBestActionMode : 'open' as NextBestActionMode, inquiry: candidate }

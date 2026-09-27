@@ -69,7 +69,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
 
   const stats = [
     { label: 'Total Inquiries', value: totals.leads.toLocaleString(), detail: 'All inquiry records' },
-    { label: 'Tour Pipeline', value: totals.tours.toLocaleString(), detail: 'Tour requested through booked' },
+    { label: 'Tour Pipeline', value: totals.tours.toLocaleString(), detail: 'Tour scheduled through booked' },
     { label: 'Booked', value: totals.bookings.toLocaleString(), detail: 'Inquiries marked booked' },
     { label: 'Booking Conversion', value: `${totals.conversionRate}%`, detail: 'Booked ÷ total inquiries' },
     { label: 'Recorded Sources', value: totals.sourceCount.toLocaleString(), detail: 'Distinct saved source values' },

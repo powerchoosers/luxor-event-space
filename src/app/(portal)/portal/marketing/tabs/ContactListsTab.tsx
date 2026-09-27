@@ -265,7 +265,7 @@ export function ContactListsTab({
       { label: 'All Forms', count: allContacts.length, filterVal: 'all' },
       { label: 'Wedding Inquiry', count: countsMap.get('Wedding Inquiry') || 0, filterVal: 'Wedding Inquiry' },
       { label: 'Quinceañera Inquiry', count: countsMap.get('Quinceañera Inquiry') || 0, filterVal: 'Quinceañera Inquiry' },
-      { label: 'Venue Tour Request', count: countsMap.get('Venue Tour Request') || 0, filterVal: 'Venue Tour Request' },
+      { label: 'Venue Tour Inquiry', count: countsMap.get('Venue Tour Request') || 0, filterVal: 'Venue Tour Request' },
       { label: 'Pricing Guide Download', count: countsMap.get('Pricing Guide Download') || 0, filterVal: 'Pricing Guide Download' },
       { label: 'VIP Newsletter Signup', count: countsMap.get('VIP Newsletter Signup') || countsMap.get('VIP Newsletter') || 0, filterVal: 'VIP Newsletter' },
       { label: 'Vendor Application', count: countsMap.get('Vendor Application') || 0, filterVal: 'Vendor Application' },
@@ -974,7 +974,7 @@ export function ContactListsTab({
                   { value: 'General Contact Form', label: 'General Contact Form' },
                   { value: 'Wedding Inquiry', label: 'Wedding Inquiry' },
                   { value: 'Quinceañera Inquiry', label: 'Quinceañera Inquiry' },
-                  { value: 'Venue Tour Request', label: 'Venue Tour Request' },
+                  { value: 'Venue Tour Request', label: 'Venue Tour Inquiry' },
                   { value: 'Newsletter Signup', label: 'Newsletter Signup' },
                   { value: 'Manual Entry', label: 'Manual Entry' },
                 ]}

@@ -224,8 +224,9 @@ export function LuxorConciergeChat() {
   const contactComplete =
     contactDetails.name.trim().length > 1 &&
     contactDetails.phone.replace(/\D/g, '').length >= 10
+  const bookingEmailComplete = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactDetails.email.trim())
   const hasTourTime = Boolean(tourSelection || preferredTourWindow)
-  const bookingReady = contactComplete && hasTourTime
+  const bookingReady = contactComplete && hasTourTime && (!tourSelection || bookingEmailComplete)
   const availableTourDates = useMemo(() => new Set(tourSlots.map((slot) => slot.date)), [tourSlots])
   const selectedDateSlots = useMemo(
     () => tourSlots.filter((slot) => slot.date === selectedTourDate),
@@ -392,6 +393,8 @@ export function LuxorConciergeChat() {
         selectedEvent: selectedEvent?.label ?? null,
         selectedTourSlotId: tourSelection?.id ?? null,
         selectedTourLabel: tourSelection?.label ?? null,
+        autoScheduleTour: Boolean(tourSelection),
+        tourBookingType: tourSelection ? 'confirmed_slot' : 'pending_custom_request',
         chatMessages: messages.map(({ role, content }) => ({ role, content })),
       },
     }
@@ -416,7 +419,7 @@ export function LuxorConciergeChat() {
           role: 'assistant',
           content:
             tourSelection
-              ? `Perfect, ${contactDetails.name.trim()}. Your appointment for ${tourSelection.label} is reserved. A Luxor coordinator will follow up within one business day.`
+              ? `Perfect, ${contactDetails.name.trim()}. Your tour for ${tourSelection.label} is confirmed. A confirmation and reminders are on the way.`
               : `Thank you, ${contactDetails.name.trim()}. Your ${preferredTourWindow.toLowerCase()} tour request is with the Luxor team. A coordinator will follow up within one business day.`,
         },
       ])
@@ -509,13 +512,16 @@ export function LuxorConciergeChat() {
               <p className="mb-2 font-serif text-lg text-[#f7efe3]">{toCalendarDate(selectedTourDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
               <PortalSelect
                 value={tourSelection?.id ?? ''}
-                onChange={(value) => setTourSelection(selectedDateSlots.find((slot) => slot.id === value) ?? null)}
+                onChange={(value) => {
+                  setTourSelection(selectedDateSlots.find((slot) => slot.id === value) ?? null)
+                  setShowOptionalContactDetails(true)
+                }}
                 className="w-full"
                 buttonClassName="!h-12 !rounded-md !border-[#caa24c]/25 !bg-[#080706] !px-3 !py-0 !text-left !text-sm !text-[#eadcc8]"
                 placeholder="Choose a time"
                 options={selectedDateSlots.map((slot) => ({ value: slot.id, label: slot.time }))}
               />
-              {tourSelection ? <p className="mt-2 text-[10px] text-[#d7c29a]/60">Selected: {tourSelection.label}</p> : null}
+              {tourSelection ? <p className="mt-2 text-[10px] text-[#d7c29a]/60">Selected: {tourSelection.label}. Add your email to receive the calendar confirmation and reminders.</p> : null}
             </motion.div>
           )}
         </AnimatePresence>
@@ -584,8 +590,9 @@ export function LuxorConciergeChat() {
                   <input
                     value={contactDetails.email}
                     onChange={(event) => updateContactDetail('email', event.target.value)}
-                    placeholder="Email (optional)"
+                    placeholder={tourSelection ? 'Email (required for booking)' : 'Email (optional)'}
                     type="email"
+                    required={Boolean(tourSelection)}
                     className="w-full rounded-md border border-[#caa24c]/18 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-[#f7efe3] outline-none placeholder:text-[#d7c29a]/38 focus:border-[#f1d27a]/60"
                   />
                 </label>
@@ -621,7 +628,7 @@ export function LuxorConciergeChat() {
           disabled={!bookingReady || submitted || submittingInquiry}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {submitted ? 'Tour requested' : submittingInquiry ? 'Sending request' : bookingReady ? (tourSelection ? 'Reserve tour' : 'Send tour request') : hasTourTime ? 'Add name + phone' : 'Pick a time'}
+          {submitted ? (tourSelection ? 'Tour confirmed' : 'Tour request sent') : submittingInquiry ? (tourSelection ? 'Booking tour' : 'Sending request') : bookingReady ? (tourSelection ? 'Confirm tour' : 'Send tour request') : hasTourTime ? tourSelection && !bookingEmailComplete ? 'Add email to confirm' : 'Add name + phone' : 'Pick a time'}
           <Check className="h-4 w-4" />
         </button>
       </motion.div>

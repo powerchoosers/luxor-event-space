@@ -235,8 +235,10 @@ export function usePortalNotifications() {
             let title = `New Inquiry: ${fullName}`
             if (source.toLowerCase().includes('rsvp') || eventType.toLowerCase().includes('rsvp')) {
               title = `New RSVP: ${fullName}`
+            } else if (inq.status === 'tour_confirmed') {
+              title = `Tour Confirmed: ${fullName}`
             } else if (source.toLowerCase().includes('tour') || inq.status === 'tour_requested') {
-              title = `Tour Request: ${fullName}`
+              title = `Tour Time Needed: ${fullName}`
             } else if (source.toLowerCase().includes('booking') || eventType.toLowerCase().includes('booking')) {
               title = `New Booking Request: ${fullName}`
             }
