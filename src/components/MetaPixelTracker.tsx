@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 
 type Fbq = ((...args: unknown[]) => void) & {
   callMethod?: (...args: unknown[]) => void
+  push?: (...args: unknown[]) => void
   queue?: unknown[][]
   loaded?: boolean
   version?: string
@@ -13,6 +14,7 @@ type Fbq = ((...args: unknown[]) => void) & {
 declare global {
   interface Window {
     fbq?: Fbq
+    _fbq?: Fbq
     __luxorMetaPixelReady?: boolean
   }
 }
@@ -143,6 +145,8 @@ function MetaPixelTrackerInner() {
       fbq.loaded = true
       fbq.version = '2.0'
       window.fbq = fbq
+      if (!window._fbq) window._fbq = fbq
+      fbq.push = fbq
 
       const script = document.createElement('script')
       script.async = true
