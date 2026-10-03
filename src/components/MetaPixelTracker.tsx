@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 
 type Fbq = ((...args: unknown[]) => void) & {
@@ -13,28 +13,69 @@ type Fbq = ((...args: unknown[]) => void) & {
 declare global {
   interface Window {
     fbq?: Fbq
+    __luxorMetaPixelReady?: boolean
   }
 }
 
 const pixelId = '28920520380920564'
 
-function isPrivateOrTransactionalPage(pathname: string) {
-  return (
-    pathname === '/tour-response' ||
-    pathname.startsWith('/tour-response/') ||
-    pathname === '/payment/success' ||
-    pathname.startsWith('/payment/success/') ||
-    pathname === '/payment/cancelled' ||
-    pathname.startsWith('/payment/cancelled/')
-  )
+const publicMarketingPaths = new Set([
+  '/',
+  '/contact',
+  '/es',
+  '/es/contact',
+  '/es/tour',
+  '/es/visit',
+  '/events',
+  '/gallery',
+  '/grand-opening-rsvp',
+  '/spaces',
+  '/tour',
+  '/visit',
+])
+
+function isPublicMarketingPage(pathname: string) {
+  if (publicMarketingPaths.has(pathname)) return true
+
+  const eventSlugMatch = pathname.match(/^\/events\/([a-z0-9]+(?:-[a-z0-9]+)*)$/)
+  return Boolean(eventSlugMatch)
+}
+
+function hasUnsafeSameOriginReferrer() {
+  if (!document.referrer) return false
+
+  try {
+    const referrer = new URL(document.referrer)
+    return referrer.origin === window.location.origin && (
+      !isPublicMarketingPage(referrer.pathname) || Boolean(referrer.search || referrer.hash)
+    )
+  } catch {
+    return true
+  }
 }
 
 export function MetaPixelTracker() {
   const pathname = usePathname()
+  const trackingDisabled = useRef(false)
 
   useEffect(() => {
-    if (isPrivateOrTransactionalPage(pathname)) return
+    if (
+      !isPublicMarketingPage(pathname) ||
+      window.location.search ||
+      window.location.hash ||
+      hasUnsafeSameOriginReferrer()
+    ) {
+      trackingDisabled.current = true
+    }
 
+    if (trackingDisabled.current) {
+      // If the script was loaded on an earlier route in this SPA session,
+      // disable pixel tracking before the visitor interacts with this page.
+      window.fbq?.('consent', 'revoke')
+      return
+    }
+
+    // Meta derives the page URL from window.location.href; only clean URLs reach it.
     if (typeof window.fbq !== 'function') {
       const fbq = ((...args: unknown[]) => {
         if (fbq.callMethod) fbq.callMethod(...args)
@@ -47,24 +88,33 @@ export function MetaPixelTracker() {
 
       const script = document.createElement('script')
       script.async = true
+      script.id = 'luxor-meta-pixel-script'
       script.src = 'https://connect.facebook.net/en_US/fbevents.js'
+      script.onload = () => {
+        window.__luxorMetaPixelReady = true
+        if (
+          !trackingDisabled.current &&
+          isPublicMarketingPage(window.location.pathname) &&
+          !window.location.search &&
+          !window.location.hash &&
+          !hasUnsafeSameOriginReferrer()
+        ) {
+          window.fbq?.('consent', 'grant')
+          window.fbq?.('track', 'PageView')
+        } else {
+          window.fbq?.('consent', 'revoke')
+        }
+      }
       document.head.appendChild(script)
 
       fbq('init', pixelId)
     }
 
-    window.fbq?.('track', 'PageView')
+    if (window.__luxorMetaPixelReady) {
+      window.fbq?.('consent', 'grant')
+      window.fbq?.('track', 'PageView')
+    }
   }, [pathname])
 
-  return (
-    <noscript>
-      <img
-        height="1"
-        width="1"
-        style={{ display: 'none' }}
-        src={`https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1`}
-        alt=""
-      />
-    </noscript>
-  )
+  return null
 }
