@@ -18,10 +18,23 @@ declare global {
 
 const pixelId = '28920520380920564'
 
+function isPrivateOrTransactionalPage(pathname: string) {
+  return (
+    pathname === '/tour-response' ||
+    pathname.startsWith('/tour-response/') ||
+    pathname === '/payment/success' ||
+    pathname.startsWith('/payment/success/') ||
+    pathname === '/payment/cancelled' ||
+    pathname.startsWith('/payment/cancelled/')
+  )
+}
+
 export function MetaPixelTracker() {
   const pathname = usePathname()
 
   useEffect(() => {
+    if (isPrivateOrTransactionalPage(pathname)) return
+
     if (typeof window.fbq !== 'function') {
       const fbq = ((...args: unknown[]) => {
         if (fbq.callMethod) fbq.callMethod(...args)
