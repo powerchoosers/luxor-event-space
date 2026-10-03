@@ -11,6 +11,7 @@ import { RouteTransition } from '@/components/RouteTransition'
 import { PublicConversionTracker } from '@/components/PublicConversionTracker'
 import { PublicMobileActions } from '@/components/PublicMobileActions'
 import { SmoothScroll } from '@/components/SmoothScroll'
+import { MetaPixelTracker } from '@/components/MetaPixelTracker'
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -120,6 +121,7 @@ export default function RootLayout({
             });
           `}
         </Script>
+        <MetaPixelTracker />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(venueStructuredData) }}
