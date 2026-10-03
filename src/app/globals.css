@@ -1206,6 +1206,10 @@ body[data-luxor-site] #hero .hero-brochure-cta svg {
 }
 
 /* Photo titles sit over darkened imagery and must remain readable on the public light theme. */
+body[data-luxor-site] main .home-gallery-photo {
+  border-color: #caa24c !important;
+}
+
 body[data-luxor-site] main .gallery-photo-title {
   color: #fff !important;
 }

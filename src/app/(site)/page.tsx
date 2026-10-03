@@ -96,7 +96,7 @@ export default function Home() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {curatedPhotos.map((photo, idx) => (
               <Reveal key={photo.src} delay={idx * 70} variant="scale" amount={16}>
-                <div className="group relative aspect-[4/5] overflow-hidden rounded-xl border border-[#caa24c]/25 bg-[#0f0c0a] shadow-lg transition-transform duration-300 hover:scale-[1.02]">
+                <div className="home-gallery-photo group relative aspect-[4/5] overflow-hidden rounded-xl border border-[#caa24c] bg-[#0f0c0a] shadow-lg transition-transform duration-300 hover:scale-[1.02]">
                   <Image
                     src={photo.src}
                     alt={photo.alt}
