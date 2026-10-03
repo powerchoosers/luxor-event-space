@@ -58,13 +58,37 @@ function hasUnsafeSameOriginReferrer() {
   }
 }
 
-const utmParameterNames = new Set([
-  'utm_source',
-  'utm_medium',
-  'utm_campaign',
-  'utm_content',
-  'utm_term',
-])
+// Keep Meta's reported page URL limited to fixed campaign labels. Free-form
+// campaign/content/term values can contain names or other personal details.
+const safeUtmValues: Record<'utm_source' | 'utm_medium', ReadonlySet<string>> = {
+  utm_source: new Set([
+    'adwords',
+    'bing',
+    'duckduckgo',
+    'facebook',
+    'facebook_ads',
+    'google',
+    'googleads',
+    'instagram',
+    'instagram_ads',
+    'meta_ads',
+    'qr',
+    'tiktok',
+    'yahoo',
+  ]),
+  utm_medium: new Set([
+    'cpc',
+    'display',
+    'email',
+    'organic',
+    'paidsearch',
+    'paidsocial',
+    'ppc',
+    'qr',
+    'referral',
+    'social',
+  ]),
+}
 
 function isSafeCampaignQuery(search: string) {
   if (!search) return true
@@ -80,16 +104,8 @@ function isSafeCampaignQuery(search: string) {
       continue
     }
 
-    // UTM values are campaign labels, not arbitrary input. Restrict them to
-    // short URL-safe slugs and reject email/phone-like values. All other query
-    // keys (including booking and form fields) disable tracking for this SPA.
-    if (
-      !utmParameterNames.has(key) ||
-      value.length > 60 ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) ||
-      /\d{7,}/.test(value) ||
-      /(?:email|phone|mobile|guest|customer|full[-_]?name)/i.test(value)
-    ) return false
+    if (key !== 'utm_source' && key !== 'utm_medium') return false
+    if (!safeUtmValues[key].has(value.toLowerCase())) return false
   }
   return true
 }
@@ -191,3 +207,4 @@ export function MetaPixelTracker() {
     </Suspense>
   )
 }
+
