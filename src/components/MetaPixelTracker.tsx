@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { Suspense, useEffect, useRef, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 type Fbq = ((...args: unknown[]) => void) & {
   callMethod?: (...args: unknown[]) => void
+  push?: (...args: unknown[]) => void
   queue?: unknown[][]
   loaded?: boolean
   version?: string
@@ -13,6 +14,7 @@ type Fbq = ((...args: unknown[]) => void) & {
 declare global {
   interface Window {
     fbq?: Fbq
+    _fbq?: Fbq
     __luxorMetaPixelReady?: boolean
   }
 }
@@ -47,22 +49,95 @@ function hasUnsafeSameOriginReferrer() {
   try {
     const referrer = new URL(document.referrer)
     return referrer.origin === window.location.origin && (
-      !isPublicMarketingPage(referrer.pathname) || Boolean(referrer.search || referrer.hash)
+      !isPublicMarketingPage(referrer.pathname) ||
+      Boolean(referrer.hash) ||
+      !isSafeCampaignQuery(referrer.search)
     )
   } catch {
     return true
   }
 }
 
-export function MetaPixelTracker() {
+// Keep Meta's reported page URL limited to fixed campaign labels. Free-form
+// campaign/content/term values can contain names or other personal details.
+const safeUtmValues: Record<'utm_source' | 'utm_medium', ReadonlySet<string>> = {
+  utm_source: new Set([
+    'adwords',
+    'bing',
+    'duckduckgo',
+    'facebook',
+    'facebook_ads',
+    'google',
+    'googleads',
+    'instagram',
+    'instagram_ads',
+    'meta_ads',
+    'qr',
+    'tiktok',
+    'yahoo',
+  ]),
+  utm_medium: new Set([
+    'cpc',
+    'display',
+    'email',
+    'organic',
+    'paidsearch',
+    'paidsocial',
+    'ppc',
+    'qr',
+    'referral',
+    'social',
+  ]),
+}
+
+function isSafeCampaignQuery(search: string) {
+  if (!search) return true
+
+  const params = new URLSearchParams(search)
+  const seen = new Set<string>()
+  for (const [key, value] of params) {
+    if (seen.has(key)) return false
+    seen.add(key)
+
+    if (key === 'fbclid') {
+      if (!/^[A-Za-z0-9_-]{20,300}$/.test(value)) return false
+      continue
+    }
+
+    if (key !== 'utm_source' && key !== 'utm_medium') return false
+    if (!safeUtmValues[key].has(value.toLowerCase())) return false
+  }
+  return true
+}
+
+function isSafeCampaignLanding() {
+  if (!isSafeCampaignQuery(window.location.search)) return false
+  // Only short UTM campaign slugs and Meta's opaque click identifier can reach
+  // Meta. Other query values can contain customer or event details, so they
+  // disable tracking for this SPA session.
+  return true
+}
+
+function MetaPixelTrackerInner() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const search = searchParams.toString()
+  const [hash, setHash] = useState(() => typeof window === 'undefined' ? '' : window.location.hash)
   const trackingDisabled = useRef(false)
+  const lastPageViewPath = useRef<string | null>(null)
+
+  useEffect(() => {
+    const updateHash = () => setHash(window.location.hash)
+    updateHash()
+    window.addEventListener('hashchange', updateHash)
+    return () => window.removeEventListener('hashchange', updateHash)
+  }, [])
 
   useEffect(() => {
     if (
       !isPublicMarketingPage(pathname) ||
-      window.location.search ||
-      window.location.hash ||
+      !isSafeCampaignLanding() ||
+      hash ||
       hasUnsafeSameOriginReferrer()
     ) {
       trackingDisabled.current = true
@@ -75,7 +150,8 @@ export function MetaPixelTracker() {
       return
     }
 
-    // Meta derives the page URL from window.location.href; only clean URLs reach it.
+    // Only allowlisted campaign metadata and Meta's opaque click id may remain
+    // in the URL when the browser Pixel reports the page location.
     if (typeof window.fbq !== 'function') {
       const fbq = ((...args: unknown[]) => {
         if (fbq.callMethod) fbq.callMethod(...args)
@@ -85,6 +161,8 @@ export function MetaPixelTracker() {
       fbq.loaded = true
       fbq.version = '2.0'
       window.fbq = fbq
+      if (!window._fbq) window._fbq = fbq
+      fbq.push = fbq
 
       const script = document.createElement('script')
       script.async = true
@@ -95,10 +173,11 @@ export function MetaPixelTracker() {
         if (
           !trackingDisabled.current &&
           isPublicMarketingPage(window.location.pathname) &&
-          !window.location.search &&
+          isSafeCampaignQuery(window.location.search) &&
           !window.location.hash &&
           !hasUnsafeSameOriginReferrer()
         ) {
+          lastPageViewPath.current = window.location.pathname
           window.fbq?.('consent', 'grant')
           window.fbq?.('track', 'PageView')
         } else {
@@ -107,14 +186,25 @@ export function MetaPixelTracker() {
       }
       document.head.appendChild(script)
 
+      fbq('set', 'autoConfig', false, pixelId)
       fbq('init', pixelId)
     }
 
-    if (window.__luxorMetaPixelReady) {
+    if (window.__luxorMetaPixelReady && lastPageViewPath.current !== pathname) {
+      lastPageViewPath.current = pathname
       window.fbq?.('consent', 'grant')
       window.fbq?.('track', 'PageView')
     }
-  }, [pathname])
+  }, [hash, pathname, search])
 
   return null
 }
+
+export function MetaPixelTracker() {
+  return (
+    <Suspense fallback={null}>
+      <MetaPixelTrackerInner />
+    </Suspense>
+  )
+}
+
