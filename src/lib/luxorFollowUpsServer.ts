@@ -204,10 +204,11 @@ export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBro
 }
 
 export async function recordLuxorFollowUpResponse(inquiryId: string) {
-  await supabaseRest(
-    `luxor_follow_up_enrollments?inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=eq.active`,
-    { method: 'PATCH', body: JSON.stringify({ response_received_at: new Date().toISOString(), updated_at: new Date().toISOString() }) },
+  const updated = await supabaseRest<Array<{ id: string }>>(
+    `luxor_follow_up_enrollments?inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=in.(active,paused)`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ response_received_at: new Date().toISOString(), updated_at: new Date().toISOString() }) },
   )
+  return updated.length > 0
 }
 
 export async function setLuxorFollowUpDisposition(inquiryId: string, disposition: 'no_response' | 'not_interested' | 'lost_another_venue' | 'event_canceled' | null, reason?: string) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { CalendarClock, Check, ChevronRight, CircleAlert, Eye, Mail, Phone, Plus, Search, Settings2, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
+import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask, phoneCompletionNeedsOutcome } from '@/lib/luxorFollowUpTaskPolicy'
 import { PortalButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -14,7 +15,7 @@ type EmailAction = { id: string; inquiry_id: string; step_key: string; scheduled
 type FollowUpRow = { id: string; inquiryId: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }
 
 function taskChannel(task: LuxorTask): Channel {
-  return task.description?.startsWith('[follow-up:email]') ? 'email' : 'phone'
+  return getLuxorFollowUpTaskChannel(task)
 }
 
 function taskNotes(task: LuxorTask) {
@@ -65,6 +66,7 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [assignees, setAssignees] = useState<string[]>([])
   const [emailActions, setEmailActions] = useState<EmailAction[]>([])
+  const [sendingEnabled, setSendingEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [channel, setChannel] = useState('all')
@@ -85,7 +87,7 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [activity, setActivity] = useState<Activity[]>([])
   const [sequence, setSequence] = useState<SequenceInfo | null>(null)
-  const [savedDisposition, setSavedDisposition] = useState<string | undefined>(undefined)
+  const [savedDispositions, setSavedDispositions] = useState<Record<string, string>>({})
   const today = luxorToday()
 
   const refresh = useCallback(async () => {
@@ -97,10 +99,11 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
       ])
       if (!response.ok || !emailResponse.ok) throw new Error('Follow-up tasks could not be loaded.')
       const result = (await response.json()) as { tasks: LuxorTask[]; assignees: string[] }
-      const emailResult = (await emailResponse.json()) as { emailActions: EmailAction[] }
+      const emailResult = (await emailResponse.json()) as { emailActions: EmailAction[]; sendingEnabled: boolean }
       setTasks(result.tasks)
       setAssignees(result.assignees)
       setEmailActions(emailResult.emailActions)
+      setSendingEnabled(emailResult.sendingEnabled)
       if (!assignee && result.assignees[0]) setAssignee(result.assignees[0])
     } catch (error) {
       notify({ title: 'Follow-up tasks could not be loaded', description: error instanceof Error ? error.message : 'Try again in a moment.', variant: 'error' })
@@ -151,13 +154,25 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   async function saveDisposition(inquiryId: string, disposition: string) {
     const response = await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, action: 'disposition', disposition: disposition || null }) })
     if (!response.ok) { notify({ title: 'Lead disposition could not be saved', variant: 'error' }); return }
-    setSavedDisposition(disposition)
+    setSavedDispositions((current) => ({ ...current, [inquiryId]: disposition }))
+    if (['not_interested', 'lost_another_venue', 'event_canceled'].includes(disposition)) {
+      setSequence((current) => current ? { ...current, status: 'stopped', ended_reason: disposition } : current)
+    }
     notify({ title: 'Lead disposition updated', description: disposition === 'no_response' ? 'No Response does not stop the sequence.' : disposition ? 'Pending brochure follow-ups have been stopped.' : 'The disposition was cleared.', variant: 'success' })
+  }
+
+  async function markLeadResponse(inquiryId: string) {
+    const response = await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, action: 'response' }) })
+    if (!response.ok) { notify({ title: 'The response could not be recorded', variant: 'error' }); return }
+    const result = await response.json() as { recorded: boolean }
+    if (!result.recorded) return
+    setSequence((current) => current ? { ...current, response_received_at: new Date().toISOString() } : current)
+    notify({ title: 'Lead response recorded', description: 'The sequence continues. It will not be marked No Response.', variant: 'success' })
   }
 
   const leadById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads])
   const eventTypes = useMemo(() => [...new Set(leads.map((lead) => lead.event_type).filter((value): value is string => Boolean(value)))].sort(), [leads])
-  const followUpTasks = useMemo(() => tasks.filter((task) => task.description?.startsWith('[follow-up:')), [tasks])
+  const followUpTasks = useMemo(() => tasks.filter(isLuxorFollowUpTask), [tasks])
   const rows = useMemo<FollowUpRow[]>(() => [
     ...followUpTasks.map((task) => ({ id: task.id, inquiryId: task.inquiry_id, channel: taskChannel(task), title: task.title, dueAt: task.due_at ?? null, dueDate: task.due_date ?? null, status: dateState(task, today), assignee: task.assigned_to ?? 'Unassigned', task })),
     ...emailActions.map((action) => ({ id: action.id, inquiryId: action.inquiry_id, channel: 'email' as const, title: `Email ${action.step_key.replace('email_', '#')}`, dueAt: action.scheduled_at, dueDate: null, status: luxorDate(action.scheduled_at) < today ? 'Overdue' : luxorDate(action.scheduled_at) === today ? 'Due today' : 'Upcoming', assignee: 'Automated' })),
@@ -178,7 +193,7 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
     { label: 'Overdue', value: rows.filter((row) => row.status === 'Overdue').length },
     { label: 'Automated Emails', value: emailActions.length },
     { label: 'Phone Calls', value: pending.filter((task) => taskChannel(task) === 'phone').length },
-    { label: 'Upcoming', value: pending.filter((task) => dateState(task, today) === 'Upcoming').length },
+    { label: 'Upcoming', value: rows.filter((row) => row.status === 'Upcoming').length },
   ]
 
   async function saveTask(event: FormEvent<HTMLFormElement>) {
@@ -206,18 +221,19 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   }
 
   async function updateTask(task: LuxorTask, status: 'completed' | 'cancelled', dueDateValue?: string, outcome?: string) {
-    if (status === 'completed' && taskChannel(task) === 'phone' && !outcome) return
+    if (status === 'completed' && phoneCompletionNeedsOutcome(taskChannel(task), outcome, Boolean(dueDateValue))) return
     setBusyId(task.id)
     try {
       const time = task.due_at ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(task.due_at)) : '09:00'
       const dueAt = dueDateValue ? localLuxorIso(dueDateValue, time) : undefined
+      const taskPatch = buildFollowUpTaskPatch({ status, dueDate: dueDateValue, dueAt, outcome, channel: taskChannel(task), completedAt: new Date().toISOString() })
       const response = await fetch('/api/tasks', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: task.id, ...(dueDateValue ? { due_date: dueDateValue, due_at: dueAt } : { status, completed_at: status === 'completed' ? new Date().toISOString() : null, ...(outcome && taskChannel(task) === 'phone' ? { call_outcome: outcome } : {}) }) }),
+        body: JSON.stringify({ id: task.id, ...taskPatch }),
       })
       if (!response.ok) throw new Error('Could not update this follow-up.')
       if (outcome === 'reached') {
-        await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, action: 'response' }) })
+        await markLeadResponse(task.inquiry_id)
       }
       await refresh()
     } catch (error) {
@@ -228,7 +244,7 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 text-[color:var(--portal-text)]">
       <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-3 text-sm">
-        <div className="flex items-start gap-2"><CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" /><p><strong>Automated brochure follow-up is off.</strong> Email #1 already runs through the brochure delivery flow. The additional sequence stays disabled until timing and send approval are confirmed. This feature will not automatically email or text leads.</p></div>
+        <div className="flex items-start gap-2"><CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" /><p><strong>{sendingEnabled ? 'Automated brochure follow-up is on.' : 'Automated brochure follow-up is off.'}</strong> Email #1 uses the existing brochure delivery. New sequence enrollment requires an opted-in brochure lead. Email replies are not automatically matched here; check Inbox and record a response on the lead to prevent an incorrect No Response outcome. Calls remain manual reminders, and no texts are sent.</p></div>
       </div>
       <div><PortalButton variant="ghost" onClick={() => void openTemplateSettings()}><Settings2 size={15} /> Edit templates</PortalButton></div>
       {settingsOpen && <section className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-surface)] p-4"><div className="flex items-center justify-between"><div><h2 className="font-medium">Brochure sequence templates</h2><p className="text-xs text-[color:var(--portal-muted)]">Preview and save template content, timing, and individual active flags. Saving here cannot approve or enable sequence delivery.</p></div><PortalButton variant="ghost" onClick={() => setSettingsOpen(false)}>Close</PortalButton></div>{templates.map((template) => <article key={template.id} className="grid gap-3 border-t border-[color:var(--portal-border)] pt-3 md:grid-cols-[minmax(12rem,0.7fr)_minmax(18rem,1.3fr)]"><div><div className="font-medium">{template.name}</div><div className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.channel === 'email' ? 'Email' : 'Manual phone task'} · day {template.delay_days}</div><label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={template.active} onChange={(event) => changeTemplate(template.id, 'active', event.target.checked)} /> Template active</label><label className="mt-2 block text-xs">Day offset<input type="number" min="0" max="365" value={template.delay_days} onChange={(event) => changeTemplate(template.id, 'delay_days', Number(event.target.value))} className="mt-1 w-24 rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1" /></label><div className="mt-3 flex gap-2"><PortalButton size="sm" onClick={() => void saveTemplate(template)}>Save</PortalButton><PortalButton size="sm" variant="ghost" onClick={() => setPreviewId(previewId === template.id ? null : template.id)}><Eye size={14} /> Preview</PortalButton></div></div><div className="space-y-2">{template.channel === 'email' && <label className="block text-xs">Subject<input value={template.subject ?? ''} onChange={(event) => changeTemplate(template.id, 'subject', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>}<label className="block text-xs">Body<textarea value={template.body ?? ''} onChange={(event) => changeTemplate(template.id, 'body', event.target.value)} rows={3} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>{template.channel === 'email' && <div className="grid gap-2 sm:grid-cols-2"><label className="block text-xs">CTA label<input value={template.cta_text ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_text', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label><label className="block text-xs">CTA link<input value={template.cta_url ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_url', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label></div>}{previewId === template.id && <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm"><strong>{template.subject}</strong><p className="mt-2 whitespace-pre-wrap">{template.body}</p><span className="mt-2 inline-block text-xs">{template.cta_text} {template.cta_url}</span></div>}</div></article>)}</section>}
@@ -265,10 +281,11 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
 
         <aside className="min-h-[18rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-surface)] p-4">
           {selected ? <>
-            <div className="border-b border-[color:var(--portal-border)] pb-3"><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><p className="mt-2 text-sm">{selected.phone ?? 'No phone'} <span className="mx-1 text-[color:var(--portal-muted)]">·</span> {selected.email ?? 'No email'}</p><label className="mt-3 block text-xs">Follow-Up Disposition<PortalSelect value={savedDisposition ?? selected.follow_up_disposition ?? ''} onChange={(value) => void saveDisposition(selected.id, value)} options={[{ value: '', label: 'No disposition' }, { value: 'no_response', label: 'No Response (sequence continues)' }, { value: 'not_interested', label: 'Not Interested (stop sequence)' }, { value: 'lost_another_venue', label: 'Lost to Another Venue (stop sequence)' }, { value: 'event_canceled', label: 'Event Canceled (stop sequence)' }]} /></label></div>
+            <div className="border-b border-[color:var(--portal-border)] pb-3"><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><p className="mt-2 text-sm">{selected.phone ?? 'No phone'} <span className="mx-1 text-[color:var(--portal-muted)]">·</span> {selected.email ?? 'No email'}</p><label className="mt-3 block text-xs">Follow-Up Disposition<PortalSelect value={Object.prototype.hasOwnProperty.call(savedDispositions, selected.id) ? savedDispositions[selected.id] : selected.follow_up_disposition ?? ''} onChange={(value) => void saveDisposition(selected.id, value)} options={[{ value: '', label: 'No disposition' }, { value: 'no_response', label: 'No Response (sequence continues)' }, { value: 'not_interested', label: 'Not Interested (stop sequence)' }, { value: 'lost_another_venue', label: 'Lost to Another Venue (stop sequence)' }, { value: 'event_canceled', label: 'Event Canceled (stop sequence)' }]} /></label></div>
             <h3 className="mt-4 flex items-center gap-2 text-sm font-semibold"><CalendarClock size={16} /> Follow-Up Timeline</h3>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <span className="text-[color:var(--portal-muted)]">Automated sequence: {sequence?.status ?? 'not enrolled'}{sequence?.response_received_at ? ' · response recorded, sequence continues' : ''}</span>
+              {(sequence?.status === 'active' || sequence?.status === 'paused') && !sequence.response_received_at && <button onClick={() => void markLeadResponse(selected.id)} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Record response</button>}
               {sequence?.status === 'active' && <button onClick={() => void changeSequence('pause')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Pause sequence</button>}
               {sequence?.status === 'paused' && <button onClick={() => void changeSequence('resume')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Resume sequence</button>}
               {(sequence?.status === 'active' || sequence?.status === 'paused') && <button onClick={() => void changeSequence('stop')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Stop sequence</button>}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorFollowUpSetup, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, stopLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
+import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, stopLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFollowUpsServer'
 
@@ -9,19 +9,20 @@ export async function GET(request: NextRequest) {
   try {
     const inquiryId = request.nextUrl.searchParams.get('inquiryId')
     if (request.nextUrl.searchParams.get('dashboard') === '1') {
+      const sendingEnabled = await isLuxorBrochureFollowUpSendingEnabled()
       const enrollments = await supabaseRest<Array<{ id: string; inquiry_id: string }>>(
-        'luxor_follow_up_enrollments?select=id,inquiry_id&automation_key=eq.brochure_lead&status=eq.active&limit=500',
+        'luxor_follow_up_enrollments?select=id,inquiry_id&automation_key=eq.brochure_lead&status=in.(active,paused)&limit=500',
       )
       const enrollmentById = new Map(enrollments.map((item) => [item.id, item.inquiry_id]))
       const ids = [...enrollmentById.keys()]
-      if (!ids.length) return NextResponse.json({ emailActions: [] })
+      if (!ids.length) return NextResponse.json({ emailActions: [], sendingEnabled })
       const actions = await supabaseRest<Array<{ id: string; enrollment_id: string; step_key: string; scheduled_at: string; status: string }>>(
         `luxor_follow_up_actions?select=id,enrollment_id,step_key,scheduled_at,status&channel=eq.email&status=in.(email_queued,scheduled)&enrollment_id=in.(${ids.map(encodeURIComponent).join(',')})&order=scheduled_at.asc&limit=1000`,
       )
       return NextResponse.json({ emailActions: actions.flatMap((item) => {
         const inquiry_id = enrollmentById.get(item.enrollment_id)
         return inquiry_id ? [{ ...item, inquiry_id }] : []
-      }) })
+      }), sendingEnabled })
     }
     if (inquiryId) {
       const [enrollment] = await supabaseRest<LuxorFollowUpEnrollment[]>(
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     }
 
     const setup = await getLuxorFollowUpSetup()
-    return NextResponse.json({ ...setup, sendsConfigured: false })
+    return NextResponse.json({ ...setup, sendsConfigured: await isLuxorBrochureFollowUpSendingEnabled() })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load follow-up settings.' }, { status: 500 })
   }
@@ -70,8 +71,8 @@ export async function POST(request: NextRequest) {
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
 
     if (action === 'response') {
-      await recordLuxorFollowUpResponse(inquiryId)
-      return NextResponse.json({ success: true })
+      const recorded = await recordLuxorFollowUpResponse(inquiryId)
+      return NextResponse.json({ success: true, recorded })
     }
     if (action === 'disposition') {
       const allowed = ['no_response', 'not_interested', 'lost_another_venue', 'event_canceled', null] as const
@@ -89,27 +90,6 @@ export async function POST(request: NextRequest) {
       await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollment.id)}`, {
         method: 'PATCH', body: JSON.stringify({ status: nextStatus, paused_at: action === 'pause' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }),
       })
-      if (action === 'pause') {
-        await supabaseRest(`luxor_email_jobs?automation_enrollment_id=eq.${encodeURIComponent(enrollment.id)}&status=eq.queued`, {
-          method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: 'Brochure follow-up paused by portal user.', updated_at: new Date().toISOString() }),
-        })
-        await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollment.id)}&status=eq.pending`, {
-          method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
-        })
-      } else {
-        const pausedReason = encodeURIComponent('Brochure follow-up paused by portal user.')
-        await supabaseRest(`luxor_email_jobs?automation_enrollment_id=eq.${encodeURIComponent(enrollment.id)}&status=eq.cancelled&last_error=eq.${pausedReason}`, {
-          method: 'PATCH', body: JSON.stringify({ status: 'queued', last_error: null, updated_at: new Date().toISOString() }),
-        })
-        const actions = await supabaseRest<Array<{ task_id: string | null; status: string }>>(
-          `luxor_follow_up_actions?select=task_id,status&enrollment_id=eq.${encodeURIComponent(enrollment.id)}&status=eq.task_created`,
-        )
-        for (const taskId of actions.map((item) => item.task_id).filter((id): id is string => Boolean(id))) {
-          await supabaseRest(`luxor_tasks?id=eq.${encodeURIComponent(taskId)}&status=eq.cancelled`, {
-            method: 'PATCH', body: JSON.stringify({ status: 'pending' }),
-          })
-        }
-      }
       return NextResponse.json({ success: true, status: nextStatus })
     }
     if (action === 'stop') {

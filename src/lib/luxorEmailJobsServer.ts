@@ -1012,11 +1012,20 @@ export async function processLuxorEmailJobs(
         const reason = 'Marketing email cancelled because this recipient is unsubscribed or suppressed.'
         await recordLuxorMarketingJobResult(job.id, 'cancelled', reason)
         await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
+        if (job.automation_enrollment_id) await stopSuppressedLuxorFollowUp(job.automation_enrollment_id)
         results.push({ id: job.id, status: 'skipped' })
         continue
       }
       if (job.automation_enrollment_id) {
         const eligible = await isLuxorFollowUpJobEligible(job)
+        if (eligible === 'paused') {
+          // The database claim may win the race with a portal pause. Return
+          // the still-queued job to the isolated queue without spending a
+          // retry attempt; resume will make it claimable again.
+          await updateLuxorEmailJob(job.id, { status: 'queued', attempts: Math.max(0, Number(job.attempts || 0) - 1), last_error: null })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
         if (!eligible) {
           const reason = 'Brochure follow-up is paused, stopped, inactive, or no longer consented.'
           await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
@@ -1064,6 +1073,14 @@ export async function processLuxorEmailJobs(
       }
       if (job.job_type === 'marketing_campaign') {
         await markMarketingJobResult(job, 'failed', message)
+      }
+      if (job.automation_enrollment_id && job.automation_step_key) {
+        await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(job.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(job.automation_step_key)}`, {
+          method: 'PATCH', body: JSON.stringify({ status: 'failed', outcome: 'email_failed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+        })
+        // Day 30 is the sequence's terminal touch. A failed provider delivery
+        // remains visibly failed, but must not leave an expired sequence active.
+        if (job.automation_step_key === 'email_5') await completeLuxorFollowUpSequence(job.automation_enrollment_id, job.inquiry_id)
       }
       results.push({ id: job.id, status: 'failed', error: message })
     }
@@ -1201,7 +1218,9 @@ async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
   const [enrollment] = await supabaseRest<Array<{ status: string; automation_key: string }>>(
     `luxor_follow_up_enrollments?select=status,automation_key&id=eq.${encodeURIComponent(job.automation_enrollment_id)}&limit=1`,
   )
-  if (!enrollment || enrollment.status !== 'active' || enrollment.automation_key !== 'brochure_lead') return false
+  if (!enrollment || enrollment.automation_key !== 'brochure_lead') return false
+  if (enrollment.status === 'paused') return 'paused' as const
+  if (enrollment.status !== 'active') return false
   const [automation] = await supabaseRest<Array<{ enabled: boolean; send_approved: boolean; timing_configured: boolean; timezone: string }>>(
     'luxor_follow_up_automations?select=enabled,send_approved,timing_configured,timezone&automation_key=eq.brochure_lead&limit=1',
   )
@@ -1226,19 +1245,35 @@ async function completeLuxorFollowUpSequence(enrollmentId: string, inquiryId: st
   if (!enrollment || enrollment.status !== 'active') return
   const now = new Date().toISOString()
   await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollmentId)}&status=eq.active`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'completed', ended_reason: 'day_30_complete', completed_at: now, nurture_eligible_at: now, updated_at: now }),
-  })
-  await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.pending`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
-  })
-  await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,task_created)`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'sequence_complete', updated_at: now }),
+    method: 'PATCH', body: JSON.stringify({ status: 'completed', ended_reason: enrollment.response_received_at ? 'day_30_complete_after_response' : 'day_30_no_response', completed_at: now, nurture_eligible_at: enrollment.response_received_at ? null : now, updated_at: now }),
   })
   if (inquiryId && !enrollment.response_received_at) {
+    await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.pending`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
+    })
+    await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,task_created)`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'sequence_complete', updated_at: now }),
+    })
     await supabaseRest(`luxor_inquiries?id=eq.${encodeURIComponent(inquiryId)}`, {
       method: 'PATCH', body: JSON.stringify({ follow_up_disposition: 'no_response', follow_up_disposition_updated_at: now, updated_at: now }),
     })
   }
+}
+
+async function stopSuppressedLuxorFollowUp(enrollmentId: string) {
+  const now = new Date().toISOString()
+  await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollmentId)}&status=in.(active,paused)`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'stopped', ended_reason: 'marketing_suppressed', updated_at: now }),
+  })
+  await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,email_queued,task_created,processing)`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'recipient_suppressed', updated_at: now }),
+  })
+  await supabaseRest(`luxor_email_jobs?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.queued`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: 'Brochure follow-up stopped because the recipient is unsubscribed or suppressed.', updated_at: now }),
+  })
+  await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.pending`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
+  })
 }
 
 async function markMarketingJobResult(job: LuxorEmailJob, status: 'sent' | 'failed', error?: string) {
