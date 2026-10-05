@@ -204,11 +204,17 @@ export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBro
 }
 
 export async function recordLuxorFollowUpResponse(inquiryId: string) {
-  const updated = await supabaseRest<Array<{ id: string }>>(
-    `luxor_follow_up_enrollments?inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=in.(active,paused)`,
-    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ response_received_at: new Date().toISOString(), updated_at: new Date().toISOString() }) },
-  )
-  return updated.length > 0
+  const result = await supabaseRest<{ recorded: boolean; status?: string }>('rpc/luxor_record_brochure_follow_up_response', {
+    method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId }),
+  })
+  return result
+}
+
+export async function controlLuxorBrochureFollowUp(inquiryId: string, action: 'pause' | 'resume' | 'stop') {
+  const result = await supabaseRest<{ status: string; finalized: boolean }>('rpc/luxor_control_brochure_follow_up', {
+    method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId, p_action: action }),
+  })
+  return result
 }
 
 export async function setLuxorFollowUpDisposition(inquiryId: string, disposition: 'no_response' | 'not_interested' | 'lost_another_venue' | 'event_canceled' | null, reason?: string) {

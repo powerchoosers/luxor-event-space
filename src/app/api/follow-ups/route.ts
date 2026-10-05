@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, stopLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
+import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, controlLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFollowUpsServer'
 
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
 
     if (action === 'response') {
-      const recorded = await recordLuxorFollowUpResponse(inquiryId)
-      return NextResponse.json({ success: true, recorded })
+      const result = await recordLuxorFollowUpResponse(inquiryId)
+      return NextResponse.json({ success: true, ...result })
     }
     if (action === 'disposition') {
       const allowed = ['no_response', 'not_interested', 'lost_another_venue', 'event_canceled', null] as const
@@ -81,20 +81,10 @@ export async function POST(request: NextRequest) {
       await setLuxorFollowUpDisposition(inquiryId, disposition, typeof body.reason === 'string' ? body.reason : undefined)
       return NextResponse.json({ success: true, disposition })
     }
-    if (action === 'pause' || action === 'resume') {
-      const nextStatus = action === 'pause' ? 'paused' : 'active'
-      const [enrollment] = await supabaseRest<LuxorFollowUpEnrollment[]>(
-        `luxor_follow_up_enrollments?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=eq.${action === 'pause' ? 'active' : 'paused'}&limit=1`,
-      )
-      if (!enrollment) return NextResponse.json({ error: 'An active sequence was not found.' }, { status: 404 })
-      await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollment.id)}`, {
-        method: 'PATCH', body: JSON.stringify({ status: nextStatus, paused_at: action === 'pause' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }),
-      })
-      return NextResponse.json({ success: true, status: nextStatus })
-    }
-    if (action === 'stop') {
-      await stopLuxorBrochureFollowUp(inquiryId, 'manual_stop')
-      return NextResponse.json({ success: true, status: 'stopped' })
+    if (action === 'pause' || action === 'resume' || action === 'stop') {
+      const result = await controlLuxorBrochureFollowUp(inquiryId, action)
+      if (result.status === 'missing') return NextResponse.json({ error: 'A brochure sequence was not found.' }, { status: 404 })
+      return NextResponse.json({ success: true, status: result.status, finalized: result.finalized })
     }
     return NextResponse.json({ error: 'Unsupported follow-up action.' }, { status: 400 })
   } catch (error) {

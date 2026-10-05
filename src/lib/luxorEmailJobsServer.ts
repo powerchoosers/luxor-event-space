@@ -1213,6 +1213,25 @@ export async function processDueLuxorFollowUpEmailJobs() {
   return processLuxorEmailJobs(jobs, { markSending: false })
 }
 
+export async function reconcileLuxorFollowUpFinalizations() {
+  const enrollments = await supabaseRest<Array<{ id: string }>>(
+    'luxor_follow_up_enrollments?select=id&automation_key=eq.brochure_lead&status=in.(active,paused)&order=started_at.asc&limit=500',
+  )
+  if (!enrollments.length) return
+  const candidateIds = enrollments.map((enrollment) => encodeURIComponent(enrollment.id)).join(',')
+  const terminalActions = await supabaseRest<Array<{ enrollment_id: string }>>(
+    `luxor_follow_up_actions?select=enrollment_id&enrollment_id=in.(${candidateIds})&step_key=eq.email_5&status=in.(completed,failed)&order=updated_at.asc&limit=500`,
+  )
+  const terminalEnrollmentIds = [...new Set(terminalActions.map((action) => action.enrollment_id))]
+  for (const enrollmentId of terminalEnrollmentIds) {
+    try {
+      await completeLuxorFollowUpSequence(enrollmentId, null)
+    } catch (error) {
+      console.error('Could not reconcile a terminal brochure follow-up sequence:', error instanceof Error ? error.message : 'Unknown error.')
+    }
+  }
+}
+
 async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
   if (process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true' || !job.automation_enrollment_id || !job.automation_step_key) return false
   const [enrollment] = await supabaseRest<Array<{ status: string; automation_key: string }>>(
@@ -1238,25 +1257,15 @@ async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
     && inquiry.status !== 'closed_lost' && (!inquiry.follow_up_disposition || inquiry.follow_up_disposition === 'no_response'))
 }
 
-async function completeLuxorFollowUpSequence(enrollmentId: string, inquiryId: string | null) {
-  const [enrollment] = await supabaseRest<Array<{ status: string; response_received_at: string | null }>>(
-    `luxor_follow_up_enrollments?select=status,response_received_at&id=eq.${encodeURIComponent(enrollmentId)}&limit=1`,
-  )
-  if (!enrollment || enrollment.status !== 'active') return
-  const now = new Date().toISOString()
-  await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollmentId)}&status=eq.active`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'completed', ended_reason: enrollment.response_received_at ? 'day_30_complete_after_response' : 'day_30_no_response', completed_at: now, nurture_eligible_at: enrollment.response_received_at ? null : now, updated_at: now }),
-  })
-  if (inquiryId && !enrollment.response_received_at) {
-    await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.pending`, {
-      method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
+async function completeLuxorFollowUpSequence(enrollmentId: string, _inquiryId: string | null) {
+  try {
+    await supabaseRest('rpc/luxor_finalize_brochure_follow_up', {
+      method: 'POST', body: JSON.stringify({ p_enrollment_id: enrollmentId }),
     })
-    await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,task_created)`, {
-      method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'sequence_complete', updated_at: now }),
-    })
-    await supabaseRest(`luxor_inquiries?id=eq.${encodeURIComponent(inquiryId)}`, {
-      method: 'PATCH', body: JSON.stringify({ follow_up_disposition: 'no_response', follow_up_disposition_updated_at: now, updated_at: now }),
-    })
+  } catch (error) {
+    // Delivery is already recorded and must not be downgraded because a
+    // separate database finalization call was transiently unavailable.
+    console.error('Could not finalize a terminal brochure follow-up sequence:', error instanceof Error ? error.message : 'Unknown error.')
   }
 }
 

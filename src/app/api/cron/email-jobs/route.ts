@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
-import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications } from '@/lib/luxorEmailJobsServer'
+import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications, reconcileLuxorFollowUpFinalizations } from '@/lib/luxorEmailJobsServer'
 import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
 import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
     const internalResults = await processDueLuxorInquiryNotifications(1)
     // Preserve the one-message runtime budget: summary rendering plus two
     // sequential provider calls could exceed the function's 60-second limit.
+    if (!internalResults.length) await reconcileLuxorFollowUpFinalizations()
     const followUpResults = internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
     const results = internalResults.length ? internalResults
       : followUpResults.length ? followUpResults

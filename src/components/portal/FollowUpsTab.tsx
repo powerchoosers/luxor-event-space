@@ -164,10 +164,11 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   async function markLeadResponse(inquiryId: string) {
     const response = await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, action: 'response' }) })
     if (!response.ok) { notify({ title: 'The response could not be recorded', variant: 'error' }); return }
-    const result = await response.json() as { recorded: boolean }
+    const result = await response.json() as { recorded: boolean; status?: string }
     if (!result.recorded) return
     setSequence((current) => current ? { ...current, response_received_at: new Date().toISOString() } : current)
-    notify({ title: 'Lead response recorded', description: 'The sequence continues. It will not be marked No Response.', variant: 'success' })
+    if (result.status === 'completed') setSavedDispositions((current) => ({ ...current, [inquiryId]: '' }))
+    notify({ title: 'Lead response recorded', description: result.status === 'completed' ? 'The completed sequence is updated and No Response eligibility is cleared.' : 'The sequence continues. It will not be marked No Response.', variant: 'success' })
   }
 
   const leadById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads])
@@ -284,8 +285,8 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
             <div className="border-b border-[color:var(--portal-border)] pb-3"><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><p className="mt-2 text-sm">{selected.phone ?? 'No phone'} <span className="mx-1 text-[color:var(--portal-muted)]">·</span> {selected.email ?? 'No email'}</p><label className="mt-3 block text-xs">Follow-Up Disposition<PortalSelect value={Object.prototype.hasOwnProperty.call(savedDispositions, selected.id) ? savedDispositions[selected.id] : selected.follow_up_disposition ?? ''} onChange={(value) => void saveDisposition(selected.id, value)} options={[{ value: '', label: 'No disposition' }, { value: 'no_response', label: 'No Response (sequence continues)' }, { value: 'not_interested', label: 'Not Interested (stop sequence)' }, { value: 'lost_another_venue', label: 'Lost to Another Venue (stop sequence)' }, { value: 'event_canceled', label: 'Event Canceled (stop sequence)' }]} /></label></div>
             <h3 className="mt-4 flex items-center gap-2 text-sm font-semibold"><CalendarClock size={16} /> Follow-Up Timeline</h3>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[color:var(--portal-muted)]">Automated sequence: {sequence?.status ?? 'not enrolled'}{sequence?.response_received_at ? ' · response recorded, sequence continues' : ''}</span>
-              {(sequence?.status === 'active' || sequence?.status === 'paused') && !sequence.response_received_at && <button onClick={() => void markLeadResponse(selected.id)} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Record response</button>}
+              <span className="text-[color:var(--portal-muted)]">Automated sequence: {sequence?.status ?? 'not enrolled'}{sequence?.response_received_at ? (sequence.status === 'active' || sequence.status === 'paused' ? ' · response recorded, sequence continues' : ' · response recorded') : ''}</span>
+              {(sequence?.status === 'active' || sequence?.status === 'paused' || (sequence?.status === 'completed' && sequence.ended_reason === 'day_30_no_response')) && !sequence.response_received_at && <button onClick={() => void markLeadResponse(selected.id)} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Record response</button>}
               {sequence?.status === 'active' && <button onClick={() => void changeSequence('pause')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Pause sequence</button>}
               {sequence?.status === 'paused' && <button onClick={() => void changeSequence('resume')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Resume sequence</button>}
               {(sequence?.status === 'active' || sequence?.status === 'paused') && <button onClick={() => void changeSequence('stop')} className="rounded-md border border-[color:var(--portal-border)] px-2.5 py-1.5">Stop sequence</button>}
