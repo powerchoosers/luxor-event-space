@@ -162,6 +162,65 @@ export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry) {
   })
 }
 
+export function buildLuxorFollowUpEmailHtml(
+  inquiry: LuxorInquiry,
+  template: { name: string; subject: string | null; body: string | null; cta_text: string | null; cta_url: string | null; secondary_cta_text: string | null; secondary_cta_url: string | null },
+  unsubscribeUrl: string,
+) {
+  const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const actions = [
+    template.cta_text && template.cta_url ? { label: template.cta_text, url: template.cta_url.startsWith('/') ? absoluteUrl(template.cta_url) : template.cta_url } : null,
+    template.secondary_cta_text && template.secondary_cta_url ? { label: template.secondary_cta_text, url: template.secondary_cta_url.startsWith('/') ? absoluteUrl(template.secondary_cta_url) : template.secondary_cta_url, tone: 'secondary' as const } : null,
+  ].filter((action): action is NonNullable<typeof action> => Boolean(action))
+  return renderLuxorSystemEmail({
+    previewText: template.subject || template.name,
+    eyebrow: 'A note from Luxor',
+    title: template.name,
+    greeting: `Hi ${escapeHtml(firstName)},`,
+    actions,
+    note: 'Reply to this email if you have questions.',
+    bodyHtml: `<p style="margin:0;white-space:pre-line">${escapeHtml(template.body || '').replace(/\n/g, '<br />')}</p><p style="margin:20px 0 0;font-size:12px;color:#68635a">If you no longer want these emails, <a href="${escapeHtml(unsubscribeUrl)}">unsubscribe here</a>.</p>`,
+    theme: 'brand',
+  })
+}
+
+export async function createLuxorFollowUpEmailJob(
+  inquiry: LuxorInquiry,
+  enrollment: { id: string; unsubscribe_token: string },
+  template: { step_key: string; name: string; subject: string | null; body: string | null; cta_text: string | null; cta_url: string | null; secondary_cta_text: string | null; secondary_cta_url: string | null },
+  scheduledAt: string,
+) {
+  if (!inquiry.email || !inquiry.marketing_opt_in) throw new Error('A consenting email address is required for brochure follow-ups.')
+  return supabaseRest<Array<{ id: string }>>(
+    'luxor_email_jobs?on_conflict=automation_enrollment_id,automation_step_key&select=id',
+    {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+      body: JSON.stringify({
+        inquiry_id: inquiry.id,
+        job_type: 'marketing_campaign',
+        status: 'queued',
+        recipient_email: inquiry.email,
+        subject: template.subject || template.name,
+        body: buildLuxorFollowUpEmailHtml(inquiry, template, absoluteUrl(`/api/follow-ups/unsubscribe/${encodeURIComponent(enrollment.unsubscribe_token)}`)),
+        scheduled_for: scheduledAt,
+        metadata: {
+          automated: true,
+          follow_up_sequence: true,
+          automation_key: 'brochure_lead',
+          step_key: template.step_key,
+          cta_text: template.cta_text,
+          cta_url: template.cta_url,
+          secondary_cta_text: template.secondary_cta_text,
+          secondary_cta_url: template.secondary_cta_url,
+        },
+        automation_enrollment_id: enrollment.id,
+        automation_step_key: template.step_key,
+      }),
+    },
+  )
+}
+
 export function buildTourRequestReceivedEmailHtmlLegacy(inquiry: LuxorInquiry, token: string) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const websiteUrl = absoluteUrl('/')
@@ -712,6 +771,12 @@ export async function claimDueLuxorEmailJobs(limit = 25) {
   })
 }
 
+export async function claimDueLuxorFollowUpEmailJobs() {
+  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_follow_up_email_jobs', {
+    method: 'POST', body: JSON.stringify({ job_limit: 1 }),
+  })
+}
+
 export async function listQueuedLuxorEmailJobsByIds(ids: string[]) {
   const safeIds = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id))
   if (!safeIds.length) return []
@@ -950,6 +1015,19 @@ export async function processLuxorEmailJobs(
         results.push({ id: job.id, status: 'skipped' })
         continue
       }
+      if (job.automation_enrollment_id) {
+        const eligible = await isLuxorFollowUpJobEligible(job)
+        if (!eligible) {
+          const reason = 'Brochure follow-up is paused, stopped, inactive, or no longer consented.'
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
+          await supabaseRest(
+            `luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(job.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(job.automation_step_key ?? '')}`,
+            { method: 'PATCH', body: JSON.stringify({ status: 'cancelled', updated_at: new Date().toISOString() }) },
+          )
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+      }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
       await sendLuxorZohoEmail({
         to: job.recipient_email,
@@ -962,6 +1040,12 @@ export async function processLuxorEmailJobs(
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       if (job.job_type === 'marketing_campaign') {
         await markMarketingJobResult(job, 'sent')
+      }
+      if (job.automation_enrollment_id && job.automation_step_key) {
+        await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(job.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(job.automation_step_key)}`, {
+          method: 'PATCH', body: JSON.stringify({ status: 'completed', outcome: 'sent', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+        })
+        if (job.automation_step_key === 'email_5') await completeLuxorFollowUpSequence(job.automation_enrollment_id, job.inquiry_id)
       }
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
@@ -1101,6 +1185,59 @@ export async function processDueLuxorEmailJobs(limit = 1) {
     )
     const jobs = await listDueLuxorEmailJobs(limit)
     return processLuxorEmailJobs(jobs, { markSending: true })
+  }
+}
+
+/** Sequence mail uses the same durable queue/provider, but its separate claim
+ * path honors Arianna's elapsed-time schedule outside the normal send window. */
+export async function processDueLuxorFollowUpEmailJobs() {
+  if (process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true') return []
+  const jobs = await claimDueLuxorFollowUpEmailJobs()
+  return processLuxorEmailJobs(jobs, { markSending: false })
+}
+
+async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
+  if (process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true' || !job.automation_enrollment_id || !job.automation_step_key) return false
+  const [enrollment] = await supabaseRest<Array<{ status: string; automation_key: string }>>(
+    `luxor_follow_up_enrollments?select=status,automation_key&id=eq.${encodeURIComponent(job.automation_enrollment_id)}&limit=1`,
+  )
+  if (!enrollment || enrollment.status !== 'active' || enrollment.automation_key !== 'brochure_lead') return false
+  const [automation] = await supabaseRest<Array<{ enabled: boolean; send_approved: boolean; timing_configured: boolean; timezone: string }>>(
+    'luxor_follow_up_automations?select=enabled,send_approved,timing_configured,timezone&automation_key=eq.brochure_lead&limit=1',
+  )
+  if (!automation?.enabled || !automation.send_approved || !automation.timing_configured || automation.timezone !== 'America/Chicago') return false
+  const [action] = await supabaseRest<Array<{ template_id: string | null; status: string }>>(
+    `luxor_follow_up_actions?select=template_id,status&enrollment_id=eq.${encodeURIComponent(job.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(job.automation_step_key)}&limit=1`,
+  )
+  if (!action || !action.template_id || !['email_queued', 'scheduled'].includes(action.status)) return false
+  const [template] = await supabaseRest<Array<{ active: boolean }>>(
+    `luxor_follow_up_templates?select=active&id=eq.${encodeURIComponent(action.template_id)}&limit=1`,
+  )
+  if (!template?.active || !job.inquiry_id) return false
+  const inquiry = await getLuxorInquiry(job.inquiry_id)
+  return Boolean(inquiry && inquiry.marketing_opt_in && inquiry.status !== 'tour_confirmed' && inquiry.status !== 'booked'
+    && inquiry.status !== 'closed_lost' && (!inquiry.follow_up_disposition || inquiry.follow_up_disposition === 'no_response'))
+}
+
+async function completeLuxorFollowUpSequence(enrollmentId: string, inquiryId: string | null) {
+  const [enrollment] = await supabaseRest<Array<{ status: string; response_received_at: string | null }>>(
+    `luxor_follow_up_enrollments?select=status,response_received_at&id=eq.${encodeURIComponent(enrollmentId)}&limit=1`,
+  )
+  if (!enrollment || enrollment.status !== 'active') return
+  const now = new Date().toISOString()
+  await supabaseRest(`luxor_follow_up_enrollments?id=eq.${encodeURIComponent(enrollmentId)}&status=eq.active`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'completed', ended_reason: 'day_30_complete', completed_at: now, nurture_eligible_at: now, updated_at: now }),
+  })
+  await supabaseRest(`luxor_tasks?automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.pending`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }),
+  })
+  await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,task_created)`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'sequence_complete', updated_at: now }),
+  })
+  if (inquiryId && !enrollment.response_received_at) {
+    await supabaseRest(`luxor_inquiries?id=eq.${encodeURIComponent(inquiryId)}`, {
+      method: 'PATCH', body: JSON.stringify({ follow_up_disposition: 'no_response', follow_up_disposition_updated_at: now, updated_at: now }),
+    })
   }
 }
 

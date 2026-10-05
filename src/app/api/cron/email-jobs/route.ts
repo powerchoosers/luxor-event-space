@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
-import { processDueLuxorEmailJobs, processDueLuxorInquiryNotifications } from '@/lib/luxorEmailJobsServer'
+import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications } from '@/lib/luxorEmailJobsServer'
 import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
 import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
@@ -99,7 +99,10 @@ export async function POST(request: NextRequest) {
     const internalResults = await processDueLuxorInquiryNotifications(1)
     // Preserve the one-message runtime budget: summary rendering plus two
     // sequential provider calls could exceed the function's 60-second limit.
-    const results = internalResults.length || outsideSendWindow ? internalResults : await processDueLuxorEmailJobs(1)
+    const followUpResults = internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
+    const results = internalResults.length ? internalResults
+      : followUpResults.length ? followUpResults
+        : outsideSendWindow ? [] : await processDueLuxorEmailJobs(1)
     const failed = results.find((result) => result.status === 'failed')
     if (failed) {
       await safelyRecordLuxorWorkerHealth('email_jobs', {
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
       })
     }
     return NextResponse.json({ success: true, processed: results.length, results,
-      ...(outsideSendWindow ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM–8:00 PM America/Chicago' } : {}) })
+      ...(outsideSendWindow && !followUpResults.length ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM-8:00 PM America/Chicago' } : {}) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Email processing failed.'
     console.error('Luxor scheduled email worker failed:', message)

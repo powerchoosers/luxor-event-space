@@ -66,6 +66,7 @@ import {
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
 import { useToast } from '@/components/portal/ToastProvider'
+import FollowUpsTab from '@/components/portal/FollowUpsTab'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -127,7 +128,7 @@ export default function LeadsPage() {
   const [error, setError] = useState<string | null>(null)
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
@@ -189,7 +190,7 @@ export default function LeadsPage() {
       const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
       const savedClientSort = localStorage.getItem('luxor_clients_table_sort')
       if (savedTab) {
-        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost')
+        setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups')
       }
       if (savedViewMode) {
         setViewMode(savedViewMode as 'list' | 'board')
@@ -626,11 +627,12 @@ export default function LeadsPage() {
           { id: 'tours', label: 'Tours', icon: <Calendar size={15} /> },
           { id: 'proposals', label: 'Proposals & Contracts', icon: <FileCheck size={15} /> },
           { id: 'clients', label: 'Booked Clients', icon: <UserCheck size={15} /> },
+          { id: 'followups', label: 'Follow Ups', icon: <Phone size={15} /> },
           { id: 'lost', label: 'Closed Lost', icon: <X size={15} />, count: closedLostCount },
           ]}
           activeTab={activeTab}
           onTabChange={(tab) => {
-            const nextTab = tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost'
+            const nextTab = tab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'
             setActiveTab(nextTab)
             localStorage.setItem('luxor_leads_active_tab', nextTab)
           }}
@@ -641,6 +643,7 @@ export default function LeadsPage() {
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
+        {activeTab === 'followups' && <FollowUpsTab leads={leads} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 

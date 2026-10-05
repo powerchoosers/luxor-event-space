@@ -52,7 +52,8 @@ export async function createTask(
   title: string,
   description?: string,
   dueDate?: string,
-  priority: LuxorTaskPriority = 'medium'
+  priority: LuxorTaskPriority = 'medium',
+  options: { dueAt?: string | null; assignedTo?: string | null } = {},
 ) {
   if (!title.trim()) {
     throw new Error('Task title cannot be empty.')
@@ -66,6 +67,8 @@ export async function createTask(
       title: title.trim(),
       description: description?.trim() || null,
       due_date: dueDate || null,
+      due_at: options.dueAt || null,
+      assigned_to: options.assignedTo || null,
       priority,
       status: 'pending',
     }),
@@ -76,7 +79,7 @@ export async function createTask(
 
 export async function updateTask(
   id: string,
-  updates: Partial<Pick<LuxorTask, 'status' | 'completed_at' | 'title' | 'description' | 'due_date' | 'priority'>>
+  updates: Partial<Pick<LuxorTask, 'status' | 'completed_at' | 'title' | 'description' | 'due_date' | 'due_at' | 'assigned_to' | 'call_outcome' | 'priority'>>
 ) {
   const [updated] = await supabaseRest<LuxorTask[]>(`luxor_tasks?select=*&id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',

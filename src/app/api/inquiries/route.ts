@@ -281,6 +281,12 @@ export async function POST(request: NextRequest) {
             void processLuxorEmailJobs([job]).catch((err) => {
               console.error('Failed delivering brochure email job immediately:', err)
             })
+            // Optional sequence enrollment has an independent server-side gate.
+            // The existing brochure delivery remains the sole Email #1.
+            const { enrollLuxorBrochureLead } = await import('@/lib/luxorFollowUpsServer')
+            await enrollLuxorBrochureLead(inquiry, job.id).catch((err) => {
+              console.error('Brochure follow-up enrollment was not created:', err)
+            })
           }
         } catch (brochureErr) {
           console.error('Failed queueing brochure email delivery:', brochureErr)

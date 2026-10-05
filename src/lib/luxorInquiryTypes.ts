@@ -112,6 +112,8 @@ export type LuxorInquiry = {
   tour_reminder_sent_at?: string | null
   tour_no_show_email_sent_at?: string | null
   tour_response_token?: string | null
+  follow_up_disposition?: 'no_response' | 'not_interested' | 'lost_another_venue' | 'event_canceled' | null
+  follow_up_disposition_reason?: string | null
 }
 
 /** Test inquiries remain visible in the CRM for end-to-end checks, but never count as business KPI records. */
@@ -504,6 +506,11 @@ export type LuxorTask = {
   completed_at: string | null
   priority: LuxorTaskPriority
   status: LuxorTaskStatus
+  due_at?: string | null
+  assigned_to?: string | null
+  call_outcome?: 'reached' | 'no_answer' | 'voicemail_left' | null
+  automation_enrollment_id?: string | null
+  automation_step_key?: string | null
 }
 
 export type LuxorBookingStatus = 'draft' | 'tentative' | 'confirmed' | 'completed' | 'cancelled'
@@ -625,6 +632,8 @@ export type LuxorEmailJob = {
   calendar_method?: 'REQUEST' | 'CANCEL' | null
   tour_revision_id?: string | null
   tour_notice?: 'confirmation' | 'reminder_24' | 'reminder_2' | null
+  automation_enrollment_id?: string | null
+  automation_step_key?: string | null
 }
 
 export type LuxorSignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'void'
