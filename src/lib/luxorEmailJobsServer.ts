@@ -1220,7 +1220,7 @@ export async function reconcileLuxorFollowUpFinalizations() {
   if (!enrollments.length) return
   const candidateIds = enrollments.map((enrollment) => encodeURIComponent(enrollment.id)).join(',')
   const terminalActions = await supabaseRest<Array<{ enrollment_id: string }>>(
-    `luxor_follow_up_actions?select=enrollment_id&enrollment_id=in.(${candidateIds})&step_key=eq.email_5&status=in.(completed,failed)&order=updated_at.asc&limit=500`,
+    `luxor_follow_up_actions?select=enrollment_id&enrollment_id=in.(${candidateIds})&step_key=eq.email_5&status=in.(completed,failed)&order=updated_at.asc&limit=25`,
   )
   const terminalEnrollmentIds = [...new Set(terminalActions.map((action) => action.enrollment_id))]
   for (const enrollmentId of terminalEnrollmentIds) {

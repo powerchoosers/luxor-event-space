@@ -95,11 +95,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const outsideSendWindow = !Number.isFinite(centralHour) || centralHour < SEND_WINDOW_START_HOUR || centralHour >= SEND_WINDOW_END_HOUR
+    // Reconcile finished sequences before claiming other work so a busy
+    // transactional queue cannot starve day-30 recovery.
+    await reconcileLuxorFollowUpFinalizations()
     // This all-hours claim includes internal alerts and requested transactional receipts.
     const internalResults = await processDueLuxorInquiryNotifications(1)
     // Preserve the one-message runtime budget: summary rendering plus two
     // sequential provider calls could exceed the function's 60-second limit.
-    if (!internalResults.length) await reconcileLuxorFollowUpFinalizations()
     const followUpResults = internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
     const results = internalResults.length ? internalResults
       : followUpResults.length ? followUpResults
