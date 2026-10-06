@@ -1898,7 +1898,7 @@ export function ProposalBuilderModal({
                     </div>
                     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-2">
                       <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial Booking Payment Due</p>
-                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(asNumber(selectedContext.amount_due_to_book) || 0)}</p>
+                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(selectedContext.amount_due_to_book == null ? Math.min(finalEventPrice ?? 0, paymentPlanDraft?.booking_payment_amount ?? asNumber(selectedContext.booking_payment_default) ?? 0) : asNumber(selectedContext.amount_due_to_book) ?? 0)}</p>
                       <p className="text-xs text-[color:var(--portal-muted)]">Due upon electronic signature to secure date reservation.</p>
                     </div>
                   </div>
