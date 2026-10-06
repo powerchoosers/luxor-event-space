@@ -681,7 +681,9 @@ export function ProposalBuilderModal({
 
   useEffect(() => {
     if (!proposalContext) return
-    setLocalContext((current) => ({ ...current, ...proposalContext }))
+    // The parent supplies a complete draft, including a fresh one on reopen.
+    // Merging would retain times and payment terms from the discarded draft.
+    setLocalContext(proposalContext)
   }, [contextKey, proposalContext])
 
   useEffect(() => {
