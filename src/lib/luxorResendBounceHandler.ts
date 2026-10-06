@@ -127,7 +127,7 @@ export async function handleLuxorResendBounce(
           due_at: occurredAt, due_date: occurredAt.slice(0, 10), priority: 'high', status: 'pending' }),
       })
     }
-    await dependencies.broadcast('lead-email-bounced', { eventId, inquiryId: matches[0].id, bouncedAddress })
+    await dependencies.broadcast('lead-email-bounced', { eventId, inquiryId: matches[0].id })
   }
 
   return [...flaggedInquiryIds]
