@@ -6,7 +6,7 @@ export type LuxorPublicEmailDeliveryStatus = 'sent' | 'pending' | 'failed' | 'un
  */
 export function getLuxorPublicEmailDeliveryStatus(status: string | null | undefined): LuxorPublicEmailDeliveryStatus {
   if (status === 'sent' || status === 'delivered' || status === 'opened' || status === 'clicked') return 'sent'
-  if (status === 'queued' || status === 'sending' || status === 'prepared' || status === 'delivery_delayed' || status === 'send_unconfirmed') return 'pending'
-  if (status === 'failed' || status === 'bounced' || status === 'suppressed' || status === 'complained' || status === 'cancelled') return 'failed'
+  if (status === 'queued' || status === 'scheduled' || status === 'sending' || status === 'prepared' || status === 'delivery_delayed' || status === 'send_unconfirmed') return 'pending'
+  if (status === 'failed' || status === 'bounced' || status === 'suppressed' || status === 'complained' || status === 'cancelled' || status === 'canceled') return 'failed'
   return 'unknown'
 }

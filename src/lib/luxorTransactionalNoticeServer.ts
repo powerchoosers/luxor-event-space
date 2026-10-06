@@ -130,7 +130,10 @@ export async function getLuxorAgreementClientEmailStatus(
     const mailRows = await supabaseRest<LuxorMailRow[]>(
       `luxor_mail_messages?select=*&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(notice.id)}&limit=2`,
     )
-    if (mailRows.length === 0 && (notice.status === 'queued' || notice.status === 'sending')) return 'pending'
+    if (mailRows.length === 0) {
+      const noticeStatus = getLuxorPublicEmailDeliveryStatus(notice.status)
+      return noticeStatus === 'sent' ? 'unknown' : noticeStatus
+    }
     if (mailRows.length !== 1) return 'unknown'
     const [mail] = mailRows
     const noticeProvider = notice.metadata?.transactionalNotice as { provider?: unknown } | undefined
@@ -143,9 +146,7 @@ export async function getLuxorAgreementClientEmailStatus(
       || !containsExactPaymentLink(mail.html_body || mail.text_body, paymentUrl)) return 'unknown'
     const providerStatus = getLuxorPublicEmailDeliveryStatus(mail.status)
     if (providerStatus !== 'unknown') return providerStatus
-    return notice.status === 'queued' || notice.status === 'sending'
-      ? 'pending'
-      : getLuxorPublicEmailDeliveryStatus(notice.status)
+    return 'unknown'
   } catch {
     // Email-status visibility must never prevent the signed agreement itself
     // from loading. Missing or unavailable evidence is not a delivery claim.
@@ -162,8 +163,26 @@ function isSecurePaymentUrl(value: string) {
   }
 }
 
-function containsExactPaymentLink(content: string, paymentUrl: string) {
-  return content.includes(paymentUrl) || content.includes(paymentUrl.replace(/&/g, '&amp;'))
+export function containsExactPaymentLink(content: string, paymentUrl: string) {
+  let expectedUrl: URL
+  try {
+    expectedUrl = new URL(paymentUrl)
+  } catch {
+    return false
+  }
+  const decodedContent = content
+    .replace(/&amp;/gi, '&')
+    .replace(/&#0*38;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+  const urls = decodedContent.match(/https:\/\/[^\s"'<>`]+/gi) || []
+  return urls.some((value) => {
+    try {
+      return new URL(value).href === expectedUrl.href
+    } catch {
+      return false
+    }
+  })
 }
 
 export async function deliverLuxorTransactionalNotice(job: LuxorEmailJob): Promise<{ status: 'sent' }> {
