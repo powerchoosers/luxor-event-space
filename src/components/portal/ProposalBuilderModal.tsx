@@ -21,7 +21,7 @@ import {
 import type { LuxorInvoiceLineItem, LuxorPromotion, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
-import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
+import { ProposalPaymentSchedule, calculateProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
 import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
@@ -187,6 +187,8 @@ type ProposalBuilderModalProps = {
   taxRate: string
   onTaxRateChange: (value: string) => void
   submitting: boolean
+  submissionError?: string | null
+  publicationPending?: boolean
   onSubmit: (action: ProposalSubmitAction) => void
 }
 
@@ -653,6 +655,8 @@ export function ProposalBuilderModal({
   taxRate,
   onTaxRateChange,
   submitting,
+  submissionError,
+  publicationPending = false,
   onSubmit,
 }: ProposalBuilderModalProps) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -1221,6 +1225,28 @@ export function ProposalBuilderModal({
         return
       }
     }
+    if (stepIndex === 4) {
+      const bookingDate = paymentPlanDraft?.booking_date || new Date().toISOString().slice(0, 10)
+      const cadence = paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'
+      const schedule = calculateProposalPaymentSchedule({
+        finalEventPrice, venueServicesTotal, eventServicesTotal, eventDate: eventDateValue,
+        paymentPlan: paymentPlanDraft, bookingDate,
+        paymentCount: paymentPlanDraft?.payment_count ?? 4, paymentCadence: cadence,
+        bookingPaymentAmount: paymentPlanDraft?.booking_payment_amount ?? asNumber(selectedContext.booking_payment_default),
+      })
+      if (!hasFinalPrice || !schedule.rows.length || schedule.initialContractPayment === null) {
+        setValidationMessage('Wait for final pricing and a valid payment schedule before continuing.')
+        return
+      }
+      // Continuing confirms the schedule on screen, including untouched defaults.
+      updatePaymentPlan({
+        mode: 'deposit_and_balance', booking_payment_percent: 25,
+        final_payment_due_days_before_event: 60, booking_date: bookingDate,
+        payment_count: schedule.rows.length, payment_cadence: cadence,
+        booking_payment_amount: schedule.initialContractPayment,
+        preferred_payment_method: paymentPlanDraft?.preferred_payment_method ?? 'card',
+      })
+    }
     setValidationMessage(null)
     setStepDirection(1)
     setStepIndex((current) => {
@@ -1261,7 +1287,7 @@ export function ProposalBuilderModal({
       : 'Finish'
 
   return (
-    <PortalModal isOpen={isOpen} onClose={onClose} ariaLabel="Final proposal builder" maxWidth="max-w-[1340px]">
+    <PortalModal isOpen={isOpen} onClose={() => { if (!submitting) onClose() }} ariaLabel="Final proposal builder" maxWidth="max-w-[1340px]">
       <div className="flex h-[calc(100dvh-2rem)] max-h-[94vh] min-h-0 flex-col bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] sm:h-[90vh]">
         <header className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
@@ -1278,7 +1304,7 @@ export function ProposalBuilderModal({
               <span className={`hidden rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] sm:inline-flex ${pricingStatus === 'ready' && !pricingErrors.length ? 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
                 {isCalculating ? <ProposalCalculationStatus label={headerStatus} /> : headerStatus}
               </span>
-              <PortalCloseButton onClick={onClose} aria-label="Close final proposal builder" />
+              <PortalCloseButton onClick={onClose} disabled={submitting} aria-label="Close final proposal builder" />
             </div>
           </div>
           <nav className="mt-4 overflow-x-auto pb-0.5" aria-label="Proposal builder steps">
@@ -1292,7 +1318,7 @@ export function ProposalBuilderModal({
                   <li key={step.id} className="flex items-center gap-1 sm:gap-2">
                     <button
                       type="button"
-                      disabled={locked}
+                      disabled={locked || submitting || publicationPending}
                       onClick={() => {
                         if (locked) return
                         setStepDirection(index >= stepIndex ? 1 : -1)
@@ -1315,7 +1341,7 @@ export function ProposalBuilderModal({
           </nav>
         </header>
 
-        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
+        <fieldset disabled={submitting || publicationPending} className="portal-scrollbar min-w-0 min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           {validationMessage ? (
             <div role="alert" className="mb-5 flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3.5 text-sm text-amber-900 dark:text-amber-100">
               <AlertCircle size={17} className="mt-0.5 shrink-0" />
@@ -1746,7 +1772,7 @@ export function ProposalBuilderModal({
                 paymentPlan={paymentPlanDraft}
                 finalPaymentDueDate={asString(selectedContext.final_payment_due_date)}
                 eventDate={eventDateValue}
-                bookingDate={new Date().toISOString().slice(0, 10)}
+                bookingDate={paymentPlanDraft?.booking_date || new Date().toISOString().slice(0, 10)}
                 paymentCount={paymentPlanDraft?.payment_count ?? 4}
                 paymentCadence={paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'}
                 bookingPaymentAmount={paymentPlanDraft?.booking_payment_amount ?? asNumber(selectedContext.booking_payment_default)}
@@ -1965,17 +1991,21 @@ export function ProposalBuilderModal({
 
           </motion.div>
           </AnimatePresence>
-        </div>
+        </fieldset>
+        {stepIndex === 5 && (submissionError || publishTitle || publicationPending) ? <div role={submissionError ? 'alert' : 'status'} className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-3 text-sm text-[color:var(--portal-text)]">
+          {submissionError || (!publicationPending && publishTitle)}
+          {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.</p> : null}
+        </div> : null}
 
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="min-h-10">
             {isCalculating ? <div role="status" aria-live="polite" className="space-y-2 py-1"><span className="block h-2.5 w-28 rounded luxor-skeleton" /><span className="block h-5 w-24 rounded luxor-skeleton" /><span className="sr-only">Updating selected final event price.</span></div> : hasFinalPrice ? <><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Selected final event price</p><p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></> : <p className="flex min-h-10 items-center text-xs text-[color:var(--portal-muted)]">Complete the event facts to calculate the final price.</p>}
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-            {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
+            {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting || publicationPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
-              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft</button>
-              <button type="button" onClick={() => onSubmit(reviewTogether ? 'in_person' : 'email')} disabled={publishDisabled} title={publishTitle} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]">{reviewTogether ? <Users size={14} /> : <Mail size={14} />}{submitting ? reviewTogether ? 'Preparing…' : 'Publishing…' : reviewTogether ? 'Begin client handoff' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || publicationPending || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft</button>
+              <button type="button" onClick={() => onSubmit(reviewTogether ? 'in_person' : 'email')} disabled={submitting || (!publicationPending && publishDisabled)} title={publishTitle} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]">{reviewTogether ? <Users size={14} /> : <Mail size={14} />}{submitting ? reviewTogether ? 'Preparing…' : 'Publishing…' : reviewTogether ? 'Begin client handoff' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>

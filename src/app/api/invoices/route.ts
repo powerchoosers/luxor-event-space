@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
@@ -414,6 +415,26 @@ export async function POST(request: NextRequest) {
       if (requestedInvoiceKind !== 'event') {
         return NextResponse.json({ error: 'A proposal selection can only create a final event proposal.' }, { status: 400 })
       }
+      const requestId = stringValue(body.creation_request_id)
+      const requestFingerprint = createHash('sha256').update(JSON.stringify({
+        selection, inquiryId, leadEventId, description: stringValue(body.description),
+        notes: stringValue(body.notes), supersedes: stringValue(body.supersedes_invoice_id),
+      })).digest('hex')
+      if (requestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+        return NextResponse.json({ error: 'Invalid proposal save request.' }, { status: 400 })
+      }
+      if (requestId) {
+        const saved = await getInvoice(requestId)
+        if (saved) {
+          if (saved.inquiry_id !== inquiryId || saved.lead_event_id !== (leadEventId || null) || saved.invoice_kind !== 'event') {
+            return NextResponse.json({ error: 'This save request belongs to another proposal.' }, { status: 409 })
+          }
+          if (saved.proposal_context?.creation_request_fingerprint !== requestFingerprint) {
+            return NextResponse.json({ error: 'This request already saved different terms. Close the builder and open the saved proposal in Documents before changing or publishing it.' }, { status: 409 })
+          }
+          return NextResponse.json(saved)
+        }
+      }
       const calculated = await calculateServerProposal(selection)
       const revision = await revisedProposalVersion({
         supersedesInvoiceId: stringValue(body.supersedes_invoice_id),
@@ -424,6 +445,7 @@ export async function POST(request: NextRequest) {
       }
 
       const invoice = await createInvoice({
+        ...(requestId ? { id: requestId } : {}),
         client_name: clientName,
         event_type: stringValue(calculated.proposalContext.event_type) ?? stringValue(body.event_type),
         description: stringValue(body.description),
@@ -445,7 +467,7 @@ export async function POST(request: NextRequest) {
         lead_event_id: leadEventId,
         notes: stringValue(body.notes),
         invoice_kind: 'event',
-        proposal_context: calculated.proposalContext,
+        proposal_context: { ...calculated.proposalContext, ...(requestId ? { creation_request_fingerprint: requestFingerprint } : {}) },
         supersedes_invoice_id: revision.supersedesInvoiceId,
         proposal_version: revision.proposalVersion,
       })

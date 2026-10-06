@@ -91,6 +91,7 @@ export async function listPaidPaymentsByInvoice(invoiceId: string) {
 }
 
 export async function createInvoice(data: {
+  id?: string
   client_name: string
   event_type?: string | null
   description?: string | null
@@ -127,10 +128,11 @@ export async function createInvoice(data: {
   supersedes_invoice_id?: string | null
   proposal_version?: number | null
 }) {
-  const [created] = await supabaseRest<LuxorInvoice[]>('luxor_invoices?select=*', {
+  const [created] = await supabaseRest<LuxorInvoice[]>(data.id ? 'luxor_invoices?on_conflict=id&select=*' : 'luxor_invoices?select=*', {
     method: 'POST',
-    headers: { Prefer: 'return=representation' },
+    headers: { Prefer: data.id ? 'resolution=ignore-duplicates,return=representation' : 'return=representation' },
     body: JSON.stringify({
+      ...(data.id ? { id: data.id } : {}),
       client_name: data.client_name,
       event_type: data.event_type || null,
       description: data.description || null,
@@ -169,7 +171,44 @@ export async function createInvoice(data: {
     }),
   })
 
-  return created
+  if (created) return created
+  const existing = data.id ? await getInvoice(data.id) : null
+  if (!existing || existing.inquiry_id !== data.inquiry_id || existing.lead_event_id !== (data.lead_event_id || null)) {
+    throw new Error('This save request could not be recovered. Refresh the proposal list before retrying.')
+  }
+  if (existing.proposal_context?.creation_request_fingerprint !== data.proposal_context?.creation_request_fingerprint) {
+    throw new Error('This request already saved different terms. Open the saved proposal in Documents before continuing.')
+  }
+  return existing
+}
+
+/** Compare-and-swap protects one proposal across double clicks and concurrent tabs. */
+export async function claimLuxorProposalPublication(invoice: LuxorInvoice, attemptId: string) {
+  const now = new Date().toISOString()
+  const [claimed] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(invoice.id)}&updated_at=eq.${encodeURIComponent(invoice.updated_at)}`,
+    {
+      method: 'PATCH', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        public_token: invoice.public_token || crypto.randomUUID(),
+        price_locked_at: invoice.price_locked_at || now,
+        proposal_context: { ...invoice.proposal_context, publication_attempt: { id: attemptId, state: 'preparing', started_at: now } },
+      }),
+    },
+  )
+  return claimed || null
+}
+
+export async function finishLuxorProposalPublication(id: string, attemptId: string, state: string) {
+  const current = await getInvoice(id)
+  if (!current || (current.proposal_context?.publication_attempt as { id?: string } | undefined)?.id !== attemptId) return false
+  const rows = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ proposal_context: {
+      ...current.proposal_context,
+      publication_attempt: { ...(current.proposal_context?.publication_attempt as Record<string, unknown>), state },
+    } }),
+  })
+  return Boolean(rows?.length)
 }
 
 export async function updateInvoice(

@@ -400,6 +400,11 @@ export default function LeadDetailPage({
   const [proposalCalculation, setProposalCalculation] = useState<ProposalPricingCalculation | null>(null)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState('')
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
+  const invoiceSubmitBusy = useRef(false)
+  const invoiceCreationRequest = useRef<string | null>(null)
+  const savedPublicationInvoice = useRef<LuxorInvoice | null>(null)
+  const [invoiceSubmissionError, setInvoiceSubmissionError] = useState<string | null>(null)
+  const [publicationPending, setPublicationPending] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
@@ -1823,6 +1828,11 @@ export default function LeadDetailPage({
   }
 
   const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
+    if (invoiceSubmitBusy.current) return
+    invoiceCreationRequest.current = crypto.randomUUID()
+    savedPublicationInvoice.current = null
+    setInvoiceSubmissionError(null)
+    setPublicationPending(false)
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
     setProposalCalculation(null)
@@ -2046,10 +2056,20 @@ export default function LeadDetailPage({
   }
 
   const handleCreateInvoice = async (action: 'save' | 'email' | 'in_person') => {
-    if (!lead) return
-    const handoffWindow = action === 'in_person' ? window.open('about:blank', 'luxor-client-handoff') : null
-
+    if (!lead || invoiceSubmitBusy.current) return
+    invoiceSubmitBusy.current = true
+    setSubmittingInvoice(true)
+    setInvoiceSubmissionError(null)
+    let handoffWindow: Window | null = null
     try {
+      if (action === 'in_person') handoffWindow = window.open('about:blank', 'luxor-client-handoff')
+      if (savedPublicationInvoice.current) {
+        if (action === 'in_person') await prepareClientProposalHandoff(savedPublicationInvoice.current, handoffWindow)
+        else await handleSendFinalProposal(savedPublicationInvoice.current, true)
+        setIsInvoiceModalOpen(false)
+        setEditingInvoiceId(null)
+        return
+      }
       if (!invoiceDueDate) {
         throw new Error('Choose when this proposal offer expires before saving it.')
       }
@@ -2079,7 +2099,7 @@ export default function LeadDetailPage({
         method: updateExistingDraft ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(updateExistingDraft && editingInvoiceId ? { id: editingInvoiceId } : {}),
+          ...(updateExistingDraft && editingInvoiceId ? { id: editingInvoiceId } : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
@@ -2097,34 +2117,34 @@ export default function LeadDetailPage({
 
       const responseBody = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(responseBody.error || ('Failed to ' + (updateExistingDraft ? 'update' : 'create') + ' final proposal.'))
+      if (!responseBody.id || !responseBody.proposal_context) throw new Error('The save response was interrupted. Retry to recover the same proposal.')
       const invoice = responseBody as LuxorInvoice
-      setInvoices((prev) => updateExistingDraft
-        ? prev.map((item) => item.id === invoice.id ? invoice : item)
-        : [invoice, ...prev])
+      setInvoices((prev) => [invoice, ...prev.filter(item => item.id !== invoice.id)])
+      if (action !== 'save') {
+        savedPublicationInvoice.current = invoice
+        setPublicationPending(true)
+      }
+      // Optional dossier summaries cannot turn a successful save into a duplicate retry.
       await (selectedLeadEvent
         ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
         : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
+        .catch(error => console.error('Proposal saved; dossier summary refresh failed:', error))
+      if (action === 'email') await handleSendFinalProposal(invoice, true)
+      if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
+      if (action === 'save') {
+        notify({ title: 'Final proposal saved', description: `${displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)} is ready to review or publish.`, variant: 'success' })
+        setProposalDeliveryPreview({ invoice, initialTab: 'email' })
+      }
       setIsInvoiceModalOpen(false)
       setEditingInvoiceId(null)
-      const displayedPriceLabel = displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)
-      if (action !== 'in_person') {
-        notify({
-          title: createRevision ? 'Final proposal revision saved' : updateExistingDraft ? 'Final proposal updated' : 'Final proposal saved',
-          description: createRevision
-            ? displayedPriceLabel + ' was saved as a new revision; the previous final proposal remains in the audit history.'
-            : displayedPriceLabel + ' is ready to review or publish.',
-          variant: 'success',
-        })
-      }
-      if (action === 'email') await handleSendFinalProposal(invoice)
-      if (action === 'save') setProposalDeliveryPreview({ invoice, initialTab: 'email' })
-      if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
       if (createRevision) void fetchAllData(false)
     } catch (err) {
       handoffWindow?.close()
-      console.error(err)
-      notify({ title: 'Final proposal not saved', description: err instanceof Error ? err.message : 'Review the proposal fields and try again.', variant: 'error' })
+      const message = err instanceof Error ? err.message : 'Review the proposal fields and try again.'
+      setInvoiceSubmissionError(message)
+      notify({ title: savedPublicationInvoice.current ? 'Proposal saved; delivery incomplete' : 'Final proposal not saved', description: message, variant: 'error' })
     } finally {
+      invoiceSubmitBusy.current = false
       setSubmittingInvoice(false)
     }
   }
@@ -2565,11 +2585,11 @@ export default function LeadDetailPage({
       setInvoices((current) => current.map((item) => item.id === data.invoice!.id ? data.invoice! : item))
       if (data.inquiry) setLead(data.inquiry)
       openClientProposalHandoff(data.invoice, handoffWindow, data.reviewUrl)
-      await fetchAllData(false)
+      void fetchAllData(false)
       notify({ title: 'Ready for the client', description: 'Hand over the iPad for proposal review, acceptance, agreement signing, and payment choice.', variant: 'success' })
     } catch (error) {
       handoffWindow?.close()
-      notify({ title: 'Client handoff not started', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+      throw error
     } finally {
       setSendingInvoiceId(null)
     }
@@ -2656,19 +2676,20 @@ export default function LeadDetailPage({
     setProposalDeliveryPreview({ invoice, initialTab })
   }
 
-  const handleSendFinalProposal = async (invoice: LuxorInvoice) => {
+  const handleSendFinalProposal = async (invoice: LuxorInvoice, propagateError = false) => {
     try {
       setSendingInvoiceId(invoice.id)
       const response = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'proposal' }) })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'The final proposal could not be sent.')
-      await fetchAllData(false)
+      if (!response.ok || !payload.invoice || !payload.reviewUrl) throw new Error(payload.error || 'Delivery could not be confirmed. Retry to recover the same proposal.')
+      void fetchAllData(false)
       notify({
         title: 'Final proposal sent',
         description: 'The client can accept the final proposal. Acceptance automatically sends the Event Agreement; Stripe is emailed only after signature.',
         variant: 'success',
       })
     } catch (error) {
+      if (propagateError) throw error
       notify({ title: 'Final proposal not sent', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingInvoiceId(null)
@@ -7806,6 +7827,8 @@ export default function LeadDetailPage({
         taxRate={invoiceTaxRate}
         onTaxRateChange={setInvoiceTaxRate}
         submitting={submittingInvoice}
+        submissionError={invoiceSubmissionError}
+        publicationPending={publicationPending}
         onSubmit={(action) => void handleCreateInvoice(action)}
       />
 
