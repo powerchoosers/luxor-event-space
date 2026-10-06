@@ -5,6 +5,7 @@ import type { LuxorEmailJob } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { luxorMailAddress, luxorMailFrom, luxorMailProvider, type LuxorMailProvider } from './luxorMailConfig'
+import { getLuxorPublicEmailDeliveryStatus, type LuxorPublicEmailDeliveryStatus } from './luxorEmailDeliveryStatus'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 
@@ -91,6 +92,38 @@ export async function queueLuxorTransactionalNotice(input: {
   if (!job) throw new Error('Transactional notification could not be recorded.')
   snapshotOf(job)
   return job
+}
+
+/** Return only the delivery state for the client-facing executed-agreement email. */
+export async function getLuxorAgreementClientEmailStatus(signatureRequestId: string): Promise<LuxorPublicEmailDeliveryStatus> {
+  if (!UUID.test(signatureRequestId)) return 'unknown'
+  try {
+    const key = `agreement_client/${signatureRequestId}`
+    const id = noticeId(key)
+    const [notice] = await supabaseRest<LuxorEmailJob[]>(
+      `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(id)}&signature_request_id=eq.${encodeURIComponent(signatureRequestId)}&limit=1`,
+    )
+    if (notice) {
+      const snapshot = snapshotOf(notice)
+      if (snapshot.kind !== 'agreement_client' || snapshot.key !== key) return 'unknown'
+      return getLuxorPublicEmailDeliveryStatus(notice.status)
+    }
+
+    // Read a pre-migration completion email only when its link to this signing
+    // record is explicit. A failed direct-send job may have delivered before
+    // the process stopped, so that legacy state is deliberately unknown.
+    const [legacy] = await supabaseRest<LuxorEmailJob[]>(
+      `luxor_email_jobs?select=*&job_type=eq.contract_signature&signature_request_id=eq.${encodeURIComponent(signatureRequestId)}&metadata->>flow_stage=eq.contract_completed&limit=1`,
+    )
+    if (!legacy || legacy.job_type !== 'contract_signature' || legacy.signature_request_id !== signatureRequestId
+      || legacy.metadata?.flow_stage !== 'contract_completed') return 'unknown'
+    if (legacy.status === 'sent') return 'sent'
+    if (legacy.status === 'queued' || legacy.status === 'sending') return 'pending'
+  } catch {
+    // Email-status visibility must never prevent the signed agreement itself
+    // from loading. Missing or unavailable evidence is not a delivery claim.
+  }
+  return 'unknown'
 }
 
 export async function deliverLuxorTransactionalNotice(job: LuxorEmailJob): Promise<{ status: 'sent' }> {

@@ -35,6 +35,7 @@ const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
 type SignatureMode = 'type' | 'draw'
 type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
   signature_placement?: LuxorContractSignaturePlacement
+  payment_email_status?: 'sent' | 'pending' | 'failed' | 'unknown'
   payment_url?: string
   payment_amount?: number
   payment_label?: string
@@ -298,6 +299,34 @@ export default function SignaturePage() {
   }, [params.token])
 
   useEffect(() => {
+    if (!complete || signature?.payment_email_status !== 'pending') return
+    let active = true
+    let attempts = 0
+    let timeout: number | undefined
+
+    const refresh = async () => {
+      attempts += 1
+      try {
+        const response = await fetch(`/api/public/signatures?token=${encodeURIComponent(params.token)}`, { cache: 'no-store' })
+        const data = await response.json() as PublicLuxorSignatureRequest
+        if (!response.ok) throw new Error('Unable to refresh email status.')
+        if (!active) return
+        setSignature((current) => current ? { ...current, payment_email_status: data.payment_email_status || 'unknown' } : current)
+        if (data.payment_email_status !== 'pending' || attempts >= 10) return
+      } catch {
+        if (!active || attempts >= 10) return
+      }
+      timeout = window.setTimeout(() => void refresh(), 1_500)
+    }
+
+    timeout = window.setTimeout(() => void refresh(), 1_500)
+    return () => {
+      active = false
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
+  }, [complete, params.token, signature?.payment_email_status])
+
+  useEffect(() => {
     if (loading || complete || signatureStatus !== 'draft') return
 
     let active = true
@@ -533,12 +562,20 @@ export default function SignaturePage() {
                   <CheckCircle2 size={25} />
                 </div>
                 <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]">Agreement complete</p>
-                <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">You’re all set.</h2>
+                <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">You&apos;re all set.</h2>
                 <p className="mt-4 text-sm leading-6 text-[#6f665b]">
-                  Your signature and Luxor’s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
+                  Your signature and Luxor&apos;s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
                   {signature.payment_options ? ' Choose how you would like to make the initial booking payment below.' : signature.payment_url ? ' Your secure booking-payment link is ready below.' : ''}
                   {paymentPreparing && !signature.payment_url ? ' Your secure booking-payment link is being prepared now.' : ''}
                 </p>
+                {signature.payment_url ? (
+                  <p aria-live="polite" className="mt-3 rounded-lg border border-[#ded5c8] bg-[#faf7f2] px-3 py-2 text-xs leading-5 text-[#5f554a]">
+                    {signature.payment_email_status === 'sent' ? `The payment link email was sent to ${signature.client_email}.` : null}
+                    {signature.payment_email_status === 'pending' ? `The payment link email is being sent to ${signature.client_email}.` : null}
+                    {signature.payment_email_status === 'failed' ? `The payment link email could not be sent to ${signature.client_email}. Please contact Luxor for help.` : null}
+                    {signature.payment_email_status === 'unknown' || !signature.payment_email_status ? 'We could not confirm whether the payment link email was sent. Please check your inbox or contact Luxor.' : null}
+                  </p>
+                ) : null}
                 {error && (
                   <div role="alert" className="mt-5 flex items-start gap-2 rounded-xl bg-[#fff3d8] p-3 text-xs leading-5 text-[#8d672b]">
                     <AlertCircle className="mt-0.5 shrink-0" size={14} /> {error}
