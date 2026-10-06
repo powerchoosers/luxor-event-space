@@ -267,7 +267,7 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const vendorEstimateLines = rawVendorLines
     .map(normalizedLineItem)
     .filter((item): item is NonNullable<typeof item> => item !== null)
-    .map(({ category, service, quantity, unitPrice, lineTotal, included }) => ({ category, service, quantity, unitPrice, lineTotal, included }))
+    .map(({ category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ category, service, quantity, unitPrice, lineTotal, included, ...(included && lineTotal === 0 ? { detail } : {}) }))
   const estimatedVendorTotal = asNonNegativeMoney(context.estimated_vendor_total)
     ?? asNonNegativeMoney(preferredVendorSnapshot?.total)
     ?? roundMoney(vendorEstimateLines.reduce((sum, item) => sum + Math.max(0, item.lineTotal), 0))
@@ -352,7 +352,7 @@ function proposalFinancialSummaryHtml(summary: LuxorProposalPricingSummary, opti
 function preferredVendorEstimateHtml(summary: LuxorProposalPricingSummary) {
   if (!summary.vendorEstimateLines.length && !summary.vendorPricingDisclaimer) return ''
   const rows = summary.vendorEstimateLines.map((item) => `<tr>
-    <td style="padding:10px 8px 10px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;line-height:1.45"><span style="display:block;color:#a99878;font-size:8px;letter-spacing:.1em;text-transform:uppercase">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}</td>
+    <td style="padding:10px 8px 10px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;line-height:1.45"><span style="display:block;color:#a99878;font-size:8px;letter-spacing:.1em;text-transform:uppercase">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}${item.detail ? `<span style="display:block;color:#a99878;font-size:10px">${escapeHtml(item.detail)}</span>` : ''}</td>
     <td align="right" style="padding:10px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f1d27a;font-size:11px;font-weight:700;white-space:nowrap">Starting at ${money(item.lineTotal)}</td>
   </tr>`).join('')
   const overall = summary.estimatedOverallInvestment === null ? '' : `<tr><td style="padding:15px 18px;color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase">Estimated total event investment</td><td align="right" style="padding:13px 18px;color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:21px;font-weight:700">${money(summary.estimatedOverallInvestment)}</td></tr>`

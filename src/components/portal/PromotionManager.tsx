@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Edit3, Plus, RefreshCw, Tag } from 'lucide-react'
 import { PortalButton, PortalModal, PortalSelect, PortalSkeleton, PortalTableCard } from '@/components/portal/PortalUI'
+import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
+import { luxorCalendarDate } from '@/lib/luxorProposalTerms'
 import type { LuxorPromotion } from '@/lib/luxorInquiryTypes'
 
-type PromotionDraft = {
+type PromotionDraft = PromotionTermsDraft & {
   id?: string
   name: string
   discount_type: LuxorPromotion['discount_type']
@@ -21,7 +23,7 @@ const EMPTY_DRAFT: PromotionDraft = {
 }
 
 function formatPromotion(promotion: Pick<LuxorPromotion, 'discount_type' | 'value'>) {
-  return promotion.discount_type === 'percent'
+  return promotion.discount_type === 'complimentary' ? 'Complimentary · Regular value ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(promotion.value) + ' · Promotional value $0' : promotion.discount_type === 'percent'
     ? `${promotion.value}% off`
     : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(promotion.value) + ' off'
 }
@@ -56,6 +58,7 @@ export function PromotionManager() {
 
   const openCreate = () => setEditor(EMPTY_DRAFT)
   const openEdit = (promotion: LuxorPromotion) => setEditor({
+    ...promotion,
     id: promotion.id,
     name: promotion.name,
     discount_type: promotion.discount_type,
@@ -80,6 +83,7 @@ export function PromotionManager() {
       return
     }
 
+    if (editor.expirationMode === 'date' && !editor.expires_on) { setError('Choose an expiration date.'); return }
     setSaving(true)
     setError(null)
     try {
@@ -88,6 +92,10 @@ export function PromotionManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(editor.id ? { id: editor.id } : {}),
+          expires_on: editor.expires_on || null,
+          complimentary_item: editor.complimentary_item,
+          complimentary_item_id: editor.complimentary_item_id,
+          complimentary_scope: editor.complimentary_scope || 'vendor',
           name,
           discount_type: editor.discount_type,
           value,
@@ -160,9 +168,9 @@ export function PromotionManager() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="truncate text-sm font-bold text-[color:var(--portal-text)]">{promotion.name}</h4>
-                    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${promotion.active ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{promotion.active ? 'Active' : 'Paused'}</span>
+                    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${promotion.active ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{promotion.expires_on && promotion.expires_on < luxorCalendarDate() ? 'Expired' : promotion.active ? 'Active' : 'Paused'}</span>
                   </div>
-                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{formatPromotion(promotion)} <span className="text-[color:var(--portal-faint)]">· {promotion.code}</span></p>
+                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{formatPromotion(promotion)} · {promotion.expires_on ? 'Expires ' + promotion.expires_on : 'No expiration'} <span className="text-[color:var(--portal-faint)]">· {promotion.code}</span></p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <PortalButton variant="secondary" size="sm" onClick={() => openEdit(promotion)}><Edit3 size={12} /> Edit</PortalButton>
@@ -190,13 +198,14 @@ export function PromotionManager() {
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
               <label className="block space-y-1.5">
                 <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Discount type</span>
-                <PortalSelect value={editor.discount_type} onChange={(value) => setEditor((current) => current ? { ...current, discount_type: value as LuxorPromotion['discount_type'] } : current)} options={[{ value: 'percent', label: 'Percentage' }, { value: 'fixed', label: 'Fixed amount' }]} />
+                <PortalSelect value={editor.discount_type} onChange={(value) => setEditor((current) => current ? { ...current, discount_type: value as LuxorPromotion['discount_type'] } : current)} options={[{ value: 'percent', label: 'Percentage' }, { value: 'fixed', label: 'Fixed amount' }, { value: 'complimentary', label: 'Complimentary' }]} />
               </label>
               <label className="block space-y-1.5">
-                <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{editor.discount_type === 'percent' ? 'Percent off' : 'Amount off'}</span>
+                <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{editor.discount_type === 'complimentary' ? 'Regular value' : editor.discount_type === 'percent' ? 'Percent off' : 'Amount off'}</span>
                 <input inputMode="decimal" value={editor.value} onChange={(event) => setEditor((current) => current ? { ...current, value: event.target.value } : current)} placeholder={editor.discount_type === 'percent' ? '10' : '250'} className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/10" />
               </label>
             </div>
+            <PromotionTermsFields value={editor} complimentary={editor.discount_type === 'complimentary'} onChange={patch => setEditor(current => current ? {...current, ...patch} : current)} />
             <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3.5 py-3 text-sm text-[color:var(--portal-text)]">
               <input type="checkbox" checked={editor.active} onChange={(event) => setEditor((current) => current ? { ...current, active: event.target.checked } : current)} className="h-4 w-4 accent-[#caa24c]" />
               <span><span className="block font-semibold">Available on new proposals</span><span className="mt-0.5 block text-xs text-[color:var(--portal-muted)]">Pause it later without changing proposals already sent.</span></span>

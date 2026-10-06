@@ -7738,6 +7738,7 @@ export default function LeadDetailPage({
       <ProposalBuilderModal
         isOpen={isInvoiceModalOpen}
         isEditing={Boolean(editingInvoiceId)}
+        invoiceId={editingInvoiceId}
         onClose={() => {
           proposalEditorOpenRef.current = false
           setIsInvoiceModalOpen(false)

@@ -23,6 +23,8 @@ import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
+import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
+import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 
 type ProposalSubmitAction = 'save' | 'email' | 'in_person'
@@ -135,6 +137,7 @@ type ProposalBuilderModalProps = {
   isOpen: boolean
   onClose: () => void
   isEditing?: boolean
+  invoiceId?: string | null
   clientName: string
   clientEmail?: string | null
   eventType?: string | null
@@ -351,56 +354,8 @@ export function parseTimeToDayMinutes(timeStr?: string | null, isEvening = false
   return h * 60 + m
 }
 
-export function validateEventTimes(
-  guestArrivalTime?: string | null,
-  eventEndTime?: string | null,
-  rentalPeriod?: string | null,
-  rentalAccess?: Record<string, unknown> | null
-): { valid: boolean; error?: string } {
-  if (!guestArrivalTime && !eventEndTime) {
-    return { valid: true }
-  }
-  const bounds = getRentalPeriodBounds(rentalPeriod, rentalAccess)
-  const isOvernightWindow = bounds.startMinutes >= 17 * 60
-
-  if (guestArrivalTime) {
-    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, isOvernightWindow)
-    if (arrivalMinutes === null) {
-      return { valid: false, error: 'Guest arrival time is invalid.' }
-    }
-    if (arrivalMinutes < bounds.startMinutes || arrivalMinutes > bounds.endMinutes) {
-      return {
-        valid: false,
-        error: `Guest arrival time must fall within the ${bounds.label} access window.`,
-      }
-    }
-  }
-
-  if (eventEndTime) {
-    const endMinutes = parseTimeToDayMinutes(eventEndTime, isOvernightWindow)
-    if (endMinutes === null) {
-      return { valid: false, error: 'Event end time is invalid.' }
-    }
-    if (endMinutes < bounds.startMinutes || endMinutes > bounds.endMinutes) {
-      return {
-        valid: false,
-        error: `Event end time must fall within the ${bounds.label} access window.`,
-      }
-    }
-  }
-
-  if (guestArrivalTime && eventEndTime) {
-    const arrivalMinutes = parseTimeToDayMinutes(guestArrivalTime, isOvernightWindow)
-    const endMinutes = parseTimeToDayMinutes(eventEndTime, isOvernightWindow)
-    if (arrivalMinutes !== null && endMinutes !== null && arrivalMinutes >= endMinutes) {
-      return {
-        valid: false,
-        error: 'Guest arrival time must be before event end time.',
-      }
-    }
-  }
-
-  return { valid: true }
+export function validateEventTimes(guestArrivalTime?: string | null, eventEndTime?: string | null, rentalPeriod?: string | null) {
+  return proposalEventTiming(rentalPeriod || 'evening', guestArrivalTime, eventEndTime)
 }
 
 function formatEventDate(value?: string | null) {
@@ -659,6 +614,7 @@ export function ProposalBuilderModal({
   isOpen,
   onClose,
   isEditing = false,
+  invoiceId,
   clientName,
   clientEmail,
   eventType,
@@ -705,7 +661,7 @@ export function ProposalBuilderModal({
   const [promotionsStatus, setPromotionsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [promotionError, setPromotionError] = useState<string | null>(null)
   const [promotionCreatorOpen, setPromotionCreatorOpen] = useState(false)
-  const [promotionDraft, setPromotionDraft] = useState<{ name: string; discount_type: 'percent' | 'fixed'; value: string }>({ name: '', discount_type: 'percent', value: '' })
+  const [promotionDraft, setPromotionDraft] = useState<PromotionTermsDraft & { name: string; discount_type: LuxorPromotion['discount_type']; value: string }>({ name: '', discount_type: 'percent', value: '' })
   const [savingPromotion, setSavingPromotion] = useState(false)
   const [presentationMode, setPresentationMode] = useState<ProposalPresentationMode>('email')
   const calculationCallbackRef = useRef(onCalculationChange)
@@ -740,28 +696,25 @@ export function ProposalBuilderModal({
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const rentalPeriod = effectiveContext.rental_period || 'evening'
-  const guestArrivalTime = asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || ''
-  const eventEndTime = asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || ''
+  const guestArrivalTime = asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || RENTAL_WINDOWS[rentalPeriod].start
+  const eventEndTime = asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || RENTAL_WINDOWS[rentalPeriod].end
   const rentalAccess = asRecord(calculation?.rental_access)
   const timeValidation = useMemo(
-    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod, rentalAccess),
+    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
     [guestArrivalTime, eventEndTime, rentalPeriod, rentalAccess]
   )
 
   const handleRentalPeriodChange = (newPeriod: string) => {
-    updateProposalContext({ rental_period: newPeriod as ProposalBuilderContext['rental_period'] })
-    const check = validateEventTimes(guestArrivalTime, eventEndTime, newPeriod, rentalAccess)
-    if (!check.valid) {
-      setValidationMessage(check.error || 'The current event times are outside the newly selected rental access period.')
-    } else {
-      setValidationMessage(null)
-    }
+    const period = newPeriod as keyof typeof RENTAL_WINDOWS
+    const window = RENTAL_WINDOWS[period]
+    updateProposalContext({ rental_period: period, guest_arrival_time: window.start, guestArrivalTime: window.start, event_end_time: window.end, eventEndTime: window.end })
+    setValidationMessage(null)
   }
 
   const handleTimeChange = (field: 'guest_arrival_time' | 'event_end_time', value: string) => {
     const nextArrival = field === 'guest_arrival_time' ? value : guestArrivalTime
     const nextEnd = field === 'event_end_time' ? value : eventEndTime
-    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod, rentalAccess)
+    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod)
     if (!check.valid) {
       setValidationMessage(check.error || null)
     } else {
@@ -851,6 +804,7 @@ export function ProposalBuilderModal({
     const name = promotionDraft.name.trim()
     const value = Number(promotionDraft.value)
     if (!name || !Number.isFinite(value) || value <= 0 || (promotionDraft.discount_type === 'percent' && value > 100)) return
+    if (promotionDraft.expirationMode === 'date' && !promotionDraft.expires_on) { setPromotionError('Choose an expiration date.'); return }
     setSavingPromotion(true)
     setPromotionError(null)
     try {
@@ -858,7 +812,7 @@ export function ProposalBuilderModal({
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, discount_type: promotionDraft.discount_type, value }),
+        body: JSON.stringify({ name, discount_type: promotionDraft.discount_type, value, expires_on: promotionDraft.expires_on || null, complimentary_item: promotionDraft.complimentary_item, complimentary_item_id: promotionDraft.complimentary_item_id, complimentary_scope: promotionDraft.complimentary_scope || 'vendor' }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload || typeof payload.id !== 'string') throw new Error(typeof payload?.error === 'string' ? payload.error : 'Promotion could not be saved.')
@@ -1055,6 +1009,7 @@ export function ProposalBuilderModal({
   }
 
   const pricingRequest = useMemo(() => ({
+    invoiceId,
     selection: {
       packageId: 'rental_only',
       eventDate: eventDateValue || null,
@@ -1095,7 +1050,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [invoiceId, customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1122,6 +1077,7 @@ export function ProposalBuilderModal({
           body: pricingRequestKey,
         })
         const payload = await response.json().catch(() => ({}))
+        if (controller.signal.aborted) return
         if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Final pricing could not be calculated.')
         const nextCalculation = normalizeCalculation(payload)
         if (!nextCalculation) throw new Error('Pricing response was not recognized.')
@@ -1180,6 +1136,12 @@ export function ProposalBuilderModal({
   }, [calculation])
   const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === 'rent_only')
   const selectedContext = calculation?.context || effectiveContext
+  const validThrough = asString(selectedContext.valid_through) || proposalValidThrough(asString(selectedContext.proposal_created_on) || luxorCalendarDate(), selectedPromotion)
+  useEffect(() => {
+    if (!isOpen) return
+    if (dueDate !== validThrough) onDueDateChange(validThrough)
+    if (offerExpiryTime !== '23:59') onOfferExpiryTimeChange('23:59')
+  }, [isOpen, dueDate, validThrough, offerExpiryTime, onDueDateChange, onOfferExpiryTimeChange])
   const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
   const refundableSecurityDeposit = selectedCalculatedPackage?.refundableSecurityDeposit ?? asNumber(selectedContext.refundable_security_deposit)
   const finalLineItems = selectedCalculatedPackage?.lineItems?.length
@@ -1454,6 +1416,7 @@ export function ProposalBuilderModal({
                         />
                       </label>
                     </div>
+                    {timeValidation.valid && timeValidation.additionalHours > 0 ? <p role="status" className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge…'}</p> : null}
                     {!timeValidation.valid ? (
                       <p role="alert" className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
                         <AlertCircle size={14} className="shrink-0" />
@@ -1461,7 +1424,7 @@ export function ProposalBuilderModal({
                       </p>
                     ) : (
                       <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                        The rental period covers all paid venue access; guest arrival and event end must fit within this window.
+                        {rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00–5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM–1:00 AM.
                       </p>
                     )}
                   </div>
@@ -1476,18 +1439,7 @@ export function ProposalBuilderModal({
                   {!clientEmail ? <div role="status" className="flex gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3 text-xs leading-5 text-amber-900 dark:text-amber-100"><Mail size={16} className="mt-0.5 shrink-0" /><div><p className="font-bold">Client email required</p><p className="mt-0.5">Add it in the client summary before the handoff. Luxor needs it to deliver the executed agreement copy after signing.</p></div></div> : null}
                   <div className="border-t border-[color:var(--portal-border)] pt-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Proposal valid through</p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_108px] lg:grid-cols-1">
-                      <PortalDatePicker value={dueDate} onChange={onDueDateChange} className="w-full" placeholder="Select expiry date" />
-                      <PortalSelect
-                        value={offerExpiryTime}
-                        onChange={onOfferExpiryTimeChange}
-                        options={LUXOR_TIME_DROPDOWN_OPTIONS}
-                        className="min-w-0"
-                        buttonClassName="min-h-10 px-3 text-sm font-semibold normal-case tracking-normal"
-                        placeholder="Expiry time"
-                      />
-                    </div>
-                    {normalizeEventDateValue(dueDate) ? <p className="mt-2 text-[10px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{formatEventDate(dueDate)}</p> : null}
+                    <p className="mt-2 text-sm font-semibold text-[color:var(--portal-text)]">{formatEventDate(validThrough)}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{selectedPromotion?.expires_on ? 'Matches the attached promotion expiration.' : '30 days from proposal creation.'}</p>
                   </div>
                   <div className="border-t border-[color:var(--portal-border)] pt-4">
                     <label className="block space-y-1.5">
@@ -1522,9 +1474,9 @@ export function ProposalBuilderModal({
                       onChange={(value) => setSelectedPromotion(value || null)}
                       options={[
                         { value: '', label: 'No promotion' },
-                        ...promotions.filter((promotion) => promotion.active).map((promotion) => ({
+                        ...promotions.filter((promotion) => promotion.active && (!promotion.expires_on || promotion.expires_on >= luxorCalendarDate()) || promotion.id === selectedPromotionId).map((promotion) => ({
                           value: promotion.id,
-                          label: `${promotion.name} · ${promotion.discount_type === 'fixed' ? formatMoney(promotion.value) : `${promotion.value}%`} off`,
+                          label: `${promotion.name} · ${promotion.discount_type === 'complimentary' ? 'Complimentary' : (promotion.discount_type === 'fixed' ? formatMoney(promotion.value) : `${promotion.value}%`) + ' off'}`,
                         })),
                       ]}
                       className="mt-2 w-full"
@@ -1730,7 +1682,7 @@ export function ProposalBuilderModal({
                         ['Venue', 'Luxor at Las Palmas Events'],
                         ['Event date', formatEventDate(eventDateValue)],
                         ['Guests', `${guestCount} expected`],
-                        ['Venue access', formatEventAccess(eventAccess, rentalPeriod, rentalAccess)],
+                        ['Venue access', formatEventAccess(eventAccess, rentalPeriod)],
                         ['Guest arrival', guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'],
                         ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'],
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
@@ -1787,7 +1739,7 @@ export function ProposalBuilderModal({
                 bookingDate={new Date().toISOString().slice(0, 10)}
                 paymentCount={paymentPlanDraft?.payment_count ?? 4}
                 paymentCadence={paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'}
-                bookingPaymentAmount={paymentPlanDraft?.booking_payment_amount}
+                bookingPaymentAmount={paymentPlanDraft?.booking_payment_amount ?? asNumber(selectedContext.booking_payment_default)}
                 preferredPaymentMethod={paymentPlanDraft?.preferred_payment_method ?? 'card'}
                 editable
                 onPaymentPlanChange={(patch) => updatePaymentPlan({ mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 60, ...patch })}
@@ -1888,7 +1840,7 @@ export function ProposalBuilderModal({
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Access / Rental Period</p>
-                        <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod, rentalAccess)}</p>
+                        <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod)}</p>
                       </div>
                     </div>
                   </div>
@@ -1938,7 +1890,7 @@ export function ProposalBuilderModal({
                     </div>
                     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 space-y-2">
                       <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Initial Booking Payment Due</p>
-                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(paymentPlanDraft?.booking_payment_amount || (finalEventPrice ? finalEventPrice * 0.25 : 0))}</p>
+                      <p className="font-mono text-xl font-bold text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(asNumber(selectedContext.amount_due_to_book) || 0)}</p>
                       <p className="text-xs text-[color:var(--portal-muted)]">Due upon electronic signature to secure date reservation.</p>
                     </div>
                   </div>
@@ -2055,9 +2007,10 @@ export function ProposalBuilderModal({
             <form onSubmit={(event) => { event.preventDefault(); void savePromotion() }} className="space-y-4 px-5 py-5">
               <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Promotion name</span><input value={promotionDraft.name} onChange={(event) => setPromotionDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Example: Grand opening special" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" autoFocus /></label>
               <div className="grid gap-3 sm:grid-cols-[.9fr_1.1fr]">
-                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Type</span><PortalSelect value={promotionDraft.discount_type} onChange={(value) => setPromotionDraft((current) => ({ ...current, discount_type: value === 'fixed' ? 'fixed' : 'percent' }))} options={[{ value: 'percent', label: 'Percent off' }, { value: 'fixed', label: 'Dollar amount' }]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
-                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Value</span><span className="flex min-h-11 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12"><span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">{promotionDraft.discount_type === 'fixed' ? '$' : '%'}</span><input type="number" min="0.01" max={promotionDraft.discount_type === 'percent' ? 100 : undefined} step="0.01" inputMode="decimal" value={promotionDraft.value} onChange={(event) => setPromotionDraft((current) => ({ ...current, value: event.target.value }))} className="min-h-10 min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none" /></span></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Type</span><PortalSelect value={promotionDraft.discount_type} onChange={(value) => setPromotionDraft((current) => ({ ...current, discount_type: value as LuxorPromotion['discount_type'] }))} options={[{ value: 'percent', label: 'Percent off' }, { value: 'fixed', label: 'Dollar amount' }, { value: 'complimentary', label: 'Complimentary' }]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" /></label>
+                <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{promotionDraft.discount_type === 'complimentary' ? 'Regular value' : 'Value'}</span><span className="flex min-h-11 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/12"><span className="pl-3 font-mono text-sm text-[color:var(--portal-muted)]">{promotionDraft.discount_type === 'percent' ? '%' : '$'}</span><input type="number" min="0.01" max={promotionDraft.discount_type === 'percent' ? 100 : undefined} step="0.01" inputMode="decimal" value={promotionDraft.value} onChange={(event) => setPromotionDraft((current) => ({ ...current, value: event.target.value }))} className="min-h-10 min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none" /></span></label>
               </div>
+              <PromotionTermsFields value={promotionDraft} complimentary={promotionDraft.discount_type === 'complimentary'} onChange={patch => setPromotionDraft(current => ({...current, ...patch}))} />
               <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Luxor creates the internal code automatically. You can edit or deactivate this saved promotion later in Settings.</p>
               {promotionError ? <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">{promotionError}</p> : null}
               <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setPromotionCreatorOpen(false)} disabled={savingPromotion} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Cancel</button><button type="submit" disabled={savingPromotion || !promotionDraft.name.trim() || !(Number(promotionDraft.value) > 0)} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45">{savingPromotion ? 'Saving…' : 'Save promotion'}</button></div>

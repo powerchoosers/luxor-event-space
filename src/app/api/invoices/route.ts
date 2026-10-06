@@ -3,7 +3,7 @@ import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateI
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
-import { getDefaultLuxorProposalPricing, LuxorPromotionSelectionError, resolveLuxorProposalPromotion } from '@/lib/luxorProposalPricingServer'
+import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion } from '@/lib/luxorProposalPricingServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { calculateLuxorOfferPricing, clampLuxorDiscountPercent, luxorOfferSnapshot } from '@/lib/luxorOffer'
@@ -12,7 +12,8 @@ import { getLuxorBooking, getLuxorBookingByInvoice, updateLuxorBooking } from '@
 import { getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
-import type { LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
+import { luxorCalendarDate, proposalValidThrough, proposalExpirationInstant } from '@/lib/luxorProposalTerms'
+import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
 
 const PRICING_CONFIGURATION_REQUIRED = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
@@ -221,13 +222,13 @@ type InvoiceRouteUpdates = Parameters<typeof updateInvoice>[1] & {
 
 const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', 'overdue', 'cancelled'])
 
-async function calculateServerProposal(selection: LuxorProposalSelection): Promise<ServerCalculatedProposal> {
+async function calculateServerProposal(selection: LuxorProposalSelection, existing?: LuxorInvoice): Promise<ServerCalculatedProposal> {
   let pricingRecord: Awaited<ReturnType<typeof getDefaultLuxorProposalPricing>>
   let calculation: unknown
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
-    pricingRecord = await getDefaultLuxorProposalPricing()
-    promotion = await resolveLuxorProposalPromotion(selection)
+    pricingRecord = await getLuxorProposalPricingForInvoice(existing)
+    promotion = await resolveLuxorProposalPromotion(selection, existing)
     calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion })
   } catch (error) {
     if (error instanceof LuxorPromotionSelectionError) throw error
@@ -269,8 +270,10 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
     ...rawContext,
     version: Math.max(1, Math.floor(numberValue(rawContext.version) ?? 1)),
     pricing_config_version: Math.max(1, Math.floor(Number(pricingRecord.version || 1))),
-    pricing_selection: selection as unknown as Record<string, unknown>,
-    ...(submittedPaymentPlan ? { payment_plan: submittedPaymentPlan } : {}),
+    pricing_selection: { ...(rawContext.pricing_selection as Record<string, unknown> || selection), ...(rawContext.payment_plan ? { paymentPlan: rawContext.payment_plan } : {}) },
+    ...(rawContext.payment_plan ? { payment_plan: rawContext.payment_plan as LuxorProposalContext['payment_plan'] } : {}),
+    proposal_created_on: existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate(),
+    valid_through: proposalValidThrough(existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate(), promotion),
     final_event_price: total,
     refundable_security_deposit: refundableSecurityDeposit,
     // Drafts can safely retain the exact calculated package before the owner
@@ -306,7 +309,7 @@ async function calculateServerProposal(selection: LuxorProposalSelection): Promi
     total,
     proposalContext,
     discount: proposalContext.promotion
-      ? { type: proposalContext.promotion.discount_type, value: proposalContext.promotion.value }
+      ? { type: proposalContext.promotion.discount_type === 'complimentary' ? 'fixed' : proposalContext.promotion.discount_type, value: proposalContext.promotion.discount_type === 'complimentary' ? 0 : proposalContext.promotion.value }
       : discountSelection(selection, discountAmount),
     promotion: proposalContext.promotion,
   }
@@ -397,13 +400,13 @@ export async function POST(request: NextRequest) {
     }
 
     const offerExpiresAt = body.offer_expires_at ? new Date(String(body.offer_expires_at)) : null
-    if (body.offer_expires_at && (!offerExpiresAt || Number.isNaN(offerExpiresAt.getTime()))) {
+    if (!selection && body.offer_expires_at && (!offerExpiresAt || Number.isNaN(offerExpiresAt.getTime()))) {
       return NextResponse.json({ error: 'Choose a valid offer expiration date and time.' }, { status: 400 })
     }
-    if (offerExpiresAt && offerExpiresAt.getTime() <= Date.now()) {
+    if (!selection && offerExpiresAt && offerExpiresAt.getTime() <= Date.now()) {
       return NextResponse.json({ error: 'The offer expiration must be in the future.' }, { status: 400 })
     }
-    if (offerExpiresAt && offerExpiresAt.getTime() < Date.now() + 30 * 60_000) {
+    if (!selection && offerExpiresAt && offerExpiresAt.getTime() < Date.now() + 30 * 60_000) {
       return NextResponse.json({ error: 'Set the offer expiration at least 30 minutes ahead so Stripe can safely create a checkout session.' }, { status: 400 })
     }
 
@@ -436,8 +439,8 @@ export async function POST(request: NextRequest) {
         discount_value: calculated.discount.value,
         promotion_id: calculated.promotion?.id ?? null,
         promotion_snapshot: calculated.promotion ?? {},
-        offer_expires_at: offerExpiresAt?.toISOString() || null,
-        due_date: stringValue(body.due_date),
+        offer_expires_at: proposalExpirationInstant(String(calculated.proposalContext.valid_through)),
+        due_date: String(calculated.proposalContext.valid_through),
         inquiry_id: inquiryId,
         lead_event_id: leadEventId,
         notes: stringValue(body.notes),
@@ -566,7 +569,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const isEventInvoice = existing.invoice_kind === 'event'
-    if (isEventInvoice && (existing.status === 'sent' || Boolean(existing.price_locked_at))) {
+    if (isEventInvoice && (existing.status === 'sent' || Boolean(existing.price_locked_at) || Boolean(existing.proposal_accepted_at) || Boolean(existing.proposal_sent_at))) {
       return NextResponse.json({ error: 'This final proposal is already published. Create a revised proposal instead of changing this version.' }, { status: 409 })
     }
 
@@ -603,7 +606,7 @@ export async function PATCH(request: NextRequest) {
 
     let offerTermsChanged = selection !== null || body.offer_expires_at !== undefined
     if (selection) {
-      const calculated = await calculateServerProposal(selection)
+      const calculated = await calculateServerProposal(selection, existing)
       updates.line_items = calculated.lineItems
       updates.tax_rate = calculated.taxRate
       updates.subtotal = calculated.subtotal
@@ -617,6 +620,8 @@ export async function PATCH(request: NextRequest) {
       updates.promotion_id = calculated.promotion?.id ?? null
       updates.promotion_snapshot = calculated.promotion ?? {}
       updates.proposal_context = calculated.proposalContext
+      updates.due_date = String(calculated.proposalContext.valid_through)
+      updates.offer_expires_at = proposalExpirationInstant(updates.due_date)
     } else {
       const legacyPricingChanged = Array.isArray(body.line_items) || body.tax_rate !== undefined || body.discount_percent !== undefined
       const nextItems = Array.isArray(body.line_items) ? body.line_items as LuxorInvoiceLineItem[] : existing.line_items

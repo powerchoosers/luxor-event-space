@@ -1,8 +1,11 @@
+import { getInvoice } from '@/lib/luxorInvoicesServer'
+import { luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import {
   getDefaultLuxorProposalPricing,
+  getLuxorProposalPricingForInvoice,
   LuxorPromotionSelectionError,
   resolveLuxorProposalPromotion,
   updateDefaultLuxorProposalPricing,
@@ -40,9 +43,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const selection = object(body)?.selection
     if (!object(selection)) return NextResponse.json({ error: 'Proposal selection is required.' }, { status: 400 })
-    const pricing = await getDefaultLuxorProposalPricing()
-    const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection)
+    const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId : ''
+    const existing = invoiceId ? await getInvoice(invoiceId) : null
+    if (invoiceId && !existing) return NextResponse.json({ error: 'Proposal not found.' }, {status: 404})
+    if (existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})
+    const pricing = await getLuxorProposalPricingForInvoice(existing)
+    const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection, existing)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion })
+    const createdOn = existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate()
+    Object.assign(calculation.context, { proposal_created_on: createdOn, valid_through: proposalValidThrough(createdOn, promotion) })
     const luxorCosts = object(pricing.config.luxor_costs) || pricing.config
     return NextResponse.json({
       pricing_config_version: pricing.version,
@@ -88,6 +97,12 @@ export async function PATCH(request: NextRequest) {
     ]
     const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
+    const bookingPayment = catalogNumber(luxorCosts, 'booking_payment', 'amount')
+    if (bookingPayment === undefined || bookingPayment < 0.5) structuralErrors.push('Set a booking payment of at least $0.50.')
+    for (const day of ['monday_thursday', 'friday', 'saturday', 'sunday']) {
+      const rate = catalogNumber(luxorCosts, 'additional_time_rates', day)
+      if (rate === undefined || rate < 0) structuralErrors.push('Set the additional-hour rate for ' + day.replace('_', ' ') + '.')
+    }
     for (const period of ['morning', 'evening', 'full_day']) {
       for (const boundary of ['start', 'end']) {
         if (!/^\d{2}:\d{2}$/.test(String(catalogValue(luxorCosts, 'rental_access', period, boundary) || ''))) structuralErrors.push(`Set a valid ${period.replace('_', ' ')} ${boundary} time.`)

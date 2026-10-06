@@ -7,6 +7,7 @@ import type {
 } from './luxorInquiryTypes'
 import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
 import { formatCatalogTime } from './luxorPricingCatalog'
+import { proposalEventTiming } from './luxorProposalTerms'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -224,6 +225,7 @@ export const LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG: LuxorProposalPricingConfig =
     sunday: { morning: { public: true, pricing_type: 'fixed' }, evening: { public: true, pricing_type: 'fixed' }, full_day: { public: true, pricing_type: 'fixed' } },
   },
   additional_time_rates: { monday_thursday: 200, friday: 350 },
+  booking_payment: { amount: 500 },
   required_fees: {
     cleaning: {
       retail: [{ min_guests: 1, max_guests: 75, amount: 250 }, { min_guests: 76, max_guests: 150, amount: 325 }, { min_guests: 151, max_guests: 200, amount: 400 }],
@@ -400,34 +402,27 @@ function eventAccessLabel(luxor: PricingRecord, rentalPeriod: LuxorRentalPeriod,
   return start && end ? `${start}–${end} access` : rentalPeriod.replace('_', ' ')
 }
 
-function clockMinutes(value: string) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value)
-  if (!match) return null
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-  if (hours > 23 || minutes > 59) return null
-  return hours * 60 + minutes
+function eventTimingErrors(selection: LuxorProposalSelection, _config: PricingRecord, period: LuxorRentalPeriod) {
+  const timing = proposalEventTiming(period, trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  return timing.valid ? [] : [timing.error!]
 }
 
-function eventTimingErrors(selection: LuxorProposalSelection, luxor: PricingRecord, rentalPeriod: LuxorRentalPeriod) {
-  const arrival = trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime)
-  const eventEnd = trimmedString(selection.event_end_time ?? selection.eventEndTime)
-  if (!arrival && !eventEnd) return []
-  const access = readRecord(luxor, 'rental_access', rentalPeriod)
-  const start = clockMinutes(String(access?.start || ''))
-  const configuredEnd = clockMinutes(String(access?.end || ''))
-  if (start === null || configuredEnd === null) return [CONFIGURATION_ERROR]
-  const end = configuredEnd < start ? configuredEnd + 24 * 60 : configuredEnd
-  const arrivalMinutesRaw = arrival ? clockMinutes(arrival) : null
-  const eventEndMinutesRaw = eventEnd ? clockMinutes(eventEnd) : null
-  const arrivalMinutes = arrivalMinutesRaw !== null && arrivalMinutesRaw < start ? arrivalMinutesRaw + 24 * 60 : arrivalMinutesRaw
-  const eventEndMinutes = eventEndMinutesRaw !== null && eventEndMinutesRaw < start ? eventEndMinutesRaw + 24 * 60 : eventEndMinutesRaw
-  if (arrival && arrivalMinutes === null) return ['Guest arrival time is invalid.']
-  if (eventEnd && eventEndMinutesRaw === null) return ['Event end time is invalid.']
-  if (arrivalMinutes !== null && (arrivalMinutes < start || arrivalMinutes > end)) return [`Guest arrival time must fall within the ${eventAccessLabel(luxor, rentalPeriod)} access window.`]
-  if (eventEndMinutes !== null && (eventEndMinutes < start || eventEndMinutes > end)) return [`Event end time must fall within the ${eventAccessLabel(luxor, rentalPeriod)} access window.`]
-  if (arrivalMinutes !== null && eventEndMinutes !== null && arrivalMinutes >= eventEndMinutes) return ['Guest arrival time must be before event end time.']
-  return []
+function addRentalExtension(items: LuxorInvoiceLineItem[], errors: string[], selection: LuxorProposalSelection, config: PricingRecord, period: LuxorRentalPeriod, eventDate: string) {
+  const timing = proposalEventTiming(period, trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  if (!timing.valid || !timing.additionalHours) return
+  const group = dateRateGroup(eventDate)
+  const rate = group ? readNumber(config, 'additional_time_rates', group) : undefined
+  if (rate === undefined || rate < 0) { errors.push('Set the additional-hour rate for this event day in Settings.'); return }
+  items.push(lineItem({ id: 'venue-additional-hours', category: 'Venue Services', description: 'Additional venue rental hours', quantity: timing.additionalHours, unitPrice: rate, paymentBucket: 'venue', required: true, detail: timing.additionalHours + ' additional hour(s) at ' + rate.toLocaleString('en-US', {style: 'currency', currency: 'USD'}) + ' per hour', pricingRuleId: 'additional_time_rates.' + group }))
+}
+
+function applyComplimentary(items: LuxorInvoiceLineItem[], promotion: LuxorProposalResolvedPromotion | null, scope: 'luxor' | 'vendor') {
+  if (promotion?.discount_type !== 'complimentary' || promotion.complimentary_scope !== scope) return
+  const itemName = promotion.complimentary_item || promotion.name
+  const existing = items.find(item => promotion.complimentary_item_id ? item.id === promotion.complimentary_item_id || item.catalogId === promotion.complimentary_item_id : item.description.toLowerCase() === itemName.toLowerCase())
+  const detail = 'Regular value: ' + promotion.value.toLocaleString('en-US', {style: 'currency', currency: 'USD'}) + ' · Promotional value: $0.00'
+  if (existing) Object.assign(existing, { unitPrice: 0, total: 0, description: 'Complimentary ' + itemName, detail, included: true, quoteBreakdown: {quantity: existing.quantity, unit_price: 0, subtotal: 0} })
+  else items.push({ ...lineItem({ id: 'complimentary-' + promotion.id, category: scope === 'vendor' ? 'Preferred Vendor Services - Estimated Pricing' : 'Complimentary service', description: 'Complimentary ' + itemName, unitPrice: 0, included: true, detail, paymentBucket: scope === 'vendor' ? 'event' : 'venue' }), costClassification: scope === 'vendor' ? 'preferred_vendor_estimate' : 'luxor_charge' })
 }
 
 function normalizeAddOn(value: unknown) {
@@ -566,13 +561,13 @@ function dateRateGroup(eventDate: string) {
   return 'monday_thursday'
 }
 
-function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaymentPlan | null {
+function planFromSelection(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig): LuxorProposalPaymentPlan | null {
   const plan = record(selection.paymentPlan || selection.payment_plan)
   if (!plan) return null
   const paymentCount = numberValue(plan.payment_count ?? plan.paymentCount)
   const cadence = plan.payment_cadence ?? plan.paymentCadence
   const paymentCadence = cadence === 'biweekly' || cadence === 'monthly' || cadence === 'evenly_spaced' ? cadence : 'evenly_spaced'
-  const bookingPaymentAmount = numberValue(plan.booking_payment_amount ?? plan.bookingPaymentAmount)
+  const bookingPaymentAmount = numberValue(plan.booking_payment_amount ?? plan.bookingPaymentAmount) ?? readNumber(readRecord(config, 'luxor_costs') || config, 'booking_payment', 'amount')
   const preferredMethod = plan.preferred_payment_method ?? plan.preferredPaymentMethod
   const preferredPaymentMethod = preferredMethod === 'card' || preferredMethod === 'cash' || preferredMethod === 'zelle' || preferredMethod === 'check' ? preferredMethod : undefined
   if (paymentCount !== undefined && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
@@ -596,6 +591,7 @@ function planFromSelection(selection: LuxorProposalSelection): LuxorProposalPaym
     mode,
     booking_payment_percent: mode === 'pay_in_full' ? 100 : rounded(percentage),
     final_payment_due_days_before_event: finalDays,
+    ...(bookingPaymentAmount !== undefined && bookingPaymentAmount >= 0.5 ? { booking_payment_amount: rounded(bookingPaymentAmount) } : {}),
     ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
   }
 }
@@ -733,7 +729,7 @@ function serviceDetail(input: {
 }
 
 function promotionFromOptions(value: LuxorProposalResolvedPromotion | null | undefined) {
-  if (!value || !value.id || !value.name || !value.code || (value.discount_type !== 'percent' && value.discount_type !== 'fixed')) return null
+  if (!value || !value.id || !value.name || !value.code || !['percent', 'fixed', 'complimentary'].includes(value.discount_type)) return null
   const amount = numberValue(value.value)
   if (amount === undefined || amount <= 0 || (value.discount_type === 'percent' && amount > 100)) return null
   return {
@@ -742,6 +738,10 @@ function promotionFromOptions(value: LuxorProposalResolvedPromotion | null | und
     code: value.code.trim().toUpperCase(),
     discount_type: value.discount_type,
     value: rounded(amount),
+    expires_on: value.expires_on ?? null,
+    complimentary_item: value.complimentary_item,
+    complimentary_scope: value.complimentary_scope,
+    complimentary_item_id: value.complimentary_item_id,
   } satisfies LuxorProposalResolvedPromotion
 }
 
@@ -829,6 +829,8 @@ function calculatePackage(input: {
       quoteBreakdown: { quantity: 1, unit_price: rentalAmount, subtotal: rentalAmount },
     }))
   }
+
+  addRentalExtension(items, errors, selection, config, rentalPeriod, eventDate)
 
   const cleaningTier = tierForGuestCount(readRecord(config, 'required_fees', 'cleaning')?.[rateTier], guestCount)
   const cleaningAmount = cleaningTier ? numberValue(cleaningTier.amount) : undefined
@@ -1027,17 +1029,19 @@ function calculatePackage(input: {
   // and frozen into the proposal snapshot rather than being client-editable.
   items.push(...customItems)
 
+  const complimentary = promotionFromOptions(input.promotion)
+  applyComplimentary(items, complimentary, 'luxor')
   const subtotal = rounded(items.reduce((sum, item) => sum + Number(item.total || 0), 0))
   const promotionTerms = promotionFromOptions(input.promotion)
-  const discountAmount = promotionTerms
+  const discountAmount = promotionTerms && promotionTerms.discount_type !== 'complimentary'
     ? promotionTerms.discount_type === 'fixed'
       ? Math.min(subtotal, promotionTerms.value)
       : Math.min(subtotal, rounded(subtotal * promotionTerms.value / 100))
     : 0
-  const promotion = promotionTerms && discountAmount > 0
+  const promotion = promotionTerms && (discountAmount > 0 || promotionTerms.discount_type === 'complimentary')
     ? { ...promotionTerms, amount: discountAmount } satisfies LuxorProposalPromotionSnapshot
     : undefined
-  if (promotion) {
+  if (promotion && discountAmount > 0) {
     items.push(lineItem({
       id: `promotion-${promotion.id}`, category: 'Promotion', description: promotion.name, unitPrice: -discountAmount, pricingRole: 'discount',
       detail: promotion.discount_type === 'fixed' ? `${promotion.code} · ${promotion.value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} promotion` : `${promotion.code} · ${promotion.value}% promotion`,
@@ -1285,6 +1289,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined
   if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
   else confirmed.push(lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor venue rental', unitPrice: rentalAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: `Official Luxor rate for ${safePeriod.replace('_', ' ')} venue access.` }))
+  addRentalExtension(confirmed, errors, selection, luxor, safePeriod, eventDate)
   const cleaning = tierForGuestCount(readRecord(luxor, 'required_fees', 'cleaning')?.retail, guestCount)
   const securityConfig = readRecord(luxor, 'required_fees', 'security') || readRecord(luxor, 'security') || readRecord(config, 'security')
   const security = tierForGuestCount(securityConfig?.retail, guestCount)
@@ -1331,8 +1336,9 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const requestedPromotionId = trimmedString(selection.promotionId ?? selection.promotion_id)
   const promotion = promotionFromOptions(options.promotion)
   if (requestedPromotionId && !promotion) errors.push('The selected promotion could not be verified. Refresh promotions and choose an active saved promotion.')
+  applyComplimentary(confirmed, promotion, 'luxor')
   const subtotal = rounded(confirmed.reduce((sum, item) => sum + item.total, 0))
-  const discountAmount = promotion ? rounded(promotion.discount_type === 'percent' ? subtotal * promotion.value / 100 : Math.min(subtotal, promotion.value)) : 0
+  const discountAmount = promotion && promotion.discount_type !== 'complimentary' ? rounded(promotion.discount_type === 'percent' ? subtotal * promotion.value / 100 : Math.min(subtotal, promotion.value)) : 0
   const configuredTaxRate = configTaxRate(luxor)
   const requestedTaxRate = selectedTaxRate(selection)
   const taxRate = requestedTaxRate === null ? 0 : requestedTaxRate ?? configuredTaxRate ?? 0
@@ -1353,9 +1359,10 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   }
   const addOnQuotes = ADD_ON_QUOTE_OPTIONS.map((option) => preferredQuote(config, option, guestCount))
   const selectedVendorEstimateLines = addOnQuotes.filter((quote) => selectedIds.includes(quote.id)).flatMap((quote) => quote.lineItems).concat(vendorCustomItems)
+  applyComplimentary(selectedVendorEstimateLines, promotion, 'vendor')
   const estimatedVendorTotal = rounded(selectedVendorEstimateLines.reduce((sum, item) => sum + item.total, 0))
   const securityDeposit = readNumber(luxor, 'security_deposit', 'amount') || 750
-  const paymentPlan = planFromSelection(selection)
+  const paymentPlan = planFromSelection(selection, config)
   const calculationErrors = [...new Set([...errors, ...quoteErrors])]
   const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
   const finalContext: LuxorProposalContext = {
@@ -1370,7 +1377,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     security_hours: securityBillableHours,
     security_total: securityAmount,
     venue_services_total: confirmedLuxorTotal, event_services_total: 0, luxor_services_total: confirmedLuxorTotal, planner_services_total: 0,
-    final_event_price: confirmedLuxorTotal, refundable_security_deposit: securityDeposit, payment_collection_scope: 'luxor_services_only', amount_due_to_book: paymentPlan?.mode === 'pay_in_full' ? confirmedLuxorTotal : paymentPlan ? rounded(confirmedLuxorTotal * paymentPlan.booking_payment_percent / 100) : null,
+    final_event_price: confirmedLuxorTotal, refundable_security_deposit: securityDeposit, payment_collection_scope: 'luxor_services_only', amount_due_to_book: paymentPlan?.mode === 'pay_in_full' ? confirmedLuxorTotal : paymentPlan ? Math.min(confirmedLuxorTotal, paymentPlan.booking_payment_amount ?? rounded(Math.max(confirmedLuxorTotal * paymentPlan.booking_payment_percent / 100, 750))) : null,
     ...(paymentPlan ? { payment_plan: paymentPlan } : {}), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}),
     confirmed_luxor_total: confirmedLuxorTotal, estimated_vendor_total: estimatedVendorTotal, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), preferred_vendor_estimate_lines: selectedVendorEstimateLines,
     vendor_pricing_disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER,
@@ -1386,6 +1393,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
       securityHours: numberValue(selection.securityHours ?? selection.security_hours) || undefined,
       security_hours: numberValue(selection.security_hours ?? selection.securityHours) || undefined,
       addOns: selectedIds,
+      ...(promotion ? { promotionId: promotion.id, promotion_id: promotion.id } : {}),
       customItems: selection.customItems ?? selection.custom_items ?? [],
       ...(paymentPlan ? { paymentPlan } : {}),
     },
@@ -1396,7 +1404,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   return { valid: calculationErrors.length === 0, publishable: calculationErrors.length === 0 && publicationErrors.length === 0, calculationErrors, publicationErrors, requirements: { paymentPlan: !paymentPlan }, errors: [...calculationErrors, ...publicationErrors], warnings, packages: [primary], lineItems: confirmed, line_items: confirmed, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, total: confirmedLuxorTotal, finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, securityDepositAmount: securityDeposit, refundable_security_deposit: securityDeposit, totalWithSecurityDeposit: rounded(confirmedLuxorTotal + securityDeposit), amountDueToBook: primary.amountDueToBook, amount_due_to_book: primary.amountDueToBook, addOnQuotes, selectedVendorEstimateLines, preferred_vendor_estimate_lines: selectedVendorEstimateLines, confirmedLuxorTotal, confirmed_luxor_total: confirmedLuxorTotal, estimatedVendorTotal, estimated_vendor_total: estimatedVendorTotal, estimatedOverallInvestment: rounded(confirmedLuxorTotal + estimatedVendorTotal), estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), proposalContext: finalContext, context: finalContext, snapshot }
 }
 
-export function calculateLuxorProposal(
+function calculateProposal(
   selection: LuxorProposalSelection,
   config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
   options: LuxorProposalCalculationOptions = {},
@@ -1437,7 +1445,7 @@ export function calculateLuxorProposal(
   }
   const securityDeposit = readNumber(config, 'security_deposit', 'amount')
   if (securityDeposit === undefined || securityDeposit !== 750) baseErrors.push(CONFIGURATION_ERROR)
-  const paymentPlan = planFromSelection(selection)
+  const paymentPlan = planFromSelection(selection, config)
   const selectedTax = selectedTaxRate(selection)
   const taxRate = selectedTax ?? configTaxRate(config)
   if (taxRate === null || taxRate === undefined) baseErrors.push(CONFIGURATION_ERROR)
@@ -1629,6 +1637,16 @@ export function calculateLuxorProposal(
     context: finalContext,
     snapshot,
   }
+}
+
+export function calculateLuxorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG, options: LuxorProposalCalculationOptions = {}): LuxorProposalCalculation {
+  const timing = proposalEventTiming(String(selection.rentalPeriod || 'evening'), trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  const normalized = { ...selection, guestArrivalTime: timing.arrival, guest_arrival_time: timing.arrival, eventEndTime: timing.end, event_end_time: timing.end }
+  const result = calculateProposal(normalized, config, options)
+  result.context.booking_payment_default = readNumber(readRecord(config, 'luxor_costs') || config, 'booking_payment', 'amount')
+  const extension = result.lineItems.find(item => item.id === 'venue-additional-hours')
+  Object.assign(result.context, { event_access: formatCatalogTime(timing.arrival) + '–' + formatCatalogTime(timing.end) + ' access', additional_rental_hours: timing.additionalHours, additional_rental_charge: extension?.total || 0 })
+  return result
 }
 
 export const calculateLuxorProposalPricing = calculateLuxorProposal

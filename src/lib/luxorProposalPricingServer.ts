@@ -6,7 +6,8 @@ import {
   type LuxorProposalSelection,
 } from './luxorProposalPricing'
 import { supabaseRest } from './supabaseRestServer'
-import type { LuxorPromotion } from './luxorInquiryTypes'
+import type { LuxorInvoice, LuxorPromotion } from './luxorInquiryTypes'
+import { luxorCalendarDate } from './luxorProposalTerms'
 
 export type LuxorProposalPricingRecord = {
   id: string
@@ -80,14 +81,16 @@ function promotionIdFromSelection(selection: LuxorProposalSelection) {
  * only an id; it can never choose the percentage, dollar amount, or active
  * state that actually affects a proposal.
  */
-export async function resolveLuxorProposalPromotion(selection: LuxorProposalSelection): Promise<LuxorProposalResolvedPromotion | null> {
+export async function resolveLuxorProposalPromotion(selection: LuxorProposalSelection, existing?: LuxorInvoice | null): Promise<LuxorProposalResolvedPromotion | null> {
   const id = promotionIdFromSelection(selection)
   if (!id) return null
+  const saved = existing?.proposal_context?.promotion
+  if (saved?.id === id) return saved
   const rows = await supabaseRest<LuxorPromotion[]>(
-    `luxor_promotions?select=id,name,code,discount_type,value,active&id=eq.${encodeURIComponent(id)}&active=eq.true&limit=1`,
+    `luxor_promotions?select=*&id=eq.${encodeURIComponent(id)}&active=eq.true&limit=1`,
   )
   const promotion = rows[0]
-  if (!promotion || !promotion.active || (promotion.discount_type !== 'percent' && promotion.discount_type !== 'fixed')) {
+  if (!promotion || !promotion.active || !['percent', 'fixed', 'complimentary'].includes(promotion.discount_type) || (promotion.expires_on && promotion.expires_on < luxorCalendarDate())) {
     throw new LuxorPromotionSelectionError()
   }
   const value = Number(promotion.value)
@@ -100,5 +103,17 @@ export async function resolveLuxorProposalPromotion(selection: LuxorProposalSele
     code: promotion.code,
     discount_type: promotion.discount_type,
     value: Math.round(value * 100) / 100,
+    expires_on: promotion.expires_on ?? null,
+    complimentary_item: promotion.complimentary_item,
+    complimentary_scope: promotion.complimentary_scope,
+    complimentary_item_id: promotion.complimentary_item_id,
   }
+}
+
+/** Never replace a saved draft's catalog with subsequently edited Settings. */
+export async function getLuxorProposalPricingForInvoice(existing?: LuxorInvoice | null): Promise<LuxorProposalPricingRecord> {
+  const snapshot = existing?.proposal_context?.pricing_snapshot
+  const config = isRecord(snapshot) && isRecord(snapshot.pricing_config) ? snapshot.pricing_config : null
+  if (config && existing) return { id: '', created_at: existing.created_at, updated_at: existing.updated_at, version: Number(existing.proposal_context?.pricing_config_version || 1), is_default: false, config }
+  return getDefaultLuxorProposalPricing()
 }

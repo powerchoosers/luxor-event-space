@@ -46,6 +46,7 @@ const MONEY_GROUPS: FieldGroup[] = [
     title: 'Confirmed Luxor charges',
     description: 'These are official Luxor charges. They appear in the final event price, agreement, payment schedule, and payment link.',
     fields: [
+      { label: 'Booking payment due at signing', path: ['luxor_costs', 'booking_payment', 'amount'], step: '0.01' },
       ...[0, 1, 2].map((index) => ({ label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'cleaning', 'retail', index, 'amount'] })),
       { label: 'Security rate', path: ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], suffix: '/ guard / hour', step: '1' },
       { label: 'Security minimum', path: ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], suffix: 'hours', step: '1', hideDollar: true },

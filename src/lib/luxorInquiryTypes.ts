@@ -167,8 +167,12 @@ export type LuxorPromotion = {
   updated_at: string
   name: string
   code: string
-  discount_type: 'percent' | 'fixed'
+  discount_type: 'percent' | 'fixed' | 'complimentary'
   value: number
+  expires_on?: string | null
+  complimentary_item?: string | null
+  complimentary_scope?: 'luxor' | 'vendor' | null
+  complimentary_item_id?: string | null
   active: boolean
   metadata: Record<string, unknown>
 }
@@ -182,9 +186,13 @@ export type LuxorProposalPromotionSnapshot = {
   id: string
   name: string
   code: string
-  discount_type: 'percent' | 'fixed'
+  discount_type: 'percent' | 'fixed' | 'complimentary'
   value: number
   amount: number
+  expires_on?: string | null
+  complimentary_item?: string | null
+  complimentary_scope?: 'luxor' | 'vendor' | null
+  complimentary_item_id?: string | null
 }
 
 /**

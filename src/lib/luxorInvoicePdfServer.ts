@@ -228,10 +228,14 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     drawLines(wrap('Planning estimates only. These services are not Luxor charges and are not included in the Final Event Price.', regular, 8.5, contentRight - margin), margin, y, 8.5, regular, muted, 11)
     y -= 28
     for (const item of summary.vendorEstimateLines) {
-      ensureSpace(24, true)
-      text(`${item.category}: ${item.service}`, margin + 10, y, 8.8, regular, ink)
+      const serviceLines = wrap(`${item.category}: ${item.service}`, regular, 8.8, contentRight - margin - 125)
+      const detailLines = item.detail ? wrap(item.detail, regular, 7.7, contentRight - margin - 20) : []
+      const rowHeight = serviceLines.length * 11 + detailLines.length * 10 + 10
+      ensureSpace(rowHeight, true)
+      drawLines(serviceLines, margin + 10, y, 8.8, regular, ink, 11)
       rightText(`Est. ${money(item.lineTotal)}`, contentRight - 10, y, 8.8, bold, darkGold)
-      y -= 20
+      if (detailLines.length) drawLines(detailLines, margin + 10, y - serviceLines.length * 11, 7.7, regular, muted, 10)
+      y -= rowHeight
     }
     page.drawLine({ start: { x: margin + 10, y: y + 5 }, end: { x: contentRight - 10, y: y + 5 }, thickness: 0.6, color: line })
     text('Estimated third-party vendor services', margin + 10, y - 8, 8.8, regular, muted)

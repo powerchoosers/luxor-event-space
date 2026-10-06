@@ -3,7 +3,7 @@ import type { LuxorInvoice, LuxorInvoiceLineItem } from './luxorInquiryTypes'
 /** New proposals use this marker so locked legacy payment behavior remains unchanged. */
 export const LUXOR_PAYMENT_COLLECTION_SCOPE = 'luxor_services_only'
 
-const LUXOR_SERVICE_IDS = new Set(['venue-rental', 'required-cleaning', 'required-security', 'essential-decor'])
+const LUXOR_SERVICE_IDS = new Set(['venue-additional-hours', 'venue-rental', 'required-cleaning', 'required-security', 'essential-decor'])
 
 function money(value: number) { return Math.round(value * 100) / 100 }
 
