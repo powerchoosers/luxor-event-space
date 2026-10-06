@@ -34,15 +34,13 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
 
 async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>) {
   if (signature.status !== 'signed') return {}
-  const paymentEmailStatus = await getLuxorAgreementClientEmailStatus(signature.id)
-  const paymentEmailState = { payment_email_status: paymentEmailStatus }
   const booking = await getLuxorBooking(signature.booking_id)
   const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
   let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
   invoice ||= masterInvoice
-  if (!booking || booking.contract_status !== 'signed' || !invoice) return paymentEmailState
+  if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
-  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return paymentEmailState
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return {}
   const preference = booking.metadata?.client_payment_preference as { method?: unknown } | undefined
   const initialMethod = ['card', 'cash', 'zelle', 'check'].includes(String(preference?.method || '').toLowerCase())
     ? String(preference?.method).toLowerCase()
@@ -67,9 +65,10 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   // The signature flow creates Checkout only after it has verified the signed
   // agreement. The client may now choose Card, Cash, or Zelle; only Card
   // continues to Stripe, while the other methods remain owner-confirmed.
-  if (!invoice.stripe_checkout_url) return { ...paymentEmailState, ...(paymentOptions ? { payment_options: paymentOptions } : {}) }
+  if (!invoice.stripe_checkout_url) return paymentOptions ? { payment_options: paymentOptions } : {}
+  const paymentEmailStatus = await getLuxorAgreementClientEmailStatus(signature.id, signature.client_email, invoice.stripe_checkout_url)
   return {
-    ...paymentEmailState,
+    payment_email_status: paymentEmailStatus,
     payment_url: invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
     payment_label: invoice.payment_requested_label || 'Initial Booking Payment - Luxor at Las Palmas Events',

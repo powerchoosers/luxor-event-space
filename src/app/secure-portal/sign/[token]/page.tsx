@@ -564,7 +564,7 @@ export default function SignaturePage() {
                 <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]">Agreement complete</p>
                 <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">You&apos;re all set.</h2>
                 <p className="mt-4 text-sm leading-6 text-[#6f665b]">
-                  Your signature and Luxor&apos;s countersignature are now part of the agreement. A copy has been sent to {signature.client_email}.
+                  Your signature and Luxor&apos;s countersignature are now part of the agreement.
                   {signature.payment_options ? ' Choose how you would like to make the initial booking payment below.' : signature.payment_url ? ' Your secure booking-payment link is ready below.' : ''}
                   {paymentPreparing && !signature.payment_url ? ' Your secure booking-payment link is being prepared now.' : ''}
                 </p>

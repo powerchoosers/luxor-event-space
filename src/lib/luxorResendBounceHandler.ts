@@ -30,6 +30,20 @@ export type BounceWebhookEvent = {
   }
 }
 
+function shouldReplaceBounceFlag(inquiry: BounceInquiry, bouncedAddress: string, occurredAt: string) {
+  const existing = inquiry.metadata?.emailBounce
+  if (!existing || typeof existing !== 'object') return true
+  const previous = existing as Record<string, unknown>
+  const previousAddress = normalizeLuxorEmailAddress(previous.address)
+  if (!previousAddress) return true
+  const previousIsCurrent = isLuxorBounceForCurrentAddress(inquiry.email, previousAddress)
+  const candidateIsCurrent = isLuxorBounceForCurrentAddress(inquiry.email, bouncedAddress)
+  if (previousIsCurrent !== candidateIsCurrent) return candidateIsCurrent
+  const previousAt = Date.parse(String(previous.occurredAt || ''))
+  const candidateAt = Date.parse(occurredAt)
+  return !Number.isFinite(previousAt) || candidateAt >= previousAt
+}
+
 export async function handleLuxorResendBounce(
   row: BounceMailRow,
   event: BounceWebhookEvent,
@@ -89,10 +103,12 @@ export async function handleLuxorResendBounce(
     }
     for (const inquiry of matches) {
       const currentAddress = isLuxorBounceForCurrentAddress(inquiry.email, bouncedAddress)
-      await dependencies.supabaseRest<unknown>(`luxor_inquiries?id=eq.${encodeURIComponent(inquiry.id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ metadata: { ...(inquiry.metadata || {}), emailBounce: { ...issue, currentAddress, currentAddressAtReport: currentAddress } } }),
-      })
+      if (shouldReplaceBounceFlag(inquiry, bouncedAddress, occurredAt)) {
+        await dependencies.supabaseRest<unknown>(`luxor_inquiries?id=eq.${encodeURIComponent(inquiry.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ metadata: { ...(inquiry.metadata || {}), emailBounce: { ...issue, currentAddress, currentAddressAtReport: currentAddress } } }),
+        })
+      }
       flaggedInquiryIds.add(inquiry.id)
     }
 

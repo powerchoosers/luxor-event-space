@@ -2,6 +2,7 @@ import 'server-only'
 
 import crypto from 'crypto'
 import type { LuxorEmailJob } from './luxorInquiryTypes'
+import type { LuxorMailRow } from './luxorMailboxServer'
 import { supabaseRest } from './supabaseRestServer'
 import { downloadLuxorPrivatePdf, saveLuxorPrivatePdf } from './luxorDocumentsServer'
 import { luxorMailAddress, luxorMailFrom, luxorMailProvider, type LuxorMailProvider } from './luxorMailConfig'
@@ -94,36 +95,75 @@ export async function queueLuxorTransactionalNotice(input: {
   return job
 }
 
-/** Return only the delivery state for the client-facing executed-agreement email. */
-export async function getLuxorAgreementClientEmailStatus(signatureRequestId: string): Promise<LuxorPublicEmailDeliveryStatus> {
-  if (!UUID.test(signatureRequestId)) return 'unknown'
+/** Return a status only when the provider record proves this exact payment URL was emailed to this client. */
+export async function getLuxorAgreementClientEmailStatus(
+  signatureRequestId: string,
+  clientEmail: string,
+  paymentUrl: string,
+): Promise<LuxorPublicEmailDeliveryStatus> {
+  if (!UUID.test(signatureRequestId) || !luxorMailAddress(clientEmail) || !isSecurePaymentUrl(paymentUrl)) return 'unknown'
   try {
     const key = `agreement_client/${signatureRequestId}`
     const id = noticeId(key)
-    const [notice] = await supabaseRest<LuxorEmailJob[]>(
+    let [notice] = await supabaseRest<LuxorEmailJob[]>(
       `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(id)}&signature_request_id=eq.${encodeURIComponent(signatureRequestId)}&limit=1`,
     )
     if (notice) {
       const snapshot = snapshotOf(notice)
       if (snapshot.kind !== 'agreement_client' || snapshot.key !== key) return 'unknown'
-      return getLuxorPublicEmailDeliveryStatus(notice.status)
+      if (snapshot.recipient !== luxorMailAddress(clientEmail) || !containsExactPaymentLink(snapshot.html, paymentUrl)) return 'unknown'
     }
 
     // Read a pre-migration completion email only when its link to this signing
     // record is explicit. A failed direct-send job may have delivered before
     // the process stopped, so that legacy state is deliberately unknown.
-    const [legacy] = await supabaseRest<LuxorEmailJob[]>(
-      `luxor_email_jobs?select=*&job_type=eq.contract_signature&signature_request_id=eq.${encodeURIComponent(signatureRequestId)}&metadata->>flow_stage=eq.contract_completed&limit=1`,
+    if (!notice) {
+      const [legacy] = await supabaseRest<LuxorEmailJob[]>(
+        `luxor_email_jobs?select=*&job_type=eq.contract_signature&signature_request_id=eq.${encodeURIComponent(signatureRequestId)}&metadata->>flow_stage=eq.contract_completed&limit=1`,
+      )
+      if (!legacy || legacy.job_type !== 'contract_signature' || legacy.signature_request_id !== signatureRequestId
+        || legacy.metadata?.flow_stage !== 'contract_completed' || luxorMailAddress(legacy.recipient_email) !== luxorMailAddress(clientEmail)
+        || !containsExactPaymentLink(legacy.body, paymentUrl)) return 'unknown'
+      notice = legacy
+    }
+
+    const mailRows = await supabaseRest<LuxorMailRow[]>(
+      `luxor_mail_messages?select=*&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(notice.id)}&limit=2`,
     )
-    if (!legacy || legacy.job_type !== 'contract_signature' || legacy.signature_request_id !== signatureRequestId
-      || legacy.metadata?.flow_stage !== 'contract_completed') return 'unknown'
-    if (legacy.status === 'sent') return 'sent'
-    if (legacy.status === 'queued' || legacy.status === 'sending') return 'pending'
+    if (mailRows.length === 0 && (notice.status === 'queued' || notice.status === 'sending')) return 'pending'
+    if (mailRows.length !== 1) return 'unknown'
+    const [mail] = mailRows
+    const noticeProvider = notice.metadata?.transactionalNotice as { provider?: unknown } | undefined
+    const provider = noticeProvider?.provider
+    const validProvider = provider === 'resend' || provider === 'zoho'
+      ? mail.provider === provider
+      : true
+    const recipients = (mail.to_addresses || []).map((value) => luxorMailAddress(value)).filter(Boolean)
+    if (!validProvider || recipients.length !== 1 || recipients[0] !== luxorMailAddress(clientEmail)
+      || !containsExactPaymentLink(mail.html_body || mail.text_body, paymentUrl)) return 'unknown'
+    const providerStatus = getLuxorPublicEmailDeliveryStatus(mail.status)
+    if (providerStatus !== 'unknown') return providerStatus
+    return notice.status === 'queued' || notice.status === 'sending'
+      ? 'pending'
+      : getLuxorPublicEmailDeliveryStatus(notice.status)
   } catch {
     // Email-status visibility must never prevent the signed agreement itself
     // from loading. Missing or unavailable evidence is not a delivery claim.
   }
   return 'unknown'
+}
+
+function isSecurePaymentUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && (url.hostname === 'checkout.stripe.com' || url.hostname === 'buy.stripe.com')
+  } catch {
+    return false
+  }
+}
+
+function containsExactPaymentLink(content: string, paymentUrl: string) {
+  return content.includes(paymentUrl) || content.includes(paymentUrl.replace(/&/g, '&amp;'))
 }
 
 export async function deliverLuxorTransactionalNotice(job: LuxorEmailJob): Promise<{ status: 'sent' }> {
